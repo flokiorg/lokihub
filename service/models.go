@@ -45,6 +45,10 @@ type Service interface {
 	// whether (and to how many relays) the announcement was published. The
 	// zero value means the hub hasn't attempted to start it yet.
 	GetPrivateTransportStatus() PrivateTransportStatus
+	// RotatePrivateTransportInbox moves the private transport to its next
+	// inbox key and announces it; the retired key keeps opening envelopes for
+	// max_request_age. Returns the new inbox.
+	RotatePrivateTransportInbox() (string, error)
 	// PublishNodeProfile signs and publishes a kind-0 profile for the hub's
 	// own node identity to the General relay pool. Returns an error if the
 	// LN backend cannot sign (no TransportSigner) or no relay accepted it.

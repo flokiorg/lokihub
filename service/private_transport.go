@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/constants"
 	"sync/atomic"
 	"time"
 
@@ -13,19 +12,13 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip44"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nodesign"
 	nmilatnip01 "github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nipcash/transport"
 )
-
-// privateTransportKeyIndex is the rotation index of the inbox key currently in
-// use. Kept a constant for now: rotation needs the hub to keep accepting the
-// previous key while bills in flight drain, and that grace set is not built yet.
-// Wiring it to configuration before the grace set exists would advertise a
-// capability the hub does not have.
-const privateTransportKeyIndex = constants.PRIVATE_TRANSPORT_KEY_INDEX
 
 // privateTransport holds what the receive path needs, resolved once at startup so
 // the hot path never re-derives a key or re-reads config.
@@ -35,9 +28,14 @@ type privateTransport struct {
 	// and flnd's ECDH returns a hashed value NIP-44 cannot consume.
 	inboxPrivKey string
 	// inboxXOnly is what clients p-tag and encrypt to, and what the relay filter
-	// matches. A constant, so the filter never changes and no resubscribe is
-	// needed when a bill is minted or destroyed.
+	// matches. It changes only on an inbox rotation, so no resubscribe is needed
+	// when a bill is minted or destroyed.
 	inboxXOnly string
+	// keyRing, once set (at start or by a rotation), replaces the two fields
+	// above: the current key and the retired keys still in their grace.
+	keyRing atomic.Pointer[inboxRing]
+	// rekey asks the subscription to resubscribe with the ring's inboxes.
+	rekey chan struct{}
 	// nodeXOnly is the hub's LN identity in Nostr form — the key that signs the
 	// announcement and the key a client recovers from a bill's mint signature.
 	nodeXOnly string
@@ -203,27 +201,25 @@ func (svc *service) newPrivateTransport() (*privateTransport, error) {
 		return nil, err
 	}
 
-	inboxPrivKey, err := svc.keys.GetPrivateTransportKey(privateTransportKeyIndex)
+	state, err := db.LoadInboxRing(svc.db, time.Now())
 	if err != nil {
-		return nil, fmt.Errorf("derive private transport key: %w", err)
+		return nil, err
 	}
-	inboxXOnly, err := nostr.GetPublicKey(inboxPrivKey)
+	ring, err := svc.buildInboxRing(state, nodeXOnly)
 	if err != nil {
-		return nil, fmt.Errorf("derive private transport pubkey: %w", err)
-	}
-	if inboxXOnly == nodeXOnly {
-		// Would mean the hub cannot decrypt its own mail. Impossible with H+3
-		// derivation, but the consequence is silence, so check rather than assume.
-		return nil, errors.New("private transport inbox key collides with the node identity")
+		return nil, err
 	}
 
-	return &privateTransport{
-		inboxPrivKey: inboxPrivKey,
-		inboxXOnly:   inboxXOnly,
+	pt := &privateTransport{
+		inboxPrivKey: ring.current.priv,
+		inboxXOnly:   ring.current.xonly,
 		nodeXOnly:    nodeXOnly,
 		nonces:       dbServedNonces{db: svc.db},
 		relayBudget:  newRelayEnvelopeBudget(svc.cfg.GetEnv().PrivateInboxEventsPerMin),
-	}, nil
+		rekey:        make(chan struct{}, 1),
+	}
+	pt.keyRing.Store(ring)
+	return pt, nil
 }
 
 // envelopeRefusal is an envelope refused at E4 to E6: it gets an envelope-level
@@ -251,8 +247,13 @@ func (e *envelopeRefusal) Error() string {
 // is the same envelope and is dropped at E3.
 func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, now time.Time) (*transport.Envelope, [32]byte, error) {
 	// The sender is a fresh ephemeral key, which is why nothing here is
-	// cacheable and why this cost is paid per event, junk included.
-	conversationKey, err := nip44.GenerateConversationKey(event.PubKey, pt.inboxPrivKey)
+	// cacheable and why this cost is paid per event, junk included. The key is
+	// the inbox the event names: the current one, or one retired in its grace.
+	inboxPrivKey, ok := pt.keyFor(firstPTagValue(event), now)
+	if !ok {
+		return nil, [32]byte{}, errors.New("not addressed to an inbox of this hub")
+	}
+	conversationKey, err := nip44.GenerateConversationKey(event.PubKey, inboxPrivKey)
 	if err != nil {
 		return nil, conversationKey, fmt.Errorf("conversation key: %w", err)
 	}
@@ -295,7 +296,7 @@ func (svc *service) resolvePrivateTransport() (*privateTransport, error) {
 	if err != nil {
 		return nil, err
 	}
-	svc.setPrivateTransportIdentity(pt.nodeXOnly, pt.inboxXOnly)
+	svc.setPrivateTransportIdentity(pt.nodeXOnly, pt.inbox())
 	return pt, nil
 }
 
@@ -312,6 +313,10 @@ func (svc *service) startPrivateTransport(ctx context.Context, pool *nostr.Simpl
 	if err != nil {
 		return err
 	}
+	svc.inboxRotation.mu.Lock()
+	svc.inboxRotation.ctx, svc.inboxRotation.pool, svc.inboxRotation.pt = ctx, pool, pt
+	svc.inboxRotation.mu.Unlock()
+	pt.rekeyAfterGrace()
 
 	// Forget served nonces once their not_after has passed.
 	if store, ok := pt.nonces.(dbServedNonces); ok {
@@ -359,7 +364,7 @@ func (svc *service) publishTransportAnnouncement(ctx context.Context, pool *nost
 	}
 
 	ev, buildErr := transport.NewAnnouncement(
-		pt.nodeXOnly, pt.inboxXOnly, svc.cfg.PrivateEnvelopeLimits(), relayURLs,
+		pt.nodeXOnly, pt.inbox(), svc.cfg.PrivateEnvelopeLimits(), relayURLs,
 	)
 	if buildErr != nil {
 		err = fmt.Errorf("build announcement: %w", buildErr)
@@ -416,7 +421,7 @@ func (svc *service) publishTransportAnnouncement(ctx context.Context, pool *nost
 	}
 
 	logger.Logger.Info().
-		Str("inbox", pt.inboxXOnly).
+		Str("inbox", pt.inbox()).
 		Str("node", pt.nodeXOnly).
 		Int("relays", publishedTo).
 		Msg("Published private transport announcement")
@@ -444,11 +449,12 @@ func toGoNostrEvent(ev *nmilatnip01.Event) (*nostr.Event, error) {
 // startPrivateTransportSubscription opens the one subscription that serves every
 // bill on the private transport.
 //
-// The filter is a single constant `p` value — the hub's inbox key — so unlike the
-// per-wallet subscriptions it never changes: no resubscribe when a bill is minted
-// or destroyed, and no window in which a freshly minted bill is unserved. That
-// also means the relay does the first cut for us, which matters because matching
-// here would otherwise cost a decryption attempt per event.
+// The filter's `p` values are the hub's inbox keys — one, or two for
+// max_request_age after an inbox rotation — so unlike the per-wallet
+// subscriptions it changes only on a rotation: no resubscribe when a bill is
+// minted or destroyed, and no window in which a freshly minted bill is unserved.
+// That also means the relay does the first cut for us, which matters because
+// matching here would otherwise cost a decryption attempt per event.
 func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool *nostr.SimplePool, pt *privateTransport, group *errgroup.Group) error {
 	pt.logDroppedEventsPeriodically(ctx, group)
 	if pt.liveness == nil {
@@ -461,16 +467,27 @@ func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool 
 		pt.probeTimeout = inboxProbeTimeout
 	}
 
-	filter := nostr.Filter{
-		Kinds: []int{transport.KindPrivateRequest},
-		Tags:  nostr.TagMap{"p": []string{pt.inboxXOnly}},
-	}
-
 	for {
+		// The filter is rebuilt each time: a rotation adds the new inbox and keeps
+		// the retired one through its grace.
+		filter := nostr.Filter{
+			Kinds: []int{transport.KindPrivateRequest},
+			Tags:  nostr.TagMap{"p": pt.inboxPTags(time.Now())},
+		}
 		subCtx, cancelSubscription := context.WithCancel(ctx)
 		eventsChannel := subscribeInbox(subCtx, pool, svc.cfg.GetRelayUrls(), filter)
 		group.Go(func() error {
 			svc.watchInboxLiveness(subCtx, pool, pt, cancelSubscription)
+			return nil
+		})
+		var rekeyed atomic.Bool
+		group.Go(func() error {
+			select {
+			case <-pt.rekey:
+				rekeyed.Store(true)
+				cancelSubscription()
+			case <-subCtx.Done():
+			}
 			return nil
 		})
 
@@ -478,6 +495,10 @@ func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool 
 		cancelSubscription()
 		if ctx.Err() != nil {
 			return nil
+		}
+		if rekeyed.Load() {
+			logger.Logger.Info().Strs("inboxes", pt.inboxPTags(time.Now())).Msg("Private transport inboxes changed, resubscribing")
+			continue
 		}
 
 		// Every other end resubscribes: the stream closing, or the liveness
@@ -612,9 +633,10 @@ func (pt *privateTransport) acceptsPrivateEvent(event *nostr.Event) bool {
 		pt.droppedEvents.Add(1)
 		return false
 	}
-	// One string compare against a constant, not a map probe: there is exactly
-	// one inbox key, unlike the standard path's registry of every wallet.
-	if firstPTagValue(event) != pt.inboxXOnly {
+	// A compare against the ring's few keys, not a map probe: there is one
+	// inbox key, two for max_request_age after a rotation, unlike the standard
+	// path's registry of every wallet.
+	if _, ok := pt.keyFor(firstPTagValue(event), time.Now()); !ok {
 		pt.droppedEvents.Add(1)
 		return false
 	}

@@ -113,7 +113,7 @@ func TestNewPrivateTransport_RequiresLNClient(t *testing.T) {
 	require.NoError(t, err)
 	defer ts.Remove()
 
-	svc := &service{cfg: ts.Cfg, keys: ts.Keys}
+	svc := &service{cfg: ts.Cfg, db: ts.DB, keys: ts.Keys}
 	_, err = svc.newPrivateTransport()
 	require.ErrorContains(t, err, "private transport needs an LN client")
 }
@@ -131,7 +131,7 @@ func TestNewPrivateTransport_RejectsWrongPubkeyLength(t *testing.T) {
 	require.True(t, ok)
 	ln := &announcingLN{MockLn: base, pub: "deadbeef"}
 
-	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ln}
+	svc := &service{cfg: ts.Cfg, db: ts.DB, keys: ts.Keys, lnClient: ln}
 	_, err = svc.newPrivateTransport()
 	require.ErrorContains(t, err, "want 66 (compressed)")
 }
@@ -159,7 +159,7 @@ func TestPublishTransportAnnouncement_RequiresTransportSigner(t *testing.T) {
 	require.NoError(t, err)
 	base.Pubkey = hex.EncodeToString(priv.PubKey().SerializeCompressed())
 
-	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ts.LNClient}
+	svc := &service{cfg: ts.Cfg, db: ts.DB, keys: ts.Keys, lnClient: ts.LNClient}
 	pt, err := svc.newPrivateTransport()
 	require.NoError(t, err)
 
@@ -183,7 +183,7 @@ func TestPublishTransportAnnouncement_PropagatesSignerError(t *testing.T) {
 	ln := newAnnouncingLN(t, base)
 	ln.signErr = errors.New("node locked")
 
-	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ln}
+	svc := &service{cfg: ts.Cfg, db: ts.DB, keys: ts.Keys, lnClient: ln}
 	pt, err := svc.newPrivateTransport()
 	require.NoError(t, err)
 
@@ -210,7 +210,7 @@ func TestPublishTransportAnnouncement_NoRelayAcceptedIsAnError(t *testing.T) {
 	require.True(t, ok)
 	ln := newAnnouncingLN(t, base)
 
-	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ln}
+	svc := &service{cfg: ts.Cfg, db: ts.DB, keys: ts.Keys, lnClient: ln}
 	pt, err := svc.newPrivateTransport()
 	require.NoError(t, err)
 
@@ -240,7 +240,7 @@ func TestPublishTransportAnnouncement_SucceedsWhenAtLeastOneRelayAccepts(t *test
 	require.True(t, ok)
 	ln := newAnnouncingLN(t, base)
 
-	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ln}
+	svc := &service{cfg: ts.Cfg, db: ts.DB, keys: ts.Keys, lnClient: ln}
 	pt, err := svc.newPrivateTransport()
 	require.NoError(t, err)
 

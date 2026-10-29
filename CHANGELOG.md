@@ -468,6 +468,11 @@ audits of both.
 
 ### Fixed
 
+- Lets the operator rotate the private-transport inbox key
+  (`POST /api/private-transport/rotate-inbox`, and its Wails route): the Hub
+  moves to the next key index, subscribes the new inbox, announces it, and
+  keeps opening requests to the old one for `max_request_age`. The index was a
+  constant, so a leaked inbox key could not be replaced.
 - Seals a circle wallet invoice's preimage at rest until it settles, with a
   key derived from the node's mnemonic at unlock; an open invoice's preimage
   is no longer stored plain or logged, and rows written before are sealed at

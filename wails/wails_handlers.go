@@ -1972,6 +1972,19 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	case "/api/private-transport/rotate-inbox":
+		if method != "POST" {
+			break
+		}
+		resp, err := app.api.RotatePrivateTransportInbox()
+		if err != nil {
+			logger.Logger.Error().Fields(map[string]interface{}{
+				"route":  route,
+				"method": method,
+			}).Err(err).Msg("Failed to rotate the inbox key")
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: resp, Error: ""}
 	case "/api/node/profile":
 		publishNodeProfileRequest := &api.PublishNodeProfileRequest{}
 		err := json.Unmarshal([]byte(body), publishNodeProfileRequest)

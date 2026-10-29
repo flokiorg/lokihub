@@ -309,6 +309,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/autoswap", httpSvc.disableAutoSwapOutHandler)
 	fullAccessApiGroup.POST("/node/alias", httpSvc.setNodeAliasHandler)
 	fullAccessApiGroup.POST("/node/profile", httpSvc.publishNodeProfileHandler)
+	fullAccessApiGroup.POST("/private-transport/rotate-inbox", httpSvc.rotateInboxHandler)
 	fullAccessApiGroup.POST("/node/note", httpSvc.publishNodeNoteHandler)
 	fullAccessApiGroup.POST("/lsps2/buy", httpSvc.buyLSPS2LiquidityHandler)
 
@@ -1651,6 +1652,16 @@ func (httpSvc *HttpService) setNodeAliasHandler(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) rotateInboxHandler(c echo.Context) error {
+	resp, err := httpSvc.api.RotatePrivateTransportInbox()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: fmt.Sprintf("Failed to rotate the inbox key: %s", err.Error()),
+		})
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 func (httpSvc *HttpService) publishNodeProfileHandler(c echo.Context) error {

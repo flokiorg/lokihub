@@ -2012,6 +2012,18 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	return nil
 }
 
+func (api *api) RotatePrivateTransportInbox() (*RotateInboxResponse, error) {
+	inbox, err := api.svc.RotatePrivateTransportInbox()
+	if inbox == "" {
+		return nil, err
+	}
+	resp := &RotateInboxResponse{InboxPubkey: inbox}
+	if err != nil {
+		resp.AnnounceError = err.Error()
+	}
+	return resp, nil
+}
+
 func (api *api) PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error {
 	if api.svc.GetLNClient() == nil {
 		return errors.New("LNClient not started")
