@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LSPManagementCard } from "src/components/LSPManagementCard";
+import { LSPCatalogue } from "src/components/lsps/LSPCatalogue";
 import { MultiRelayInput } from "src/components/MultiRelayInput";
 import {
   ServiceCardSelector,
@@ -31,7 +31,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "src/components/ui/tabs";
-import { LSP } from "src/types";
 import { request } from "src/utils/request";
 import {
   validateHTTPURL,
@@ -49,7 +48,6 @@ export interface ServiceConfigState {
   messageboardNwcUrl: string;
   enableSwap: boolean;
   enableMessageboardNwc: boolean;
-  lsps: LSP[];
 }
 
 export interface ServiceConfigFormProps {
@@ -63,6 +61,8 @@ export interface ServiceConfigFormProps {
   // Services screen (PATCH /api/settings) persists them. Default to true.
   showGeneralRelay?: boolean;
   showSearchRelay?: boolean;
+  // The LSP catalogue needs the running node; setup shows a note instead.
+  showLSPCatalogue?: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -187,6 +187,7 @@ export function ServiceConfigForm({
   validationErrors = [],
   showGeneralRelay = true,
   showSearchRelay = true,
+  showLSPCatalogue = true,
 }: ServiceConfigFormProps) {
   const { t } = useTranslation("setup");
 
@@ -217,13 +218,11 @@ export function ServiceConfigForm({
     relay: ServiceOption[];
     messageboard: ServiceOption[];
     mempool: ServiceOption[];
-    lsp: ServiceOption[];
   }>({
     swap: [],
     relay: [],
     messageboard: [],
     mempool: [],
-    lsp: [],
   });
 
   useEffect(() => {
@@ -243,29 +242,11 @@ export function ServiceConfigForm({
             description: s.description,
           });
 
-          const mapLSP = (s: any) => {
-            const connection = s.connection || s.uri || "";
-            const parts = connection.split("@");
-            const pubkey = parts[0] || "";
-            const host = parts[1] || "";
-
-            return {
-              name: s.name,
-              pubkey: pubkey,
-              host: host,
-              active: false,
-              isCommunity: true,
-              description: s.description,
-              website: s.url || s.website,
-            } as LSP;
-          };
-
           setCommunityOptions({
             swap: (services.swap_service || []).map(mapUrlService),
             relay: (services.nostr_relay || []).map(mapUrlService),
             messageboard: (services.messageboard_nwc || []).map(mapNwcService),
             mempool: (services.flokicoin_explorer || []).map(mapUrlService),
-            lsp: (services.lsps || []).map(mapLSP),
           });
         }
       } catch (error) {
@@ -392,10 +373,9 @@ export function ServiceConfigForm({
         </CardContent>
       </Card>
 
-      {/* LSP Management */}
-      <LSPManagementCard
-        localLSPs={state.lsps}
-        setLocalLSPs={(lsps) => onChange({ ...state, lsps })}
+      {/* LSP catalogue (NIP-LSP announcements; WP-26) */}
+      <LSPCatalogue
+        disabled={showLSPCatalogue === false}
         className="border-border shadow-sm"
       />
 

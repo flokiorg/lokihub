@@ -49,7 +49,7 @@ func (cm *ConnectionManager) Start(ctx context.Context) {
 // maintainConnections fetches active LSPs and ensures we are connected to them
 func (cm *ConnectionManager) maintainConnections(ctx context.Context) {
 	// 1. Get enabled LSPs from store
-	lsps, err := cm.cfg.LSPManager.ListLSPs()
+	lsps, err := cm.cfg.LSPManager.ListTrustedLSPs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("ConnectionManager: Failed to list LSPs")
 		return
@@ -58,7 +58,10 @@ func (cm *ConnectionManager) maintainConnections(ctx context.Context) {
 	// Filter for active LSPs
 	var activeLSPs []struct{ Pubkey, Host string }
 	for _, lsp := range lsps {
-		if lsp.IsActive {
+		// Only trusted LSPs, resolved and announced with an address, whose
+		// newest announcement is usable and not closed: never through an
+		// older announcement's address (NIP-LSP §Client Behavior).
+		if lsp.Trusted && connectable(lsp.Usable, lsp.Status) && lsp.Pubkey != "" && lsp.Host != "" {
 			activeLSPs = append(activeLSPs, struct{ Pubkey, Host string }{lsp.Pubkey, lsp.Host})
 		}
 	}
@@ -107,4 +110,9 @@ func (cm *ConnectionManager) maintainConnections(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// connectable: an LSP's newest announcement is usable and not closed.
+func connectable(usable bool, status string) bool {
+	return usable && status != "closed"
 }

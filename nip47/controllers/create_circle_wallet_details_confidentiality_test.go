@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"github.com/ohstr/nmilat/nipcw"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -19,13 +20,13 @@ import (
 // decryptCircleWalletDetails opens a join response's encrypted_details as the
 // joining member would: NIP-44, keyed to the member's own identity privkey and
 // the circle hub wallet's pubkey.
-func decryptCircleWalletDetails(t *testing.T, recipientPrivKey, hubWalletPubkey, encrypted string) circleWalletDetails {
+func decryptCircleWalletDetails(t *testing.T, recipientPrivKey, hubWalletPubkey, encrypted string) nipcw.CircleWalletDetails {
 	t.Helper()
 	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, hubWalletPubkey, recipientPrivKey)
 	require.NoError(t, err)
 	plaintext, err := c.Decrypt(encrypted)
 	require.NoError(t, err)
-	var details circleWalletDetails
+	var details nipcw.CircleWalletDetails
 	require.NoError(t, json.Unmarshal([]byte(plaintext), &details))
 	return details
 }
@@ -42,7 +43,7 @@ func joinCircle(t *testing.T, ctx context.Context, svc *tests.TestService, provi
 
 	var published *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			published = r
 		})
 	require.NotNil(t, published)

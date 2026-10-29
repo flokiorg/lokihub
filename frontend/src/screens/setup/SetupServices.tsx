@@ -11,7 +11,6 @@ import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
 import { Button } from "src/components/ui/button";
 import { Skeleton } from "src/components/ui/skeleton";
 import useSetupStore from "src/state/SetupStore";
-import { LSP } from "src/types";
 import { request } from "src/utils/request";
 import { SetupLayout } from "./SetupLayout";
 
@@ -32,7 +31,6 @@ export function SetupServices() {
     messageboardNwcUrl: store.nodeInfo.messageboardNwcUrl || "",
     enableSwap: store.nodeInfo.enableSwap ?? false,
     enableMessageboardNwc: store.nodeInfo.enableMessageboardNwc ?? false,
-    lsps: store.nodeInfo.lsps || [],
   });
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -42,13 +40,6 @@ export function SetupServices() {
     async function fetchServices() {
       try {
         setLoading(true);
-        // Get community services config to merge LSPs
-        const services = await request<any>("/api/setup/config", {
-          method: "GET",
-        });
-
-        const communityLSPs = services?.lsps || [];
-
         // Also fetch current info to prepopulate defaults if store is empty
         const info = await request<any>("/api/info", { method: "GET" });
         if (info) {
@@ -79,29 +70,6 @@ export function SetupServices() {
               info.enableMessageboardNwc !== undefined
             )
               newConfig.enableMessageboardNwc = info.enableMessageboardNwc;
-
-            // LSPs
-            if (newConfig.lsps.length === 0) {
-              const existingLSPs = (info.lsps as LSP[]) || [];
-              if (existingLSPs.length > 0) {
-                newConfig.lsps = existingLSPs;
-              } else {
-                // Use community LSPs as defaults
-                newConfig.lsps = communityLSPs.map((opt: any) => {
-                  const connection = opt.connection || opt.uri || "";
-                  const [pubkeyRaw, host] = connection.split("@");
-                  return {
-                    name: opt.name,
-                    pubkey: pubkeyRaw,
-                    host: host,
-                    active: false, // Default to inactive until user selects
-                    isCommunity: true,
-                    description: opt.description,
-                    website: opt.url || opt.website,
-                  } as LSP;
-                });
-              }
-            }
 
             return newConfig;
           });
@@ -138,7 +106,6 @@ export function SetupServices() {
       mempoolApi: config.mempoolApi,
       enableSwap: config.enableSwap,
       enableMessageboardNwc: config.enableMessageboardNwc,
-      lsps: config.lsps,
     });
     navigate("/setup/node");
   }
@@ -164,6 +131,7 @@ export function SetupServices() {
               validationErrors={validationErrors}
               showGeneralRelay={false}
               showSearchRelay={false}
+              showLSPCatalogue={false}
             />
           )}
         </div>

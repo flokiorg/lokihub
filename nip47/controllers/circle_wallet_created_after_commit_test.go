@@ -63,7 +63,7 @@ func TestCreateCircleWallet_CreatedEventOnlyAfterCommit(t *testing.T) {
 	ev := &db.RequestEvent{NostrId: tests.RandomHex32()}
 	require.NoError(t, svc.DB.Create(ev).Error)
 	var response *models.Response
-	controller.HandleCreateCircleWalletEvent(context.TODO(), req, ev.ID, provider, func(r *models.Response, _ nostr.Tags) {
+	controller.testJoin(t, context.TODO(), req, ev.ID, provider, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	})
 	require.NotNil(t, response)

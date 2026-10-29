@@ -34,6 +34,6 @@ func TestCreateCircleWallet_MalformedPubkeyRefusedAsSuch(t *testing.T) {
 		response := callCreateCircleWallet(t, svc, provider, rawCircleWalletRequest(t, pubkey, 100_000, 3600, proof))
 		require.NotNil(t, response.Error, name)
 		assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code, name)
-		assert.Contains(t, response.Error.Message, "lowercase-hex", name)
+		assert.Contains(t, response.Error.Message, "lowercase hex", name)
 	}
 }

@@ -5,6 +5,7 @@ import {
   HomeIcon,
   LogOut,
   LucideIcon,
+  MegaphoneIcon,
   Plug2Icon,
   Settings,
   SquareStack,
@@ -89,6 +90,11 @@ export function AppSidebar() {
         title: t("nav.cashHub"),
         url: "/cash-hub",
         icon: BanknoteIcon,
+      },
+      {
+        title: t("nav", { ns: "listings" }),
+        url: "/listings",
+        icon: MegaphoneIcon,
       },
       {
         title: t("nav.connections"),

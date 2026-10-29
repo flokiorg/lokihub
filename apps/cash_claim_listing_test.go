@@ -13,12 +13,12 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// seedMergedHub builds a hub with two live slices and three archived ones,
+// seedMergedHub builds a hub with two live slices and two archived ones,
 // interleaved in time so ordering across the live/archived boundary is
 // actually exercised rather than accidentally satisfied.
 //
 // createdAt runs oldest to newest: archived(-5m), live(-4m), archived(-3m),
-// live(-2m), archived(-1m, void).
+// live(-2m).
 func seedMergedHub(t *testing.T, svc *tests.TestService) (*db.App, *db.App) {
 	t.Helper()
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
@@ -44,12 +44,10 @@ func seedMergedHub(t *testing.T, svc *tests.TestService) (*db.App, *db.App) {
 	require.NoError(t, svc.DB.Model(&live[0]).Update("created_at", now.Add(-4*time.Minute)).Error)
 	require.NoError(t, svc.DB.Model(&live[1]).Update("created_at", now.Add(-2*time.Minute)).Error)
 
-	// Three archived slices from a bill that no longer exists — including a
-	// void one, which must stay out of the listing.
+	// Two archived slices from bills that no longer exist.
 	for _, a := range []db.CashBillSliceArchive{
 		{AmountMloki: 3000, Outcome: db.CashSliceStatusExpired, CreatedAt: now.Add(-5 * time.Minute)},
 		{AmountMloki: 4000, Outcome: db.CashSliceStatusSplit, CreatedAt: now.Add(-3 * time.Minute)},
-		{AmountMloki: 5000, Outcome: db.CashSliceStatusVoid, CreatedAt: now.Add(-1 * time.Minute)},
 	} {
 		a.WalletAppID = 999_000 + uint(a.AmountMloki) //nolint:gosec // fixed positive amounts in a test fixture
 		a.HubAppID = hub.ID
@@ -74,7 +72,7 @@ func TestListCashWalletClaims_MergesLiveAndArchived(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Four rows, newest first — the void one excluded.
+	// Four rows, newest first.
 	require.Len(t, rows, 4)
 	assert.EqualValues(t, 4, total)
 	assert.Equal(t, []int64{2000, 4000, 1000, 3000}, []int64{
@@ -89,7 +87,6 @@ func TestListCashWalletClaims_MergesLiveAndArchived(t *testing.T) {
 	assert.EqualValues(t, 1, counts[db.CashSliceStatusSplit])
 	assert.EqualValues(t, 1, counts[db.CashSliceStatusExpired])
 	assert.EqualValues(t, 2, counts["claimed"], "the legacy umbrella is redeemed + split")
-	assert.Zero(t, counts[db.CashSliceStatusVoid], "a void bill was never observable to anyone")
 }
 
 // TestListCashWalletClaims_PaginatesAcrossTheBoundary is the case a hand-rolled

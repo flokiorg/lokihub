@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/nbd-wtf/go-nostr"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 
@@ -23,11 +24,16 @@ import (
 	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
+	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 
+	"github.com/flokiorg/lokihub/cashorder"
+	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -56,14 +62,21 @@ type service struct {
 	// timer rather than logged per event.
 	droppedRequestEvents atomic.Int64
 	nip47Service         nip47.Nip47Service
-	socialCache          *nostrSocialCache
-	lsps5Listener        *lspsnostr.Listener
-	liquidityManager     *manager.LiquidityManager
-	appCancelFn          context.CancelFunc
-	nostrCancelFn        context.CancelFunc
-	keys                 keys.Keys
-	relayStatuses        []RelayStatus
-	startupState         string
+	// withdraw serves on-chain withdrawals (service/withdraw.go).
+	withdraw *cashwithdraw.Service
+	// withdrawEngine pays the payouts (service/withdraw.go).
+	withdrawEngine *cashwithdraw.Engine
+	// noticePool is the relay pool Start opens; order and payout notices go
+	// through it.
+	noticePool       atomic.Pointer[nostr.SimplePool]
+	socialCache      *nostrSocialCache
+	lsps5Listener    *lspsnostr.Listener
+	liquidityManager *manager.LiquidityManager
+	appCancelFn      context.CancelFunc
+	nostrCancelFn    context.CancelFunc
+	keys             keys.Keys
+	relayStatuses    []RelayStatus
+	startupState     string
 	// privateTransportStatus is set by setPrivateTransportIdentity /
 	// setPrivateTransportAnnounceResult (service/private_transport.go) and
 	// read by GetPrivateTransportStatus. A pointer so a read never races a
@@ -73,6 +86,14 @@ type service struct {
 	// that the inbox's liveness watcher updates the snapshot concurrently with
 	// startup.
 	privateTransportStatusMu sync.Mutex
+	// orders takes order payments in and mints them (NIP-CO).
+	orders *cashorder.Engine
+	// listingSvc lists offers (WP-25); set by startListings.
+	listingSvc *listing.Service
+	// listingClockOffset moves the listing clock (test hook only), seconds.
+	listingClockOffset atomic.Int64
+	// lspCatalogue is the NIP-LSP catalogue (WP-26); set by startLSPCatalogue.
+	lspCatalogue *discovery.Service
 }
 
 func NewService(ctx context.Context) (*service, error) {
@@ -126,12 +147,24 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 	err = migrations.Migrate(gormDB)
 	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Refusing to start: the database cannot be used")
 		return nil, err
 	}
 
 	cfg, err := config.NewConfig(appConfig, gormDB)
 	if err != nil {
 		return nil, err
+	}
+
+	// The horizon H only ever increases (NIP-CASH §Deadlines): the stored H is
+	// raised to the configured one, and a lower configured H is ignored.
+	horizon, err := cashrequest.RaiseHorizon(gormDB, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("failed to store the horizon: %w", err)
+	}
+	if configured := int64(appConfig.CashMaxRequestAgeSecs); configured > 0 && configured < horizon {
+		logger.Logger.Error().Int64("configured", configured).Int64("in_force", horizon).
+			Msg("CASH_MAX_REQUEST_AGE_SECS is below the stored horizon, which can only increase; keeping the stored one")
 	}
 
 	// write auto unlock password from env to user config
@@ -158,6 +191,10 @@ func NewService(ctx context.Context) (*service, error) {
 	socialCache.inboxKey = func() (string, error) {
 		return keys.GetPrivateTransportKey(privateTransportKeyIndex)
 	}
+	socialCache.retiredInboxKeys = func() []string { return retiredInboxKeys(gormDB, keys) }
+	socialCache.onResolved = func(provider, d string, set *FollowSet) {
+		ApplyFollowSetResolution(gormDB, eventPublisher, provider, d, set.IsMember, time.Now())
+	}
 
 	svc := &service{
 		cfg:            cfg,
@@ -173,6 +210,11 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 
 	svc.nip47Service.SetPrivateIdentity(svc.privateJoinIdentity)
+	// A Circle Wallet payment the node reports accepted is settled by the Hub
+	// once re-checked, which needs the node.
+	svc.transactionsService.SetLNClientProvider(svc.GetLNClient)
+	svc.orders = svc.newOrderEngine(gormDB, keys, cfg, eventPublisher)
+	svc.setupWithdraw()
 
 	eventPublisher.RegisterSubscriber(svc.transactionsService)
 	eventPublisher.RegisterSubscriber(svc.nip47Service)

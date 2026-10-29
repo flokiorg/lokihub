@@ -23,6 +23,8 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
+	"github.com/flokiorg/lokihub/cashorder"
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	lokidb "github.com/flokiorg/lokihub/db"
@@ -59,6 +61,9 @@ type HttpService struct {
 
 	shutdownOnce sync.Once
 	shutdownCh   chan struct{}
+
+	// svc is read only by the test hooks (testhooks builds).
+	svc service.Service
 }
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
@@ -72,6 +77,7 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		appStoreSvc:    svc.GetAppStoreSvc(),
 		logger:         logger.Logger.With().Str("component", "http").Logger(),
 		shutdownCh:     make(chan struct{}),
+		svc:            svc,
 	}
 }
 
@@ -226,6 +232,9 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.Use(httpSvc.requireFullAccess)
 
 	fullAccessApiGroup.POST("/api/event", httpSvc.eventHandler)
+	httpSvc.registerWithdrawRoutes(fullAccessApiGroup)
+	httpSvc.registerWithdrawTestHooks(fullAccessApiGroup)
+	httpSvc.registerListingRoutes(fullAccessApiGroup)
 	fullAccessApiGroup.PATCH("/unlock-password", httpSvc.changeUnlockPasswordHandler)
 	fullAccessApiGroup.PATCH("/auto-unlock", httpSvc.autoUnlockHandler)
 	fullAccessApiGroup.PATCH("/settings", httpSvc.updateSettingsHandler)
@@ -240,6 +249,8 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/apps/:id/circle/children", httpSvc.circleChildrenListHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/circle/children/:childId", httpSvc.circleChildDeleteHandler)
 	fullAccessApiGroup.POST("/apps/:id/circle/delete", httpSvc.circleHubDeleteHandler)
+	fullAccessApiGroup.POST("/circle-hubs/:id/member-requests", httpSvc.circleMemberRequestHandler)
+	fullAccessApiGroup.POST("/apps/:id/circle/accepting", httpSvc.circleAcceptingHandler)
 	fullAccessApiGroup.GET("/circle-identities", httpSvc.circleIdentitiesListHandler)
 	fullAccessApiGroup.GET("/circle-identities/:id", httpSvc.circleIdentityGetHandler)
 	fullAccessApiGroup.DELETE("/circle-identities/:id", httpSvc.circleIdentityDeleteHandler)
@@ -248,6 +259,12 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/apps/:id/cash-wallets", httpSvc.cashWalletClaimsListHandler)
 	fullAccessApiGroup.GET("/apps/:id/cash-stats", httpSvc.cashHubStatsHandler)
 	fullAccessApiGroup.GET("/cash-hubs/stats", httpSvc.allCashHubStatsHandler)
+	fullAccessApiGroup.GET("/cash-hubs/:id/delete-check", httpSvc.cashHubDeleteCheckHandler)
+	fullAccessApiGroup.POST("/cash-hubs/:id/order-connections", httpSvc.orderConnectionCreateHandler)
+	fullAccessApiGroup.GET("/cash-hubs/:id/order-connections", httpSvc.orderConnectionsListHandler)
+	fullAccessApiGroup.POST("/cash-hubs/:id/order-connections/:conn/retire", httpSvc.orderConnectionRetireHandler)
+	fullAccessApiGroup.GET("/cash-hubs/:id/order-terms", httpSvc.orderTermsGetHandler)
+	fullAccessApiGroup.PUT("/cash-hubs/:id/order-terms", httpSvc.orderTermsPutHandler)
 	fullAccessApiGroup.GET("/apps/:id/circle-stats", httpSvc.circleHubStatsHandler)
 	fullAccessApiGroup.POST("/apps/:id/cash-wallets", httpSvc.cashWalletsCreateHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId", httpSvc.cashWalletDeleteHandler)
@@ -297,8 +314,8 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 
 	fullAccessApiGroup.GET("/lsps", httpSvc.listLSPsHandler)
 	fullAccessApiGroup.POST("/lsps", httpSvc.addLSPHandler)
-	fullAccessApiGroup.PUT("/lsps/:pubkey", httpSvc.updateLSPHandler)
-	fullAccessApiGroup.DELETE("/lsps/:pubkey", httpSvc.deleteLSPHandler)
+	fullAccessApiGroup.PUT("/lsps/:pubkey/trust", httpSvc.trustLSPHandler)
+	fullAccessApiGroup.POST("/lsps/:pubkey/check", httpSvc.checkLSPHandler)
 
 	// LSPS0/1/5
 	fullAccessApiGroup.GET("/lsps0/protocols", httpSvc.lsps0ListProtocolsHandler)
@@ -1061,6 +1078,9 @@ func (httpSvc *HttpService) signMessageHandler(c echo.Context) error {
 
 	signMessageResponse, err := httpSvc.api.SignMessage(ctx, signMessageRequest.Message)
 
+	if errors.Is(err, api.ErrReservedSignText) {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	}
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to sign message: %s", err.Error()),
@@ -2133,6 +2153,157 @@ func (httpSvc *HttpService) circleHubDeleteHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
+// circleAcceptingHandler opens or closes a circle to new members: {accepting}.
+func (httpSvc *HttpService) circleAcceptingHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Accepting *bool `json:"accepting"`
+	}
+	if err := c.Bind(&body); err != nil || body.Accepting == nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "accepting (true or false) is required"})
+	}
+	if err := httpSvc.api.SetCircleAccepting(dbApp, *body.Accepting); err != nil {
+		code, msg := mapCircleAllowlistError(err)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// circleMemberRequestHandler submits a member request the member signed (NIP-CW
+// §Recovering a Lost Connection) to a circle hub: {event}. A refusal is a 200
+// with the NIP-CW code, which the host's UI shows.
+func (httpSvc *HttpService) circleMemberRequestHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Event json.RawMessage `json:"event"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+	result, err := httpSvc.api.SubmitCircleMemberRequest(dbApp, body.Event)
+	if err != nil {
+		code, msg := mapCircleAllowlistError(err)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+// cashHubDeleteCheckHandler reports what keeps a Cash Hub from being deleted,
+// without deleting anything (Q23): each blocker with its count and time, and the
+// earliest possible deletion.
+func (httpSvc *HttpService) cashHubDeleteCheckHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindCashHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a cash_hub"})
+	}
+	check, err := httpSvc.appsSvc.CashHubDeleteCheck(dbApp.ID)
+	if err != nil {
+		httpSvc.logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to check a cash hub's deletion")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: "could not read this hub's records"})
+	}
+	return c.JSON(http.StatusOK, check)
+}
+
+// orderError maps an Order connection or terms error to its HTTP answer: a
+// refused input 400, a node that cannot sign 503, anything else 500.
+func (httpSvc *HttpService) orderError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, constants.ErrInvalidParams):
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	case errors.Is(err, cashorder.ErrSignerUnavailable):
+		return c.JSON(http.StatusServiceUnavailable, ErrorResponse{Message: err.Error()})
+	}
+	httpSvc.logger.Error().Err(err).Msg("Failed to serve an order connection request")
+	return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+}
+
+// orderConnectionCreateHandler creates an Order connection for a Cash Hub.
+func (httpSvc *HttpService) orderConnectionCreateHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Label string `json:"label"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+	conn, err := httpSvc.api.CreateOrderConnection(dbApp, body.Label)
+	if err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.JSON(http.StatusOK, conn)
+}
+
+// orderConnectionsListHandler lists a Cash Hub's Order connections.
+func (httpSvc *HttpService) orderConnectionsListHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	conns, err := httpSvc.api.ListOrderConnections(dbApp)
+	if err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.JSON(http.StatusOK, conns)
+}
+
+// orderConnectionRetireHandler retires an Order connection (irreversible).
+func (httpSvc *HttpService) orderConnectionRetireHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	connID, err := strconv.ParseUint(c.Param("conn"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid order connection id"})
+	}
+	if err := httpSvc.api.RetireOrderConnection(dbApp, uint(connID)); err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// orderTermsGetHandler is a Cash Hub's selling terms (null while it sells nothing).
+func (httpSvc *HttpService) orderTermsGetHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	terms, err := httpSvc.api.GetOrderTerms(dbApp)
+	if err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.JSON(http.StatusOK, terms)
+}
+
+// orderTermsPutHandler sets a Cash Hub's selling terms, refusing (never
+// clamping) any out of bounds.
+func (httpSvc *HttpService) orderTermsPutHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	var body cashorder.Settings
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+	if err := httpSvc.api.PutOrderTerms(dbApp, body); err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // circleIdentitiesListHandler lists every CircleIdentity, for the
 // circle-creation-time "use existing identity" picker.
 func (httpSvc *HttpService) circleIdentitiesListHandler(c echo.Context) error {
@@ -2203,6 +2374,10 @@ func mapCashAllocError(err error) (int, string) {
 		return http.StatusBadRequest, err.Error()
 	case errors.Is(err, transactions.NewQuotaExceededError()):
 		return http.StatusBadRequest, err.Error()
+	case errors.Is(err, cashrequest.ErrRequestReused):
+		return http.StatusConflict, "REQUEST_REUSED: this request_id was already used on this node"
+	case errors.Is(err, cashrequest.ErrDeadlinePassed):
+		return http.StatusBadRequest, "reached commit after its deadline; nothing was committed"
 	case errors.Is(err, constants.ErrInvalidParams):
 		// Our own validation messages are human-readable and safe to surface.
 		return http.StatusBadRequest, err.Error()

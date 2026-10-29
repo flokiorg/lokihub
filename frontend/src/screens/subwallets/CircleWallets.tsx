@@ -32,11 +32,12 @@ type CircleWalletsProps = {
 
 // Lists the circle_wallet children already instantiated for this circle_hub
 // (distinct from CircleAllowlist, which manages pubkeys eligible to request
-// one but not-yet-instantiated). Removing a child reclaims any remaining
-// balance back to the hub and deletes the wallet — unlike DeleteCircleHub,
-// which only ever operates on the whole hub at once. Balances are polled so
-// that member spending shows up here without a manual refresh, matching the
-// transaction list's auto-load behavior.
+// one but not-yet-instantiated), with each wallet's state, grace countdown,
+// dust threshold, freeze and pending rotation (NIP-CW §Lifecycle and
+// Deletion). The host's action is "Close": the wallet moves to Closing, pays
+// out only, and goes once its grace is over and it holds at most dust; its
+// balance is never moved. Balances are polled so that member spending shows
+// up here without a manual refresh.
 export function CircleWallets({ appId }: CircleWalletsProps) {
   const { t } = useTranslation("circles");
   const { t: tc } = useTranslation("common");
@@ -112,7 +113,7 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
       await request(`/api/apps/${appId}/circle/children/${childId}`, {
         method: "DELETE",
       });
-      toast(t("circleWallets.removedToast"));
+      toast(t("circleWallets.closedToast"));
       setConfirmDeleteChild(null);
       // A delete can empty out the last page — step back a page rather than
       // showing an empty list with pagination still pointing past the end.
@@ -122,7 +123,7 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
         await refreshChildren();
       }
     } catch (error) {
-      handleRequestError(t("circleWallets.errors.remove"), error);
+      handleRequestError(t("circleWallets.errors.close"), error);
     }
     setDeleting(false);
   };
@@ -141,7 +142,7 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
           })
         )
       );
-      toast(t("circleWallets.removedSelectedToast", { count: ids.length }));
+      toast(t("circleWallets.closedSelectedToast", { count: ids.length }));
       setSelected(new Set());
       setConfirmBulkDeleteOpen(false);
       if (ids.length === children.length && page > 1) {
@@ -150,7 +151,7 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
         await refreshChildren();
       }
     } catch (error) {
-      handleRequestError(t("circleWallets.errors.removeSelected"), error);
+      handleRequestError(t("circleWallets.errors.closeSelected"), error);
     }
     setRemovingSelected(false);
   };
@@ -179,7 +180,7 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
             loading={isRemovingSelected}
             onClick={() => setConfirmBulkDeleteOpen(true)}
           >
-            <Trash2Icon className="size-4" /> {t("common.removeSelected")}
+            <Trash2Icon className="size-4" /> {t("circleWallets.closeSelected")}
           </LoadingButton>
         </div>
       )}
@@ -231,22 +232,18 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
                     />
                   </div>
                   <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end sm:gap-3">
-                    {child.frozen && (
-                      <Badge
-                        variant="warning"
-                        title={t("circleWallets.frozenHint")}
-                      >
-                        {t("circleWallets.frozenBadge")}
-                      </Badge>
-                    )}
+                    <CircleWalletStatus child={child} />
                     <div className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
                       {(child.balanceMloki / 1000).toLocaleString()} loki
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      title={t("common.remove")}
-                      aria-label={t("common.remove")}
+                      title={t("circleWallets.close")}
+                      aria-label={t("circleWallets.close")}
+                      disabled={
+                        child.state !== "active" && child.state !== "suspended"
+                      }
                       className="text-muted-foreground hover:text-destructive"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -276,11 +273,9 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("circleWallets.removeTitle")}
-            </AlertDialogTitle>
+            <AlertDialogTitle>{t("circleWallets.closeTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t("circleWallets.removeDescription")}
+              {t("circleWallets.closeDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -298,7 +293,7 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
                 confirmDeleteChild && handleDelete(confirmDeleteChild.appId)
               }
             >
-              {t("common.remove")}
+              {t("circleWallets.close")}
             </LoadingButton>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -311,12 +306,12 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t("circleWallets.removeSelectedTitle", {
+              {t("circleWallets.closeSelectedTitle", {
                 count: selected.size,
               })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("circleWallets.removeSelectedDescription")}
+              {t("circleWallets.closeSelectedDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -332,11 +327,61 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
               loading={isRemovingSelected}
               onClick={handleRemoveSelected}
             >
-              {t("common.remove")}
+              {t("circleWallets.close")}
             </LoadingButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+// CircleWalletStatus shows a wallet's state, its grace countdown, its freeze
+// and its pending rotation as badges.
+export function CircleWalletStatus({ child }: { child: CircleChildBalance }) {
+  const { t } = useTranslation("circles");
+  // Read once per mount: a countdown to the day needs no ticking clock.
+  const [now] = React.useState(() => Math.floor(Date.now() / 1000));
+  const graceLeft =
+    child.graceEndsAt !== undefined ? child.graceEndsAt - now : undefined;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <Badge
+        variant={child.state === "active" ? "outline" : "warning"}
+        title={t(`circleWallets.stateHint.${child.state}`)}
+      >
+        {t(`circleWallets.state.${child.state}`)}
+      </Badge>
+      {graceLeft !== undefined && child.state !== "active" && (
+        <span className="text-xs text-muted-foreground">
+          {graceLeft > 0
+            ? t("circleWallets.graceLeft", {
+                days: Math.ceil(graceLeft / 86400),
+              })
+            : t("circleWallets.graceOver", {
+                dust: (child.dustThresholdMloki / 1000).toLocaleString(),
+              })}
+        </span>
+      )}
+      {child.frozen && (
+        <Badge variant="destructive" title={t("circleWallets.frozenHint")}>
+          {t("circleWallets.frozenBadge")}
+        </Badge>
+      )}
+      {child.pendingRotation && (
+        <Badge
+          variant="outline"
+          title={t("circleWallets.rotationHint", {
+            key: child.pendingRotation.connectionPubkey.slice(0, 12),
+          })}
+        >
+          {t("circleWallets.rotationBadge", {
+            at: new Date(
+              child.pendingRotation.completesAt * 1000
+            ).toLocaleString(),
+          })}
+        </Badge>
+      )}
     </div>
   );
 }

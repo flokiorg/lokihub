@@ -215,7 +215,7 @@ func TestAuditB_ConnectionKeyBill_ScopeMineIsACompositionOracle(t *testing.T) {
 // one of the bill's slices (NIP-CASH §Bearer Items). Holding the token string alone —
 // as a giver who kept a copy does — must not reveal whether or when the slice was
 // redeemed. §Archival on Deletion's concession covers destroyed bills only.
-func TestAuditB_CashModeBill_ProoflessStatusNeedsTheSecret(t *testing.T) {
+func TestAuditB_CashModeBill_ProoflessStatusOnTheBillProofAlone(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -251,14 +251,18 @@ func TestAuditB_CashModeBill_ProoflessStatusNeedsTheSecret(t *testing.T) {
 		return res
 	}
 
+	// NIP-CASH §Scoping the Roster: a cash-mode cash_status carries neither proof nor
+	// secret and is answered from the bill proof alone, the single row being "mine".
 	tokenOnly := ask(strings.Repeat("e1", 32), `{"scope":"mine"}`)
-	require.NotNil(t, tokenOnly.Error, "the token string alone is not enough")
-	require.Nil(t, tokenOnly.Result)
-
-	withSecret := ask(strings.Repeat("e2", 32), `{"cash_secret":"`+secret+`","scope":"all"}`)
-	require.Nil(t, withSecret.Error, "%v", withSecret.Error)
+	require.Nil(t, tokenOnly.Error, "%v", tokenOnly.Error)
 	var out nipcash.CashStatusResult
-	require.NoError(t, json.Unmarshal(withSecret.Result, &out))
+	require.NoError(t, json.Unmarshal(tokenOnly.Result, &out))
 	require.Len(t, out.Recipients, 1)
-	require.NotNil(t, out.Recipients[0].ClaimedAt, "the secret's holder still sees their slice's state")
+	require.NotNil(t, out.Recipients[0].ClaimedAt, "the bill's holder sees their slice's state")
+
+	// I8: one carrying the secret is refused, even the right one.
+	withSecret := ask(strings.Repeat("e2", 32), `{"cash_secret":"`+secret+`","scope":"all"}`)
+	require.NotNil(t, withSecret.Error)
+	require.Equal(t, constants.ERROR_BAD_REQUEST, withSecret.Error.Code)
+	require.Nil(t, withSecret.Result)
 }

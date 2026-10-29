@@ -19,8 +19,8 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // connKeyTransferProofTags builds the connection_key-mode-only extra tags a
@@ -50,7 +50,7 @@ func createConnKeyCashWallet(t *testing.T, hubClient *nwcclient.Client, iaPub, c
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
-	return mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv), created.WalletPubkey, claimantPriv, claimantPub
+	return mustConnectBill(t, created.CashToken, claimantPriv), created.WalletPubkey, claimantPriv, claimantPub
 }
 
 // TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath proves the
@@ -113,9 +113,9 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	remDec, err := remCipher.Decrypt(res.RemainderWalletToken)
 	require.NoError(t, err)
-	remTok, err := lokicash.Decode(remDec)
+	_, err = nipcash.Decode(remDec)
 	require.NoError(t, err)
-	remClient := mustConnectBill(t, nwcURIFromLokicash(remTok), remDec, newPriv)
+	remClient := mustConnectBill(t, remDec, newPriv)
 	remInvoice := mintInvoiceFromSimpleWallet(t, cfg, fullAmount-splitAmount, "audit connkey remainder redeem")
 	remAttestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
 	remProof := buildClaimProofEvent(t, claimantPriv, res.RemainderWalletPubkey, remInvoice.PaymentHash,
@@ -136,9 +136,9 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	dec, err := c.Decrypt(res.NewWalletToken)
 	require.NoError(t, err)
-	tok, err := lokicash.Decode(dec)
+	_, err = nipcash.Decode(dec)
 	require.NoError(t, err)
-	newClient := mustConnectBill(t, nwcURIFromLokicash(tok), dec, newPriv)
+	newClient := mustConnectBill(t, dec, newPriv)
 	newInvoice := mintInvoiceFromSimpleWallet(t, cfg, splitAmount, "audit connkey carveoff redeem")
 	newProof := buildClaimProofEvent(t, newPriv, res.NewWalletPubkey, newInvoice.PaymentHash, nil, time.Now())
 	var newClaim ClaimFundsResult
@@ -266,7 +266,7 @@ func TestAudit_CashTransferConnectionKey_NewTargetUntrustedIA_Rejected(t *testin
 		NewIdentity:      CashTransferNewIdentityParam{IdentityType: "connection_key", IdentityValue: targetConnKey, IAPubkey: untrustedIAPub},
 		AmountMillis:     &half,
 	}, &res)
-	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 
 	// Nothing moved.
 	// Read from the HUB's own records, not over the wire.
@@ -318,7 +318,7 @@ func TestAudit_CashTransferConnectionKey_AttestationForWrongClaimant_Rejected(t 
 		NewIdentity:      CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: attackerTargetPub},
 		AmountMillis:     &half,
 	}, &res)
-	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+	requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 	// The real owner can still split their own slice using the same attestation.
 	realTargetPriv := newTestPrivkey(t)

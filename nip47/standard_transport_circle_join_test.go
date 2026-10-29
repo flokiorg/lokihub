@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -61,18 +60,52 @@ func sendOverStandardTransport(t *testing.T, svc *tests.TestService, nip47svc *n
 	return response
 }
 
+// U-13.8: a join on the standard transport is NOT_IMPLEMENTED before any proof,
+// scope or membership work, so its proof is not consumed (NIP-CW §Errors).
+func TestStandardTransport_CircleJoin_NotImplemented(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	require.NoError(t, svc.Cfg.SetUpdate("Relay", "wss://relay.example", ""))
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, everyoneIsAMember{})
+	hub, hubSecret, err := svc.AppsService.CreateCircleHub("circle", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE}, nil,
+		apps.CircleIdentityRef{Name: "circle", Policy: db.CirclePolicyAllowlist},
+		db.CircleHubConfig{MaxExpSecs: 7200, PerWalletMaxMloki: 1_000_000})
+	require.NoError(t, err)
+	tests.FundApp(svc, hub.ID, 1_000_000, tests.RandomHex32())
+
+	member := nostr.GeneratePrivateKey()
+	connection, err := nipcw.NewConnectionKey()
+	require.NoError(t, err)
+	prepared, err := nipcw.CreateCircleWalletParams{Credential: nipcw.BySigning(member), Connection: connection,
+		MaxAmountMillis: 100_000, MaxReceiveMillis: 100_000, Expiry: time.Hour}.Prepare(*hub.WalletPubkey, time.Now())
+	require.NoError(t, err)
+
+	response := sendOverStandardTransport(t, svc, nip47svc, *hub.WalletPubkey, hubSecret,
+		map[string]interface{}{"method": constants.NIP47MethodCreateCircleWallet, "params": prepared.Request})
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_NOT_IMPLEMENTED, response.Error.Code)
+	var proofs int64
+	require.NoError(t, svc.DB.Model(&db.CircleWalletIdentityProof{}).Count(&proofs).Error)
+	assert.Zero(t, proofs, "the proof is not consumed")
+
+	// The same proof then joins over the private transport.
+	raw := privateJoin(t, svc, nip47svc, hub, hubSecret, member, prepared.Request)
+	_, err = prepared.ParseResult(raw)
+	require.NoError(t, err)
+}
+
 // NIP-CW §Creating a Circle Wallet and §Pairing Connection, end to end over the
-// standard transport, which a Hub offering the private join MUST keep serving
-// (CW-private-join-02):
+// private transport:
 //
 //   - nmilat's client generates the connection key and builds the join;
 //   - this Hub issues the wallet to that key and returns no secret;
-//   - nmilat's client turns the reply into a connection string;
 //   - the member then reaches the wallet with the secret only it ever held.
 //
 // The member's secret must appear nowhere on the Hub: not in the reply, not in
 // its database, not in its logs.
-func TestStandardTransport_CircleJoin_MemberKeyEndToEnd(t *testing.T) {
+func TestPrivateJoin_MemberKeyEndToEnd(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -94,23 +127,12 @@ func TestStandardTransport_CircleJoin_MemberKeyEndToEnd(t *testing.T) {
 	member := nostr.GeneratePrivateKey()
 	connection, err := nipcw.NewConnectionKey()
 	require.NoError(t, err)
-	join := nipcw.CreateCircleWalletParams{
-		Credential:      nipcw.BySigning(member),
-		Connection:      connection,
-		MaxAmountMillis: 100_000,
-		Expiry:          time.Hour,
-	}
-	params, err := join.Request(*hub.WalletPubkey)
+	prepared, err := nipcw.CreateCircleWalletParams{Credential: nipcw.BySigning(member), Connection: connection,
+		MaxAmountMillis: 100_000, Expiry: time.Hour}.Prepare(*hub.WalletPubkey, time.Now())
 	require.NoError(t, err)
 
-	response := sendOverStandardTransport(t, svc, nip47svc, *hub.WalletPubkey, hubSecret,
-		map[string]interface{}{"method": constants.NIP47MethodCreateCircleWallet, "params": params})
-	require.Nil(t, response.Error, "%+v", response.Error)
-	require.Equal(t, constants.NIP47MethodCreateCircleWallet, response.ResultType)
-
-	raw, err := json.Marshal(response.Result)
-	require.NoError(t, err)
-	issued, err := join.ParseResult(*hub.WalletPubkey, raw)
+	raw := privateJoin(t, svc, nip47svc, hub, hubSecret, member, prepared.Request)
+	issued, err := prepared.ParseResult(raw)
 	require.NoError(t, err, "nmilat's client must accept this Hub's reply")
 	assert.Equal(t, []string{"wss://relay.example"}, issued.Relays)
 
@@ -139,10 +161,9 @@ func TestStandardTransport_CircleJoin_MemberKeyEndToEnd(t *testing.T) {
 	assert.Equal(t, db.AppKindCircleWallet, wallet.Kind)
 	assert.Equal(t, connection.Pubkey(), wallet.AppPubkey)
 
-	// The member reaches it with the connection string nmilat built from its own secret.
-	uri, err := url.Parse(issued.PairingURI)
-	require.NoError(t, err)
-	require.Equal(t, connection.Secret(), uri.Query().Get("secret"))
+	// The member reaches it with its own connection secret (no URI form is issued).
+	require.Equal(t, connection.Pubkey(), issued.ConnectionPubkey)
+	require.Empty(t, issued.LeakedFields)
 	balance := sendOverStandardTransport(t, svc, nip47svc, issued.WalletPubkey, connection.Secret(),
 		map[string]interface{}{"method": models.GET_BALANCE_METHOD})
 	require.Nil(t, balance.Error, "the member's own connection key must be authorized: %+v", balance.Error)

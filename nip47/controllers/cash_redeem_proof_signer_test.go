@@ -45,7 +45,7 @@ func TestHandleCashRedeemEvent_CoRecipientSignsForAnotherSlice_Rejected(t *testi
 	})
 
 	require.NotNil(t, response.Error, "a co-recipient must not redeem another recipient's slice")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 
 	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, alicePubkey)
 	require.NoError(t, err)

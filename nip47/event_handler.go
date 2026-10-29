@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
+	"gorm.io/gorm"
 	"slices"
 	"time"
 
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
@@ -18,9 +21,13 @@ import (
 	"github.com/flokiorg/lokihub/nip47/permissions"
 	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
 	"github.com/nbd-wtf/go-nostr"
+	nmilatnip01 "github.com/ohstr/nmilat/nip01"
+	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 )
 
 func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
+	// Arrival is taken before any decryption (NIP-CASH §Deadlines).
+	meta := standardCallMeta(event, time.Now())
 	var nip47Response *models.Response
 	logger.Logger.Debug().
 		Str("requestEventNostrId", event.ID).
@@ -76,6 +83,11 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		walletPubkey = pTag[1]
 	}
 
+	// A Circle Wallet rotation that has come due completes before a request
+	// by either of its keys is resolved, so the old key stops working at once
+	// and the new one is served (NIP-CW §Recovering a Lost Connection).
+	svc.completeDueRotationsFor(event.PubKey)
+
 	app := db.App{}
 
 	query := svc.db.Where("app_pubkey = ?", event.PubKey)
@@ -86,14 +98,9 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 
 	err = query.First(&app).Error
 	if err != nil {
-		// No app row. Usually that is a pubkey this hub never served, and the
-		// answer is silence. But a cash bill this hub destroyed also lands
-		// here, and for a bounded window its holder gets a definitive "spent"
-		// instead — see tryReplySpentBill for the three gates that keep this
-		// from becoming an existence oracle.
-		if svc.tryReplySpentBill(ctx, pool, event, &requestEvent, walletPubkey) {
-			return
-		}
+		// No app row: a pubkey this hub never served, or a bill it destroyed,
+		// which kind 23194 answers with silence (its tombstone is served on the
+		// private transport only).
 		logger.Logger.Error().Err(err).
 			Str("appPubkey", event.PubKey).
 			Str("walletPubkey", walletPubkey).
@@ -119,7 +126,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 
 	if app.WalletPubkey != nil {
 		// This is a new child key derived from master using app ID as index
-		appWalletPrivKey, err = svc.keys.GetAppWalletKey(app.ID)
+		appWalletPrivKey, err = svc.keys.GetAppWalletKey(walletKeyAppID(&app))
 		if err != nil {
 			logger.Logger.Error().Err(err).
 				Uint("appId", app.ID).
@@ -398,6 +405,13 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		return
 	}
 
+	// A listed circle's own connection answers get_info as its hub, and nothing
+	// else on this transport (WP-25 item 6).
+	if app.Kind == db.AppKindCircleHubConn {
+		svc.serveListingConn(ctx, lnClient, nip47Request, requestEvent.ID, &app, publishResponse)
+		return
+	}
+
 	// Bill methods are served over the PRIVATE transport only (NIP-CASH §The
 	// Private Transport), which requires refusing them here with NOT_IMPLEMENTED —
 	// before the permission check, so a connection without the scope, or an
@@ -413,9 +427,26 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	// changes that. mint_cash stays on this transport because it is the hub
 	// owner's method on the hub's own connection, and NIP-CASH keeps it off the
 	// private transport for its own reasons.
+	// An Order connection is granted get_info only on this transport, and
+	// cash_order is never served here (NIP-CO §What It Allows), refused before
+	// any scope or method dispatch.
+	if (app.Kind == db.AppKindCashOrder && nip47Request.Method != models.GET_INFO_METHOD) ||
+		nip47Request.Method == constants.NIP47MethodCashOrder {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_NOT_IMPLEMENTED,
+				Message: nip47Request.Method + " is not served on this connection over this transport",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
 	switch nip47Request.Method {
 	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
-		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus:
+		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus,
+		constants.NIP47MethodCashLookup, constants.NIP47MethodCreateCircleWallet,
+		constants.NIP47MethodCashWithdrawQuote, constants.NIP47MethodCashWithdraw:
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error: &models.Error{
@@ -425,6 +456,32 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 					nip47Request.Method),
 			},
 		}, nostr.Tags{})
+		return
+	}
+
+	// A request validly signed by a Circle Wallet's current key cancels its
+	// pending rotation, unless the wallet is frozen (NIP-CW §Recovering a Lost
+	// Connection).
+	if app.Kind == db.AppKindCircleWallet && !app.CircleFrozen {
+		notices, err := circlelife.CancelPendingRotation(svc.db, app.ID, hubclock.Now())
+		if err != nil {
+			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to cancel a pending rotation")
+		}
+		circlelife.Publish(svc.eventPublisher, notices)
+	}
+
+	// A Circle Wallet serves only the methods its state allows, before any scope
+	// is read; delete_circle_wallet needs no scope (NIP-CW §Methods).
+	if ok, code, message := circleWalletGate(&app, nip47Request.Method, hubclock.Now()); !ok {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error:      &models.Error{Code: code, Message: message},
+		}, nostr.Tags{})
+		return
+	}
+	if nip47Request.Method == constants.NIP47MethodDeleteCircleWallet {
+		controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr).
+			HandleDeleteCircleWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
 		return
 	}
 
@@ -486,16 +543,6 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		}
 	}
 
-	// A circle wallet works only while its member is still in the circle. Only
-	// this transport serves wallet methods, so this is the one place to check.
-	if ok, code, message := svc.circleMemberStillAuthorized(ctx, &app, nip47Request.Method); !ok {
-		publishResponse(&models.Response{
-			ResultType: nip47Request.Method,
-			Error:      &models.Error{Code: code, Message: message},
-		}, nostr.Tags{})
-		return
-	}
-
 	controller := controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr).
 		WithPrivateIdentity(svc.privateIdentity)
 
@@ -538,10 +585,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 			HandleCreateConnectionEvent(ctx, nip47Request, requestEvent.ID, publishResponse)
 	case constants.NIP47MethodMintCash:
 		controller.
-			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
-	case constants.NIP47MethodCreateCircleWallet:
-		controller.
-			HandleCreateCircleWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, meta)
 	case models.MAKE_HOLD_INVOICE_METHOD:
 		controller.
 			HandleMakeHoldInvoiceEvent(ctx, nip47Request, requestEvent.ID, app.ID, publishResponse)
@@ -668,4 +712,41 @@ func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrmod
 	}
 
 	return nil
+}
+
+// standardCallMeta is a kind-23194 request's arrival and deadline: its expiration
+// tag, read as nmilat reads it (exactly one, unsigned decimal).
+func standardCallMeta(event *nostr.Event, arrived time.Time) models.CallMeta {
+	meta := models.CallMeta{Transport: models.TransportStandard, ArrivedAt: arrived.Unix()}
+	tags := make([][]string, len(event.Tags))
+	for i, t := range event.Tags {
+		tags[i] = t
+	}
+	deadline, present, err := nmilatnip47.RequestExpiration(&nmilatnip01.Event{Tags: tags})
+	meta.Deadline, meta.DeadlinePresent, meta.DeadlineMalformed = deadline, present, err != nil
+	return meta
+}
+
+// completeDueRotationsFor completes the due rotations whose old or new key is
+// key (NIP-CW §Recovering a Lost Connection: lazily, by the request of either
+// key at or after completes_at; the job does the rest).
+func (svc *nip47Service) completeDueRotationsFor(key string) {
+	now := hubclock.Now()
+	filter := func(q *gorm.DB) *gorm.DB {
+		return q.Where("new_connection_pubkey = ? OR wallet_app_id IN (?)", key,
+			svc.db.Model(&db.App{}).Select("id").Where("app_pubkey = ? AND kind = ?", key, db.AppKindCircleWallet))
+	}
+	// A read first: almost every request has no rotation due, and needs no
+	// write transaction.
+	var due int64
+	if err := filter(svc.db.Model(&db.CircleRotation{}).Where("state = ? AND completes_at <= ?", db.CircleRotationPending, now.Unix())).
+		Count(&due).Error; err != nil || due == 0 {
+		return
+	}
+	notices, _, err := circlelife.CompleteDueRotations(svc.db, now, filter)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to complete due circle rotations")
+		return
+	}
+	circlelife.Publish(svc.eventPublisher, notices)
 }

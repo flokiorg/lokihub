@@ -2,6 +2,7 @@ package transactions
 
 import (
 	"encoding/json"
+	"github.com/flokiorg/lokihub/circlemoney"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -130,7 +131,7 @@ func TestSendPaymentSync_CircleWallet_FeeSkim_InsufficientBalance_IncludesSkim(t
 	transaction, err := transactionsService.SendPaymentSync(tests.MockInvoice, nil, nil, svc.LNClient, &wallet.ID, nil)
 
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, NewInsufficientBalanceError())
+	assertCircleRefusal(t, err, constants.ERROR_INSUFFICIENT_BALANCE)
 	assert.Nil(t, transaction)
 
 	// Nothing was skimmed — the payment never happened.
@@ -152,7 +153,7 @@ func TestSendPaymentSync_CircleWallet_FeeSkim_QuotaExceeded(t *testing.T) {
 	transaction, err := transactionsService.SendPaymentSync(tests.MockInvoice, nil, nil, svc.LNClient, &wallet.ID, nil)
 
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, NewQuotaExceededError())
+	assertCircleRefusal(t, err, constants.ERROR_QUOTA_EXCEEDED)
 	assert.Nil(t, transaction)
 }
 
@@ -230,14 +231,13 @@ func TestSendKeysend_CircleWallet_FeeSkim(t *testing.T) {
 	assert.Equal(t, int64(1_000), queries.GetIsolatedBalance(svc.DB, hub.ID))
 }
 
-func TestSendPaymentSync_CircleWallet_NoParentConfig_NoSkim(t *testing.T) {
+// A circle_wallet whose Hub has no config cannot be checked against its caps,
+// so its payment is refused rather than sent unchecked.
+func TestSendPaymentSync_CircleWallet_NoParentConfig_Refused(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	// A circle_wallet whose parent app has no circle_hub_configs row at all
-	// (e.g. an orphaned/malformed lineage) must not error — the LEFT JOIN in
-	// validateCanPay simply yields fees_ppm = 0.
 	parent := &db.App{Name: "parent", Kind: db.AppKindCircleHub}
 	require.NoError(t, svc.DB.Create(parent).Error)
 
@@ -249,8 +249,9 @@ func TestSendPaymentSync_CircleWallet_NoParentConfig_NoSkim(t *testing.T) {
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
 	transaction, err := transactionsService.SendPaymentSync(tests.MockInvoice, nil, nil, svc.LNClient, &wallet.ID, nil)
-	require.NoError(t, err)
-	assert.Zero(t, transaction.FeeSkimMloki)
+	require.Error(t, err)
+	assert.Nil(t, transaction)
+	assert.Equal(t, int64(140_000), queries.GetIsolatedBalance(svc.DB, wallet.ID))
 }
 
 func TestCalculateFeeSkimMloki(t *testing.T) {
@@ -261,4 +262,12 @@ func TestCalculateFeeSkimMloki(t *testing.T) {
 	assert.Equal(t, uint64(0), CalculateFeeSkimMloki(1, 500_000), "sub-unit skims floor to zero, never round up")
 	assert.Equal(t, uint64(1), CalculateFeeSkimMloki(19, 100_000), "19 * 0.1 = 1.9, floors to 1")
 	assert.Equal(t, uint64(0), CalculateFeeSkimMloki(0, 1_000_000), "zero amount always skims zero")
+}
+
+// assertCircleRefusal checks err is a circle money refusal with code.
+func assertCircleRefusal(t *testing.T, err error, code string) {
+	t.Helper()
+	refusal, ok := circlemoney.AsRefusal(err)
+	require.True(t, ok, "%v is not a circle refusal", err)
+	assert.Equal(t, code, refusal.Code)
 }

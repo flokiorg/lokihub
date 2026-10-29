@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -22,25 +24,30 @@ import (
 	"github.com/flokiorg/flnd/lnrpc"
 	"github.com/flokiorg/go-flokicoin/chainutil"
 	nmilatnip47 "github.com/ohstr/nmilat/nip47"
-	"github.com/ohstr/nmilat/nipcash"
 	"github.com/ohstr/nmilat/nipcash/transport"
-	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashwallet"
+	"github.com/flokiorg/lokihub/circlelife"
+	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/ohstr/nmilat/nipcash"
+
+	"github.com/flokiorg/lokihub/cashrequest"
 
 	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/keys"
@@ -172,10 +179,21 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			createAppRequest.Metadata,
 			identityRef,
 			db.CircleHubConfig{
-				MaxExpSecs:        createAppRequest.CircleMaxExpSecs,
-				FeesPpm:           createAppRequest.CircleFeesPpm,
-				PerWalletMaxMloki: createAppRequest.CirclePerWalletMaxMloki,
-				MinBudgetRenewal:  createAppRequest.CircleMinBudgetRenewal,
+				MaxExpSecs:               createAppRequest.CircleMaxExpSecs,
+				DefaultExpSecs:           createAppRequest.CircleDefaultExpSecs,
+				FeesPpm:                  createAppRequest.CircleFeesPpm,
+				PerWalletMaxMloki:        createAppRequest.CirclePerWalletMaxMloki,
+				PerWalletMaxReceiveMloki: createAppRequest.CirclePerWalletMaxReceiveMloki,
+				MinBudgetRenewal:         createAppRequest.CircleMinBudgetRenewal,
+				HoldingsCeilingMloki:     createAppRequest.CircleHoldingsCeilingMloki,
+				FeeReservePpm:            createAppRequest.CircleFeeReservePpm,
+				FeeReserveMinMloki:       createAppRequest.CircleFeeReserveMinMloki,
+				OutboundCeilingMloki:     createAppRequest.CircleOutboundCeilingMloki,
+				OutboundPeriod:           createAppRequest.CircleOutboundPeriod,
+				GraceSecs:                createAppRequest.CircleGraceSecs,
+				DustThresholdMloki:       createAppRequest.CircleDustThresholdMloki,
+				RotationEnabled:          createAppRequest.CircleRotationEnabled,
+				RotationDelaySecs:        createAppRequest.CircleRotationDelaySecs,
 			},
 		)
 	default:
@@ -260,26 +278,16 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 	// the pairing URI above carries the same connection.
 	switch kind {
 	case db.AppKindCashHub:
-		hubToken, err := nipcash.EncodeCashHubConnection(nipcash.CashHubConnection{
-			WalletPubkey: *app.WalletPubkey,
-			Secret:       pairingSecretKey,
-			RelayURLs:    relayUrls,
-			Label:        hubLabel(app.Name),
-		})
+		hubToken, err := connstr.CashHub(context.Background(), api.lnClient(), *app.WalletPubkey, relayUrls, pairingSecretKey, hubLabel(app.Name))
 		if err != nil {
-			logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Msg("Could not encode the cash hub connection token; returning the pairing URI only")
+			logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Msg("Could not sign the cash hub connection string; returning the pairing URI only")
 		} else {
 			responseBody.CashHubToken = &hubToken
 		}
 	case db.AppKindCircleHub:
-		hubToken, err := nipcw.EncodeCircleHubConnection(nipcw.CircleHubConnection{
-			WalletPubkey: *app.WalletPubkey,
-			Secret:       pairingSecretKey,
-			RelayURLs:    relayUrls,
-			Label:        hubLabel(circleLabel),
-		})
+		hubToken, err := connstr.CircleHub(context.Background(), api.lnClient(), *app.WalletPubkey, relayUrls, pairingSecretKey, hubLabel(circleLabel))
 		if err != nil {
-			logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Msg("Could not encode the circle hub connection token; returning the pairing URI only")
+			logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Msg("Could not sign the circle hub connection string; returning the pairing URI only")
 		} else {
 			responseBody.CircleHubToken = &hubToken
 		}
@@ -320,15 +328,49 @@ func (api *api) GetSetupStatus(ctx context.Context) (*SetupStatusResponse, error
 	}, nil
 }
 
+// circleHoldingsLoki is a circle hub's holdings and holdings ceiling, in loki.
+func (api *api) circleHoldingsLoki(hubID uint) (holdings, ceiling uint64) {
+	cfg, err := api.appsSvc.GetCircleHubConfig(hubID)
+	if err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", hubID).Msg("Failed to read a circle hub's config")
+		return 0, 0
+	}
+	held, err := circlemoney.Holdings(api.db, hubID, time.Now())
+	if err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", hubID).Msg("Failed to compute a circle hub's holdings")
+	}
+	return uint64(max(held, 0)) / 1000, uint64(max(cfg.HoldingsCeilingMloki, 0)) / 1000
+}
+
+// circleHubConfigPatch is the circle hub settings an update request carries.
+func circleHubConfigPatch(req *UpdateAppRequest) apps.CircleHubConfigPatch {
+	return apps.CircleHubConfigPatch{
+		MaxExpSecs:               req.CircleMaxExpSecs,
+		DefaultExpSecs:           req.CircleDefaultExpSecs,
+		FeesPpm:                  req.CircleFeesPpm,
+		PerWalletMaxMloki:        req.CirclePerWalletMaxMloki,
+		PerWalletMaxReceiveMloki: req.CirclePerWalletMaxReceiveMloki,
+		MinBudgetRenewal:         req.CircleMinBudgetRenewal,
+		HoldingsCeilingMloki:     req.CircleHoldingsCeilingMloki,
+		FeeReservePpm:            req.CircleFeeReservePpm,
+		FeeReserveMinMloki:       req.CircleFeeReserveMinMloki,
+		OutboundCeilingMloki:     req.CircleOutboundCeilingMloki,
+		OutboundPeriod:           req.CircleOutboundPeriod,
+		GraceSecs:                req.CircleGraceSecs,
+		DustThresholdMloki:       req.CircleDustThresholdMloki,
+		RotationEnabled:          req.CircleRotationEnabled,
+		RotationDelaySecs:        req.CircleRotationDelaySecs,
+	}
+}
+
 func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) error {
 	updatesCashHub := userApp.Kind == db.AppKindCashHub &&
 		(updateAppRequest.CashPerWalletMaxMloki != nil || updateAppRequest.CashMaxExpSecs != nil ||
 			updateAppRequest.CashMinTransferMloki != nil || updateAppRequest.CashRedeemFeePpm != nil ||
 			updateAppRequest.CashRedeemFeeBaseMloki != nil ||
 			updateAppRequest.CashSpentRetentionSecs != nil)
-	updatesCircleHub := userApp.Kind == db.AppKindCircleHub &&
-		(updateAppRequest.CircleMaxExpSecs != nil || updateAppRequest.CircleFeesPpm != nil ||
-			updateAppRequest.CirclePerWalletMaxMloki != nil || updateAppRequest.CircleMinBudgetRenewal != nil)
+	circlePatch := circleHubConfigPatch(updateAppRequest)
+	updatesCircleHub := userApp.Kind == db.AppKindCircleHub && !circlePatch.IsEmpty()
 
 	// The hub settings are saved after the app itself, so check them first: a
 	// rejected setting must leave the whole request unsaved.
@@ -342,9 +384,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 		}
 	}
 	if updatesCircleHub {
-		if err := api.appsSvc.ValidateCircleHubConfigUpdate(
-			updateAppRequest.CircleMaxExpSecs, updateAppRequest.CircleFeesPpm,
-			updateAppRequest.CirclePerWalletMaxMloki, updateAppRequest.CircleMinBudgetRenewal); err != nil {
+		if err := api.appsSvc.ValidateCircleHubConfigUpdate(userApp.ID, circlePatch); err != nil {
 			return err
 		}
 	}
@@ -539,13 +579,33 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 	}
 
 	if updatesCircleHub {
-		if err := api.appsSvc.UpdateCircleHubConfig(userApp.ID,
-			updateAppRequest.CircleMaxExpSecs, updateAppRequest.CircleFeesPpm,
-			updateAppRequest.CirclePerWalletMaxMloki, updateAppRequest.CircleMinBudgetRenewal); err != nil {
+		if err := api.appsSvc.UpdateCircleHubConfig(userApp.ID, circlePatch); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// refuseOwnerDeleteOfHeldBill refuses the Hub owner's delete of a bill holding
+// a live ordered slice (NIP-CASH §Data Model) or the live slice of a bill a
+// cancelled withdrawal re-minted (§Cancelling a Payout): only its holder ends
+// it. Every owner delete path (the Cash Hub's wallet list and the generic app
+// delete behind Disconnect) goes through it.
+func (api *api) refuseOwnerDeleteOfHeldBill(walletAppID uint) error {
+	var held []db.CashWalletClaim
+	if err := api.db.Select("ordered", "reminted").Where("wallet_app_id = ? AND (ordered = ? OR reminted = ?) AND claimed_at IS NULL",
+		walletAppID, true, true).Find(&held).Error; err != nil {
+		return err
+	}
+	for _, c := range held {
+		if c.Ordered {
+			return fmt.Errorf("%w: a wallet holding an ordered slice cannot be deleted", constants.ErrInvalidParams)
+		}
+	}
+	if len(held) > 0 {
+		return fmt.Errorf("%w: this bill was re-minted by a cancelled withdrawal and cannot be deleted", constants.ErrInvalidParams)
+	}
 	return nil
 }
 
@@ -558,7 +618,22 @@ func (api *api) DeleteApp(userApp *db.App) error {
 	// DeleteCashWallet/DeleteCircleWalletChild endpoints use, so this generic
 	// path (e.g. the app detail page's Disconnect action) is safe too,
 	// regardless of claim state.
-	if userApp.Kind == db.AppKindCashWallet || userApp.Kind == db.AppKindCircleWallet {
+	// A host delete of a Circle Wallet moves it to Closing: a member's balance
+	// is never swept, and the wallet goes once its grace is over and it holds
+	// at most dust (NIP-CW §Lifecycle and Deletion).
+	if userApp.Kind == db.AppKindCircleWallet {
+		return api.closeCircleWallet(userApp.ID)
+	}
+	// A circle hub is torn down: every wallet Closing, the hub kept until the
+	// last one is deleted.
+	if userApp.Kind == db.AppKindCircleHub {
+		_, err := api.teardownCircleHub(userApp)
+		return err
+	}
+	if userApp.Kind == db.AppKindCashWallet {
+		if err := api.refuseOwnerDeleteOfHeldBill(userApp.ID); err != nil {
+			return err
+		}
 		return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
 			api.svc.GetTransactionsService(), api.svc.GetLNClient(), *userApp, service.SubWalletDeletion{
 				Outcome:        db.CashBillOutcomeDeleted,
@@ -566,7 +641,22 @@ func (api *api) DeleteApp(userApp *db.App) error {
 			})
 	}
 
-	return api.appsSvc.DeleteApp(userApp)
+	// A Cash Hub's Order connections go with it: their listings are retired in
+	// order once the delete is committed (WP-16 item 9, OQ-RC5; I-RC2).
+	var orderConns []uint
+	if userApp.Kind == db.AppKindCashHub {
+		if err := api.db.Model(&db.CashOrderConnection{}).Where("hub_app_id = ?", userApp.ID).
+			Pluck("app_id", &orderConns).Error; err != nil {
+			return err
+		}
+	}
+	if err := api.appsSvc.DeleteApp(userApp); err != nil {
+		return err
+	}
+	for _, id := range orderConns {
+		api.closeListings(func(l *listing.Service) error { return l.RetireOrder(context.Background(), id) })
+	}
+	return nil
 }
 
 func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
@@ -601,17 +691,10 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 	budgetUsage := uint64(0)
 	maxAmount := uint64(budgetPermission.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
 	if dbApp.Kind == db.AppKindCircleHub {
-		// A circle_hub never spends directly (only its children do), so the
-		// generic outgoing-transaction usage sum below is always ~0 and
-		// meaningless here. "Used" for a hub's own budget means "currently
-		// committed to live children" — the same metric enforced in
-		// nip47/controllers/create_circle_wallet_controller.go.
-		commitmentMloki, err := queries.GetCircleCommitmentMloki(api.db, dbApp.ID)
-		if err != nil {
-			logger.Logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to compute circle hub commitment")
-		} else {
-			budgetUsage = uint64(commitmentMloki) / 1000 //nolint:gosec // sum of non-negative budget commitments
-		}
+		// A circle_hub never spends: its "used" budget is the circle's
+		// holdings and its maximum the holdings ceiling (NIP-CW §Own Funds and
+		// Caps).
+		budgetUsage, maxAmount = api.circleHoldingsLoki(dbApp.ID)
 	} else {
 		budgetUsage = queries.GetBudgetUsageSat(api.db, &budgetPermission)
 	}
@@ -677,6 +760,20 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 			response.CircleFeesPpm = &cfg.FeesPpm
 			response.CirclePerWalletMaxMloki = &cfg.PerWalletMaxMloki
 			response.CircleMinBudgetRenewal = &cfg.MinBudgetRenewal
+			response.CircleDefaultExpSecs = &cfg.DefaultExpSecs
+			response.CirclePerWalletMaxReceiveMloki = &cfg.PerWalletMaxReceiveMloki
+			response.CircleHoldingsCeilingMloki = &cfg.HoldingsCeilingMloki
+			response.CircleFeeReservePpm = &cfg.FeeReservePpm
+			response.CircleFeeReserveMinMloki = &cfg.FeeReserveMinMloki
+			response.CircleOutboundCeilingMloki = &cfg.OutboundCeilingMloki
+			response.CircleOutboundPeriod = &cfg.OutboundPeriod
+			response.CircleGraceSecs = &cfg.GraceSecs
+			response.CircleDustThresholdMloki = &cfg.DustThresholdMloki
+			accepting := cfg.AcceptingJoins == nil || *cfg.AcceptingJoins
+			response.CircleAccepting = &accepting
+			response.CircleTeardownRequestedAt = cfg.TeardownRequestedAt
+			response.CircleRotationEnabled = &cfg.RotationEnabled
+			response.CircleRotationDelaySecs = &cfg.RotationDelaySecs
 		}
 	}
 
@@ -889,7 +986,8 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 		// listings (Connections page, command palette, unused-apps nudges, etc.).
 		// Filtering for a specific hub's children (ParentAppId set) is exactly
 		// that narrow, intentional exception, so skip the exclusion in that case.
-		query = query.Where("kind != ?", db.AppKindCashWallet)
+		// Order connections are listed on their Cash Hub's own page.
+		query = query.Where("kind NOT IN ?", []string{db.AppKindCashWallet, db.AppKindCashOrder})
 	}
 
 	if orderBy == "" {
@@ -987,13 +1085,8 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 			apiApp.BudgetRenewal = budgetPermission.BudgetRenewal
 			apiApp.MaxAmountLoki = uint64(budgetPermission.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
 			if dbApp.Kind == db.AppKindCircleHub {
-				// See GetApp: "used" for a circle_hub means live commitment
-				// to children, not its own (always ~0) outgoing spend.
-				if commitmentMloki, err := queries.GetCircleCommitmentMloki(api.db, dbApp.ID); err != nil {
-					logger.Logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to compute circle hub commitment")
-				} else {
-					apiApp.BudgetUsage = uint64(commitmentMloki) / 1000 //nolint:gosec // sum of non-negative budget commitments
-				}
+				// See GetApp: a circle_hub's holdings against its ceiling.
+				apiApp.BudgetUsage, apiApp.MaxAmountLoki = api.circleHoldingsLoki(dbApp.ID)
 			} else {
 				apiApp.BudgetUsage = queries.GetBudgetUsageSat(api.db, budgetPermission)
 			}
@@ -1412,6 +1505,13 @@ func (api *api) OpenChannel(ctx context.Context, openChannelRequest *OpenChannel
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
 	}
+	// A channel's funding is an on-chain spend: it may not take coins set
+	// aside for withdrawals.
+	if w, err := api.withdrawService(); err == nil && openChannelRequest != nil && openChannelRequest.AmountLoki > 0 {
+		if err := w.OnchainSpendCheck(ctx, uint64(openChannelRequest.AmountLoki), false); err != nil {
+			return nil, err
+		}
+	}
 	return api.svc.GetLNClient().OpenChannel(ctx, openChannelRequest)
 }
 
@@ -1503,7 +1603,14 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 	return newAddress, nil
 }
 
+// ErrReservedSignText refuses a text the node key signs as Hub data: a bill, a
+// zap bill or a connection string (NIP-CASH §Security Considerations).
+var ErrReservedSignText = errors.New("text with a reserved cash prefix cannot be signed")
+
 func (api *api) SignMessage(ctx context.Context, message string) (*SignMessageResponse, error) {
+	if nipcash.IsReservedSignText(message) {
+		return nil, ErrReservedSignText
+	}
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
 	}
@@ -1520,6 +1627,12 @@ func (api *api) SignMessage(ctx context.Context, message string) (*SignMessageRe
 func (api *api) RedeemOnchainFunds(ctx context.Context, toAddress string, amount uint64, feeRate *uint64, sendAll bool) (*RedeemOnchainFundsResponse, error) {
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
+	}
+	// Coins set aside for withdrawals are not the operator's to spend.
+	if w, err := api.withdrawService(); err == nil {
+		if err := w.OnchainSpendCheck(ctx, amount, sendAll); err != nil {
+			return nil, err
+		}
 	}
 	txId, err := api.svc.GetLNClient().RedeemOnchainFunds(ctx, toAddress, amount, feeRate, sendAll)
 	if err != nil {
@@ -1662,18 +1775,21 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	}
 	info.SearchRelay = api.cfg.GetSearchRelay()
 
-	// Populate selected LSPs
+	// The trusted LSPs (WP-26).
 	if lm := api.svc.GetLiquidityManager(); lm != nil {
 		selected, err := lm.GetSelectedLSPs()
 		if err == nil {
 			info.LSPs = make([]LSPInfo, len(selected))
 			for i, lsp := range selected {
 				info.LSPs[i] = LSPInfo{
+					NodeKey: lsp.NodeKey,
 					Name:    lsp.Name,
 					Pubkey:  lsp.Pubkey,
 					Host:    lsp.Host,
 					Website: lsp.Website,
-					Active:  lsp.Active,
+					Active:  lsp.Trusted,
+					Status:  lsp.Status,
+					Usable:  lsp.Usable,
 				}
 			}
 		}
@@ -1871,13 +1987,6 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		err := api.cfg.SetMessageboardNwcUrl(updateSettingsRequest.MessageboardNwcUrl)
 		if err != nil {
 			return fmt.Errorf("failed to set MessageboardNwcUrl: %w", err)
-		}
-	}
-
-	// Process LSP updates using new helper (which uses LSPManager and atomic updates)
-	if updateSettingsRequest.LSPs != nil {
-		if err := api.saveLSPsToDatabase(updateSettingsRequest.LSPs); err != nil {
-			return fmt.Errorf("failed to update LSPs: %w", err)
 		}
 	}
 
@@ -2175,14 +2284,6 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 		err = api.cfg.SetUpdate("LNDMacaroonHex", setupRequest.FLNDMacaroonHex, setupRequest.UnlockPassword)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save FLND macaroon hex")
-			return err
-		}
-	}
-
-	if setupRequest.LSP != "" {
-		err = api.cfg.SetLSP(setupRequest.LSP)
-		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save LSP")
 			return err
 		}
 	}
@@ -2586,12 +2687,6 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 		return err
 	}
 
-	if req.LSP != "" {
-		if err := api.cfg.SetLSP(req.LSP); err != nil {
-			return err
-		}
-	}
-
 	if req.LokihubServicesURL != "" {
 		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
 			return fmt.Errorf("invalid Hub Services URL: %w", err)
@@ -2632,18 +2727,6 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
-			return err
-		}
-	}
-
-	// Process LSPs array (new approach)
-	if len(req.LSPs) > 0 {
-		if err := api.saveLSPsToDatabase(req.LSPs); err != nil {
-			return fmt.Errorf("failed to save LSPs: %w", err)
-		}
-	} else if req.LSP != "" {
-		// Backward compatibility: single LSP string (deprecated)
-		if err := api.cfg.SetLSP(req.LSP); err != nil {
 			return err
 		}
 	}
@@ -2697,12 +2780,6 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 		return err
 	}
 
-	if req.LSP != "" {
-		if err := api.cfg.SetLSP(req.LSP); err != nil {
-			return err
-		}
-	}
-
 	if req.LokihubServicesURL != "" {
 		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
 			return fmt.Errorf("invalid Hub Services URL: %w", err)
@@ -2743,18 +2820,6 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
-			return err
-		}
-	}
-
-	// Process LSPs array (new approach)
-	if len(req.LSPs) > 0 {
-		if err := api.saveLSPsToDatabase(req.LSPs); err != nil {
-			return fmt.Errorf("failed to save LSPs: %w", err)
-		}
-	} else if req.LSP != "" {
-		// Backward compatibility: single LSP string (deprecated)
-		if err := api.cfg.SetLSP(req.LSP); err != nil {
 			return err
 		}
 	}
@@ -2802,7 +2867,7 @@ func (api *api) GetServices(ctx context.Context) (interface{}, error) {
 	if cachedJSON != "" {
 		var result interface{}
 		if err := json.Unmarshal([]byte(cachedJSON), &result); err == nil {
-			return result, nil
+			return withoutServicesLSPs(result), nil
 		}
 		logger.Logger.Error().Msg("Failed to unmarshal cached services JSON, falling back to network")
 	}
@@ -2837,7 +2902,17 @@ func (api *api) GetServices(ctx context.Context) (interface{}, error) {
 		return nil, err
 	}
 
-	return result, nil
+	return withoutServicesLSPs(result), nil
+}
+
+// withoutServicesLSPs drops services.json's lsps: the LSP list comes from
+// NIP-LSP announcements only (WP-26, LP-2). Rates, currencies, info and faq
+// stay.
+func withoutServicesLSPs(result interface{}) interface{} {
+	if m, ok := result.(map[string]interface{}); ok {
+		delete(m, "lsps")
+	}
+	return result
 }
 
 // ReplaceCircleAllowlist replaces the full allowlist for the CircleIdentity
@@ -2852,7 +2927,8 @@ func (api *api) ReplaceCircleAllowlist(app *db.App, pubkeys []string) error {
 		return fmt.Errorf("circle_hub has no config: %w", err)
 	}
 	identityID := cfg.CircleIdentityID
-	return api.db.Transaction(func(tx *gorm.DB) error {
+	var changes []circlelife.HubMembershipChange
+	err = api.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("circle_identity_id = ?", identityID).Delete(&db.CircleIdentityAllowedPubkey{}).Error; err != nil {
 			return err
 		}
@@ -2872,8 +2948,41 @@ func (api *api) ReplaceCircleAllowlist(app *db.App, pubkeys []string) error {
 				return err
 			}
 		}
-		return nil
+		return api.applyAllowlistTx(tx, identityID, &changes)
 	})
+	if err == nil {
+		api.publishMassSuspension(changes)
+	}
+	return err
+}
+
+// applyAllowlistTx applies an allowlist identity's committed list to its Hubs'
+// wallets in the editing transaction: each committed edit is a successful
+// resolution, applied at once (NIP-CW §Membership).
+func (api *api) applyAllowlistTx(tx *gorm.DB, identityID uint, changes *[]circlelife.HubMembershipChange) error {
+	var pubkeys []string
+	if err := tx.Model(&db.CircleIdentityAllowedPubkey{}).Where("circle_identity_id = ?", identityID).Pluck("pubkey", &pubkeys).Error; err != nil {
+		return err
+	}
+	members := make(map[string]bool, len(pubkeys))
+	for _, pk := range pubkeys {
+		members[pk] = true
+	}
+	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, time.Now())
+	*changes = applied
+	return err
+}
+
+// publishMassSuspension raises the host alert for a Hub one edit suspended a
+// large share of (no member pubkey in it).
+func (api *api) publishMassSuspension(changes []circlelife.HubMembershipChange) {
+	for _, c := range changes {
+		if c.Alert() && api.eventPublisher != nil {
+			api.eventPublisher.Publish(&events.Event{Event: "nwc_circle_mass_suspension", Properties: map[string]interface{}{
+				"hub_app_id": c.HubID, "suspended": c.Suspended, "active_before": c.ActiveBefore,
+			}})
+		}
+	}
 }
 
 // RemoveCircleAllowedPubkey removes a single pubkey from the CircleIdentity
@@ -2895,8 +3004,18 @@ func (api *api) RemoveCircleAllowedPubkey(app *db.App, pubkey string) error {
 	if err != nil {
 		return fmt.Errorf("circle_hub has no config: %w", err)
 	}
-	return api.db.Where("circle_identity_id = ? AND pubkey = ?", cfg.CircleIdentityID, pubkey).
-		Delete(&db.CircleIdentityAllowedPubkey{}).Error
+	var changes []circlelife.HubMembershipChange
+	err = api.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("circle_identity_id = ? AND pubkey = ?", cfg.CircleIdentityID, pubkey).
+			Delete(&db.CircleIdentityAllowedPubkey{}).Error; err != nil {
+			return err
+		}
+		return api.applyAllowlistTx(tx, cfg.CircleIdentityID, &changes)
+	})
+	if err == nil {
+		api.publishMassSuspension(changes)
+	}
+	return err
 }
 
 // ListCircleAllowlist returns the current allowlisted pubkeys for the
@@ -2962,67 +3081,75 @@ func (api *api) ListCircleChildrenBalances(app *db.App, limit uint64, offset uin
 		return nil, 0, err
 	}
 
-	pagePubkeys := make([]string, 0, len(requesterPubkeysByID))
-	for _, pubkey := range requesterPubkeysByID {
-		pagePubkeys = append(pagePubkeys, pubkey)
-	}
-	isMember, err := api.circleMembershipWithoutFetch(app, pagePubkeys)
-	if err != nil {
+	// An Expired or Closing wallet has no membership row any more: its member
+	// is read from its join record.
+	var records []db.CircleJoinRecord
+	if err := api.db.Where("wallet_app_id IN ?", childAppIDs(children)).Find(&records).Error; err != nil {
 		return nil, 0, err
 	}
-
-	balances := make([]CircleChildBalance, 0, len(children))
-	for _, child := range children {
-		requester := requesterPubkeysByID[child.ID]
-		balance := CircleChildBalance{
-			AppID:           child.ID,
-			Name:            child.Name,
-			RequesterPubkey: requester,
-			AppPubkey:       child.AppPubkey,
-			BalanceMloki:    balancesByID[child.ID],
+	for _, r := range records {
+		if requesterPubkeysByID[r.WalletAppID] == "" {
+			requesterPubkeysByID[r.WalletAppID] = r.AuthorizerPubkey
 		}
-		if isMember != nil {
-			// No member on record is refused like a removed one.
-			frozen := requester == "" || !isMember(requester)
-			balance.Frozen = &frozen
+	}
+	var rotations []db.CircleRotation
+	if err := api.db.Where("wallet_app_id IN ? AND state = ?", childAppIDs(children), db.CircleRotationPending).Find(&rotations).Error; err != nil {
+		return nil, 0, err
+	}
+	pending := make(map[uint]*CirclePendingRotation, len(rotations))
+	for _, r := range rotations {
+		pending[r.WalletAppID] = &CirclePendingRotation{ConnectionPubkey: r.NewConnectionPubkey, CompletesAt: r.CompletesAt}
+	}
+
+	now := time.Now()
+	balances := make([]CircleChildBalance, 0, len(children))
+	for i := range children {
+		child := &children[i]
+		balance := CircleChildBalance{
+			AppID:              child.ID,
+			Name:               child.Name,
+			RequesterPubkey:    requesterPubkeysByID[child.ID],
+			AppPubkey:          child.AppPubkey,
+			BalanceMloki:       balancesByID[child.ID],
+			State:              circlelife.EffectiveState(child, now),
+			GraceEndsAt:        child.CircleGraceEndsAt,
+			DustThresholdMloki: circlelife.Dust(child),
+			Frozen:             child.CircleFrozen,
+			PendingRotation:    pending[child.ID],
+		}
+		if child.ExpiresAt != nil {
+			at := child.ExpiresAt.Unix()
+			balance.ExpiresAt = &at
 		}
 		balances = append(balances, balance)
 	}
 	return balances, totalCount, nil
 }
 
-// circleMembershipWithoutFetch returns which of pubkeys are still in hub's
-// circle, the same rule the circle wallet freeze applies, without waiting on a
-// relay. It returns nil when that isn't known yet (a follow set not cached).
-func (api *api) circleMembershipWithoutFetch(hub *db.App, pubkeys []string) (func(pubkey string) bool, error) {
-	cfg, err := api.appsSvc.GetCircleHubConfig(hub.ID)
+// SetCircleAccepting opens or closes a circle hub to new members: joins are
+// refused RESTRICTED while closed, and members keep their wallets and lookups.
+// A torn-down circle stays closed.
+func (api *api) SetCircleAccepting(app *db.App, accepting bool) error {
+	if app.Kind != db.AppKindCircleHub {
+		return fmt.Errorf("%w: app is not a circle_hub", constants.ErrInvalidParams)
+	}
+	cfg, err := api.appsSvc.GetCircleHubConfig(app.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	identity := cfg.CircleIdentity
-	switch identity.Policy {
-	case db.CirclePolicyAllowlist:
-		var listed []string
-		if err := api.db.Model(&db.CircleIdentityAllowedPubkey{}).
-			Where("circle_identity_id = ? AND pubkey IN ?", identity.ID, pubkeys).Pluck("pubkey", &listed).Error; err != nil {
-			return nil, err
-		}
-		members := make(map[string]struct{}, len(listed))
-		for _, pubkey := range listed {
-			members[pubkey] = struct{}{}
-		}
-		return func(pubkey string) bool {
-			_, ok := members[pubkey]
-			return ok
-		}, nil
-	case db.CirclePolicyFollowSet:
-		set, ok := api.svc.PeekFollowSet(identity.ProviderPubkey, identity.FollowSetD)
-		if !ok {
-			return nil, nil
-		}
-		return set.IsMember, nil
+	if accepting && cfg.TeardownRequestedAt != nil {
+		return fmt.Errorf("%w: this circle is being torn down and takes no new members", constants.ErrInvalidParams)
 	}
-	return nil, nil
+	if err := api.db.Model(&db.CircleHubConfig{}).Where("app_id = ?", app.ID).Update("accepting_joins", accepting).Error; err != nil {
+		return err
+	}
+	if accepting {
+		return nil
+	}
+	// accepting false is committed, so get_info says so; then the circle's
+	// listing is closed and deleted in order (WP-25 item 8, H-CASH-417).
+	api.closeListings(func(l *listing.Service) error { return l.CloseCircle(context.Background(), app.ID) })
+	return nil
 }
 
 // paginateSlice returns the [offset, offset+limit) window of s, clamped to
@@ -3049,12 +3176,10 @@ func childAppIDs(children []db.App) []uint {
 	return ids
 }
 
-// DeleteCircleWalletChild removes a single circle_wallet child from a
-// circle_hub, in any state (empty or with a remaining balance) — unlike
-// DeleteCircleHub, which only ever operates on the whole hub at once. Any
-// remaining balance is first reclaimed back to the hub and the child app
-// deleted (service.ReclaimAndDeleteSubWallet), the same way
-// DeleteCashHubAllocation handles a claimed Cash wallet.
+// DeleteCircleWalletChild is the host's delete of one of a circle hub's
+// wallets: it moves the wallet to Closing (NIP-CW §Lifecycle and Deletion),
+// starting its grace period unless it is already in one, and never moves its
+// balance. An Expired or Closing wallet is left as it is.
 func (api *api) DeleteCircleWalletChild(hubAppID uint, childAppID uint) error {
 	var hub db.App
 	if err := api.db.First(&hub, hubAppID).Error; err != nil {
@@ -3072,22 +3197,60 @@ func (api *api) DeleteCircleWalletChild(hubAppID uint, childAppID uint) error {
 		}
 		return err
 	}
-
-	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
-		api.svc.GetTransactionsService(), api.svc.GetLNClient(), child, service.SubWalletDeletion{
-			Outcome:        db.CashBillOutcomeDeleted,
-			EventPublisher: api.eventPublisher,
-		})
+	return api.closeCircleWallet(child.ID)
 }
 
-// DeleteCircleHub deletes a circle_hub app and its circle_wallet children.
-// mode must be db.CircleDeleteModeAll (sweep every child's balance back to the hub
-// and the hub's to the main balance, then delete; see sweepAndDeleteCircleHub) or
-// db.CircleDeleteModeEmptyOnly (delete only zero-balance children with no payment
-// in flight). In both modes, a child that can't go yet leaves the provider itself
-// intact so the admin can retry once it has drained. Guarded by the same
-// per-provider advisory lock used by create_circle_wallet, so this can't race a
-// concurrent wallet creation on the app.
+// closeCircleWallet moves one Circle Wallet to Closing under its Hub's lock, then
+// cancels its open invoices at the node (the lifecycle job retries a failure).
+func (api *api) closeCircleWallet(walletID uint) error {
+	var wallet db.App
+	err := api.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("id = ?", walletID).First(&wallet).Error; err != nil {
+			return err
+		}
+		if wallet.ParentAppID == nil {
+			return fmt.Errorf("%w: circle wallet has no hub", constants.ErrInvalidParams)
+		}
+		if err := db.LockApp(tx, *wallet.ParentAppID); err != nil {
+			return err
+		}
+		cfg, err := circlemoney.HubConfig(tx, *wallet.ParentAppID)
+		if err != nil {
+			return err
+		}
+		err = circlelife.Transition(tx, &wallet, circlelife.EventHostDelete, time.Now(), cfg.GraceSecs)
+		if errors.Is(err, circlelife.ErrForbiddenEdge) {
+			return nil // Expired or Closing already: nothing changes
+		}
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	api.cancelCircleInvoices(walletID)
+	return nil
+}
+
+// cancelCircleInvoices cancels a wallet's open invoices at the node, best
+// effort: the lifecycle job retries.
+func (api *api) cancelCircleInvoices(walletID uint) {
+	if api.svc == nil {
+		return
+	}
+	lnClient := api.svc.GetLNClient()
+	if lnClient == nil {
+		return
+	}
+	if err := api.svc.GetTransactionsService().CancelOpenCircleInvoices(context.Background(), walletID, lnClient); err != nil {
+		logger.Logger.Warn().Err(err).Uint("app_id", walletID).Msg("Failed to cancel a closing circle wallet's invoices; the lifecycle job retries")
+	}
+}
+
+// DeleteCircleHub tears a circle hub down (NIP-CW §Lifecycle and Deletion, Hub
+// teardown), whatever mode is asked: every wallet moves to Closing as a host
+// delete does, the circle stops accepting joins, and the hub itself goes only
+// once its last wallet is deleted (at once when it has none). mode is still
+// checked, for the clients that send it; both values do the same.
 func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResult, error) {
 	if app.Kind != db.AppKindCircleHub {
 		return nil, fmt.Errorf("%w: app is not a circle_hub", constants.ErrInvalidParams)
@@ -3096,150 +3259,76 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 		return nil, fmt.Errorf("%w: mode must be %q or %q", constants.ErrInvalidParams,
 			db.CircleDeleteModeAll, db.CircleDeleteModeEmptyOnly)
 	}
-	if mode == db.CircleDeleteModeAll {
-		return api.sweepAndDeleteCircleHub(app)
-	}
+	return api.teardownCircleHub(app)
+}
 
-	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}}
+// teardownCircleHub moves every wallet of hub to Closing in one transaction
+// under the hub's lock, records the teardown and closes the circle to joins;
+// the hub is deleted now if it has no wallet, else by the lifecycle job after
+// its last one.
+func (api *api) teardownCircleHub(app *db.App) (*DeleteCircleHubResult, error) {
+	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}, ClosingChildIDs: []uint{}}
+	now := time.Now()
 	err := api.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Name() == "postgres" {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
-				return fmt.Errorf("acquire circle delete lock: %w", err)
-			}
+		if err := db.LockApp(tx, app.ID); err != nil {
+			return err
 		}
-
+		cfg, err := circlemoney.HubConfig(tx, app.ID)
+		if err != nil {
+			return err
+		}
 		children, err := getCircleChildren(tx, app.ID)
 		if err != nil {
 			return err
 		}
-
-		balancesByID, err := queries.GetIsolatedBalancesByAppIDs(tx, childAppIDs(children))
-		if err != nil {
-			return err
-		}
-
-		var idsToDelete []uint
-		for _, child := range children {
-			// Empty also means nothing can still arrive or leave: deleting a child
-			// cascade-deletes a pending row, and its settlement would then have
-			// nowhere to land (the same rule ReclaimAndDeleteSubWallet applies).
-			if balancesByID[child.ID] != 0 ||
-				queries.HasPendingIncoming(tx, child.ID) || queries.HasPendingOutgoing(tx, child.ID) {
-				result.SkippedChildIDs = append(result.SkippedChildIDs, child.ID)
-				continue
-			}
-			idsToDelete = append(idsToDelete, child.ID)
-		}
-
-		if len(idsToDelete) > 0 {
-			if err := tx.Where("id IN ?", idsToDelete).Delete(&db.App{}).Error; err != nil {
+		for i := range children {
+			err := circlelife.Transition(tx, &children[i], circlelife.EventTeardown, now, cfg.GraceSecs)
+			if err != nil && !errors.Is(err, circlelife.ErrForbiddenEdge) {
 				return err
 			}
-			result.DeletedChildIDs = idsToDelete
+			result.ClosingChildIDs = append(result.ClosingChildIDs, children[i].ID)
 		}
-
-		if len(result.SkippedChildIDs) > 0 {
-			// At least one child still has balance and was left intact — abort the
-			// provider deletion so an admin can retry once it drains.
-			return nil
+		updates := map[string]interface{}{"accepting_joins": false}
+		if cfg.TeardownRequestedAt == nil {
+			updates["teardown_requested_at"] = now.Unix()
 		}
-
-		if err := tx.Delete(app).Error; err != nil {
+		if err := tx.Model(&db.CircleHubConfig{}).Where("app_id = ?", app.ID).Updates(updates).Error; err != nil {
 			return err
 		}
-		result.HubDeleted = true
+		if len(children) == 0 {
+			if err := tx.Delete(&db.App{}, app.ID).Error; err != nil {
+				return err
+			}
+			result.HubDeleted = true
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	for _, childID := range result.DeletedChildIDs {
-		api.eventPublisher.Publish(&events.Event{
-			Event:      "nwc_app_deleted",
-			Properties: map[string]interface{}{"id": childID},
-		})
+	for _, id := range result.ClosingChildIDs {
+		api.cancelCircleInvoices(id)
 	}
 	if result.HubDeleted {
 		api.publishCircleHubDeleted(app)
 	}
-
+	// Closing set accepting false: the circle's listing is closed in order
+	// (WP-16 item 9, WP-25 item 8).
+	api.closeListings(func(l *listing.Service) error { return l.CloseCircle(context.Background(), app.ID) })
 	return result, nil
 }
 
-// errCircleHubChanged aborts the final delete when a member joined or a
-// payment started after the sweep.
-var errCircleHubChanged = errors.New("circle hub changed while deleting")
-
-// sweepAndDeleteCircleHub is DeleteCircleHub's mode=all: each child's balance
-// goes back to the hub (ReclaimAndDeleteSubWallet, which also deletes the
-// child), then the hub's balance goes to the node's main balance as a recorded
-// transfer, and only then is the hub deleted. Lightning payments can't sit in
-// a DB transaction, so this can stop part-way: a child with a payment in flight
-// is skipped and the hub kept, and a retry picks up where this one left off.
-func (api *api) sweepAndDeleteCircleHub(app *db.App) (*DeleteCircleHubResult, error) {
-	ctx := context.Background()
-	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}}
-
-	children, err := getCircleChildren(api.db, app.ID)
-	if err != nil {
-		return nil, err
+// closeListings runs a listing retirement after the commit that ended an offer;
+// a failure is retried by the listing scheduler.
+func (api *api) closeListings(f func(*listing.Service) error) {
+	if api.svc == nil {
+		return
 	}
-	for _, child := range children {
-		err := service.ReclaimAndDeleteSubWallet(ctx, api.db,
-			api.svc.GetTransactionsService(), api.svc.GetLNClient(), child, service.SubWalletDeletion{
-				Outcome:        db.CashBillOutcomeDeleted,
-				EventPublisher: api.eventPublisher,
-			})
-		switch {
-		case err == nil:
-			result.DeletedChildIDs = append(result.DeletedChildIDs, child.ID)
-		case errors.Is(err, constants.ErrInvalidParams):
-			// A payment is still in flight: retry once it ends.
-			result.SkippedChildIDs = append(result.SkippedChildIDs, child.ID)
-		default:
-			return nil, fmt.Errorf("reclaim circle wallet %d: %w", child.ID, err)
+	if l := api.svc.GetListingService(); l != nil {
+		if err := f(l); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Could not close an ended offer's listing yet; the scheduler retries")
 		}
 	}
-	if len(result.SkippedChildIDs) > 0 {
-		return result, nil
-	}
-
-	if queries.HasPendingIncoming(api.db, app.ID) || queries.HasPendingOutgoing(api.db, app.ID) {
-		return nil, fmt.Errorf("%w: a payment to or from this hub is still in flight, try again shortly", constants.ErrInvalidParams)
-	}
-	if balance := queries.GetIsolatedBalance(api.db, app.ID); balance > 0 {
-		if err := api.Transfer(ctx, &app.ID, nil, uint64(balance)); err != nil { //nolint:gosec // guarded by the balance > 0 check
-			return nil, fmt.Errorf("move the hub's balance to the main balance: %w", err)
-		}
-	}
-
-	err = api.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Name() == "postgres" {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
-				return fmt.Errorf("acquire circle delete lock: %w", err)
-			}
-		}
-		remaining, err := getCircleChildren(tx, app.ID)
-		if err != nil {
-			return err
-		}
-		if len(remaining) > 0 || queries.GetIsolatedBalance(tx, app.ID) != 0 ||
-			queries.HasPendingIncoming(tx, app.ID) || queries.HasPendingOutgoing(tx, app.ID) {
-			return errCircleHubChanged
-		}
-		return tx.Delete(app).Error
-	})
-	if errors.Is(err, errCircleHubChanged) {
-		return nil, fmt.Errorf("%w: a member joined or a payment arrived while deleting, try again", constants.ErrInvalidParams)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	result.HubDeleted = true
-	api.publishCircleHubDeleted(app)
-	return result, nil
 }
 
 func (api *api) publishCircleHubDeleted(app *db.App) {
@@ -3429,6 +3518,16 @@ func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) e
 		}
 		return err
 	}
+	// An ordered slice, or a re-minted one, is never removed by the Hub's owner
+	// (NIP-CASH §Data Model, §Cancelling a Payout).
+	var held int64
+	if err := api.db.Model(&db.CashWalletClaim{}).Where("id = ? AND wallet_app_id = ? AND (ordered = ? OR reminted = ?)",
+		claimID, walletAppID, true, true).Count(&held).Error; err != nil {
+		return err
+	}
+	if held > 0 {
+		return fmt.Errorf("%w: an ordered or re-minted slice cannot be removed", constants.ErrInvalidParams)
+	}
 
 	// The sweep runs while the slice is held (NIP-CASH §Removing a Recipient):
 	// if it fails, the slice stays exactly as it was.
@@ -3499,6 +3598,9 @@ func (api *api) DeleteCashWallet(hubAppID uint, walletAppID uint) error {
 		}
 		return err
 	}
+	if err := api.refuseOwnerDeleteOfHeldBill(walletAppID); err != nil {
+		return err
+	}
 
 	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
 		api.svc.GetTransactionsService(), api.svc.GetLNClient(), wallet, service.SubWalletDeletion{
@@ -3507,13 +3609,8 @@ func (api *api) DeleteCashWallet(hubAppID uint, walletAppID uint) error {
 		})
 }
 
-// GetCashWalletConnection returns the NWC pairing URI for an already-created Cash
-// wallet. Unlike a normal app's pairing secret (a random key generated once at
-// creation and never persisted), a Cash wallet's pairing key is deterministic —
-// derived on demand from the wallet's own app ID via keys.GetCashPairingKey,
-// specifically so the connection_key claim flow never has to store it. That
-// same determinism means it can be safely re-derived here any number of
-// times: nothing is rotated or invalidated for a client already using it.
+// GetCashWalletConnection returns an already-created bill's cash_token, its only
+// credential (NIP-CASH §The Cash Token).
 func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionResponse, error) {
 	var app db.App
 	if err := api.db.First(&app, appID).Error; err != nil {
@@ -3522,18 +3619,6 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 	if app.Kind != db.AppKindCashWallet {
 		return nil, fmt.Errorf("app is not a cash_wallet")
 	}
-	if app.WalletPubkey == nil {
-		return nil, fmt.Errorf("cash wallet has no wallet pubkey")
-	}
-
-	pairingSecretKey, err := api.keys.GetCashPairingKey(app.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive Cash pairing key: %w", err)
-	}
-
-	relayUrls := api.cfg.GetRelayUrls()
-
-	pairingURI := nmilatnip47.BuildPairingURI(*app.WalletPubkey, relayUrls, pairingSecretKey, nil)
 
 	// The token is returned VERBATIM as issued, never re-derived.
 	//
@@ -3553,7 +3638,7 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 		return nil, fmt.Errorf("cash wallet %d has no issued token stored, and one cannot be re-derived: a re-encode would lack the mint signature and be unspendable", app.ID)
 	}
 
-	return &CashWalletConnectionResponse{PairingURI: pairingURI, CashToken: app.CashToken}, nil
+	return &CashWalletConnectionResponse{CashToken: app.CashToken}, nil
 }
 
 // GetCashWalletRecipients returns every recipient slice of a single
@@ -3627,11 +3712,10 @@ func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, 
 	return result, nil
 }
 
-// CreateCashWallet is the admin equivalent of a hub calling mint_cash
-// over NWC: it immediately creates, funds, and returns the plaintext pairing
-// URI for a shared Cash wallet serving every recipient in the request in one
-// shot — the connection is meant to be distributed to the whole recipient
-// group by the hub owner afterward.
+// CreateCashWallet is the admin equivalent of a hub calling mint_cash over NWC:
+// it creates and funds a shared Cash wallet serving every recipient in the
+// request in one shot and returns its cash_token, which the hub owner
+// distributes to the recipients afterward.
 func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*CreateCashWalletResponse, error) {
 	var hub db.App
 	if err := api.db.First(&hub, hubID).Error; err != nil {
@@ -3653,24 +3737,61 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 	}
 	defer release()
 
+	// NIP-CASH §Minting Cash, step 2, as over NWC: the id is checked and marked
+	// used before anything else, whatever else is wrong with the request, then
+	// the deadline. The record commits with the bill (cashwallet.MintRecord).
+	if req.RequestID == "" && req.Expiration != 0 {
+		return nil, fmt.Errorf("%w: expiration needs a request_id", constants.ErrInvalidParams)
+	}
+	if req.RequestID != "" {
+		if !nipcash.ValidRequestID(req.RequestID) {
+			return nil, fmt.Errorf("%w: request_id must be 32 to 64 lowercase hex characters", constants.ErrInvalidParams)
+		}
+		if err := cashrequest.New(api.db).MarkUsed(req.RequestID, constants.NIP47MethodMintCash); err != nil {
+			return nil, err
+		}
+		now := time.Now().Unix()
+		switch {
+		case req.Expiration == 0:
+			return nil, fmt.Errorf("%w: a request_id needs an expiration (its deadline)", constants.ErrInvalidParams)
+		case nipcash.CheckDeadline(req.Expiration, now, api.cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds) != nil:
+			return nil, fmt.Errorf("%w: the expiration must lie within %d seconds", constants.ErrInvalidParams,
+				api.cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
+		case !nipcash.CommitAllowed(req.Expiration, now):
+			return nil, fmt.Errorf("%w: the expiration has passed", constants.ErrInvalidParams)
+		}
+	}
+
+	// The operator is the minter here. A cash recipient sent without a commitment
+	// gets a secret generated for the operator, and only its commitment reaches the
+	// mint, as over NWC (NIP-CASH §Minting Cash). Until the browser generates it
+	// (WP-19), the secret is returned once in this admin response.
+	var operatorSecret string
 	recipients := make([]cashwallet.RecipientInput, len(req.Recipients))
 	for i, r := range req.Recipients {
 		if r.AmountMloki < 0 {
 			return nil, fmt.Errorf("%w: recipient amount_mloki must not be negative", constants.ErrInvalidParams)
 		}
-		// NIP-CASH §Minting Cash: only the Hub may generate a cash secret.
 		if r.CashSecret != "" {
-			return nil, fmt.Errorf("%w: cash_secret is generated by the Hub and must not be supplied", constants.ErrInvalidParams)
+			return nil, fmt.Errorf("%w: send a cash recipient's commitment, never its secret", constants.ErrInvalidParams)
+		}
+		identityValue := r.IdentityValue
+		if r.IdentityType == db.CashIdentityCash && identityValue == "" {
+			secret, commitment, err := newCashSecret()
+			if err != nil {
+				return nil, err
+			}
+			operatorSecret, identityValue = secret, commitment
 		}
 		recipients[i] = cashwallet.RecipientInput{
 			IdentityType:  r.IdentityType,
-			IdentityValue: r.IdentityValue,
+			IdentityValue: identityValue,
 			IAPubkey:      r.IAPubkey,
 			AmountMloki:   uint64(r.AmountMloki),
 		}
 	}
 
-	result, err := cashwallet.Create(context.Background(), cashwallet.Deps{
+	deps := cashwallet.Deps{
 		AppsService:         api.appsSvc,
 		TransactionsService: api.svc.GetTransactionsService(),
 		LNClient:            api.svc.GetLNClient(),
@@ -3678,11 +3799,22 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 		DB:                  api.db,
 		RelayURLs:           api.cfg.GetRelayUrls(),
 		IAChecker:           api.iaManager,
-	}, cashwallet.Params{
+	}
+	resolved, err := cashwallet.Resolve(context.Background(), deps, cashwallet.Params{
 		HubApp:     &hub,
 		Recipients: recipients,
 		ExpirySecs: req.ExpirySecs,
 	})
+	if err != nil {
+		return nil, err
+	}
+	var record *db.CashRequestRecord
+	if req.RequestID != "" {
+		if record, err = cashwallet.MintRecord(req.RequestID, &hub, req.Expiration, resolved); err != nil {
+			return nil, err
+		}
+	}
+	result, err := cashwallet.Commit(context.Background(), deps, resolved, record)
 	if err != nil {
 		return nil, err
 	}
@@ -3693,7 +3825,9 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			AmountMloki:   int64(r.AmountMloki), //nolint:gosec // mloki amounts are always far below int64 range
-			CashSecret:    r.CashSecret,
+		}
+		if r.IdentityType == db.CashIdentityCash {
+			recipientResults[i].CashSecret = operatorSecret
 		}
 	}
 
@@ -3705,7 +3839,6 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 
 	return &CreateCashWalletResponse{
 		AppID:      result.WalletApp.ID,
-		PairingURI: result.PairingURI,
 		CashToken:  result.CashToken,
 		ExpiresAt:  expiresAt,
 		Recipients: recipientResults,
@@ -3774,4 +3907,23 @@ func identityAuthorityToResponse(a apps.IdentityAuthority) IdentityAuthorityResp
 		RelayURLs: relayURLs,
 		CreatedAt: a.CreatedAt.Unix(),
 	}
+}
+
+// newCashSecret is a fresh 32-byte cash secret and its sha256 commitment, both hex.
+func newCashSecret() (secretHex, commitmentHex string, err error) {
+	var secret [32]byte
+	if _, err := rand.Read(secret[:]); err != nil {
+		return "", "", err
+	}
+	sum := sha256.Sum256(secret[:])
+	return hex.EncodeToString(secret[:]), hex.EncodeToString(sum[:]), nil
+}
+
+// lnClient is the running node, or nil when none is started (or in a test API
+// built without a service).
+func (api *api) lnClient() lnclient.LNClient {
+	if api.svc == nil {
+		return nil
+	}
+	return api.svc.GetLNClient()
 }

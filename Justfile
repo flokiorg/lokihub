@@ -260,7 +260,7 @@ test subcommand="unit" *args:
             restore() {
                 sed -i \
                     -e 's/^CASH_WALLET_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_RATE_LIMIT_PER_HOUR=0/' \
-                    -e 's/^CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0/' \
+                    -e 's/^CASH_CLAIM_CALLS_PER_HOUR=.*/CASH_CLAIM_CALLS_PER_HOUR=0/' \
                     -e 's/^CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=.*/CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=0/' \
                     .env
                 {{DOCKER_COMPOSE_DEV}} restart backend >/dev/null
@@ -270,7 +270,7 @@ test subcommand="unit" *args:
 
             sed -i \
                 -e 's/^CASH_WALLET_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_RATE_LIMIT_PER_HOUR=10/' \
-                -e 's/^CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=20/' \
+                -e 's/^CASH_CLAIM_CALLS_PER_HOUR=.*/CASH_CLAIM_CALLS_PER_HOUR=120/' \
                 -e 's/^CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=.*/CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=3/' \
                 .env
             restarted_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)

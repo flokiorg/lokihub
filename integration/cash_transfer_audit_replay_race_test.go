@@ -51,8 +51,8 @@ func TestAudit_CashTransferIdenticalProofRace_ExactlyOneWins(t *testing.T) {
 		proofJSON := eventJSON(t, proof)
 		amt := splitAmount
 
-		clientA := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
-		clientB := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
+		clientA := mustConnectBill(t, created.CashToken, curPriv)
+		clientB := mustConnectBill(t, created.CashToken, curPriv)
 
 		var resA, resB CashTransferResult
 		var errA, errB error
@@ -126,7 +126,7 @@ func TestAudit_CashTransferExactReplaySequential_Rejected(t *testing.T) {
 		Recipients: onePubkeyRecipient(curPub, fullAmount),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
+	shared := mustConnectBill(t, created.CashToken, curPriv)
 
 	newPub := mustPubkey(t, newTestPrivkey(t))
 	const splitAmount = uint64(25_000)
@@ -169,7 +169,7 @@ func TestAudit_CashTransferExactReplaySequential_Rejected(t *testing.T) {
 //     bypassable in a way that lets one wallet borrow another's allowance.
 //
 // Opt-in like the other rate-limit tests: dev's .env sets
-// CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0, which the limiter treats as "disabled"
+// CASH_CLAIM_CALLS_PER_HOUR=0, which the limiter treats as "disabled"
 // (nip47/controllers/rate_limiter.go). `just test integration-ratelimits` sets it to
 // 20 and runs this with INTEGRATION_RUN_RATE_LIMIT_TESTS=1.
 func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {
@@ -187,7 +187,7 @@ func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {
 		Recipients: onePubkeyRecipient(curPub, fullAmount),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
+	shared := mustConnectBill(t, created.CashToken, curPriv)
 
 	// Real splits cannot exhaust it: a partial split moves the caller's change into
 	// a fresh remainder wallet and destroys this one, so every split lands on a new
@@ -222,7 +222,7 @@ func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {
 		Recipients: onePubkeyRecipient(otherPub, happyPathAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &other))
-	otherShared := mustConnectBill(t, other.PairingURI, other.CashToken, otherPriv)
+	otherShared := mustConnectBill(t, other.CashToken, otherPriv)
 	otherTargetPub := mustPubkey(t, newTestPrivkey(t))
 	amt := uint64(happyPathAmountMloki / 2)
 	otherProof := buildTransferProofEvent(t, otherPriv, other.WalletPubkey, "pubkey", otherTargetPub, "", amt, nil, time.Now())

@@ -97,6 +97,11 @@ type App struct {
 	// Sub-wallet lineage (Cash and circle children)
 	ParentAppID *uint  `gorm:"index:idx_apps_parent,priority:1"`
 	ParentKind  string `gorm:"index:idx_apps_parent,priority:2"`
+	// HubGroupPubkey is a Cash Hub's hub group input once its connection was
+	// regenerated (WP-25 item 7): the client key it minted under before, kept so
+	// the fingerprint never changes (NIP-CASH §The Hub Group Fingerprint). Nil
+	// until then, when the input is AppPubkey.
+	HubGroupPubkey *string `gorm:"size:64"`
 
 	// Expiry of this sub-wallet app (mirrors the AppPermission.ExpiresAt value for
 	// efficient cleanup/commitment queries on the apps table itself).
@@ -114,12 +119,60 @@ type App struct {
 	// on the NEW wallet, which wallet it came from). Never read by any
 	// atomic guard, only by callers wanting to show lineage.
 	SplitFromWalletAppID *uint
+	// CashLineageRootID is the minted bill a bill's value descends from: a
+	// minted bill's own id, a spin-off's source's root, a merge's first source's
+	// root. Spin-offs are rate-limited per lineage.
+	CashLineageRootID *uint `gorm:"index"`
+
+	// The scheme-2 fields of a bill created by a zap transfer (NIP-CASH §Mint
+	// Provenance), kept for the bill's life so its payload can be rebuilt; nil on
+	// every other bill. Never the zap_target itself, only its sha256.
+	ZapIssuedAt   *int64
+	ZapExpiresAt  *int64
+	ZapTargetHash *string `gorm:"size:64"`
+	ZapRecipient  *string `gorm:"size:80"`
+	ZapSender     *string `gorm:"size:80"`
 
 	// CircleFeesPpm is a circle_wallet's forwarding-fee rate, fixed when the
 	// member joined (NIP-CW §Fees): a host changing the Hub's rate later
 	// affects only new members. Nil on wallets created before the column
 	// existed, which keep paying the Hub's current rate.
 	CircleFeesPpm *int
+	// CircleMaxReceiveMloki is a circle_wallet's receive cap per budget period
+	// (max_receive), as resolved at its join. Nil on every other kind.
+	CircleMaxReceiveMloki *int64
+	// CircleMaxAmountMloki is a circle_wallet's send cap per budget period
+	// (max_amount) as the join resolved it, in mloki: exact, so a cap of 0 is
+	// a cap of 0. The pay_invoice permission's whole-loki MaxAmountLoki, where
+	// 0 means "no cap", cannot carry a cap under 1 loki. Nil on a wallet not
+	// made by a join (WalletCaps then reads the permission).
+	CircleMaxAmountMloki *int64
+	// CircleBudgetAnchorAt is when a circle_wallet's budget periods start
+	// counting from (NIP-CW §Budget Renewal Floor): its creation, unix seconds.
+	CircleBudgetAnchorAt *int64
+	// CircleState is a circle_wallet's state (NIP-CW §Lifecycle and Deletion):
+	// active, suspended, expired or closing ("" reads as active); CircleStateAt
+	// when it was entered. Deleted has no row.
+	CircleState   string `gorm:"index"`
+	CircleStateAt *int64
+	// CircleGraceStartedAt and CircleGraceEndsAt are a circle_wallet's grace
+	// period, set when it first leaves Active for any state but Deleted and
+	// never restarted; nil while it has none.
+	CircleGraceStartedAt *int64
+	CircleGraceEndsAt    *int64
+	// CircleDustThresholdMloki is the largest balance the Hub may keep from a
+	// wallet it deletes, fixed when the member joined.
+	CircleDustThresholdMloki *int64
+	// CircleInboxKeyIndex is the private-transport inbox key index current when
+	// the circle_wallet was issued: hidden members encrypted to it stay
+	// readable while the wallet is Active or Suspended (NIP-CW §Hidden Members).
+	CircleInboxKeyIndex *uint32
+	// CircleFrozen: a member request froze the wallet, so every request by its
+	// current key is refused FROZEN until an unfreeze or a completed rotation.
+	CircleFrozen bool
+	// CircleRotationDelaySecs is the wallet's rotation delay, fixed when it was
+	// issued; nil on a wallet of a Hub that did not serve rotation then.
+	CircleRotationDelaySecs *int64
 }
 
 // CashHubConfig holds the per-Cash-Hub parameters that constrain what
@@ -197,19 +250,22 @@ const (
 // ExpiresAt (a property of the App itself, not duplicated here). cash_redeem
 // atomically flips ClaimedAt (guarded by "WHERE claimed_at IS NULL") to pay
 // out a slice exactly once. (wallet_app_id, identity_type, identity_value)
-// is unique: one slice per identity per wallet.
+// is unique among UNCLAIMED rows only (the partial index
+// idx_cash_claim_wallet_identity_live): one live slice per identity per wallet.
+// A claimed row stays as history, and the same identity may later receive a
+// slice on the wallet in place (NIP-CASH §Which outcome a request produces).
 type CashWalletClaim struct {
 	ID          uint `gorm:"primaryKey"`
-	WalletAppID uint `gorm:"not null;uniqueIndex:idx_cash_claim_wallet_identity,priority:1"`
+	WalletAppID uint `gorm:"not null;index:idx_cash_claim_wallet_identity_all,priority:1"`
 	App         App  `gorm:"foreignKey:WalletAppID;constraint:OnDelete:CASCADE"`
 	// IdentityType is "pubkey" | "connection_key" | "cash".
-	IdentityType string `gorm:"not null;uniqueIndex:idx_cash_claim_wallet_identity,priority:2"`
+	IdentityType string `gorm:"not null;index:idx_cash_claim_wallet_identity_all,priority:2"`
 	// IdentityValue is 64-char hex. For pubkey/connection_key slices this is
 	// the identity itself (public, proof-gated at claim time). For a cash-mode
 	// slice it is instead a one-way SHA-256 commitment of the slice's
 	// secret — the raw secret is never persisted, only ever returned once,
 	// in the mint_cash/cash_transfer response that generated it.
-	IdentityValue string `gorm:"not null;uniqueIndex:idx_cash_claim_wallet_identity,priority:3"`
+	IdentityValue string `gorm:"not null;index:idx_cash_claim_wallet_identity_all,priority:3"`
 	// IAPubkey is set only for connection_key-mode slices — the Identity
 	// Authority that must attest the claimant's identity at claim time.
 	// Indexed so ListIdentityAuthorities' unredeemed-slice-count query (grouped
@@ -254,6 +310,21 @@ type CashWalletClaim struct {
 	// must travel together, or a slice could be split into pieces that each pay a
 	// different share of the same route.
 	RedeemFeeBaseMloki int64
+	// Ordered marks an ordered slice (NIP-CASH §Data Model): minted for a NIP-CO
+	// order, or made from ordered slices only. It never expires, and the Hub's
+	// owner can neither delete its wallet nor remove it. Carried onto every
+	// wallet made from it.
+	Ordered bool `gorm:"not null;default:false"`
+	// UnfinalPaymentIDs are the on-chain cash_order_payments ids (a JSON array)
+	// an ordered slice was made from: until each has final_depth confirmations
+	// the slice is refused for cash_withdraw (unfinal, NIP-CASH §Redeeming
+	// On-chain). Set at the mint, carried onto every slice made from it (a
+	// merge carries the union), copied onto a re-minted bill.
+	UnfinalPaymentIDs *string `gorm:"type:text"`
+	// Reminted marks the slice of a bill a cancelled cash_withdraw re-minted
+	// (NIP-CASH §Cancelling a Payout): as for an ordered slice, the Hub's owner
+	// can neither delete its wallet nor remove it.
+	Reminted bool `gorm:"not null;default:false"`
 	// SpunOffToWalletAppID is set (alongside ClaimedAt) when this slice's
 	// entire value was moved into a brand-new dedicated cash_wallet rather
 	// than redeemed via a real Lightning payment — see
@@ -287,7 +358,18 @@ type CashWalletClaim struct {
 	RedeemFeeMloki  int64
 	RoutingFeeMloki int64
 	SettledAt       *time.Time
-	CreatedAt       time.Time
+	// RedeemProofID is the claim proof consumed by the cash_redeem whose payout
+	// is in flight, "" for a cash-mode slice. A payout that definitely fails
+	// releases the claim and forgets this proof in one transaction.
+	RedeemProofID string `gorm:"size:64"`
+	// RedeemCooldownUntil is set when a payout failed only after cash_redeem had
+	// answered: until then another redeem of the slice is RATE_LIMITED.
+	RedeemCooldownUntil *time.Time
+	// EndedAs is the terminal state the claim that ended this slice gave it:
+	// redeemed, transferred or consolidated ("" while live, or for a slice a
+	// sweep ends). It decides the tombstone reason of the bill it destroys.
+	EndedAs   string `gorm:"size:12"`
+	CreatedAt time.Time
 }
 
 // CircleIdentity is a reusable Nostr identity (policy + provider pubkey +
@@ -342,11 +424,42 @@ type CircleHubConfig struct {
 	// No OnDelete:CASCADE here — deleting this config (i.e. deleting the
 	// circle_hub app) must never delete the shared identity.
 	CircleIdentity CircleIdentity
+	// MaxExpSecs is the ceiling on a wallet's lifetime, 0 = none; DefaultExpSecs
+	// is the lifetime a join that names none gets, 0 = never. A default above a
+	// non-zero ceiling, or 0 under one, is refused (NIP-CW §Data Model).
 	MaxExpSecs     int
+	DefaultExpSecs int
 	FeesPpm        int
 	// PerWalletMaxMloki caps a caller's requested max_amount per issued wallet
 	// (required positive — mirrors CashHubConfig.PerWalletMaxMloki).
 	PerWalletMaxMloki int
+	// PerWalletMaxReceiveMloki caps a caller's requested max_receive.
+	PerWalletMaxReceiveMloki int64
+	// HoldingsCeilingMloki is the most the circle's Active wallets may hold
+	// together, their open invoices included (NIP-CW §Own Funds and Caps).
+	HoldingsCeilingMloki int64
+	// FeeReservePpm and FeeReserveMinMloki are the routing-fee reserve rule a
+	// member's Lightning payment holds back and may spend: the larger of the
+	// minimum and amount × ppm / 1,000,000, rounded down.
+	FeeReservePpm      int
+	FeeReserveMinMloki int64
+	// OutboundCeilingMloki optionally bounds what the circle's wallets together
+	// send as external traffic in one OutboundPeriod of the Hub's own (daily to
+	// yearly, from the Hub's creation); 0 is no ceiling.
+	OutboundCeilingMloki int64
+	OutboundPeriod       string
+	// GraceSecs is the grace period a member gets before a wallet they did not
+	// delete may be (NIP-CW §Lifecycle and Deletion); DustThresholdMloki the
+	// dust threshold a new wallet gets.
+	GraceSecs          int64
+	DustThresholdMloki int64
+	// TeardownRequestedAt is when the host tore the Hub down: every wallet is
+	// Closing, and the Hub goes once its last wallet is deleted.
+	TeardownRequestedAt *int64
+	// RotationEnabled: the Hub serves NIP-CW §Recovering a Lost Connection,
+	// with RotationDelaySecs (default 432000) for the wallets it issues.
+	RotationEnabled   bool
+	RotationDelaySecs int64
 	// MinBudgetRenewal is the shortest (tightest) renewal period a caller may
 	// request for their wallet's budget_renewal — protects the hub from
 	// members resetting their spend cap too often. A request is rejected when
@@ -354,6 +467,10 @@ type CircleHubConfig struct {
 	// rank (e.g. floor "monthly" allows "monthly"/"yearly"/"never", rejects
 	// "daily"/"weekly").
 	MinBudgetRenewal string
+	// AcceptingJoins is false once the host closes the circle to new members:
+	// every join is then RESTRICTED (NIP-CW §The Circle Wallet Hub Connection).
+	// NULL is the default, open.
+	AcceptingJoins *bool
 }
 
 // CircleWalletIdentityProof records the nostr event ID of every consumed
@@ -368,82 +485,159 @@ type CircleWalletIdentityProof struct {
 	AppID     uint   `gorm:"not null;index"` // the circle_hub, for observability only
 	EventID   string `gorm:"not null;uniqueIndex"`
 	CreatedAt time.Time
+	// Kind is "join" or "member" (a member request, NIP-CW §Recovering a Lost
+	// Connection); RetainUntil is the unix time the id may be forgotten after:
+	// a join's created_at + 360, a member request's + 86460. 0 on older rows.
+	Kind        string `gorm:"size:8"`
+	RetainUntil int64  `gorm:"index"`
 }
 
-// CashTransferProof records the nostr event ID of every consumed
-// cash_transfer identity proof, so a captured proof (a multi-recipient
-// cash_wallet connection is shared — every co-recipient can decrypt every
-// request sent over it, including this one) can't be resubmitted to
-// authorize a repeat transfer/split, or one for a different amount_mloki
-// than it was signed for, within its own freshness window. A partial split
-// doesn't change the source slice's registered identity the way an in-place
-// reassignment does, so — unlike a full transfer — state alone doesn't
-// naturally invalidate a replayed proof for the split case; this table is
-// what does. EventID is globally unique (content-addressed hash), so no
-// additional scoping key is needed for correctness. See
-// verifyTransferIdentityEvent's doc comment (cash_transfer_controller.go).
-type CashTransferProof struct {
-	ID        uint   `gorm:"primaryKey"`
-	AppID     uint   `gorm:"not null;index"` // the cash_wallet, for observability only
-	EventID   string `gorm:"not null;uniqueIndex"`
-	CreatedAt time.Time
-}
+// Kinds of single-use proof ids.
+const (
+	CircleProofJoin   = "join"
+	CircleProofMember = "member"
+)
 
-// CashMintIdempotency records that one mint_cash request was already served, so a
-// caller's retry-on-timeout cannot mint a second wallet.
-//
-// mint_cash was the one money method with no replay guard. cash_transfer and
-// cash_consolidate sources carry a signed identity_event the backend refuses on replay;
-// mint_cash's params are plain identity_type / identity_value / amount_millis with no
-// nonce, so a caller whose own retry logic reads a timeout as "it failed" resends the
-// same logical request as a new NWC event and the hub mints and funds a SECOND wallet.
-//
-// A client-visible timeout does NOT mean the mint did not happen: Commit is durable and
-// complete before any response is built, and publishPrivateReply records
-// PUBLISH_CONFIRMED or PUBLISH_FAILED either way. The observed case was a response
-// sitting confirmed on the relay for a subscriber that had already given up.
-//
-// Keyed per hub, not globally: two hubs are different ledgers and an idempotency key is
-// only ever meaningful within the one the caller addressed. The unique index is what
-// enforces the guard — a concurrent duplicate loses on insert rather than on a
-// read-then-write race.
-//
-// WalletPubkey and Token are recorded so a replay can be told WHICH wallet it already
-// created. Deliberately NOT the recipients' cash secrets: for a cash-mode mint the hub
-// holds only a commitment and could not reproduce one even if it wanted to, which is
-// why a replay is REFUSED with a pointer to the wallet rather than answered with the
-// original result. Storing secrets to make replay work would trade this gap for a worse
-// one.
-type CashMintIdempotency struct {
-	ID             uint   `gorm:"primaryKey"`
-	HubAppID       uint   `gorm:"not null;uniqueIndex:idx_cash_mint_idem,priority:1"`
-	IdempotencyKey string `gorm:"not null;uniqueIndex:idx_cash_mint_idem,priority:2"`
-	WalletAppID    uint   `gorm:"not null;index"`
-	WalletPubkey   string `gorm:"not null"`
-	Token          string
-	CreatedAt      time.Time
-}
+// Circle rotation states (NIP-CW §Recovering a Lost Connection).
+const (
+	CircleRotationPending   = "pending"
+	CircleRotationCompleted = "completed"
+	CircleRotationCancelled = "cancelled"
+)
 
-// CashStrandedFund is a durable record of one compensating-saga reversal that
-// itself failed during cashwallet.Consolidate/SplitInTwo, so an operator can
-// find and resolve it by querying data instead of grepping logs.
-// SourceWalletAppID is the wallet whose contribution was debited but never
-// returned; RetainedWalletAppID is the wallet deliberately left un-deleted
-// (the merged wallet for a consolidate, the carved wallet for a split),
-// still holding those funds. No foreign key to either App row: this record's
-// own lifecycle is independent of whatever later happens to them (e.g. an
-// operator manually sweeping and deleting the retained wallet must not
-// silently erase the reconciliation history). ResolvedAt is set once an
-// operator has manually swept the funds back — nil means still outstanding.
-type CashStrandedFund struct {
+// CircleRotation is a member's move of a Circle Wallet to a new connection key:
+// pending from RequestedAt until CompletesAt, then completed or cancelled. Kept
+// while the wallet exists, so a join lookup by the new key can be answered.
+type CircleRotation struct {
 	ID                  uint   `gorm:"primaryKey"`
-	Operation           string `gorm:"not null"` // "consolidate" | "split" | "mint" (an unfunded wallet a failed mint could not delete; AmountMloki 0)
-	SourceWalletAppID   uint   `gorm:"not null;index"`
-	RetainedWalletAppID uint   `gorm:"not null;index"`
-	AmountMloki         uint64 `gorm:"not null"`
-	CreatedAt           time.Time
-	ResolvedAt          *time.Time `gorm:"index"`
+	WalletAppID         uint   `gorm:"not null;index"`
+	MemberPubkey        string `gorm:"size:64;not null;index"`
+	NewConnectionPubkey string `gorm:"size:64;not null;index"`
+	RequestedAt         int64  `gorm:"not null"`
+	CompletesAt         int64  `gorm:"not null;index"`
+	State               string `gorm:"size:12;not null;index"`
+	EndedAt             *int64
 }
+
+// CircleJoinRecord is a join's record (NIP-CW §Lost Join Reply): what a lookup by
+// (signer, connection_pubkey) answers with. Kept while the wallet exists and at
+// least until the join's deadline plus 6 minutes; no foreign key, since it
+// outlives the wallet.
+type CircleJoinRecord struct {
+	ID               uint   `gorm:"primaryKey"`
+	CircleHubAppID   uint   `gorm:"not null;index"`
+	HubWalletPubkey  string `gorm:"size:64;not null"`
+	HubConnPubkey    string `gorm:"size:64;not null"`
+	AuthorizerPubkey string `gorm:"size:64;not null;uniqueIndex:idx_circle_join_record_key,priority:1"`
+	ConnectionPubkey string `gorm:"size:64;not null;uniqueIndex:idx_circle_join_record_key,priority:2"`
+	ProofCreatedAt   int64  `gorm:"not null"`
+	Deadline         int64  `gorm:"not null;index"`
+	EncryptedDetails string `gorm:"type:text;not null"`
+	WalletAppID      uint   `gorm:"not null;index"`
+	// WalletDeletedAt is when the wallet was deleted; the record is then kept
+	// until the join's deadline plus 6 minutes.
+	WalletDeletedAt *int64
+}
+
+// PrivateServedNonce is the nonce of an envelope this hub served on the private
+// transport (NIP-CASH §Serving an Envelope, E3), kept until its not_after passes
+// so a replay is dropped even across a restart.
+type PrivateServedNonce struct {
+	Nonce    string `gorm:"primaryKey;size:64"`
+	NotAfter int64  `gorm:"not null;index"`
+}
+
+// CashConsumedProof marks a claim proof (kind 23198) as used, so a captured proof
+// cannot authorize a second redeem, transfer or consolidate (NIP-CASH §Claim
+// Proofs). Kept until well after the proof could pass the freshness check
+// (nipcash.ClaimRetainUntil); pruned an hour after its created_at.
+type CashConsumedProof struct {
+	EventID        string `gorm:"primaryKey;size:64"`
+	ProofCreatedAt int64  `gorm:"not null;index"`
+	ConsumedAt     int64  `gorm:"not null"`
+	Method         string `gorm:"size:24;not null"`
+}
+
+// CashUsedRequestID is the permanent used mark of a request_id (NIP-CASH
+// §request_id): set once a call is authorized and never removed, so a reused id
+// is refused REQUEST_REUSED forever.
+type CashUsedRequestID struct {
+	RequestID string `gorm:"primaryKey;size:64"`
+	Method    string `gorm:"size:24;not null"`
+	UsedAt    int64  `gorm:"not null"`
+}
+
+// CashRequestRecord is the record of a committed bill-creating call (NIP-CASH
+// §The Record), written in the call's commit transaction. It holds what a lookup
+// needs to rebuild the call's answer and never a secret, a token or a zap target.
+type CashRequestRecord struct {
+	ID                 uint    `gorm:"primaryKey"`
+	RequestID          string  `gorm:"size:64;not null;uniqueIndex"`
+	Method             string  `gorm:"size:24;not null"`
+	OrderID            *uint   // cash_order: its order row
+	WithdrawalID       *uint   // cash_withdraw: its withdrawal row
+	HubAppID           uint    `gorm:"not null"` // no FK: the Hub cannot be deleted while a record names it
+	TargetWalletPubkey string  `gorm:"size:64;not null;index"`
+	TargetConnPubkey   string  `gorm:"size:64;not null"`
+	AuthorizerKind     string  `gorm:"size:12;not null"` // pubkey | commitment | client
+	Authorizer         string  `gorm:"size:64;not null"`
+	Deadline           int64   `gorm:"not null"`
+	DeliveryPubkey     *string `gorm:"size:64"` // inner-layer key; nil means the token is in the clear
+	ResultMeta         string  `gorm:"type:text;not null"`
+	CommittedAt        int64   `gorm:"not null"`
+	DropAfter          *int64  `gorm:"index"` // set once every created bill is destroyed
+}
+
+// Roles of a record's bills.
+const (
+	CashRecordBillMinted    = "minted"
+	CashRecordBillCarved    = "carved"
+	CashRecordBillRemainder = "remainder"
+	CashRecordBillSingle    = "single"
+	CashRecordBillMerged    = "merged"
+)
+
+// CashRequestRecordBill is one bill a recorded call created, with what a lookup
+// needs to rebuild its token (the connection secret is re-derived from
+// WalletAppID; nothing secret is stored).
+type CashRequestRecordBill struct {
+	ID               uint              `gorm:"primaryKey"`
+	RecordID         uint              `gorm:"not null;index"`
+	Record           CashRequestRecord `gorm:"foreignKey:RecordID;constraint:OnDelete:CASCADE"`
+	Ordinal          int16             `gorm:"not null"`
+	Role             string            `gorm:"size:12;not null"`
+	WalletAppID      uint              `gorm:"not null;index"` // no FK: the record outlives the bill
+	WalletPubkey     string            `gorm:"size:64;not null"`
+	RelayHints       string            `gorm:"type:text;not null"` // JSON array, exactly as encoded
+	IdentityRequired *int16
+	HubGroup         *string `gorm:"size:8"`
+	AmountMillis     int64   `gorm:"not null"`
+	Scheme           int16   `gorm:"not null"`
+	Signature        string  `gorm:"size:130;not null"`
+	ZapIssuedAt      *int64
+	ZapExpiresAt     *int64
+	ZapTargetHash    *string `gorm:"size:64"`
+	ZapRecipient     *string `gorm:"size:80"`
+	ZapSender        *string `gorm:"size:80"`
+	// PaidMillis and Outpoint are an ordered bill's payment: what it brought in,
+	// and its on-chain output (txid:vout), nil for Lightning (NIP-CO §Response).
+	PaidMillis *int64
+	Outpoint   *string `gorm:"size:80"`
+}
+
+// CashRecordBillOrdered is the role of a bill minted for an order.
+const CashRecordBillOrdered = "ordered"
+
+// CashHorizon holds the single horizon H (NIP-CASH §Deadlines) in its only row
+// (ID 1). H never decreases, so the stored value is the largest ever used.
+type CashHorizon struct {
+	ID        int16 `gorm:"primaryKey"`
+	HSecs     int64 `gorm:"not null"`
+	UpdatedAt int64
+}
+
+// TableName is cash_horizon: one row, not a collection.
+func (CashHorizon) TableName() string { return "cash_horizon" }
 
 // How a cash bill itself ended. Deliberately a different set from the
 // slice-level vocabulary below: a bill whose slices ended differently — one
@@ -460,10 +654,6 @@ const (
 	// CashBillOutcomeWrittenOff: the parent hub was gone, so a remaining
 	// balance could not be reclaimed anywhere and was abandoned.
 	CashBillOutcomeWrittenOff = "written-off"
-	// CashBillOutcomeVoid: a rollback of a bill whose funding (or whose
-	// compensating reversal) failed. No recipient ever saw it, so it is kept
-	// for forensics but excluded from listings by default.
-	CashBillOutcomeVoid = "void"
 )
 
 // How one slice ended. This is the vocabulary shared by live and archived
@@ -487,8 +677,11 @@ const (
 	// CashSliceStatusWrittenOff: unclaimed, and the value could not be
 	// returned anywhere because the parent hub was gone.
 	CashSliceStatusWrittenOff = "written-off"
-	// CashSliceStatusVoid: belonged to a bill that never came into existence.
-	CashSliceStatusVoid = "void"
+	// CashSliceStatusTransferred and CashSliceStatusConsolidated are the two
+	// ways a slice's value moves into another bill, as a tombstone reason
+	// tells them apart; the operator's listing groups both under split.
+	CashSliceStatusTransferred  = "transferred"
+	CashSliceStatusConsolidated = "consolidated"
 )
 
 // CashBillArchive is the durable record of one cash bill — a cash_wallet app —
@@ -500,9 +693,8 @@ const (
 // CashWalletClaim and Transaction alike, so without this table a bill leaves no
 // trace at all and the operator cannot account for money that passed through.
 //
-// No foreign key to any App row, for the same reason CashStrandedFund has
-// none: every app this record names is already gone by the time it exists, so
-// a constraint could only ever be a liability. Retained forever — this is the
+// No foreign key to any App row: every app this record names is already gone by
+// the time it exists, so a constraint could only ever be a liability. Retained forever — this is the
 // only remaining evidence the bill existed.
 //
 // WalletAppID is unique: app IDs are never reused, so it is this table's
@@ -569,6 +761,11 @@ type CashBillArchive struct {
 	ExpiresAt     *time.Time
 	// Outcome is one of the CashBillOutcome* values.
 	Outcome string `gorm:"not null;index"`
+	// Reason is the tombstone reason (NIP-CASH §Answering About a Destroyed
+	// Bill): the terminal state of the slice whose ending destroyed the bill, one
+	// of redeemed, transferred, consolidated, expired and reclaimed. NULL for a
+	// written-off bill, whose tombstone carries no reason.
+	Reason *string `gorm:"size:12"`
 	// TotalMloki is the sum of this bill's archived slices, including any
 	// archived earlier by an operator removing a single recipient — so it is
 	// computed after those rows land, not from the claims alive at death.
@@ -733,7 +930,9 @@ func IsNameImmutableKind(kind string) bool {
 // is never discovered by relay query. A cash_hub, by contrast, is a public
 // service and advertising mint_cash is the point.
 func PublishesNip47InfoEvent(kind string) bool {
-	return kind != AppKindCashWallet
+	// A circle_hub_conn shares its hub's wallet key: publishing or deleting an
+	// info event for it would replace or delete the hub's (WP-25 item 6).
+	return kind != AppKindCashWallet && kind != AppKindCircleHubConn
 }
 
 type AppPermission struct {
@@ -781,7 +980,7 @@ type ResponseEvent struct {
 
 type Transaction struct {
 	ID              uint
-	AppId           *uint `gorm:"index:idx_transactions_app_type_state,priority:1"`
+	AppId           *uint `gorm:"index:idx_transactions_app_type_state,priority:1;index:idx_transactions_app_period,priority:1"`
 	App             *App  `gorm:"constraint:OnDelete:CASCADE;"`
 	RequestEventId  *uint
 	RequestEvent    *RequestEvent `gorm:"constraint:OnDelete:SET NULL;foreignKey:RequestEventId"`
@@ -829,6 +1028,21 @@ type Transaction struct {
 	FailureReason      string
 	Hold               bool
 	SettleDeadline     *uint32 // block number for accepted hold invoices
+
+	// PaymentKind is a circle wallet payment's kind (NIP-CW §Own Funds and
+	// Caps, 1 same circle … 4 Lightning) from the wallet's own side; 0 on a row
+	// no circle wallet is party to. Set when an outgoing payment starts and when
+	// an incoming one settles.
+	PaymentKind int `gorm:"index:idx_transactions_app_period,priority:3"`
+	// CountsSend marks an outgoing row of an Active circle wallet that counts
+	// on its send cap; PeriodStart is the wallet's budget period (unix) the row
+	// counts in: when the payment started, or when an incoming one settled.
+	CountsSend  bool
+	PeriodStart int64 `gorm:"index:idx_transactions_app_period,priority:2"`
+	// OutboundPeriodStart is the Hub period (unix) an external payment of a
+	// circle wallet counts in on the circle's outbound ceiling; 0 when it does
+	// not count.
+	OutboundPeriodStart int64
 }
 
 type Swap struct {

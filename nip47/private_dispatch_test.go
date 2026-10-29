@@ -208,12 +208,6 @@ func TestServePrivateItem_OmitsRatherThanErrors(t *testing.T) {
 				recipientPriv, connPriv, hubXOnly, strings.Repeat("77", 32), notAfter),
 			why: "a banked proof must not be replayable in a later envelope",
 		},
-		{
-			name: "a method this transport does not serve",
-			item: buildItem(t, "x5", walletPubkey, constants.NIP47MethodMintCash, `{}`,
-				recipientPriv, connPriv, hubXOnly, nonce, notAfter),
-			why: "the allowlist itself must not be discoverable",
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, tc.item, binding)
@@ -222,6 +216,19 @@ func TestServePrivateItem_OmitsRatherThanErrors(t *testing.T) {
 				"an omitted item must carry no error — an error would distinguish it from a bill the hub does not hold")
 		})
 	}
+
+	// I5: once the bill proof verifies, a method this hub does not serve here is
+	// NOT_IMPLEMENTED; for a target it does not hold it stays an omission.
+	item := buildItem(t, "x5", walletPubkey, constants.NIP47MethodMintCash, `{}`,
+		recipientPriv, connPriv, hubXOnly, nonce, notAfter)
+	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+	require.True(t, served)
+	require.NotNil(t, result.Error)
+	assert.Equal(t, constants.ERROR_NOT_IMPLEMENTED, result.Error.Code)
+	item = buildItem(t, "x6", unknownTarget, constants.NIP47MethodMintCash, `{}`,
+		recipientPriv, connPriv, hubXOnly, nonce, notAfter)
+	_, served = nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+	assert.False(t, served)
 }
 
 // TestServePrivateItem_RecordsOneRequestEventPerItem: the controllers take a
@@ -404,4 +411,51 @@ func TestServePrivateItem_ClaimsLookupFailure_IsRetryable(t *testing.T) {
 	require.True(t, served)
 	require.NotNil(t, result.Error)
 	assert.Equal(t, constants.ERROR_INTERNAL, result.Error.Code)
+}
+
+// An item proof by a key other than its claim proof's signer is one that does
+// not verify (NIP-CASH §Item Proofs): UNAUTHORIZED, even though that key holds
+// no slice of the bill. A signer holding no slice whose claim proof is its own
+// gets NOT_FOUND.
+func TestServePrivateItem_ItemSignerOtherThanClaimSigner(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+	walletPubkey, recipientPriv, _, connPriv := privateDispatchFixture(t, svc)
+	recipientPub, err := nostr.GetPublicKey(recipientPriv)
+	require.NoError(t, err)
+	stranger := nostr.GeneratePrivateKey()
+	strangerPub, err := nostr.GetPublicKey(stranger)
+	require.NoError(t, err)
+
+	hubXOnly := strings.Repeat("ab", 32)
+	nonce := strings.Repeat("cd", 32)
+	notAfter := time.Now().Add(time.Minute).Unix()
+	binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
+	params := func(claimSigner string) string {
+		ev, err := json.Marshal(map[string]any{"pubkey": claimSigner, "kind": 23198})
+		require.NoError(t, err)
+		raw, err := json.Marshal(map[string]any{"invoice": "lnbcrt1x", "identity_type": "pubkey",
+			"identity_value": claimSigner, "identity_event": string(ev)})
+		require.NoError(t, err)
+		return string(raw)
+	}
+
+	// cash_withdraw, cash_transfer and cash_consolidate take the same path once
+	// their own earlier checks pass (this fixture offers no withdrawals).
+	for _, method := range []string{constants.NIP47MethodCashRedeem} {
+		item := buildItem(t, "r1", walletPubkey, method, params(recipientPub), stranger, connPriv, hubXOnly, nonce, notAfter)
+		result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+		require.True(t, served)
+		require.NotNil(t, result.Error, method)
+		assert.Equal(t, constants.ERROR_UNAUTHORIZED, result.Error.Code, method)
+
+		item = buildItem(t, "r2", walletPubkey, method, params(strangerPub), stranger, connPriv, hubXOnly, nonce, notAfter)
+		result, served = nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+		require.True(t, served)
+		require.NotNil(t, result.Error, method)
+		assert.Equal(t, constants.ERROR_NOT_FOUND, result.Error.Code, method)
+	}
 }

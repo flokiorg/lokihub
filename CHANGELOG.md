@@ -9,6 +9,185 @@ audits of both.
 
 ### Added
 
+- Takes order payments in and mints them (NIP-CO §Paying and Minting). A
+  settled order invoice, or a payment of one by a wallet on this node, is
+  recorded once by its payment hash and minted in one commit: the Hub is
+  credited with what it brought in and each bill of the split (none above
+  `max_millis`; nothing for a payment of at most the fee, which the Hub keeps)
+  is created, signed, funded and recorded on the order. Outputs to order
+  addresses are read from the node's wallet every 30 s, seen, confirmed at
+  their tier and minted; an unconfirmed output gone for two scans is dropped,
+  a minted one that leaves the chain is reorged (the bill stands, alerted); a
+  payment to an address with no live order is kept by the Hub. A failed mint
+  is retried with backoff for good. pay_by expires an unpaid Lightning order
+  once its invoice is cancelled, and closes or expires an on-chain one;
+  retention drops what NIP-CO allows, with the used mark of an unpaid order.
+  Every state change and new bill publishes an order notice on the relay the
+  order arrived on. `cash_lookup` of an order returns its bills, tokens
+  rebuilt. Ordered slices never expire, cannot be removed or have their wallet
+  deleted by the owner, carry their mark through transfers and merges, and are
+  never consolidated with other slices. Open orders and unminted payments keep
+  their Cash Hub (`orders` in the delete check). (#158)
+- Sells a Cash Hub's cash through NIP-CO Order connections. The operator
+  creates any number per Cash Hub (`POST /api/cash-hubs/:id/order-connections`
+  returns the signed `cashorder1` string, shown again by the list), retires one
+  for good (`POST …/order-connections/:conn/retire`) and sets the selling terms
+  (`GET`/`PUT /api/cash-hubs/:id/order-terms`: Lightning and on-chain amounts,
+  fees, windows, confirmation tiers, bill terms and open-order ceilings,
+  refused rather than clamped out of bounds); the same routes exist in Wails.
+  An Order connection answers `get_info` only on the standard transport, with
+  its terms (`{}` once retired), and takes `cash_order` items on the private
+  transport: checked in NIP-CO's order, the order is recorded with its invoice
+  or a fresh address, its reservation and its request record, moving no funds;
+  `cash_lookup` reads it back with the buyer key. A Cash Hub's per-wallet
+  ceiling can no longer drop below an offered `max_millis`, and an Order
+  connection is deleted only with its Hub. (#158)
+- Adds the circle operator screens for NIP-CW: the circle settings editor
+  covers the default lifetime, receive ceiling, holdings ceiling, routing-fee
+  reserve, outbound ceiling and period, grace period, dust threshold and member
+  requests with their delay; the wallet list shows each wallet's state, grace
+  countdown, freeze and pending rotation, and its action is Close (the wallet
+  moves to Closing and keeps its balance); deleting a circle is Close circle
+  (teardown); a "New members" toggle closes or opens the circle
+  (`POST /api/apps/:id/circle/accepting`, and its Wails route); a member
+  request card submits a signed member request and shows the Hub's code. The
+  Cash Hub delete dialog reads the delete check and shows each blocker and the
+  earliest deletion time. (#158)
+- Serves NIP-CW §Recovering a Lost Connection on a Circle Wallet Hub that
+  enables it (new settings: rotation on/off, delay default 5 days; `get_info`
+  reports `rotation_delay_secs` and each wallet's details carry its own, fixed
+  at join). The host submits a member request the member signed with
+  `POST /api/circle-hubs/:id/member-requests` (and its Wails route); it is
+  checked in the spec's order (`NOT_IMPLEMENTED`, `UNAUTHORIZED`,
+  `REQUEST_REUSED` with the id kept 24 h 1 min, `NOT_FOUND`, `UNAUTHORIZED`,
+  `NOT_IMPLEMENTED`, then the action). A `rotate` is accepted under the
+  node-wide connection-key lock shared with joins (`ROTATION_PENDING`,
+  `RESTRICTED`), completes at its `completes_at` (lazily on a request by either
+  key, and by a 10-second job), is cancelled by any request of the old key or
+  when the new key got used, and swaps the wallet's key, ending a freeze. A
+  `freeze` refuses every request of the current key `FROZEN` until an
+  `unfreeze` or a completed rotation. `rotation_pending`, `rotation_cancelled`,
+  `rotation_completed` and `wallet_frozen` notifications go to the wallet's
+  key; Circle Wallets are granted `notifications`. A join lookup by the member
+  naming a rotated key answers `pending` until `completes_at`, then `done` with
+  the details re-encrypted for the new key, writing nothing. A join to a key a
+  pending rotation names is `RESTRICTED`. (#158)
+- Adds NIP-CW's Circle Wallet lifecycle (new `circlelife` package): Active,
+  Suspended, Expired and Closing, with only the spec's edges; a wallet past its
+  `expires_at` is Expired at once, whether or not the job has run; the grace
+  period (new Hub setting, default 7 days) starts when a wallet first leaves
+  Active and is never restarted; reaching Expired or Closing frees the member to
+  join again; a wallet that is not Active has its open invoices cancelled,
+  stops counting toward the holdings and cannot receive (`PAYMENT_FAILED` to a
+  same-node payer). A job every minute records expiries, closes Suspended
+  wallets past their grace, and deletes Expired or Closing wallets past their
+  grace that hold at most their dust (new Hub setting, default 1000 mloki,
+  fixed per wallet at join and reported in the join details) and have nothing
+  in flight, keeping the dust on the Hub. (#158)
+- Serves `delete_circle_wallet` on a Circle Wallet's own connection in every
+  state: refused `RESTRICTED` while it holds more than dust or a payment is in
+  flight; otherwise its open invoices are cancelled at the node first and the
+  wallet is deleted in one step. Any other connection is refused `RESTRICTED`. (#158)
+- Gates every Circle Wallet request by state (NIP-CW §What a Circle Wallet
+  Connection Allows): an Active wallet serves `pay_invoice`, `pay_keysend`,
+  `make_invoice`, `lookup_invoice`, `list_transactions`, `get_balance`,
+  `get_budget`, `get_info` and `delete_circle_wallet`; any other state only
+  pays out, reads and deletes; everything else is `RESTRICTED`. (#158)
+- Adds `GET /api/cash-hubs/:id/delete-check` (and its Wails route): what keeps
+  a Cash Hub from being deleted (live bills, retained request records) with
+  each blocker's time and the earliest possible deletion. (#158)
+- Adds NIP-CW's money model for Circle Wallets (new `circlemoney` package).
+  Every payment is classified as same circle, another circle on the node, any
+  other connection on the node, or Lightning; only Lightning carries the
+  member's `fees_ppm` fee and the routing-fee reserve (the larger of
+  `min_millis` and amount × `ppm` / 1,000,000, rounded down, never exceeded:
+  it is the payment's fee limit). The send cap (`max_amount`) and the receive
+  cap (`max_receive`) count external traffic only, per budget period anchored
+  at the wallet's creation in UTC; the receive room counts open invoices and
+  accepted held payments. A circle's holdings (its wallets' balances and open
+  invoices) stay under its holdings ceiling (`INSUFFICIENT_CAPACITY`), and an
+  optional outbound ceiling bounds what its wallets send per Hub period
+  (`QUOTA_EXCEEDED`). Pending payments (32), external payments in flight (8),
+  same-circle transfers (60 a minute), open invoices (100) and invoices (60 a
+  minute) are bounded per wallet (`RATE_LIMITED`). New Circle Hub settings:
+  holdings ceiling (default: 100 wallets at the receive ceiling), fee reserve
+  ppm and minimum (default 10000 and 10000), outbound ceiling and period. (#158)
+- Issues every Circle Wallet invoice as a hold invoice the Hub settles itself
+  after re-checking the payment (amount equal to the invoice's, not expired),
+  cancelling it otherwise; a same-node payment of one is settled at once, and
+  accepted ones left from a restart are resolved at start. `get_budget` on a
+  Circle Wallet reports both caps for the current period, clamped. (#158)
+- Adds a Circle Wallet Hub's per-wallet receive ceiling and default wallet
+  lifetime (NIP-CW §Data Model): a join whose `max_receive` is over the
+  ceiling is refused `LIMIT_EXCEEDED` naming `max_receive`, the wallet keeps
+  the `max_receive` it asked for, and a join naming no expiry gets the default
+  lifetime instead of the ceiling. A lifetime ceiling of 0 (none) is accepted;
+  a default above a non-zero ceiling, or 0 under one, is refused. `get_info`
+  reports `per_wallet_max_receive_millis`. (#158)
+- Lists offers on relays (NIP-CASH §Listing Offers): a circle, from its hub
+  page or the new Listings page, is published as a kind-31190 listing signed
+  by the node identity, with its own public `circlehub1` connection (the
+  members' invite is untouched). Listings are republished every 7 days and on
+  each change, paused and resumed, and retired in the spec's order: the
+  `closed` version, kept until the last open version expires, then a NIP-09
+  deletion. The node publishes a kind 10002 naming the listing relays (a new
+  Listing relays setting). An optional operator is named in the `p` tag and
+  checked, read-only, against their own kind 11191; lokihub never asks for
+  their key. A Cash Hub connection is never listed. Order connections are
+  listed once they exist. (#158)
+- Adds "Revoke and reissue the Cash Hub connection": the old `cashhub1` stops
+  working at once and a new one is shown once; bills, records and the hub
+  group are untouched. (#158)
+- Builds the LSP list from NIP-LSP announcements (kind 10735) on the Hub's
+  relays: every LSP announced for its chain and network is shown unranked in
+  Settings > Services with its services, fee hint, status and whether it is
+  in the node's own graph; the user ticks the LSPs they trust, and trusting
+  runs a live check of the LSP's LSPS answers against its announcement. Only
+  trusted LSPs are contacted; a paused one sells nothing new and a closed one
+  disappears. Every purchase (an LSPS1 order, an LSPS2 buy, automatic JIT)
+  runs the live check first and is refused when an announced protocol is
+  missing; automatic JIT also skips an LSP whose last check failed and refuses
+  live terms worse than announced. An LSP whose newest announcement fails a
+  check, expires or closes is not reconnected and gets no zero-conf channels,
+  though it stays trusted. An LSP can be added by its node key. The regtest
+  dev stack runs flspd as the test LSP (compose profile `lsp`). (#158)
+- Keeps a record of every circle join and serves the NIP-CW join lookup:
+  `cash_lookup` by `connection_pubkey` at a Circle Wallet Hub answers the
+  joiner (its item proof required, `UNAUTHORIZED` otherwise) with the join's
+  own `encrypted_details`, and anyone else by deadline with the 6-minute
+  window. A record is dropped once its wallet is gone and that window has
+  passed. (#158)
+- Serves `cash_lookup` on the private transport (NIP-CASH §Looking Up a Call):
+  a held record answers `done` with the call's reply rebuilt (the same fields,
+  each token re-encoded from the record and encrypted to the same key, a
+  destroyed bill's token as its tombstone) to the recorded authorizer only, any
+  other signer, target or secret `UNAUTHORIZED`; with no record the answer is
+  `pending`, `unknown` or `expired` by the call's deadline. A lookup writes
+  nothing, is served for a destroyed bill a record names, is limited to 600 an
+  hour per signer, and is listed in `private_methods`; on kind 23194 it is
+  `NOT_IMPLEMENTED`. (#158)
+- Adds `PRIVATE_INBOX_EVENTS_PER_MIN` (600): the envelopes decrypted per relay
+  connection a minute; the rest are dropped undecrypted. (#158)
+- Adds the `cash_redeem` operator limits: `CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS`
+  (86400) and `CASH_REDEEM_MAX_FINAL_CLTV` (2880 blocks) refuse an invoice over them
+  `RESTRICTED`; `CASH_REDEEM_INFLIGHT_PER_HUB` (32) and
+  `CASH_REDEEM_INFLIGHT_NODE` (256) bound the payouts in flight
+  (`RATE_LIMITED` before the claim); `CASH_REDEEM_LATE_FAILURE_COOLDOWN_SECS`
+  (600) refuses another redeem of a slice whose payout failed after its answer;
+  `CASH_REDEEM_ROUTE_MARGIN_PPM` (2000) and
+  `CASH_REDEEM_ROUTE_MARGIN_MIN_MILLIS` (1000) set the routing margin; and
+  `CASH_REDEEM_REPLY_WAIT_SECS` (20) is how long a redeem waits for its payment. (#158)
+
+- Adds `CASH_LINEAGE_SPIN_OFFS_PER_HOUR` (default 20), which bounds the bills
+  one minted bill's lineage may spin off per hour (`RATE_LIMITED` over it), and
+  `CASH_MAX_LIVE_BILLS_PER_HUB` (default 10 000), which caps the live bills a
+  spin-off may leave under one Cash Hub (`QUOTA_EXCEEDED`). (#158)
+- Makes zap transfers (NIP-CZ): a `cash_transfer` with `zap_target` spins the
+  slice off into a bill signed under the zap scheme, whose `issued_at` and
+  `expires_at` the reply returns exactly as signed; the hub keeps the zap fields
+  with the bill and stores the target only as its hash. (#158)
+- Adds `CASH_MAX_REQUEST_AGE_SECS`, the horizon H a request's deadline may lie
+  ahead (default 300, 60 to 86400); it can be raised, never lowered. (#158)
 - Adds the Cash Hub, which issues multi-recipient cash bills held by a secret
   or bound to an identity, shared as a `lokicash1...` token. (#90)
 - Adds `cash_transfer` to split a slice off a bill, `cash_consolidate` to merge
@@ -61,6 +240,166 @@ audits of both.
 
 ### Changed
 
+- Breaking: a Circle Wallet's membership is decided by resolutions, no longer
+  re-checked on every call (NIP-CW §Membership): each successful resolution of
+  the circle's follow set (nmilat's `ResolveFollowSet`: the newest signed
+  version, one dated more than 15 minutes ahead ignored, one older than the
+  last resolution a failed refresh) and each committed allowlist edit suspends
+  the Active wallets of members no longer named and returns Suspended ones
+  named again within their grace to Active; an unresolved or failed refresh
+  changes nothing. A resolution suspending 20 % or more of a circle's Active
+  wallets raises a host alert (`nwc_circle_mass_suspension`, log WARN, no
+  member pubkeys). Hidden members are read with the current inbox key and every
+  retired one an Active or Suspended wallet was issued under. (#158)
+- Breaking: a host delete of a Circle Wallet (the wallet list, the generic app
+  delete) moves it to Closing instead of sweeping its balance to the Hub, and
+  deleting a circle hub tears it down: every wallet Closing, the circle closed
+  to joins, the hub deleted only after its last wallet (at once if it has
+  none). The cash expiry sweep never touches a Circle Wallet. A Cash Hub is not
+  deleted while a request record naming it is retained. (#158)
+- Breaking: a Circle Wallet's join checks the circle's holdings against its
+  holdings ceiling instead of committing each wallet's `max_amount` against the
+  Hub's balance; the Hub-wide budget ceiling is gone, and a circle hub's app
+  listing shows its holdings against that ceiling. A Circle Wallet's
+  zero-amount invoice is refused `RESTRICTED` (was `BAD_REQUEST`), and its
+  `make_hold_invoice` is refused `RESTRICTED`. A same-node keysend over the
+  receiving Circle Wallet's room or its circle's ceiling is refused before it
+  is sent. (#158)
+- A Lightning keysend to a Circle Wallet that is not Active, or over its
+  receive room or its circle's holdings ceiling, is failed at the final hop
+  instead of staying with the node. This needs flnd run with
+  `keysend-hold-time` (for example `30s`) wherever it accepts keysends: lokihub
+  then settles every held keysend that passes and cancels the rest; a node
+  that settles keysends itself is logged as misconfigured whenever it settles
+  one the checks refuse. The admin invoice endpoint gives a Circle Wallet the
+  same Hub-settled invoice as its `make_invoice`. (#158)
+- Resolves a private item whose target several connections share to the
+  Circle Wallet Hub's row, and checks a circle's bill proof against every live
+  connection of the Hub (nmilat's `VerifyBillProofAny` rule) for joins and join
+  lookups; a join lookup still resolves through the retained join records once
+  the Hub is gone. (#158)
+- Breaking: the LSP list no longer comes from `services.json`, the `LSP`
+  setting and env, or `pubkey@host` input, and setup no longer picks LSPs:
+  the LSP table is recreated, and LSPs are trusted again from their
+  announcements. `/api/info`'s `lsps` lists the trusted LSPs; the
+  `/api/lsps/:pubkey` update and delete routes are replaced by
+  `PUT /api/lsps/:pubkey/trust` and `POST /api/lsps/:pubkey/check`. (#158)
+- Breaking: serves `create_circle_wallet` on the private transport only (kind
+  23194 answers `NOT_IMPLEMENTED` before any proof is read) and in NIP-CW's
+  order and codes: params `BAD_REQUEST`; a Hub not accepting joins
+  `RESTRICTED`; the join proof, now checked by nmilat with its `terms` tag,
+  `UNAUTHORIZED`; a used proof `REQUEST_REUSED`; membership `NOT_READY` or
+  `RESTRICTED`; an existing wallet `WALLET_EXISTS`; a term over the Hub's limits
+  `LIMIT_EXCEEDED` naming the field; a full circle `INSUFFICIENT_CAPACITY`; a
+  connection key in use `RESTRICTED`; and a join reaching its commit past its
+  proof's freshness window `BAD_REQUEST`. The details carry `max_receive`. (#158)
+- Answers `get_info` on every connection a Cash Hub serves (its own, its
+  bills, Circle Wallet Hubs and their wallets) with `network` and `chain`
+  whatever the connection's scopes; a Cash Hub's `pubkey` is its node identity
+  as 64-hex x-only (the `cashhub1` string's TLV 4). A Circle Wallet Hub's
+  `circle_wallet` block always carries `identity`, `fee_reserve`,
+  `dust_threshold_millis` and `accepting`, and caps `available_millis` at the
+  per-wallet ceiling. `create_circle_wallet` moves from `methods` to
+  `private_methods`. (#158)
+- Gives a destroyed bill's tombstone its reason: the terminal state of the slice
+  whose ending destroyed it (`redeemed`, `transferred`, `consolidated`,
+  `expired` or `reclaimed`), kept on the bill's archive row and none for a
+  written-off bill, on `cash_status`, the value methods and a lookup's rebuilt
+  result. (#158)
+- Answers a destroyed bill on kind 23194 with silence: its tombstone is served
+  on the private transport only. The relay gate no longer keeps destroyed bills'
+  wallets registered for their retention window, so the start-up reload, the
+  retention-change resync and the expiry prune of those wallets are gone. (#158)
+- Serves private-transport envelopes through nmilat's E1 to E6 classifier: an
+  envelope refused at E4 to E6 gets an envelope-level `BAD_REQUEST` or
+  `QUOTA_EXCEEDED` reply and its nonce stays unserved; served nonces are kept in
+  the database (`private_served_nonces`) until their `not_after`, so a replay is
+  dropped across a restart, and a nonce that cannot be recorded drops the
+  envelope. Replies are dated a random 0 to 48 hours in the past. (#158)
+- Serves private-transport items in NIP-CASH's I2 to I10 order: a destroyed
+  bill is answered with its tombstone for `cash_redeem`, `cash_transfer` and
+  `cash_consolidate` as well as `cash_status`; a method this hub does not serve is
+  `NOT_IMPLEMENTED` once the bill proof verifies (no longer omitted); an item
+  proof that does not verify, or a proofless item on an identity-bound bill, is
+  `UNAUTHORIZED`; and after more than eight items of one envelope fail
+  authorization its further value items are `RATE_LIMITED`. (#158)
+- Runs `cash_redeem` in NIP-CASH's order and codes: locate (`NOT_FOUND`, a
+  claimed or expired slice `RESTRICTED`), authorize (a claim proof that does not
+  verify, now checked by nmilat with its `m` tag, or a wrong cash secret is
+  `UNAUTHORIZED`; an IA no longer trusted `RESTRICTED`), the invoice policy, the
+  amount rules (an `amount` beside an invoice's own amount, even an equal one, is
+  `BAD_REQUEST`; a zero payout `RESTRICTED`), then the claim, which consumes the
+  claim proof in the same transaction. Caller-set fee, rate or same-node fields
+  are `BAD_REQUEST`. (#158)
+- Answers `cash_redeem` while its payment may still settle: after the reply wait
+  it is `INTERNAL` with the slice kept claimed; a payment that fails before it can
+  have settled is `PAYMENT_FAILED` and releases the claim and the proof together;
+  a payout that fails later releases both and starts the slice's cool-down. (#158)
+- Caps every external redeem's route at the quoted fee plus the routing margin,
+  never the generic fee reserve, so a fee-free slice is bounded too. (#158)
+- Breaking: replaces `CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR` (20 per bill) with
+  `CASH_CLAIM_CALLS_PER_HOUR` (120), shared by `cash_redeem`, `cash_transfer`
+  and `cash_consolidate` and keyed by the verified claim signer or the slice's
+  commitment, never by a bill, so one co-recipient can no longer spend the
+  others' allowance. (#158)
+
+- Runs `cash_consolidate` in NIP-CASH's order and codes: the item names its
+  first source; it requires a `request_id`, marked once every source's claim
+  proof verifies (now by nmilat, with the `s` sources hash); any proof failure
+  of any kind is one `UNAUTHORIZED` "sources not authorized"; a source's state,
+  another Hub, an untrusted IA and differing terms are `RESTRICTED`; over the
+  ceiling or the source cap is `QUOTA_EXCEEDED`; and the record commits with
+  the merge. (#158)
+- Runs `cash_transfer` in NIP-CASH's order and codes: a claimed or expired
+  slice is `RESTRICTED`; a claim proof that does not verify (now checked by
+  nmilat, `m` tag and exact tags included), a wrong cash secret, or an item proof
+  by another key is `UNAUTHORIZED`; an untrusted IA and dust are `RESTRICTED`. A
+  full transfer to an identity already holding a slice on the bill spins off, a
+  cash slice's partial split takes a fresh `remainder_commitment`. (#158)
+- Requires a `request_id` on `cash_transfer`: a missing or malformed one is
+  refused before the item's proofs (`BAD_REQUEST`), a used one with
+  `REQUEST_REUSED`; it is marked used once the call is authorized, and the
+  call's record commits with the transfer, under the envelope's `not_after`. (#158)
+- Returns only the `cash_token` from the admin mint and the bill connection
+  endpoint, the bill's one credential; neither carries a `pairing_uri` any more,
+  and the Cash screens show the token alone. (#158)
+- Marks an admin mint's `request_id` used and commits its record with the bill,
+  as over NWC, when the request carries one with its `expiration`. (#158)
+- Checks `mint_cash` in NIP-CASH's order: recipients first (over 100, or one
+  amount or the total over the per-wallet ceiling, is `QUOTA_EXCEEDED`), then
+  the Identity Authorities (`RESTRICTED`), commitments and refused fields, then
+  the expiry (over the Hub's ceiling is `RESTRICTED`), then the balance. (#158)
+- Drops the stranded-fund records and the `void` bill outcome: a failed cash
+  call now leaves nothing behind to reconcile. (#158)
+- Commits each `mint_cash`, `cash_transfer` and `cash_consolidate` as one
+  database transaction: the new bills, their slices and signed tokens, the
+  funding, the consumed claim proofs and the mint's record commit together or
+  not at all. Value moves between bills as ledger rows, with no Lightning
+  invoice. A slice claimed by a concurrent call is refused with `RESTRICTED`,
+  and a claim proof already used with `UNAUTHORIZED`. (#158)
+- Answers `cash_status` `mine` only from the item-proof signer and refuses a
+  signer that holds no slice with `NOT_FOUND` for every scope; roster rows of
+  `connection_key` slices carry their `ia_pubkey`. (#158)
+- Signs every `circlehub1` string with the node identity and chain, and names
+  the member's `connection_pubkey` in a join's encrypted details. (#158)
+- Requires an `expiration` tag on `mint_cash` (its deadline, at most the
+  announced `max_request_age` ahead) and refuses a used `request_id` with
+  `REQUEST_REUSED`; a mint running concurrently on the same Hub is
+  `RATE_LIMITED`. (#158)
+- Takes a `request_id` on `mint_cash` and, for a cash recipient, the
+  caller's commitment; the Hub no longer generates or returns a cash secret.
+  `idempotency_key`, `min_transfer_millis` and a recipient `cash_secret` are
+  refused, and the reply carries `cash_token` without `pairing_uri`. (#158)
+- Signs every bill under `cash-mint:v1` and every `cashhub1` string with the
+  node identity and chain, as the final NIP-CASH requires. (#158)
+- Refuses to sign text starting with `cash-mint:`, `cash-zap:`, `cash-hub:`,
+  `cash-order:` or `circle-hub:`, over NWC (`RESTRICTED`) and from the
+  operator's sign-message screen. (#158)
+- Answers `cash_status` on a cash-mode bill from the bill proof alone and
+  refuses one that carries a `cash_secret`; a destroyed bill's answer is
+  `{"status":"spent"}`. (#158)
+- Refuses to start on a database created before 0.5.0's final schema, and no
+  longer converts older databases. Reset the database before upgrading. (#158)
 - Breaking: renames NIP-CASH's bearer mode to cash mode (`identity_type:
   "cash"`, `cash_secret`) across every cash method and the admin API. A
   migration rewrites stored rows, so existing slices stay redeemable with the
@@ -129,6 +468,64 @@ audits of both.
 
 ### Fixed
 
+- Funds an on-chain payout's replacement (an RBF bump, or the invalidation a
+  cancel needs) from the inputs its broadcast version already spends. The node
+  no longer lists a coin an unmined transaction of its own spends, so a
+  replacement could fail "not an unspent wallet coin" whenever such an input
+  was not leased; the input is now read from its parent transaction in the
+  wallet, only when the wallet marks that output its own, then leased and
+  signed as before. (#158)
+- Stops re-leasing the coins a confirmed, not yet final payout version spent.
+  The wallet no longer holds them, so every lease was refused "unknown
+  output": at each restart's reconcile, which re-leases every coin, and on
+  every pass once their leases came due (a clock jump makes them due at
+  once). A reorganisation that unconfirms the version has them leased again. (#158)
+- Marks a CPFP child conflicted once another version of its batch confirms
+  (its parent, a reorganised version, lost): it stayed broadcast forever, and
+  the parent's change it spends, which no longer exists, was leased every pass
+  ("unknown output"). The change of a conflicted, replaced or invalid version
+  is no longer leased. (#158)
+- Keeps an on-chain order open past `pay_by` while the node's wallet cannot be
+  scanned, instead of expiring it and keeping a payment seen in time. The next
+  good scan judges each output by the node's first-seen time, or by the chain
+  tip read at `pay_by`; failed scans are logged as errors. (#158)
+- Refuses a `cash_withdraw` whose quote expired or whose bill expired while it
+  waited for its locks: the commit now reads the chain tip and the bill again
+  under them. (#158)
+- Stops the expiry sweep from reclaiming a bill whose slice a `cash_redeem`
+  claimed but has not started paying yet. The redemption won the slice, and
+  its payment would have failed with the funds already back at the Hub. (#158)
+- Publishes a payout's CPFP child on its own when the node refuses it as a
+  package. lokid has no package relay, so the child of a reorganised payout
+  was refused every pass; now its parent is republished and the child sent
+  after it, which relays whenever the parent meets the minimum relay fee by
+  itself. A parent below that fee still needs package relay: both are retried
+  each pass while the parent keeps being republished. (#158)
+- Answers `UNAUTHORIZED`, not `NOT_FOUND`, to a `cash_redeem`,
+  `cash_withdraw`, `cash_transfer` or `cash_consolidate` item whose item proof
+  is signed by a key other than its claim proof's signer: NIP-CASH §Item Proofs
+  treats such a proof as one that does not verify. A signer holding no slice
+  whose claim proof is its own still gets `NOT_FOUND`. (#158)
+- Refuses a tampered `cash_withdraw` quote (its content changed, its id and
+  signature kept) at step 3 with `RESTRICTED`/`quote_invalid`, as NIP-CASH
+  orders it: the claim proof's `q` now binds the quote's id as sent, and the
+  quote's own check finds that the content no longer hashes to it. It was
+  refused `UNAUTHORIZED` at step 2. (#158)
+- Holds a `cash_withdraw` claim proof's freshness to the wall clock, as
+  `cash_redeem` and the item proofs are, not to the test hooks' Hub clock
+  offset: with the offset moved a fresh proof was refused `UNAUTHORIZED`.
+  Production runs no offset, so nothing changes there. (#158)
+- Takes a circle join at any `max_amount`. A join was refused
+  `LIMIT_EXCEEDED` under 11,000 mloki (the fee reserve plus 1 loki), a floor
+  NIP-CW step 6 does not allow and `get_info` never advertised. The cap is
+  rounded down to whole loki, reported as applied, and stored exactly on the
+  wallet, so a request under 1 loki is a send cap of 0, never "no cap"; a cap
+  under the fee reserve makes a wallet that pays only on this node. (#158)
+- Reads a payment's update stream until it succeeds or fails. A node run with
+  `routerrpc.usestatusinitiated` sends `INITIATED` first, which was taken as a
+  failure while the payment's HTLCs were still out. (#158)
+- Refuses a private-transport item whose `cash_secret` does not verify with
+  `UNAUTHORIZED` instead of `NOT_FOUND`, as NIP-CASH requires. (#158)
 - Fixes a Circle Wallet spend-cap bypass where a member could disable their
   own cap with a sub-loki `max_amount`, plus seven smaller audit findings.
   (#90)

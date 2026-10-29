@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/permissions"
@@ -17,25 +16,29 @@ import (
 	"github.com/flokiorg/lokihub/transactions"
 )
 
-// raceLosingApps lets a concurrent request claim one wallet's slice just before
-// this request gets to it: the window between consolidate resolving its sources
-// and claiming them.
+// raceLosingApps lets a concurrent request claim one wallet's slice after this
+// request checked its sources' state and before its commit claims them: the
+// Hub's config is read in between (NIP-CASH §Consolidating Tokens, step 5).
 type raceLosingApps struct {
 	apps.AppsService
-	lostWalletID uint
+	lostWalletID  uint
+	identityType  string
+	identityValue string
+	claimed       *bool
 }
 
-func (a raceLosingApps) ClaimCashSlice(walletAppID uint, identityType, identityValue string) (int64, error) {
-	if walletAppID == a.lostWalletID {
-		if _, err := a.AppsService.ClaimCashSlice(walletAppID, identityType, identityValue); err != nil {
-			return 0, err
-		}
+func (a raceLosingApps) GetAppById(id uint) *db.App {
+	if !*a.claimed {
+		*a.claimed = true
+		_, _ = a.ClaimCashSlice(a.lostWalletID, a.identityType, a.identityValue)
 	}
-	return a.AppsService.ClaimCashSlice(walletAppID, identityType, identityValue)
+	return a.AppsService.GetAppById(id)
 }
 
-// A consolidate that loses the race for one source must give back every source
-// it had already claimed, leave the winner's claim alone, and create nothing.
+// A consolidate that loses the race for one source is refused RESTRICTED (NIP-CASH:
+// a slice already claimed by a concurrent call), and its one commit leaves every
+// other source unclaimed, the winner's claim alone, no merged bill and no used
+// proof.
 func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -45,7 +48,7 @@ func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 	caller := guardCashWallet(t, svc, hub)
 	ownerPriv := nostr.GeneratePrivateKey()
 	ownerPub, _ := nostr.GetPublicKey(ownerPriv)
-	_, secretHash, err := cashwallet.GenerateCashSecret()
+	_, secretHash, err := tests.GenerateCashSecret()
 	require.NoError(t, err)
 
 	s1 := guardSource(t, svc, hub, ownerPub, 2_000, 0, 0)
@@ -55,7 +58,7 @@ func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 
 	controller := NewNip47Controller(svc.LNClient, svc.DB, svc.EventPublisher,
 		permissions.NewPermissionsService(svc.DB, svc.EventPublisher), transactions.NewTransactionsService(svc.DB, svc.EventPublisher),
-		raceLosingApps{AppsService: svc.AppsService, lostWalletID: s2.ID}, svc.Keys, nil,
+		raceLosingApps{AppsService: svc.AppsService, lostWalletID: s2.ID, identityType: db.CashIdentityPubkey, identityValue: ownerPub, claimed: new(bool)}, svc.Keys, nil,
 		NewRateLimiter(), NewRateLimiter(), NewRateLimiter(), svc.Cfg, apps.NewIdentityAuthorityManager(svc.DB))
 
 	proof1 := buildTransferProofEvent(t, ownerPriv, *s1.WalletPubkey, db.CashIdentityCash, secretHash, "", 2_000, nil, time.Now())
@@ -68,10 +71,10 @@ func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: secretHash},
 	})
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, resp.Error.Code)
 
 	assert.Nil(t, cashWalletClaimByIdentity(t, svc, s1.ID, db.CashIdentityPubkey, ownerPub).ClaimedAt,
-		"the source this request had claimed is given back")
+		"the other source is untouched: its claim rolled back with the commit")
 	assert.NotNil(t, cashWalletClaimByIdentity(t, svc, s2.ID, db.CashIdentityPubkey, ownerPub).ClaimedAt,
 		"the concurrent winner's claim is left alone")
 
@@ -80,6 +83,6 @@ func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 		hub.ID, db.AppKindCashWallet, []uint{caller.ID, s1.ID, s2.ID}).Count(&merged).Error)
 	assert.Zero(t, merged, "no merged bill is created")
 	var burned int64
-	require.NoError(t, svc.DB.Model(&db.CashTransferProof{}).Count(&burned).Error)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Count(&burned).Error)
 	assert.Zero(t, burned, "no proof is used up by a request that failed")
 }

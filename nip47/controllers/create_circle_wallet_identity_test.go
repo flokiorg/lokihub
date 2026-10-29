@@ -30,7 +30,7 @@ func callCreateCircleWallet(t *testing.T, svc *tests.TestService, provider *db.A
 	svc.DB.Create(&ev)
 	var resp *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(context.TODO(), nip47Request, ev.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, context.TODO(), nip47Request, ev.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			resp = r
 		})
 	return resp
@@ -40,7 +40,7 @@ func callCreateCircleWallet(t *testing.T, svc *tests.TestService, provider *db.A
 // arbitrary, pre-built identity_event string (rather than a freshly-signed,
 // correctly-bound one) — used to exercise malformed/adversarial identity
 // proofs that makeCircleWalletRequest can't express.
-func rawCircleWalletRequest(t *testing.T, requesterPubkey string, maxAmountMloki uint64, expirationSecs int, identityEventJSON string) string {
+func rawCircleWalletRequest(t *testing.T, requesterPubkey string, maxAmountMloki uint64, expirationSecs uint64, identityEventJSON string) string {
 	t.Helper()
 	params := nipcw.CreateCircleWalletRequest{
 		Pubkey:           requesterPubkey,
@@ -49,10 +49,7 @@ func rawCircleWalletRequest(t *testing.T, requesterPubkey string, maxAmountMloki
 		Expiry:           expirationSecs,
 		IdentityEvent:    identityEventJSON,
 	}
-	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
-	b, err := json.Marshal(content)
-	require.NoError(t, err)
-	return string(b)
+	return joinRequestJSON(t, params)
 }
 
 func TestHandleCreateCircleWalletEvent_IdentityEvent_Missing_Rejected(t *testing.T) {
@@ -106,7 +103,7 @@ func TestHandleCreateCircleWalletEvent_IdentityEvent_WrongSigner_Rejected(t *tes
 		rawCircleWalletRequest(t, victimPubkey, 100_000, 3600, mustMarshal(t, forgedEvent)))
 
 	require.NotNil(t, resp.Error, "an attacker signing as themselves must not be able to claim a different pubkey")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code)
 }
 
 // Cross-hub replay: a proof bound to a different hub's WalletPubkey (e.g.
@@ -131,7 +128,7 @@ func TestHandleCreateCircleWalletEvent_IdentityEvent_WrongHub_Rejected(t *testin
 		rawCircleWalletRequest(t, requesterPubkey, 100_000, 3600, mustMarshal(t, crossHubEvent)))
 
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code)
 }
 
 func TestHandleCreateCircleWalletEvent_IdentityEvent_Stale_Rejected(t *testing.T) {
@@ -154,7 +151,7 @@ func TestHandleCreateCircleWalletEvent_IdentityEvent_Stale_Rejected(t *testing.T
 		rawCircleWalletRequest(t, requesterPubkey, 100_000, 3600, mustMarshal(t, staleEvent)))
 
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code)
 }
 
 func TestHandleCreateCircleWalletEvent_IdentityEvent_FutureTimestamp_Rejected(t *testing.T) {
@@ -177,7 +174,7 @@ func TestHandleCreateCircleWalletEvent_IdentityEvent_FutureTimestamp_Rejected(t 
 		rawCircleWalletRequest(t, requesterPubkey, 100_000, 3600, mustMarshal(t, futureEvent)))
 
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code)
 }
 
 // A captured proof (the circle_hub connection is shared/public, so anyone
@@ -208,7 +205,7 @@ func TestHandleCreateCircleWalletEvent_IdentityEvent_Replayed_Rejected(t *testin
 	// rejection reason is unambiguous.
 	second := callCreateCircleWallet(t, svc, provider, rawCircleWalletRequest(t, requesterPubkey, 100_000, 3600, identityEventJSON))
 	require.NotNil(t, second.Error, "a replayed identity_event must be rejected")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, second.Error.Code)
+	assert.Equal(t, constants.ERROR_REQUEST_REUSED, second.Error.Code)
 }
 
 // Only a duplicate proof is a replay. Any other failure to record it is the
@@ -278,7 +275,7 @@ func TestHandleCreateCircleWalletEvent_IdentityEvent_TamperedID_Rejected(t *test
 		rawCircleWalletRequest(t, requesterPubkey, 100_000, 3600, mustMarshal(t, &tampered)))
 
 	require.NotNil(t, resp.Error, "an event whose id doesn't match its own content must be rejected regardless of a valid signature")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code)
 }
 
 // Two different requesters signing independently, each with their own fresh
@@ -330,7 +327,7 @@ func TestHandleCreateCircleWalletEvent_RejectedImpersonation_DoesNotConsumeVicti
 		resp := callCreateCircleWallet(t, svc, provider,
 			rawCircleWalletRequest(t, victimPubkey, 50_000, 3600, mustMarshal(t, forgedEvent)))
 		require.NotNil(t, resp.Error, "forged attempt %d must be rejected", i)
-		assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+		assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code)
 	}
 
 	// The victim, using their own real key, must still be able to mint —

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/testknobs"
 	"math"
 	"slices"
 	"sort"
@@ -274,6 +275,13 @@ func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
 					}
 				}
 
+				// A keysend the node holds (flnd's keysend-hold-time) is
+				// followed until it is accepted, so lokihub can settle or fail
+				// it at the final hop (NIP-CW §Own Funds and Caps).
+				if invoice.State == lnrpc.Invoice_OPEN && invoice.IsKeysend {
+					go svc.subscribeSingleInvoice(invoice.RHash)
+					continue
+				}
 				if invoice.State != lnrpc.Invoice_SETTLED {
 					continue
 				}
@@ -381,7 +389,8 @@ func (svc *FLNDService) subscribeOpenHoldInvoices(ctx context.Context) {
 	}
 
 	for _, invoice := range listInvoicesResponse.Invoices {
-		if invoice.State == lnrpc.Invoice_OPEN {
+		// A keysend held while lokihub was down is decided now.
+		if invoice.State == lnrpc.Invoice_OPEN || (invoice.State == lnrpc.Invoice_ACCEPTED && invoice.IsKeysend) {
 			paymentHashHex := hex.EncodeToString(invoice.RHash)
 			logger.Logger.Debug().
 				Str("payment_hash", paymentHashHex).
@@ -490,6 +499,14 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64, feeLimitM
 	if amount != nil {
 		paymentAmountMloki = *amount
 	}
+	// Regtest test hooks only (testknobs is inert in other builds): a payment
+	// held in flight until cleared, or the next route over its fee bound.
+	if err := testknobs.WaitPayments(svc.ctx); err != nil {
+		return nil, err
+	}
+	if testknobs.TakeRouteOverBound() {
+		return nil, errors.New(lnrpc.PaymentFailureReason_FAILURE_REASON_NO_ROUTE.String())
+	}
 	// feeLimitMloki, when supplied, is the fee the caller already WITHHELD from the
 	// payment and is therefore willing to spend delivering it. Honouring it is what
 	// keeps payout + fee inside the amount being paid, so the node never covers a
@@ -548,6 +565,15 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64, feeLimitM
 }
 
 func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string) (*lnclient.PayKeysendResponse, error) {
+	return svc.SendKeysendWithFeeLimit(amount, destination, custom_records, preimage, transactions.CalculateFeeReserveMloki(amount))
+}
+
+// SendKeysendWithFeeLimit is SendKeysend with the routing fee capped at
+// feeLimitMloki: a Circle Wallet's keysend never pays more than its reserve.
+func (svc *FLNDService) SendKeysendWithFeeLimit(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string, feeLimitMloki uint64) (*lnclient.PayKeysendResponse, error) {
+	if err := testknobs.WaitPayments(svc.ctx); err != nil {
+		return nil, err
+	}
 	destBytes, err := hex.DecodeString(destination)
 	if err != nil {
 		logger.Logger.Error().Err(err).
@@ -594,7 +620,7 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 		DestCustomRecords: destCustomRecords,
 		MaxParts:          MAX_PARTIAL_PAYMENTS,
 		TimeoutSeconds:    SEND_PAYMENT_TIMEOUT,
-		FeeLimitMsat:      int64(transactions.CalculateFeeReserveMloki(amount)), //nolint:gosec // msat amounts are always far below int64 range
+		FeeLimitMsat:      int64(feeLimitMloki), //nolint:gosec // msat amounts are always far below int64 range
 	}
 
 	payStream, err := svc.client.SendPayment(svc.ctx, sendPaymentRequest)
@@ -713,6 +739,11 @@ func (svc *FLNDService) LookupPayment(ctx context.Context, paymentHash string) (
 	return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusInFlight}, nil
 }
 
+// getPaymentResult reads a payment's update stream until the payment is final:
+// SUCCEEDED or FAILED. Every other status (INITIATED, which a node run with
+// routerrpc.usestatusinitiated sends first, IN_FLIGHT, UNKNOWN) means the HTLCs
+// may still be out, so it is never taken as an outcome. A stream that ends
+// before a final status returns its error, and the caller then asks the node.
 func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Client) (*lnrpc.Payment, error) {
 	for {
 		payment, err := stream.Recv()
@@ -720,8 +751,11 @@ func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Cl
 			return nil, err
 		}
 
-		if payment.Status != lnrpc.Payment_IN_FLIGHT {
+		switch payment.Status {
+		case lnrpc.Payment_SUCCEEDED, lnrpc.Payment_FAILED:
 			return payment, nil
+		default:
+			// Not final yet: read the next update.
 		}
 	}
 }
@@ -1636,7 +1670,13 @@ func (svc *FLNDService) BroadcastTransaction(ctx context.Context, txHex string) 
 	return nil
 }
 
+// errSignerBroken is the node signer failing on purpose (a regtest test hook).
+var errSignerBroken = errors.New("the node signer is broken (test fault)")
+
 func (svc *FLNDService) SignMessage(ctx context.Context, message string) (string, error) {
+	if testknobs.SignerBroken() {
+		return "", errSignerBroken
+	}
 	resp, err := svc.client.SignMessage(ctx, &lnrpc.SignMessageRequest{Msg: []byte(message)})
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to sign message")
@@ -1859,6 +1899,9 @@ func (svc *FLNDService) GetSupportedNIP47NotificationTypes() []string {
 // transport.AnnouncementSigningPayload for why msg is the event's serialization
 // rather than its id.
 func (svc *FLNDService) SignSchnorrNodeKey(ctx context.Context, msg []byte) ([]byte, error) {
+	if testknobs.SignerBroken() {
+		return nil, errSignerBroken
+	}
 	return svc.client.SignSchnorrNodeKey(ctx, msg)
 }
 
@@ -1942,6 +1985,9 @@ func flndInvoiceToTransaction(invoice *lnrpc.Invoice) *lnclient.Transaction {
 	var settledAt *int64
 	preimage := hex.EncodeToString(invoice.RPreimage)
 	metadata := map[string]interface{}{}
+	// OPEN, SETTLED, CANCELED or ACCEPTED: an order's pay_by job tells a
+	// cancelled invoice from one holding an accepted HTLC by it.
+	metadata[lnclient.InvoiceStateKey] = invoice.State.String()
 
 	if invoice.State == lnrpc.Invoice_SETTLED {
 		settledAt = &invoice.SettleDate
@@ -1973,6 +2019,7 @@ func flndInvoiceToTransaction(invoice *lnrpc.Invoice) *lnclient.Transaction {
 		Preimage:        preimage,
 		PaymentHash:     hex.EncodeToString(invoice.RHash),
 		Amount:          invoice.ValueMsat,
+		AmountPaid:      invoice.AmtPaidMsat,
 		CreatedAt:       invoice.CreationDate,
 		SettledAt:       settledAt,
 		ExpiresAt:       expiresAt,
@@ -2224,4 +2271,34 @@ func (svc *FLNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan ln
 	}
 
 	return reqChan, respond, nil
+}
+
+// ListOnchainOutputs lists every output to one of the wallet's own addresses,
+// over every wallet transaction, confirmed or in the mempool.
+func (svc *FLNDService) ListOnchainOutputs(ctx context.Context) ([]lnclient.OnchainOutput, error) {
+	var out []lnclient.OnchainOutput
+	offset := uint32(0)
+	const limit = uint32(1000)
+	for {
+		resp, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{IndexOffset: offset, MaxTransactions: limit})
+		if err != nil {
+			return nil, err
+		}
+		for _, tx := range resp.Transactions {
+			for _, o := range tx.OutputDetails {
+				if !o.IsOurAddress || o.Address == "" || o.OutputIndex < 0 {
+					continue
+				}
+				out = append(out, lnclient.OnchainOutput{
+					TxID: tx.TxHash, Vout: uint32(o.OutputIndex), Address: o.Address, AmountLoki: o.Amount, //nolint:gosec // an output index
+					Confirmations: uint32(max(tx.NumConfirmations, 0)), BlockHeight: tx.BlockHeight, //nolint:gosec // non-negative
+					SeenAt: tx.TimeStamp,
+				})
+			}
+		}
+		if len(resp.Transactions) < int(limit) {
+			return out, nil
+		}
+		offset += uint32(len(resp.Transactions)) //nolint:gosec // at most limit
+	}
 }

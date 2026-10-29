@@ -201,20 +201,7 @@
     "description": "이 서클의 멤버를 위해 이미 생성된 지갑입니다.",
     "empty": "아직 생성된 서클 지갑이 없습니다.",
     "selectWallet": "서클 지갑 선택",
-    "frozenBadge": "동결됨",
-    "frozenHint": "이 멤버는 서클을 떠났습니다. 다시 추가될 때까지 이 지갑은 결제하거나 새 인보이스를 만들 수 없습니다.",
-    "removeTitle": "이 서클 지갑을 제거하시겠습니까?",
-    "removeDescription": "남은 잔액은 이 허브로 반환되며, NWC 연결은 즉시 작동을 멈춥니다. 되돌릴 수 없습니다.",
-    "removeSelectedTitle_one": "서클 지갑 {{count}}개를 제거하시겠습니까?",
-    "removeSelectedTitle_other": "서클 지갑 {{count}}개를 제거하시겠습니까?",
-    "removeSelectedDescription": "남은 잔액은 이 허브로 반환되며, NWC 연결은 즉시 작동을 멈춥니다. 되돌릴 수 없습니다.",
-    "removedToast": "서클 지갑이 제거되었습니다",
-    "removedSelectedToast_one": "서클 지갑 {{count}}개가 제거되었습니다",
-    "removedSelectedToast_other": "서클 지갑 {{count}}개가 제거되었습니다",
-    "errors": {
-      "remove": "서클 지갑을 제거하지 못했습니다",
-      "removeSelected": "선택한 서클 지갑을 제거하지 못했습니다"
-    }
+    "errors": {}
   },
   "cashHubAllocations": {
     "durationDays_one": "{{count}}일",
@@ -341,26 +328,11 @@
     }
   },
   "disconnectCircleHub": {
-    "title": "정말로 이 서클을 삭제하시겠습니까?",
     "checking": "멤버 지갑 잔액을 확인하는 중…",
-    "allEmpty": "이 서클의 모든 멤버 지갑이 비어 있습니다. 서클을 삭제하면 모든 멤버 지갑도 함께 삭제됩니다.",
-    "hasBalance_one": "이 서클에는 아직 잔액이 남아 있는 멤버 지갑이 {{count}}개 있습니다.",
-    "hasBalance_other": "이 서클에는 아직 잔액이 남아 있는 멤버 지갑이 {{count}}개 있습니다.",
     "colName": "이름",
     "colPubkey": "공개 키",
     "colBalance": "잔액 (loki)",
-    "totalSummary_one": "총 {{total}} loki, {{count}}개 지갑.",
-    "totalSummary_other": "총 {{total}} loki, {{count}}개 지갑.",
-    "sweepSummary": "‘모두 삭제’를 하면 {{total}} loki가 기본 잔액으로 옮겨집니다. 멤버 지갑의 잔액 전부와 허브 자체의 {{hub}} loki입니다. 멤버는 지갑과 그 기록을 잃습니다.",
-    "sweepPartialToast": "비우고 삭제한 지갑: {{count}}",
-    "sweepPartialDescription": "결제가 끝날 때까지 남겨 둔 지갑: {{count}}. 서클은 삭제되지 않았습니다. 잠시 후 다시 시도하세요.",
-    "deleteEmptyOnly": "빈 지갑만 삭제",
-    "deleteAll": "전체 삭제",
     "deletedToast": "서클이 삭제되었습니다",
-    "partialDeleteToast_one": "빈 지갑 {{count}}개가 삭제되었습니다",
-    "partialDeleteToast_other": "빈 지갑 {{count}}개가 삭제되었습니다",
-    "partialDeleteDescription_one": "잔액 또는 진행 중인 결제가 있는 지갑 {{count}}개는 그대로 유지되었습니다 — 서클은 삭제되지 않았습니다.",
-    "partialDeleteDescription_other": "잔액 또는 진행 중인 결제가 있는 지갑 {{count}}개는 그대로 유지되었습니다 — 서클은 삭제되지 않았습니다.",
     "errors": {
       "load": "서클 지갑을 불러오지 못했습니다",
       "delete": "서클을 삭제하지 못했습니다"

@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -17,172 +19,106 @@ import (
 	"github.com/flokiorg/lokihub/transactions"
 )
 
-// create_circle_wallet_controller.go now rejects any
-// max_amount below 1000 mloki (one whole loki) outright, before the
-// truncating "/1000" conversion ever runs, so AppPermission.MaxAmountLoki can
-// no longer land on the same sentinel value (0) this codebase uses elsewhere
-// to mean "no cap at all". NIP-CW requires max_amount on every request and
-// establishes no "0 means unlimited" wire convention for this method, so a
-// sub-loki value can only ever have been an accidental truncation, never a
-// deliberate "no cap" request — rejecting it outright, rather than rounding
-// it to something, is the correct fix.
-//
-// This file originally proved the bug (a sub-loki max_amount silently
-// disabled a Circle Wallet's spend cap entirely — 246x overspend
-// demonstrated live). It now proves the fix: every sub-loki request (0 and
-// [1, 999] mloki) is rejected with BAD_REQUEST before any wallet is created.
-// The join floor has since risen to constants.MIN_CIRCLE_WALLET_MAX_MLOKI
-// (fee reserve + 1 loki), so the controls below use that floor.
-func TestHandleCreateCircleWalletEvent_SubLokiMaxAmount_Rejected(t *testing.T) {
-	ctx := context.TODO()
+// The pay_invoice permission keeps a budget in whole loki, with 0 meaning "no
+// cap at all". A sub-loki max_amount once truncated to that 0 and silently
+// disabled a Circle Wallet's send cap (a 246x overspend, shown live). Joins
+// used to be refused below a floor to close it, but NIP-CW §Processing
+// Algorithm step 6 has no floor on max_amount and get_info no field to
+// advertise one. A join now takes any max_amount, rounds it down to whole
+// loki (never raising it, NIP-CW §Response), and stores the result exactly on
+// the wallet (CircleMaxAmountMloki): a request under 1 loki is a cap of 0,
+// never "no cap". These tests prove that cap holds.
 
+// joinResolved joins a fresh member with maxAmount and returns the
+// decrypted details and the wallet.
+func joinResolved(t *testing.T, svc *tests.TestService, provider *db.App, maxAmount uint64) (uint64, db.App) {
+	t.Helper()
+	requesterKey := nostr.GeneratePrivateKey()
+	nip47Request := &models.Request{}
+	require.NoError(t, json.Unmarshal(
+		[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, maxAmount, 3600)), nip47Request))
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
+		testJoin(t, context.TODO(), nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+			publishedResponse = r
+		})
+	require.NotNil(t, publishedResponse)
+	require.Nil(t, publishedResponse.Error, "a join is never refused for a small max_amount")
+	resp, ok := publishedResponse.Result.(createCircleWalletResponse)
+	require.True(t, ok)
+	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, resp.EncryptedDetails)
+
+	var walletApp db.App
+	require.NoError(t, svc.DB.Where("wallet_pubkey = ?", details.WalletPubkey).First(&walletApp).Error)
+	return details.MaxAmount, walletApp
+}
+
+// requireSendCapRefusal pays tests.MockInvoice (123,000 mloki) from a wallet
+// funded with 200,000 mloki and requires QUOTA_EXCEEDED.
+func requireSendCapRefusal(t *testing.T, svc *tests.TestService, wallet db.App) {
+	t.Helper()
+	tests.FundApp(svc, wallet.ID, 200_000, tests.RandomHex32())
+	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
+	_, err := transactionsSvc.SendPaymentSync(tests.MockInvoice, nil, nil, svc.LNClient, &wallet.ID, nil)
+	require.Error(t, err, "a capped circle_wallet must not pay 123,000 mloki, even funded beyond it")
+	r, ok := circlemoney.AsRefusal(err)
+	require.True(t, ok, "refused by the circle send checks: %v", err)
+	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, r.Code)
+}
+
+func TestHandleCreateCircleWalletEvent_SubLokiMaxAmount_ZeroCap(t *testing.T) {
 	for _, maxAmount := range []uint64{0, 1, 500, 999} {
 		t.Run(fmt.Sprintf("max_amount_%d", maxAmount), func(t *testing.T) {
 			svc, err := tests.CreateTestService(t)
 			require.NoError(t, err)
 			defer svc.Remove()
-
-			// High per-wallet ceiling and high balance so neither binds —
-			// only the requested max_amount itself is under test.
+			// High per-wallet ceiling and high balance so neither binds.
 			provider := createCircleHubWithCaps(t, svc, 3600, 10_000_000, 1_000_000_000, "")
 
-			requesterKey := nostr.GeneratePrivateKey()
+			reported, wallet := joinResolved(t, svc, provider, maxAmount)
+			assert.Equal(t, uint64(0), reported, "rounded down to whole loki, never raised")
+			require.NotNil(t, wallet.CircleMaxAmountMloki)
+			assert.Equal(t, int64(0), *wallet.CircleMaxAmountMloki, "stored exactly: a cap of 0")
 
-			nip47Request := &models.Request{}
-			require.NoError(t, json.Unmarshal(
-				[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, maxAmount, 3600)), nip47Request))
+			caps, err := circlemoney.WalletCaps(svc.DB, &wallet)
+			require.NoError(t, err)
+			assert.False(t, caps.NoSendCap, "a zero cap is a cap, never \"no cap\"")
+			assert.Equal(t, int64(0), caps.MaxAmount)
 
-			dbRequestEvent := &db.RequestEvent{}
-			svc.DB.Create(&dbRequestEvent)
-
-			var publishedResponse *models.Response
-			NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-				HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
-					publishedResponse = r
-				})
-
-			require.NotNil(t, publishedResponse)
-			require.NotNil(t, publishedResponse.Error,
-				"a max_amount below 1000 mloki must be rejected outright, never silently truncated to an unlimited cap")
-			assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
-
-			// No wallet, and therefore no spend-cap-bypassing app, was created.
-			var count int64
-			require.NoError(t, svc.DB.Model(&db.App{}).
-				Where("parent_app_id = ? AND parent_kind = ?", provider.ID, db.ParentKindCircle).
-				Count(&count).Error)
-			assert.Equal(t, int64(0), count, "a rejected request must not leave a partially-created wallet behind")
+			requireSendCapRefusal(t, svc, wallet)
 		})
 	}
 }
 
-// End-to-end confirmation that the fix actually closes the exploit path, not
-// just the input-validation surface: even if a caller could somehow get past
-// the new pre-check (they can't — this is defense-in-depth verification, not
-// a bypass finding), a wallet is never left able to spend far beyond its
-// requested budget the way the original bug allowed.
-func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_NoOverspendPossible(t *testing.T) {
-	ctx := context.TODO()
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
+// A cap under the fee reserve plus 1 loki (once the join floor) is accepted:
+// the wallet pays only on this node.
+func TestHandleCreateCircleWalletEvent_BelowFeeReserve_Accepted(t *testing.T) {
+	for _, tc := range []struct{ asked, applied uint64 }{
+		{1_000, 1_000}, {1_500, 1_000}, {10_999, 10_000}, {constants.MIN_CIRCLE_WALLET_MAX_MLOKI, constants.MIN_CIRCLE_WALLET_MAX_MLOKI},
+	} {
+		t.Run(fmt.Sprintf("max_amount_%d", tc.asked), func(t *testing.T) {
+			svc, err := tests.CreateTestService(t)
+			require.NoError(t, err)
+			defer svc.Remove()
+			provider := createCircleHubWithCaps(t, svc, 3600, 10_000_000, 1_000_000_000, "")
 
-	provider := createCircleHubWithCaps(t, svc, 3600, 10_000_000, 1_000_000_000, "")
-	requesterKey := nostr.GeneratePrivateKey()
+			reported, wallet := joinResolved(t, svc, provider, tc.asked)
+			assert.Equal(t, tc.applied, reported)
+			require.NotNil(t, wallet.CircleMaxAmountMloki)
+			assert.Equal(t, int64(tc.applied), *wallet.CircleMaxAmountMloki) //nolint:gosec // small
 
-	// The smallest amount a join accepts: the fee-reserve floor.
-	nip47Request := &models.Request{}
-	require.NoError(t, json.Unmarshal(
-		[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, constants.MIN_CIRCLE_WALLET_MAX_MLOKI, 3600)), nip47Request))
+			var perm db.AppPermission
+			require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", wallet.ID, constants.PAY_INVOICE_SCOPE).First(&perm).Error)
+			assert.Equal(t, int(tc.applied/1000), perm.MaxAmountLoki) //nolint:gosec // small
 
-	dbRequestEvent := &db.RequestEvent{}
-	svc.DB.Create(&dbRequestEvent)
+			budget, err := NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).circleBudget(&wallet, time.Now())
+			require.NoError(t, err)
+			assert.Equal(t, tc.applied, budget.TotalBudget, "get_budget reports the exact cap")
 
-	var publishedResponse *models.Response
-	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
-			publishedResponse = r
+			requireSendCapRefusal(t, svc, wallet)
 		})
-
-	require.NotNil(t, publishedResponse)
-	require.Nil(t, publishedResponse.Error)
-	resp, ok := publishedResponse.Result.(createCircleWalletResponse)
-	require.True(t, ok)
-
-	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, resp.EncryptedDetails)
-
-	var walletApp db.App
-	require.NoError(t, svc.DB.Where("wallet_pubkey = ?", details.WalletPubkey).First(&walletApp).Error)
-
-	var perm db.AppPermission
-	require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", walletApp.ID, constants.PAY_INVOICE_SCOPE).First(&perm).Error)
-	require.Equal(t, constants.MIN_CIRCLE_WALLET_MAX_MLOKI/1000, perm.MaxAmountLoki, "the floor converts to whole loki exactly, never 0")
-
-	// The hub's aggregate-commitment accounting sees this wallet's real
-	// commitment (not silently undercounted to 0).
-	var commitment int64
-	require.NoError(t, svc.DB.Table("apps").
-		Select("COALESCE(SUM(ap.max_amount_loki * 1000), 0)").
-		Joins("JOIN app_permissions ap ON ap.app_id = apps.id AND ap.scope = ?", constants.PAY_INVOICE_SCOPE).
-		Where("apps.parent_app_id = ? AND apps.parent_kind = ?", provider.ID, db.ParentKindCircle).
-		Scan(&commitment).Error)
-	assert.Equal(t, int64(constants.MIN_CIRCLE_WALLET_MAX_MLOKI), commitment)
-
-	tests.FundApp(svc, walletApp.ID, 200_000, tests.RandomHex32())
-
-	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	// tests.MockInvoice resolves to a fixed 123,000 mloki payment -- far
-	// beyond the 11,000 mloki cap, even though the wallet holds 200,000 mloki.
-	_, err = transactionsSvc.SendPaymentSync(tests.MockInvoice, nil, nil, svc.LNClient, &walletApp.ID, nil)
-	require.Error(t, err, "an 11-loki-capped circle_wallet must not be able to pay out 123,000 mloki, even once funded well beyond its cap")
-}
-
-// Control case: the exact same scenario, but max_amount is the join floor,
-// a whole number of loki, so it does NOT truncate to zero. The same oversized payment
-// must now be rejected on budget grounds -- proving the bug above is
-// specifically the sub-loki truncation, not a general failure of the
-// per-wallet budget cap mechanism.
-func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_BudgetCapEnforced(t *testing.T) {
-	ctx := context.TODO()
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	provider := createCircleHubWithCaps(t, svc, 3600, 10_000_000, 1_000_000_000, "")
-
-	requesterKey := nostr.GeneratePrivateKey()
-
-	// The smallest amount a join accepts: the fee-reserve floor.
-	nip47Request := &models.Request{}
-	require.NoError(t, json.Unmarshal(
-		[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, constants.MIN_CIRCLE_WALLET_MAX_MLOKI, 3600)), nip47Request))
-
-	dbRequestEvent := &db.RequestEvent{}
-	svc.DB.Create(&dbRequestEvent)
-
-	var publishedResponse *models.Response
-	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
-			publishedResponse = r
-		})
-
-	require.NotNil(t, publishedResponse)
-	require.Nil(t, publishedResponse.Error)
-	resp, ok := publishedResponse.Result.(createCircleWalletResponse)
-	require.True(t, ok)
-
-	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, resp.EncryptedDetails)
-
-	var walletApp db.App
-	require.NoError(t, svc.DB.Where("wallet_pubkey = ?", details.WalletPubkey).First(&walletApp).Error)
-
-	var perm db.AppPermission
-	require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", walletApp.ID, constants.PAY_INVOICE_SCOPE).First(&perm).Error)
-	require.Equal(t, constants.MIN_CIRCLE_WALLET_MAX_MLOKI/1000, perm.MaxAmountLoki, "the floor converts to whole loki exactly, never 0")
-
-	tests.FundApp(svc, walletApp.ID, 200_000, tests.RandomHex32())
-
-	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	_, err = transactionsSvc.SendPaymentSync(tests.MockInvoice, nil, nil, svc.LNClient, &walletApp.ID, nil)
-	require.Error(t, err, "an 11-loki-capped circle_wallet must not be able to pay out 123,000 mloki")
+	}
 }

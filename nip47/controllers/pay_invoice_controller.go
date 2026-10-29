@@ -10,6 +10,7 @@ import (
 	decodepay "github.com/flokiorg/lokihub/decodepay"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -73,6 +74,7 @@ func (controller *nip47Controller) pay(bolt11 string, amount *uint64, metadata m
 		delete(metadata, "internal_transfer")
 		delete(metadata, "cash_claim_slice")
 		delete(metadata, "cash_redeem_fee_mloki")
+		delete(metadata, transactions.CashRedeemRouteCapKey)
 	}
 
 	transaction, err := controller.transactionsService.SendPaymentSync(bolt11, amount, metadata, controller.lnClient, &app.ID, &requestEventId)

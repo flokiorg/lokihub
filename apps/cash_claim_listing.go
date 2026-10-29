@@ -137,7 +137,7 @@ SELECT
 FROM cash_bill_slice_archives s
 LEFT JOIN cash_bill_archives b
        ON b.wallet_app_id = s.wallet_app_id AND b.hub_app_id = s.hub_app_id
-WHERE s.hub_app_id = ? AND s.outcome <> 'void'
+WHERE s.hub_app_id = ?
 `
 
 // allHubsCashClaimUnionSQL is cashClaimUnionSQL scoped to every cash hub on
@@ -152,7 +152,7 @@ WHERE s.hub_app_id = ? AND s.outcome <> 'void'
 // loudly if a rename ever stops these replacements matching.
 var allHubsCashClaimUnionSQL = strings.NewReplacer(
 	"WHERE a.parent_app_id = ? AND ", "WHERE ",
-	"WHERE s.hub_app_id = ? AND ", "WHERE ",
+	"\nWHERE s.hub_app_id = ?\n", "\n",
 ).Replace(cashClaimUnionSQL)
 
 // cashStatusFilterValues maps a requested status onto the values it matches.

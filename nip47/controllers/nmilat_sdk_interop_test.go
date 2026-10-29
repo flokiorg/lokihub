@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -48,11 +47,15 @@ func serveSDK(t *testing.T, svc *tests.TestService, app *db.App, req *models.Req
 	var response *models.Response
 	publish := func(r *models.Response, _ nostr.Tags) { response = r }
 	controller := NewTestNip47Controller(svc)
+	var params struct {
+		IdentityEvent string `json:"identity_event"`
+	}
+	_ = json.Unmarshal(req.Params, &params)
 	switch req.Method {
 	case constants.NIP47MethodCashRedeem:
-		controller.HandleCashRedeemEvent(context.TODO(), req, ev.ID, app, publish, nostr.Tags{})
+		controller.HandleCashRedeemEvent(context.TODO(), req, ev.ID, app, publish, nostr.Tags{}, testPrivateCall(params.IdentityEvent))
 	case constants.NIP47MethodCashTransfer:
-		controller.HandleCashTransferEvent(context.TODO(), req, ev.ID, app, publish, nostr.Tags{})
+		controller.HandleCashTransferEvent(context.TODO(), req, ev.ID, app, publish, nostr.Tags{}, testPrivateCall(params.IdentityEvent))
 	default:
 		t.Fatalf("no handler wired for %s", req.Method)
 	}
@@ -67,7 +70,8 @@ func trustedConnectionKey(t *testing.T, svc *tests.TestService, externalID, clai
 	iaPriv := nostr.GeneratePrivateKey()
 	iaPub, _ = nostr.GetPublicKey(iaPriv)
 	registerTrustedIA(t, svc, iaPub)
-	connKey = nipIC.NewConnectionKey(interopPlatform, externalID)
+	connKey, err := nipIC.NewConnectionKey(interopPlatform, externalID)
+	require.NoError(t, err)
 	if claimantPub == "" {
 		return iaPub, connKey, nil
 	}
@@ -76,7 +80,8 @@ func trustedConnectionKey(t *testing.T, svc *tests.TestService, externalID, clai
 		ConnectionKey:  connKey,
 		UserPubkey:     claimantPub,
 		Platform:       interopPlatform,
-		Evidence:       nipIC.Evidence{Platform: interopPlatform, UserID: externalID, VerifiedAt: time.Now().Unix()},
+		Evidence:       nipIC.Evidence{Platform: interopPlatform, UserID: externalID, Username: "interop", VerifiedAt: time.Now().Unix()},
+		AuthType:       "oauth",
 		ExpirationDays: 1,
 	})
 	require.NoError(t, err)
@@ -117,15 +122,17 @@ func TestSDKInterop_Redeem_ConnectionKey(t *testing.T) {
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 	claimantPriv := nostr.GeneratePrivateKey()
 	claimantPub, _ := nostr.GetPublicKey(claimantPriv)
-	iaPub, connKey, attestation := trustedConnectionKey(t, svc, "interop-user", claimantPub)
+	iaPub, connKey, attestation := trustedConnectionKey(t, svc, "100000000000000001", claimantPub)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityConnectionKey, IdentityValue: string(connKey), IAPubkey: iaPub, AmountMloki: 1000},
 	}))
 
 	amount := uint64(1000)
+	cred, err := nipcash.BySigningConnectionKey(claimantPriv, attestation)
+	require.NoError(t, err)
 	params, err := nipcash.CashRedeemParams{
 		Invoice: tests.MockZeroAmountInvoice, Amount: &amount,
-		Credential: nipcash.BySigningConnectionKey(claimantPriv, interopPlatform, "interop-user", attestation),
+		Credential: cred,
 	}.Request(*wallet.WalletPubkey)
 	require.NoError(t, err)
 
@@ -162,12 +169,15 @@ func TestSDKInterop_Transfer_SplitToConnectionKey(t *testing.T) {
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: ownerPub, AmountMloki: 5000},
 	}))
-	iaPub, connKey, _ := trustedConnectionKey(t, svc, "interop-recipient", "")
+	iaPub, connKey, _ := trustedConnectionKey(t, svc, "100000000000000002", "")
 
 	split := uint64(2000)
+	to, err := nipcash.ConnectionKey(interopPlatform, "100000000000000002", iaPub)
+	require.NoError(t, err)
 	params, err := nipcash.CashTransferParams{
+		RequestID:     testRequestID(),
 		Credential:    nipcash.BySigning(ownerPriv),
-		To:            nipcash.ConnectionKey(interopPlatform, "interop-recipient", iaPub),
+		To:            to,
 		CurrentAmount: 5000,
 		SplitAmount:   &split,
 	}.Request(*wallet.WalletPubkey)
@@ -194,7 +204,7 @@ func TestSDKInterop_Transfer_CashCurrent(t *testing.T) {
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
-	secretHex, commitment, err := cashwallet.GenerateCashSecret()
+	secretHex, commitment, err := tests.GenerateCashSecret()
 	require.NoError(t, err)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityCash, IdentityValue: commitment, AmountMloki: 1000},
@@ -202,6 +212,7 @@ func TestSDKInterop_Transfer_CashCurrent(t *testing.T) {
 	newPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
 	params, err := nipcash.CashTransferParams{
+		RequestID:     testRequestID(),
 		Credential:    nipcash.BySecret(secretHex),
 		To:            nipcash.Pubkey(newPub),
 		CurrentAmount: 1000,

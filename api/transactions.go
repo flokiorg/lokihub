@@ -40,6 +40,25 @@ func (api *api) CreateInvoice(ctx context.Context, req *MakeInvoiceRequest) (*Ma
 		lspFeeProp = &fp
 	}
 
+	// A Circle Wallet's invoice is always the Hub-settled one, checked against
+	// its receive room, its circle's holdings and its state (NIP-CW §Own Funds
+	// and Caps), whoever asks for it.
+	if req.AppId != nil {
+		var app db.App
+		if err := api.db.Limit(1).Find(&app, *req.AppId).Error; err != nil {
+			return nil, err
+		}
+		if app.Kind == db.AppKindCircleWallet {
+			if req.LSPJitChannelSCID != "" || req.LSPPubkey != "" {
+				return nil, fmt.Errorf("%w: a circle wallet's invoice takes no LSP channel", constants.ErrInvalidParams)
+			}
+			transaction, err := api.svc.GetTransactionsService().MakeCircleInvoice(ctx, &app, req.Amount, req.Description, req.DescriptionHash, 0, nil, api.svc.GetLNClient(), nil)
+			if err != nil {
+				return nil, err
+			}
+			return toApiTransaction(transaction), nil
+		}
+	}
 	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, req.Amount, req.Description, req.DescriptionHash, 0, nil, api.svc.GetLNClient(), req.AppId, nil, lspPubkey, lspScid, lspCltv, lspFeeBase, lspFeeProp, nil)
 	if err != nil {
 		return nil, err
@@ -93,6 +112,7 @@ func (api *api) SendPayment(ctx context.Context, invoice string, amountMloki *ui
 		delete(metadata, "internal_transfer")
 		delete(metadata, "cash_claim_slice")
 		delete(metadata, "cash_redeem_fee_mloki")
+		delete(metadata, transactions.CashRedeemRouteCapKey)
 	}
 	transaction, err := api.svc.GetTransactionsService().SendPaymentSync(invoice, amountMloki, metadata, api.svc.GetLNClient(), appID, nil)
 	if err != nil {

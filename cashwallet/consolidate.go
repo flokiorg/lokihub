@@ -2,7 +2,6 @@ package cashwallet
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -10,75 +9,22 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/transactions"
-	"github.com/nbd-wtf/go-nostr"
 )
 
-// fundInternal moves amountMloki from fromAppID into a freshly-created invoice
-// on toAppID over the internal-transfer path — no real Lightning hop, and
-// exempt (via internal_transfer metadata, stripped at every external NWC entry
-// point) from both the cash full-drain guard and the pay_invoice-scope
-// requirement a cash_wallet's real connection deliberately never has. This is
-// the one funding primitive every internal transfer in this package reduces
-// to: Commit's Hub→Wallet transfer, Split's Source→New transfer, Consolidate's
-// N source→merged transfers and their compensating reversals, and
-// SplitInTwo's own carved-wallet reversal. Deps.FundInternalOverride, when
-// set, replaces the body below entirely — see its own doc comment.
-func fundInternal(ctx context.Context, deps Deps, fromAppID, toAppID uint, amountMloki uint64, memo string) error {
-	if deps.FundInternalOverride != nil {
-		return deps.FundInternalOverride(ctx, fromAppID, toAppID, amountMloki, memo)
-	}
-	invoice, err := deps.TransactionsService.MakeInvoice(
-		ctx, amountMloki, memo, "", 0,
-		nil, deps.LNClient, &toAppID, nil, nil, nil, nil, nil, nil,
-		&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create internal transfer invoice: %w", err)
-	}
-	if _, err = deps.TransactionsService.SendPaymentSync(
-		invoice.PaymentRequest, nil,
-		map[string]interface{}{"internal_transfer": true},
-		deps.LNClient, &fromAppID, nil,
-	); err != nil {
-		// Sent but not recorded: the funds have moved (the paying app's balance
-		// already counts the pending row), so this is a completed transfer. Every
-		// saga above treats an error as "nothing moved" and compensates —
-		// deleting a wallet that now holds the funds, or restoring a source claim
-		// whose value already left — so reporting it as a failure would create
-		// value twice.
-		if errors.Is(err, transactions.ErrPaymentSentNotRecorded) {
-			logger.Logger.Error().Err(err).
-				Uint("from_app_id", fromAppID).
-				Uint("to_app_id", toAppID).
-				Uint64("amount_mloki", amountMloki).
-				Str("memo", memo).
-				Msg("Internal transfer sent but not recorded; treating it as moved, outgoing row left pending for the operator")
-			return nil
-		}
-		return fmt.Errorf("failed to fund via internal transfer: %w", err)
-	}
-	return nil
-}
-
-// ConsolidateSource is one input slice to a consolidation: the source
-// cash_wallet this node custodies, and the full committed amount the caller has
-// already claimed terminal on it (mirroring Split's "caller claims first"
-// contract).
+// ConsolidateSource is one input slice to a consolidation: the source bill this
+// node custodies, the slice exactly as the caller read and authorized it, and
+// its committed amount.
 type ConsolidateSource struct {
 	WalletApp   *db.App
+	Slice       apps.SliceRef
 	AmountMloki uint64
 }
 
-// ConsolidateParams describes combining several already-claimed source slices
-// into one new dedicated cash_wallet for NewIdentity. The caller (controller)
-// is responsible for: verifying this node custodies every source, that they
-// share HubApp, that the caller controls each, that the summed amount fits the
-// hub ceiling, and that MinTransferMloki/RedeemFeePpm agree across sources —
-// then claiming every source slice terminal (ClaimCashSlice) before calling
-// here, and on error unclaiming every source EXCEPT those named in the
-// returned strandedSourceAppIDs (see Consolidate's doc comment). Consolidate
-// itself only creates and funds the merged wallet.
+// ConsolidateParams describes merging several source slices into one new
+// dedicated bill for NewIdentity. The caller has verified that this node
+// custodies every source, that they share HubApp, that the caller controls each,
+// that the total fits the Hub's ceiling and that the sources agree on their
+// terms. The commit claims every source terminal itself.
 type ConsolidateParams struct {
 	HubApp           *db.App
 	Sources          []ConsolidateSource
@@ -93,7 +39,16 @@ type ConsolidateParams struct {
 	RedeemFeePpm     int
 	// RedeemFeeBaseMloki travels with RedeemFeePpm — they are one quoted price.
 	RedeemFeeBaseMloki int64
-	ExpiresAt          *time.Time
+	// Ordered: a merge of ordered sources is ordered.
+	Ordered bool
+	// UnfinalPaymentIDs: the union of the sources' (db.MergePaymentIDs).
+	UnfinalPaymentIDs *string
+	ExpiresAt         *time.Time
+
+	// Proofs are consumed by the commit, and only if it commits.
+	Proofs []ClaimProof
+	// Record, when set, is the call's record, written last under its deadline.
+	Record *db.CashRequestRecord
 }
 
 // ConsolidateResult carries the merged wallet and its token, delivered to the
@@ -104,164 +59,69 @@ type ConsolidateResult struct {
 	AmountMloki uint64
 }
 
-// Consolidate creates one spend-only cash_wallet child of params.HubApp for
-// NewIdentity and funds it via one internal transfer out of EACH source
-// wallet's balance — the many-to-one inverse of Split.
-//
-// Atomicity is a compensating saga: the new wallet and its claim are reversible
-// by deletion, and each completed source→new transfer is reversed (new→source)
-// if a LATER source transfer fails, before the wallet is deleted — so a
-// mid-loop failure leaves no source drained and no wallet created. A
-// compensation that itself fails is logged for manual sweep (the same posture
-// Split takes for its own irreversible funding step), and a process crash
-// mid-loop is caught by the background cash sweep, exactly as it is for Split.
-//
-// The caller has already claimed every source slice terminal. On error, it
-// MUST NOT blindly unclaim every source: strandedSourceAppIDs names exactly
-// those whose compensating reverse-transfer itself failed — for those, the
-// funds are still sitting in the (deliberately retained) merged wallet, so
-// restoring the claim to its full original amount would create an
-// over-entitlement the source's real balance can't back. Every OTHER source —
-// never funded, or successfully reversed — is safe to unclaim as before.
-func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (result *ConsolidateResult, strandedSourceAppIDs []uint, err error) {
+// Consolidate merges the sources into one new bill as one commit: every source
+// claim, the bill, its signed token, one funding row pair per source, the
+// consumed proofs and the record commit together or not at all. On any error
+// every source is untouched and claimable.
+func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (*ConsolidateResult, error) {
 	if len(params.Sources) < 2 {
-		return nil, nil, fmt.Errorf("%w: consolidate needs at least two sources", constants.ErrInvalidParams)
+		return nil, fmt.Errorf("%w: consolidate needs at least two sources", constants.ErrInvalidParams)
 	}
 	var total uint64
+	lock := make([]uint, 0, len(params.Sources))
+	refs := make([]apps.SliceRef, 0, len(params.Sources))
+	transfers := make([]internalTransfer, 0, len(params.Sources))
 	for _, s := range params.Sources {
 		total += s.AmountMloki // overflow already guarded by the caller
+		lock = append(lock, s.WalletApp.ID)
+		refs = append(refs, s.Slice)
+		transfers = append(transfers, internalTransfer{fromAppID: s.WalletApp.ID, toBill: 0, amount: s.AmountMloki})
 	}
 
-	newApp, _, err := deps.AppsService.CreateApp(
-		apps.GenerateChildName(params.HubApp.Name, params.NewIdentityValue),
-		"", // temporary random keypair; overridden with the deterministic one below
-		total/1000,
-		constants.BUDGET_RENEWAL_NEVER,
-		params.ExpiresAt,
-		cashWalletScopes,
-		db.AppKindCashWallet,
-		&params.HubApp.ID,
-		db.ParentKindCash,
-		nil,
-	)
+	// A merge continues its first source's lineage.
+	root := LineageRoot(params.Sources[0].WalletApp)
+	out, err := commit(ctx, deps, commitPlan{
+		op:       "consolidate",
+		hub:      params.HubApp,
+		lockApps: lock,
+		bills: []newBill{{
+			role:      db.CashRecordBillMerged,
+			nameSeed:  params.NewIdentityValue,
+			amount:    total,
+			expiresAt: params.ExpiresAt,
+			claims: []db.CashWalletClaim{{
+				IdentityType:       params.NewIdentityType,
+				IdentityValue:      params.NewIdentityValue,
+				IAPubkey:           params.NewIAPubkey,
+				AmountMloki:        int64(total), //nolint:gosec // bounded by the hub's int64 per-wallet ceiling
+				MinTransferMloki:   params.MinTransferMloki,
+				RedeemFeePpm:       params.RedeemFeePpm,
+				RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
+				Ordered:            params.Ordered,
+				UnfinalPaymentIDs:  params.UnfinalPaymentIDs,
+			}},
+			identityRequired: params.NewIdentityType != db.CashIdentityCash,
+			lineageRoot:      &root,
+		}},
+		sources:   refs,
+		transfers: transfers,
+		proofs:    params.Proofs,
+		record:    params.Record,
+	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create consolidated Cash wallet app: %w", err)
+		return nil, err
 	}
-
-	// funded tracks source→new transfers that completed, so a later failure can
-	// compensate (move them back) before the new wallet is deleted. Reversal
-	// MUST happen while newApp still exists, so it precedes the delete.
-	funded := make([]ConsolidateSource, 0, len(params.Sources))
-	fullyFunded := false
-	defer func() {
-		if fullyFunded {
-			return
-		}
-		// Only delete newApp once every completed transfer has been reversed —
-		// mirrors SplitInTwo's carved-wallet compensation. If any reversal fails,
-		// newApp still holds that source's funds, so deleting it would strand
-		// them silently; leave the (now orphaned but non-empty) wallet app in
-		// place for a manual sweep instead of erasing the record of where the
-		// funds are. Each such source's app ID is reported via
-		// strandedSourceAppIDs so the caller knows not to unclaim it.
-		allReversed := true
-		for _, s := range funded {
-			if rerr := fundInternal(ctx, deps, newApp.ID, s.WalletApp.ID, s.AmountMloki, "cash consolidate rollback"); rerr != nil {
-				allReversed = false
-				strandedSourceAppIDs = append(strandedSourceAppIDs, s.WalletApp.ID)
-				logger.Logger.Error().Err(rerr).
-					Uint("new_wallet_id", newApp.ID).
-					Uint("source_wallet_id", s.WalletApp.ID).
-					Uint64("amount_mloki", s.AmountMloki).
-					Msg("Failed to reverse a consolidation transfer after a later source failed — funds are stranded in the consolidated wallet; manual sweep recommended, wallet app left in place, source claim must not be restored")
-				if recErr := deps.AppsService.RecordCashStrandedFund("consolidate", s.WalletApp.ID, newApp.ID, s.AmountMloki); recErr != nil {
-					logger.Logger.Error().Err(recErr).
-						Uint("new_wallet_id", newApp.ID).
-						Uint("source_wallet_id", s.WalletApp.ID).
-						Msg("Failed to durably record a stranded-fund reconciliation entry; the log line above is the only record")
-				}
-			}
-		}
-		if allReversed {
-			// allReversed means every fundInternal CALL returned nil, which is not the
-			// same as "the merged wallet is empty" — see deleteIfDrained.
-			var firstSource uint
-			if len(funded) > 0 {
-				firstSource = funded[0].WalletApp.ID
-			}
-			if !deleteIfDrained(deps, "consolidate", firstSource, newApp) {
-				// The wallet survived because it still holds funds, so no source claim
-				// may be restored: the same value would exist in two places.
-				for _, s := range funded {
-					strandedSourceAppIDs = append(strandedSourceAppIDs, s.WalletApp.ID)
-				}
-			}
-		}
-	}()
-
-	pairingSecretKey, err := deps.Keys.GetCashPairingKey(newApp.ID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to derive Cash pairing key: %w", err)
-	}
-	deterministicPubKey, err := nostr.GetPublicKey(pairingSecretKey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to derive Cash pairing pubkey: %w", err)
-	}
-	if err := deps.DB.Model(&db.App{}).Where("id = ?", newApp.ID).
-		Update("app_pubkey", deterministicPubKey).Error; err != nil {
-		return nil, nil, fmt.Errorf("failed to register pairing key: %w", err)
-	}
-	newApp.AppPubkey = deterministicPubKey
-	walletPubkey := *newApp.WalletPubkey
-
-	if err := deps.AppsService.CreateCashWalletClaims(newApp.ID, []db.CashWalletClaim{{
-		IdentityType:       params.NewIdentityType,
-		IdentityValue:      params.NewIdentityValue,
-		IAPubkey:           params.NewIAPubkey,
-		AmountMloki:        int64(total), //nolint:gosec // bounded to <= the hub's PerWalletMaxMloki by the caller, itself an int64
-		MinTransferMloki:   params.MinTransferMloki,
-		RedeemFeePpm:       params.RedeemFeePpm,
-		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
-	}}); err != nil {
-		return nil, nil, fmt.Errorf("failed to store consolidated recipient claim: %w", err)
-	}
-
-	// Provenance before the money, for the reason Commit gives at its own call: it is
-	// mandatory, it can fail, and once the sources below have been drained a failure
-	// could only be swallowed. Single-slice by construction, so identity-required
-	// follows NewIdentity; the provenance attests the merged total, immutable for the
-	// wallet's life.
-	identityRequired := params.NewIdentityType != db.CashIdentityCash
-	mintSig, err := MintProvenance(ctx, deps.LNClient, walletPubkey, total)
-	if err != nil {
-		return nil, nil, fmt.Errorf("refusing to consolidate into a bill without provenance: %w", err)
-	}
-	token, err := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, total, params.HubApp.AppPubkey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("refusing to consolidate into a bill whose token cannot be encoded: %w", err)
-	}
-
-	// Fund the merged wallet from each source in turn. A failure here returns,
-	// and the defer compensates every transfer that already completed.
-	for _, s := range params.Sources {
-		if err := fundInternal(ctx, deps, s.WalletApp.ID, newApp.ID, s.AmountMloki, "cash consolidate"); err != nil {
-			return nil, nil, fmt.Errorf("failed to fund consolidated Cash wallet from source wallet %d: %w", s.WalletApp.ID, err)
-		}
-		funded = append(funded, s)
-	}
-	fullyFunded = true
-	storeCashToken(deps, newApp.ID, token)
 
 	logger.Logger.Info().
-		Uint("cash_wallet_id", newApp.ID).
+		Uint("cash_wallet_id", out[0].App.ID).
 		Uint("parent_app_id", params.HubApp.ID).
 		Int("source_count", len(params.Sources)).
 		Uint64("total_mloki", total).
 		Msg("Slices consolidated into a new dedicated Cash wallet")
 
 	return &ConsolidateResult{
-		WalletApp:   newApp,
-		CashToken:   token,
+		WalletApp:   out[0].App,
+		CashToken:   out[0].Token,
 		AmountMloki: total,
-	}, nil, nil
+	}, nil
 }

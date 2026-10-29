@@ -20,15 +20,15 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
-// oneCashRecipient builds a single-cash-mode-recipient mint_cash
-// request. The Hub mints the cash secret and returns it once in the create
-// response (over the Hub's own single-owner connection).
-func oneCashRecipient(amountMloki uint64) []CashWalletRecipientParam {
-	return []CashWalletRecipientParam{{IdentityType: "cash", AmountMillis: amountMloki}}
+// oneCashRecipient builds a single-cash-mode-recipient mint_cash request:
+// the caller generates the secret and sends only its commitment (NIP-CASH
+// §Creating a Cash-Mode Slice); the Hub never returns a secret.
+func oneCashRecipient(commitment string, amountMloki uint64) []CashWalletRecipientParam {
+	return []CashWalletRecipientParam{{IdentityType: "cash", IdentityValue: commitment, AmountMillis: amountMloki}}
 }
 
 // createCashModeWallet mints a fresh single-recipient cash-mode wallet and returns its
@@ -37,17 +37,18 @@ func oneCashRecipient(amountMloki uint64) []CashWalletRecipientParam {
 // The token is returned because bill methods now travel over the private transport, whose
 // hub identity comes from the token's own mint signature — a pairing URI does not carry
 // one, so a caller holding only that can mint but cannot act on the bill.
-func createCashModeWallet(t *testing.T, hubClient *nwcclient.Client, amountMloki uint64) (pairingURI, token, walletPubkey, cashSecret string) {
+func createCashModeWallet(t *testing.T, hubClient *nwcclient.Client, amountMloki uint64) (unused, token, walletPubkey, cashSecret string) {
 	t.Helper()
+	secret, commitment := cashSecretAndHash(t)
 	var created MintCashResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
-		Recipients: oneCashRecipient(amountMloki),
+		Recipients: oneCashRecipient(commitment, amountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
 	require.Len(t, created.Recipients, 1)
 	require.Equal(t, "cash", created.Recipients[0].IdentityType)
-	require.NotEmpty(t, created.Recipients[0].CashSecret, "hub must mint the cash secret in the create response")
-	return created.PairingURI, created.CashToken, created.WalletPubkey, created.Recipients[0].CashSecret
+	require.Empty(t, created.Recipients[0].CashSecret, "the hub never returns a cash secret")
+	return "", created.CashToken, created.WalletPubkey, secret
 }
 
 // fireBarrier runs two funcs as simultaneously as the Go scheduler + the real
@@ -97,12 +98,12 @@ func TestAudit_CashTransferVsRedeem_NeverBothSucceed(t *testing.T) {
 	const iterations = 40
 
 	for i := 0; i < iterations; i++ {
-		pairingURI, pairingURIToken, _, secret1 := createCashModeWallet(t, hubClient, happyPathAmountMloki)
+		_, pairingURIToken, _, secret1 := createCashModeWallet(t, hubClient, happyPathAmountMloki)
 
 		// Two independent clients (each its own relay connection) so the two
 		// requests genuinely race on the wire, not through one client's lock.
-		redeemClient := mustConnectBill(t, pairingURI, pairingURIToken, "")
-		transferClient := mustConnectBill(t, pairingURI, pairingURIToken, "")
+		redeemClient := mustConnectBill(t, pairingURIToken, "")
+		transferClient := mustConnectBill(t, pairingURIToken, "")
 
 		redeemInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit redeem-vs-transfer")
 		secret2Hex, secret2Hash := cashSecretAndHash(t)
@@ -162,7 +163,7 @@ func TestAudit_CashTransferVsRedeem_NeverBothSucceed(t *testing.T) {
 				CashSecret: secret1,
 			}, &probeRes)
 			require.Error(t, probeErr, "CRITICAL DOUBLE-SPEND: the superseded pre-transfer secret redeemed a slice already transferred away")
-			requireNWCErrorCode(t, probeErr, constants.ERROR_NOT_FOUND)
+			requireNWCErrorCode(t, probeErr, constants.ERROR_UNAUTHORIZED)
 
 			winInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit winner-probe-secret2")
 			var winRes ClaimFundsResult
@@ -187,9 +188,9 @@ func TestAudit_CashConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
 	const iterations = 6
 	for i := 0; i < iterations; i++ {
 		t.Run("iteration", func(t *testing.T) {
-			pairingURI, pairingURIToken, _, secret1 := createCashModeWallet(t, hubClient, happyPathAmountMloki)
-			clientA := mustConnectBill(t, pairingURI, pairingURIToken, "")
-			clientB := mustConnectBill(t, pairingURI, pairingURIToken, "")
+			_, pairingURIToken, _, secret1 := createCashModeWallet(t, hubClient, happyPathAmountMloki)
+			clientA := mustConnectBill(t, pairingURIToken, "")
+			clientB := mustConnectBill(t, pairingURIToken, "")
 
 			aHex, aHash := cashSecretAndHash(t)
 			bHex, bHash := cashSecretAndHash(t)
@@ -230,7 +231,7 @@ func TestAudit_CashConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
 				Invoice:    loseInvoice.Invoice,
 				CashSecret: loseHex,
 			}, &loseRes)
-			requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+			requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 			// Winner's secret redeems exactly the full amount, once.
 			winInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit winner-secret")
@@ -264,7 +265,7 @@ func TestAudit_CashTransferCashTarget_Boundaries(t *testing.T) {
 			Recipients: onePubkeyRecipient(curPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		return mustConnectBill(t, created.PairingURI, created.CashToken, curPriv), curPriv, curPub, created.WalletPubkey
+		return mustConnectBill(t, created.CashToken, curPriv), curPriv, curPub, created.WalletPubkey
 	}
 
 	t.Run("CashTarget_MissingIdentityValue_Rejected_NoServerMintedSecret", func(t *testing.T) {
@@ -322,7 +323,7 @@ func TestAudit_CashTransferCashTarget_Boundaries(t *testing.T) {
 			IdentityEvent: eventJSON(t, proof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "cash", IdentityValue: secretHash, IAPubkey: curPub},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("UnknownNewIdentityType_Rejected", func(t *testing.T) {
@@ -362,11 +363,11 @@ func TestAudit_CashTransferCashTarget_Boundaries(t *testing.T) {
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
 
-	t.Run("CashSecret_WrongSecret_NotFound", func(t *testing.T) {
+	t.Run("CashSecret_WrongSecret_Unauthorized", func(t *testing.T) {
 		shared, _, _, _ := newPubkeySlice(t)
 		// Bearer: the request authorizes with a cash secret, so the item must carry no
 		// slice proof. One carrying both is refused as malformed before the secret is even
-		// looked at — which would mask the NOT_FOUND this case is asserting.
+		// looked at — which would mask the UNAUTHORIZED this case is asserting.
 		shared.(*billConn).Bearer()
 		wrongHex, targetHash := cashSecretAndHash(t) // random, unrelated secret
 		var res CashTransferResult
@@ -374,7 +375,7 @@ func TestAudit_CashTransferCashTarget_Boundaries(t *testing.T) {
 			CashSecret:  wrongHex,
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "cash", IdentityValue: targetHash},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 }
 
@@ -408,7 +409,7 @@ func TestAudit_CashTransferIntoCash_SpinsOffOnSharedWallet(t *testing.T) {
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
-	shared := mustConnectBill(t, created.PairingURI, created.CashToken, aPriv)
+	shared := mustConnectBill(t, created.CashToken, aPriv)
 
 	secretHex, secretHash := cashSecretAndHash(t)
 	proof := buildTransferProofEvent(t, aPriv, created.WalletPubkey, "cash", secretHash, "", happyPathAmountMloki, nil, time.Now())
@@ -426,12 +427,12 @@ func TestAudit_CashTransferIntoCash_SpinsOffOnSharedWallet(t *testing.T) {
 	require.NoError(t, err)
 	decrypted, err := aCipher.Decrypt(res.NewWalletToken)
 	require.NoError(t, err)
-	newWalletToken, err := lokicash.Decode(decrypted)
+	_, err = nipcash.Decode(decrypted)
 	require.NoError(t, err)
 
 	// Bearer: this spun-off bill is cash-mode, so its secret in params IS the authorization
 	// and the item must carry no slice proof (§Bearer Items).
-	newWalletClient := mustConnectBill(t, nwcURIFromLokicash(newWalletToken), decrypted, "")
+	newWalletClient := mustConnectBill(t, decrypted, "")
 	invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit spinoff redeem")
 	var claim ClaimFundsResult
 	require.NoError(t, newWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{

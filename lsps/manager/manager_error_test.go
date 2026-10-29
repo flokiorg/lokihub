@@ -11,9 +11,12 @@ import (
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/lsps2"
+	"github.com/flokiorg/lokihub/lsps/persist"
 	"github.com/flokiorg/lokihub/lsps/transport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // MockTransport allows capturing messages
@@ -75,7 +78,8 @@ func TestJitRetryOnExpiredParams(t *testing.T) {
 
 			m := &LiquidityManager{
 				cfg: &ManagerConfig{
-					LNClient: mockLN,
+					LNClient:   mockLN,
+					LSPManager: trustedCatalogue(t, "lsp_pubkey"),
 				},
 				transport:       mockTransport,
 				eventQueue:      eq,
@@ -218,4 +222,22 @@ func (m *MockLNClient) GetBalances(ctx context.Context, onchain bool) (*lnclient
 }
 func (m *MockLNClient) SubscribeCustomMessages(ctx context.Context) (<-chan lnclient.CustomMessage, <-chan error, error) {
 	return nil, nil, nil
+}
+
+// trustedCatalogue is an LSP catalogue holding nodeID, trusted and open: a
+// purchase is refused from any other (CheckPurchase).
+func trustedCatalogue(t *testing.T, nodeID string) *LSPManager {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s_catalogue?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&persist.LSP{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	lm := NewLSPManager(db)
+	if _, err := lm.addTestLSP("catalogue", nodeID, "10.0.0.1:9735", true); err != nil {
+		t.Fatalf("add LSP: %v", err)
+	}
+	return lm
 }

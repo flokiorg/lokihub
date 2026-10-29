@@ -1,9 +1,9 @@
 package api
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -15,11 +15,11 @@ import (
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/tests"
 	"github.com/flokiorg/lokihub/tests/mocks"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // newTestAPI returns an api wired to the test service's real DB and AppsService.
@@ -36,6 +36,7 @@ func newTestAPIWithService(t *testing.T, svc *tests.TestService) *api {
 	txSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
 	mockSvc.On("GetTransactionsService").Return(txSvc).Maybe()
 	mockSvc.On("GetLNClient").Return(svc.LNClient).Maybe()
+	mockSvc.On("GetListingService").Return(nil).Maybe()
 
 	return &api{
 		db:             svc.DB,
@@ -66,8 +67,7 @@ func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
 		ExpirySecs: 1800,
 	})
 	require.NoError(t, err)
-	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
-	assert.True(t, strings.HasPrefix(result.CashToken, lokicash.HRP+"1"))
+	assert.True(t, strings.HasPrefix(result.CashToken, constants.CashTokenHRP+"1"))
 	assert.NotZero(t, result.AppID)
 	require.Len(t, result.Recipients, 1)
 
@@ -80,24 +80,17 @@ func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
 	require.NoError(t, svc.DB.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ?", result.AppID).Count(&claimCount).Error)
 	assert.EqualValues(t, 1, claimCount)
 
-	// GET cash-connection for the new wallet must return the identical URI and
-	// lokicash token (determinism) — a recipient re-fetching later must land
-	// on the exact same wallet, never a different one.
+	// GET cash-connection returns the identical token, the bill's only credential,
+	// and it names this bill with the secret derived from its id.
 	conn, err := theAPI.GetCashWalletConnection(result.AppID)
 	require.NoError(t, err)
-	assert.Equal(t, result.PairingURI, conn.PairingURI)
 	assert.Equal(t, result.CashToken, conn.CashToken)
-
-	// The lokicash token and the pairing URI must describe the exact same
-	// wallet — the fund-safety property that matters most here, since either
-	// string alone is a sufficient connection credential.
-	pairingURI, err := url.Parse(result.PairingURI)
+	decoded, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
-	decoded, err := lokicash.Decode(result.CashToken)
+	assert.Equal(t, *childApp.WalletPubkey, decoded.WalletPubkey)
+	secret, err := svc.Keys.GetCashPairingKey(result.AppID)
 	require.NoError(t, err)
-	assert.Equal(t, pairingURI.Host, decoded.WalletPubkey)
-	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
-	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
+	assert.Equal(t, secret, decoded.Secret)
 }
 
 // TestCreateCashWallet_ProducesSignedToken pins that a wallet minted through the admin
@@ -133,13 +126,13 @@ func TestCreateCashWallet_ProducesSignedToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tok, err := lokicash.Decode(result.CashToken)
+	tok, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, tok.MintSignature)
-	require.NotNil(t, tok.AttestedAmount)
-	assert.Equal(t, uint64(1000), *tok.AttestedAmount)
+	require.NotNil(t, tok.AttestedAmountMillis)
+	assert.Equal(t, uint64(1000), *tok.AttestedAmountMillis)
 
-	recovered, ok := lokicash.VerifyMint(tok)
+	recovered, ok := nipcash.VerifyProvenance(tok)
 	require.True(t, ok)
 	assert.Equal(t, minterPubkey, recovered)
 }
@@ -195,8 +188,32 @@ func TestCreateCashWallet_Cash_HappyPath(t *testing.T) {
 
 	r := result.Recipients[0]
 	assert.Equal(t, db.CashIdentityCash, r.IdentityType)
-	assert.NotEmpty(t, r.CashSecret, "the admin HTTP API must also surface the plaintext secret exactly once")
-	assert.Empty(t, r.IdentityValue, "the admin HTTP API must not surface the internal secret hash either")
+	assert.NotEmpty(t, r.CashSecret, "the operator gets the secret generated for it, once")
+	secret, err := hex.DecodeString(r.CashSecret)
+	require.NoError(t, err)
+	commitment := sha256.Sum256(secret)
+	assert.Equal(t, hex.EncodeToString(commitment[:]), r.IdentityValue, "the entry echoes the commitment, as over NWC")
+}
+
+// The operator may send the commitment itself, as a mint_cash caller does; then no
+// secret is generated or returned.
+func TestCreateCashWallet_Cash_OperatorCommitment(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	_, commitment, err := tests.GenerateCashSecret()
+	require.NoError(t, err)
+	result, err := newTestAPIWithService(t, svc).CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{{IdentityType: db.CashIdentityCash, IdentityValue: commitment, AmountMloki: 1000}},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Recipients, 1)
+	assert.Equal(t, commitment, result.Recipients[0].IdentityValue)
+	assert.Empty(t, result.Recipients[0].CashSecret)
 }
 
 func TestCreateCashWallet_Cash_RejectsMixedRecipients(t *testing.T) {
@@ -337,9 +354,9 @@ func TestCreateCashWallet_TransferFailure_Rollback(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
-	mockLN := svc.LNClient.(*tests.MockLn)
-	mockLN.PayInvoiceResponses = []*lnclient.PayInvoiceResponse{nil}
-	mockLN.PayInvoiceErrors = []error{errors.New("simulated payment failure")}
+	// The node cannot sign, so the commit fails after it has created the bill
+	// inside its transaction: everything it wrote must roll back.
+	svc.LNClient.(*tests.MockLn).SigningKey = nil
 
 	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
@@ -354,5 +371,6 @@ func TestCreateCashWallet_TransferFailure_Rollback(t *testing.T) {
 
 	var childApps []db.App
 	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
-	assert.Empty(t, childApps, "the child Cash wallet app must be rolled back after a funding failure")
+	assert.Empty(t, childApps, "the bill must roll back with its failed commit")
+	assert.Equal(t, int64(10_000_000), queries.GetIsolatedBalance(svc.DB, hub.ID), "the Hub was never debited")
 }

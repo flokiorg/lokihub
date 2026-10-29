@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -64,7 +65,7 @@ const (
 // e-tag referencing the attestation event).
 func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash string, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
 	t.Helper()
-	tags := nostr.Tags{{"d", walletPubkey}, {"bolt11_hash", bolt11Hash}}
+	tags := nostr.Tags{{"d", walletPubkey}, {"m", "cash_redeem"}, {"bolt11_hash", bolt11Hash}}
 	tags = append(tags, extraTags...)
 	ev := &nostr.Event{
 		Kind:      nostrKindClaimProof,
@@ -72,6 +73,7 @@ func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash 
 		Tags:      tags,
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
+	transferProofSigners.Store(ev.ID, signerPrivkey)
 	return ev
 }
 
@@ -97,6 +99,7 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 	sum := sha256.Sum256([]byte(newIdentityType + ":" + newIdentityValue + ":" + newIAPubkey))
 	tags := nostr.Tags{
 		{"d", walletPubkey},
+		{"m", "cash_transfer"},
 		{"new_identity_hash", hex.EncodeToString(sum[:])},
 		{"amount_millis", strconv.FormatUint(amountMloki, 10)},
 	}
@@ -107,7 +110,73 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 		Tags:      tags,
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
+	transferProofSigners.Store(ev.ID, signerPrivkey)
 	return ev
+}
+
+// transferProofSigners remembers who signed each claim proof the suite built, so
+// a consolidate call can re-bind its sources' proofs to the call
+// (rebindConsolidateProofs) and an item proof is signed by its claim proof's
+// signer (claimSignerOf).
+var transferProofSigners sync.Map
+
+// rebindConsolidateProofs makes each source's claim proof a cash_consolidate
+// proof of this call: m cash_consolidate and s, the hash of every source wallet
+// (NIP-CASH §Claim Proofs). The suite builds sources with the transfer builder,
+// whose other bindings a consolidate shares; a proof the suite did not sign is
+// left as it is.
+func rebindConsolidateProofs(t *testing.T, raw json.RawMessage) json.RawMessage {
+	t.Helper()
+	var params map[string]json.RawMessage
+	if json.Unmarshal(raw, &params) != nil {
+		return raw
+	}
+	var sources []map[string]json.RawMessage
+	if json.Unmarshal(params["sources"], &sources) != nil {
+		return raw
+	}
+	wallets := make([]string, 0, len(sources))
+	for _, src := range sources {
+		var w string
+		_ = json.Unmarshal(src["wallet_pubkey"], &w)
+		wallets = append(wallets, w)
+	}
+	sum := sha256.Sum256([]byte(strings.Join(wallets, "")))
+	sHash := hex.EncodeToString(sum[:])
+	for _, src := range sources {
+		var evJSON string
+		if json.Unmarshal(src["identity_event"], &evJSON) != nil {
+			continue
+		}
+		var ev nostr.Event
+		if json.Unmarshal([]byte(evJSON), &ev) != nil {
+			continue
+		}
+		priv, ok := transferProofSigners.Load(ev.ID)
+		if !ok {
+			continue
+		}
+		tags := nostr.Tags{}
+		for _, tag := range ev.Tags {
+			if len(tag) > 0 && (tag[0] == "m" || tag[0] == "s") {
+				continue
+			}
+			tags = append(tags, tag)
+		}
+		ev.Tags = append(tags, nostr.Tag{"m", "cash_consolidate"}, nostr.Tag{"s", sHash})
+		require.NoError(t, ev.Sign(priv.(string)))
+		transferProofSigners.Store(ev.ID, priv)
+		rebound, err := json.Marshal(ev)
+		require.NoError(t, err)
+		src["identity_event"], err = json.Marshal(string(rebound))
+		require.NoError(t, err)
+	}
+	var err error
+	params["sources"], err = json.Marshal(sources)
+	require.NoError(t, err)
+	out, err := json.Marshal(params)
+	require.NoError(t, err)
+	return out
 }
 
 // buildIAAttestationEvent builds and signs a kind-35522 IA attestation,
@@ -150,6 +219,7 @@ func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubWalletPub
 		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", circleConnectionPubkey(mustPubkey(t, requesterPrivkey))}},
 	}
 	require.NoError(t, ev.Sign(requesterPrivkey))
+	circleProofSigners.Store(ev.ID, requesterPrivkey)
 	return ev
 }
 
@@ -165,6 +235,7 @@ func buildCircleWalletIdentityEventCustom(t *testing.T, signerPrivkey, dTagValue
 		Tags:      nostr.Tags{{"d", dTagValue}, {"connection", circleConnectionPubkey(mustPubkey(t, signerPrivkey))}},
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
+	circleProofSigners.Store(ev.ID, signerPrivkey)
 	return ev
 }
 
@@ -186,6 +257,7 @@ func distinctCircleWalletIdentityEvent(t *testing.T, signerPrivkey, hubWalletPub
 		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", circleConnectionPubkey(mustPubkey(t, signerPrivkey))}, {"disambiguator", disambiguator}},
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
+	circleProofSigners.Store(ev.ID, signerPrivkey)
 	return ev
 }
 
@@ -229,14 +301,37 @@ func requireConfig(t *testing.T) *Config {
 	return cfg
 }
 
-// mustConnect connects an nwcclient.Client and registers it for cleanup.
-func mustConnect(t *testing.T, pairingURI string) *nwcclient.Client {
+// mustConnect connects an nwcclient.Client through a signed cashhub1 or
+// circlehub1 string (or a simple wallet's pairing URI) and registers it for
+// cleanup.
+func mustConnect(t *testing.T, connection string) *nwcclient.Client {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client, err := nwcclient.Connect(ctx, pairingURI)
-	require.NoError(t, err, "connect to %s", pairingURI)
+	client, err := nwcclient.ConnectAny(ctx, connection)
+	require.NoError(t, err, "connect to %s", connection)
+	if strings.HasPrefix(connection, nipcw.CircleHubConnectionHRP+"1") {
+		client.PrivateCall = func(ctx context.Context, method string, params, result any) (bool, error) {
+			if method != constants.NIP47MethodCreateCircleWallet {
+				return false, nil
+			}
+			return true, privateJoinCall(t, ctx, connection, params, result)
+		}
+	}
+	client.Logger = t.Logf
+	t.Cleanup(client.Close)
+	return client
+}
+
+// mustConnectCircleWallet connects a member to its circle wallet and registers
+// the client for cleanup.
+func mustConnectCircleWallet(t *testing.T, c circleWalletConnection) *nwcclient.Client {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := nwcclient.ConnectCircleWallet(ctx, c.WalletPubkey, c.Relays, c.Secret)
+	require.NoError(t, err, "connect to the circle wallet")
 	client.Logger = t.Logf
 	t.Cleanup(client.Close)
 	return client
@@ -351,7 +446,7 @@ func requireCashWalletDrainedAway(t *testing.T, admin *adminClient, hubAppID uin
 	// a caller as an omission. Both are information-free by design — indistinguishable from
 	// a pubkey this hub never served — which is exactly the property being asserted.
 	require.True(t,
-		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted),
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted) || isBillGone(err),
 		"a deleted cash wallet must be met with silence; any answer tells the caller this hub once served that pubkey (got %v)", err)
 }
 
@@ -386,7 +481,9 @@ func requireSpentBillSilent(t *testing.T, call func(ctx context.Context) error) 
 		// deliberately indistinguishable from a bill the hub never held — so both satisfy
 		// "stopped answering". Accepting only the timeout would fail this test for the very
 		// behaviour it is asserting.
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted) {
+		// A value method on the private transport gets the bill's tombstone
+		// instead: the bill is gone just the same.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted) || isBillGone(err) {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -573,7 +670,7 @@ func requireSpentBillTombstoned(t *testing.T, conn billCaller) {
 		err := conn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &status)
 		cancel()
 
-		if err == nil && status.Error == nipcash.ErrorSpent {
+		if err == nil && status.Status == nipcash.StatusSpent {
 			require.Empty(t, status.Recipients,
 				"a tombstone must carry no roster — the bill and its slices are gone")
 			return
@@ -587,7 +684,7 @@ func requireSpentBillTombstoned(t *testing.T, conn billCaller) {
 			require.Fail(t,
 				"a spent bill must answer only a tombstone, or nothing at all",
 				"still returning %d roster row(s) %s after its last slice was spent (err: %v, error field: %q)",
-				len(status.Recipients), drainedWalletDeleteWindow, err, status.Error)
+				len(status.Recipients), drainedWalletDeleteWindow, err, status.Status)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
@@ -599,4 +696,93 @@ func balanceOf(t *testing.T, c *nwcclient.Client) int64 {
 	var b GetBalanceResult
 	require.NoError(t, c.Call(ctxT(t), "get_balance", struct{}{}, &b))
 	return b.Balance
+}
+
+// claimSignerOf is the key that signed the claim proof an item carries (for
+// cash_consolidate, sources[0]'s), when the suite built it; "" otherwise.
+// NIP-CASH §Claim Proofs: the item proof must be signed by the same key.
+func claimSignerOf(raw json.RawMessage) string {
+	var params struct {
+		IdentityEvent string `json:"identity_event"`
+		Sources       []struct {
+			IdentityEvent string `json:"identity_event"`
+		} `json:"sources"`
+	}
+	if json.Unmarshal(raw, &params) != nil {
+		return ""
+	}
+	evJSON := params.IdentityEvent
+	if evJSON == "" && len(params.Sources) > 0 {
+		evJSON = params.Sources[0].IdentityEvent
+	}
+	var ev nostr.Event
+	if evJSON == "" || json.Unmarshal([]byte(evJSON), &ev) != nil {
+		return ""
+	}
+	if priv, ok := transferProofSigners.Load(ev.ID); ok {
+		return priv.(string)
+	}
+	return ""
+}
+
+// circleProofSigners remembers who signed each join proof the suite built, so a
+// private join can be bound to its request's terms and signed by its member.
+var circleProofSigners sync.Map
+
+// reboundJoinProofs keeps the first binding of each suite-built proof, so a proof
+// sent again is the same event, bound to the terms it was first sent with: a
+// replay stays a replay rather than a fresh proof.
+var reboundJoinProofs sync.Map
+
+// bindJoinProof completes a join the way the suite builds it: max_receive asks
+// for as much as max_amount when absent, and a proof the suite signed gets the
+// request's terms tag (NIP-CW §Identity Proof, check 7) and is re-signed. It
+// returns the params and the proof's signer ("" for a proof the suite did not
+// sign, which is sent as it is).
+func bindJoinProof(t *testing.T, raw json.RawMessage) (json.RawMessage, string) {
+	t.Helper()
+	var params map[string]any
+	if json.Unmarshal(raw, &params) != nil || params == nil {
+		return raw, ""
+	}
+	if _, ok := params["max_receive"]; !ok {
+		params["max_receive"] = params["max_amount"]
+	}
+	signer := ""
+	evJSON, _ := params["identity_event"].(string)
+	var ev nostr.Event
+	if json.Unmarshal([]byte(evJSON), &ev) == nil {
+		if priv, ok := circleProofSigners.Load(ev.ID); ok {
+			signer = priv.(string)
+			if rebound, ok := reboundJoinProofs.Load(ev.ID); ok {
+				params["identity_event"] = rebound.(string)
+				out, err := json.Marshal(params)
+				require.NoError(t, err)
+				return out, signer
+			}
+			originalID := ev.ID
+			req, err := json.Marshal(params)
+			require.NoError(t, err)
+			if parsed, err := nipcw.ParseCreateCircleWalletRequest(req); err == nil {
+				if terms, err := nipcw.TermsTag(parsed.Terms()); err == nil {
+					kept := nostr.Tags{}
+					for _, tag := range ev.Tags {
+						if len(tag) > 0 && tag[0] != "terms" {
+							kept = append(kept, tag)
+						}
+					}
+					ev.Tags = append(kept, nostr.Tag{"terms", terms})
+					require.NoError(t, ev.Sign(signer))
+					circleProofSigners.Store(ev.ID, signer)
+					rebound, err := json.Marshal(ev)
+					require.NoError(t, err)
+					params["identity_event"] = string(rebound)
+					reboundJoinProofs.Store(originalID, string(rebound))
+				}
+			}
+		}
+	}
+	out, err := json.Marshal(params)
+	require.NoError(t, err)
+	return out, signer
 }

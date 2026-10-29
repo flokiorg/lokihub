@@ -1,6 +1,6 @@
 import useSWR from "swr";
 
-import { CashHubStats } from "src/types";
+import { CashHubDeleteCheck, CashHubStats } from "src/types";
 import { swrFetcher } from "src/utils/swr";
 
 // Cash stats refresh on a timer because a bill's state changes without the
@@ -27,4 +27,13 @@ export function useAllCashHubStats(poll = true) {
   return useSWR<CashHubStats>("/api/cash-hubs/stats", swrFetcher, {
     refreshInterval: poll ? CASH_REFRESH_INTERVAL_MS : 0,
   });
+}
+
+// What keeps a Cash Hub from being deleted, without deleting anything (Q23):
+// each blocker with its count and time, and the earliest possible deletion.
+export function useCashHubDeleteCheck(hubId: number | undefined) {
+  return useSWR<CashHubDeleteCheck>(
+    !!hubId && `/api/cash-hubs/${hubId}/delete-check`,
+    swrFetcher
+  );
 }

@@ -3,6 +3,7 @@ package queries_test
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/flokiorg/lokihub/circlemoney"
 	"math/rand"
 	"testing"
 	"time"
@@ -97,9 +98,9 @@ func benchCircleDB(tb testing.TB, n int) (*gorm.DB, *testdb.StatementCounter, ui
 	return gormDB, counter, hubID
 }
 
-// --- Op 13: the commitment sum, inside the member-admission lock -------------
+// --- Op 13: the circle's holdings, inside the member-admission lock ----------
 
-func BenchmarkGetCircleCommitmentMloki(b *testing.B) {
+func BenchmarkCircleHoldings(b *testing.B) {
 	for _, n := range memberLadder {
 		b.Run(fmt.Sprintf("members=%d", n), func(b *testing.B) {
 			gormDB, counter, hubID := benchCircleDB(b, n)
@@ -107,7 +108,7 @@ func BenchmarkGetCircleCommitmentMloki(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if _, err := queries.GetCircleCommitmentMloki(gormDB, hubID); err != nil {
+				if _, err := circlemoney.Holdings(gormDB, hubID, time.Now()); err != nil {
 					b.Fatal(err)
 				}
 			}

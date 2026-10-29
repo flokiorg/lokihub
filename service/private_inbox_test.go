@@ -262,7 +262,7 @@ func TestPrivateTransportSubscription_SilentRelay_ProbeResubscribesAndDeliveryRe
 	inbox := tests.RandomHex32()
 	pt := &privateTransport{
 		inboxXOnly:    inbox,
-		nonces:        newPrivateNonceSet(),
+		nonces:        newMemServedNonces(),
 		probeInterval: 200 * time.Millisecond,
 		probeTimeout:  300 * time.Millisecond,
 	}

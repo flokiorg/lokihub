@@ -62,8 +62,10 @@ func (svc *permissionsService) HasPermission(app *db.App, scope string) (result 
 		// deadline that passed, rather than NIP-47 connection-management
 		// jargon that names no mechanism they can act on. Every other app
 		// kind keeps the original generic message.
+		// The code is RESTRICTED: NIP-CASH refuses a slice past its expiry with
+		// it and has no EXPIRED code.
 		if app.Kind == db.AppKindCashWallet {
-			return false, constants.ERROR_EXPIRED, fmt.Sprintf(
+			return false, constants.ERROR_RESTRICTED, fmt.Sprintf(
 				"this cash wallet's redemption deadline (%s) has passed; contact the wallet operator",
 				expiresAt.UTC().Format(time.RFC3339))
 		}
@@ -161,6 +163,12 @@ func (svc *permissionsService) GetPrivateMethods(app *db.App) []string {
 			out = append(out, method)
 		}
 	}
+	// cash_lookup recovers a lost reply of a bill method or of mint_cash, so every
+	// connection serving either lists it (NIP-CASH §Support).
+	out = append(out, withdrawPrivateMethods(app, scopes)...)
+	if len(out) > 0 || slices.Contains(scopes, constants.CASH_HUB_SCOPE) {
+		out = append(out, constants.NIP47MethodCashLookup)
+	}
 	slices.Sort(out)
 	return out
 }
@@ -170,6 +178,9 @@ var privateOnlyMethods = map[string]bool{
 	constants.NIP47MethodCashRedeem:      true,
 	constants.NIP47MethodCashTransfer:    true,
 	constants.NIP47MethodCashConsolidate: true,
+	// NIP-CW joins are private-only: a Circle Wallet Hub lists create_circle_wallet
+	// in private_methods, never in methods (NIP-CW §Private Join).
+	constants.NIP47MethodCreateCircleWallet: true,
 }
 
 func (svc *permissionsService) PermitsNotifications(app *db.App) bool {
@@ -271,7 +282,8 @@ func RequestMethodToScope(requestMethod string) (string, error) {
 		return constants.CASH_HUB_SCOPE, nil
 	case constants.NIP47MethodCreateCircleWallet:
 		return constants.CIRCLE_WALLET_SCOPE, nil
-	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashStatus:
+	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashStatus,
+		constants.NIP47MethodCashWithdrawQuote, constants.NIP47MethodCashWithdraw:
 		return constants.CASH_REDEEM_SCOPE, nil
 	case constants.NIP47MethodCashTransfer:
 		return constants.CASH_TRANSFER_SCOPE, nil

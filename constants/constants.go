@@ -150,6 +150,12 @@ const (
 const (
 	NIP47MethodMintCash           = nipcash.MethodMintCash
 	NIP47MethodCreateCircleWallet = nipcw.MethodCreateCircleWallet
+	// NIP47MethodDeleteCircleWallet is a member's own deletion of its Circle
+	// Wallet (NIP-CW §Deleting a Circle Wallet), on every Circle Wallet
+	// connection.
+	NIP47MethodDeleteCircleWallet = nipcw.MethodDeleteCircleWallet
+	// NIP47MethodCashOrder places an order on an Order connection (NIP-CO).
+	NIP47MethodCashOrder = nipcash.MethodCashOrder
 	// NIP47MethodCashRedeem pays out a proven recipient's slice of a shared
 	// cash_wallet in one shot (NIP-CASH §Redeeming Funds).
 	NIP47MethodCashRedeem = nipcash.MethodCashRedeem
@@ -160,15 +166,23 @@ const (
 	// NIP47MethodCashConsolidate combines several same-hub slices this node
 	// custodies into one new cash token (NIP-CASH §Consolidating Tokens).
 	NIP47MethodCashConsolidate = nipcash.MethodCashConsolidate
+	// NIP47MethodCashLookup looks up a call by its request_id (NIP-CASH §Looking
+	// Up a Call). Private transport only; it moves nothing.
+	NIP47MethodCashLookup = nipcash.MethodCashLookup
 	// NIP47MethodCashStatus asks a bill for its state. It answers with the
 	// full roster of that bill's recipients (identity, entitled amount,
 	// claimed status) — no invoice or preimage detail, since a cash_wallet has
 	// no list_transactions grant — or, for a bill this hub has destroyed, with
-	// a "spent" tombstone (see nip47.tryReplySpentBill).
+	// a "spent" tombstone on the private transport.
 	//
 	// Despite the name it is NOT scoped to the caller's own slice: every
 	// holder of the connection sees every row (NIP-CASH §Cash Status).
 	NIP47MethodCashStatus = nipcash.MethodCashStatus
+	// NIP47MethodCashWithdrawQuote and NIP47MethodCashWithdraw quote and commit an
+	// on-chain withdrawal of a slice (NIP-CASH §Redeeming On-chain). Private
+	// transport only.
+	NIP47MethodCashWithdrawQuote = nipcash.MethodCashWithdrawQuote
+	NIP47MethodCashWithdraw      = nipcash.MethodCashWithdraw
 )
 
 // Bech32 HRPs for a Cash Hub's / Circle Wallet Hub's own connection string
@@ -207,9 +221,36 @@ const MAX_FEES_PPM = PPM_DIVISOR
 // for routing fees (see transactions.CalculateFeeReserveMloki).
 const MIN_FEE_RESERVE_MLOKI = 10_000
 
-// MIN_CIRCLE_WALLET_MAX_MLOKI is the smallest cap a Circle Wallet may have:
-// the fee reserve plus 1 loki. Any less, and the reserve alone exceeds the cap,
-// so the wallet could never pay outside this node.
+// Circle money model defaults (NIP-CW §Own Funds and Caps): the routing-fee
+// reserve a Hub gets unless its host sets another, the outbound ceiling's
+// period, and a holdings ceiling left unset sized as this many wallets at their
+// full receive ceiling.
+const (
+	CIRCLE_DEFAULT_FEE_RESERVE_PPM          = 10_000
+	CIRCLE_DEFAULT_FEE_RESERVE_MIN_MLOKI    = 10_000
+	CIRCLE_DEFAULT_OUTBOUND_PERIOD          = BUDGET_RENEWAL_MONTHLY
+	CIRCLE_DEFAULT_HOLDINGS_CEILING_WALLETS = 100
+	// CIRCLE_DEFAULT_GRACE_SECS (7 days) and CIRCLE_DEFAULT_DUST_MLOKI are the
+	// grace period and dust threshold a Hub gets unless its host sets others.
+	CIRCLE_DEFAULT_GRACE_SECS = 604_800
+	CIRCLE_DEFAULT_DUST_MLOKI = 1_000
+	// CIRCLE_DEFAULT_ROTATION_DELAY_SECS is the rotation delay NIP-CW
+	// recommends: 5 days.
+	CIRCLE_DEFAULT_ROTATION_DELAY_SECS = 432_000
+)
+
+// PRIVATE_TRANSPORT_KEY_INDEX is the rotation index of the private-transport
+// inbox key currently in use.
+const PRIVATE_TRANSPORT_KEY_INDEX = 0
+
+// CIRCLE_MEMBERSHIP_STALENESS_SECS bounds how old the membership a Circle
+// Wallet Hub acts on may be: the follow sets are refreshed every 300 seconds.
+const CIRCLE_MEMBERSHIP_STALENESS_SECS = 600
+
+// MIN_CIRCLE_WALLET_MAX_MLOKI is the fee reserve plus 1 loki: the smallest send
+// cap under which a Circle Wallet can pay outside this node. It bounds the
+// operator's per-wallet ceiling only; a join takes any max_amount (NIP-CW step
+// 6 has no floor), and a smaller cap is a wallet that pays only on this node.
 const MIN_CIRCLE_WALLET_MAX_MLOKI = MIN_FEE_RESERVE_MLOKI + 1_000
 
 // MAX_EXPIRY_SECS is the upper bound accepted for any config or request field
@@ -265,11 +306,16 @@ const INVOICE_METADATA_MAX_LENGTH = 4096
 
 // errors used by NIP-47 and the transaction service
 const (
-	ERROR_INTERNAL               = "INTERNAL"
-	ERROR_NOT_IMPLEMENTED        = "NOT_IMPLEMENTED"
-	ERROR_QUOTA_EXCEEDED         = "QUOTA_EXCEEDED"
-	ERROR_INSUFFICIENT_BALANCE   = "INSUFFICIENT_BALANCE"
-	ERROR_UNAUTHORIZED           = "UNAUTHORIZED"
+	ERROR_INTERNAL             = "INTERNAL"
+	ERROR_NOT_IMPLEMENTED      = "NOT_IMPLEMENTED"
+	ERROR_QUOTA_EXCEEDED       = "QUOTA_EXCEEDED"
+	ERROR_INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE"
+	ERROR_UNAUTHORIZED         = "UNAUTHORIZED"
+	// ERROR_REQUEST_REUSED: the request_id was already used on this node (NIP-CASH §request_id).
+	ERROR_REQUEST_REUSED = nipcash.ErrCodeRequestReused
+	// ERROR_PAYMENT_FAILED: cash_redeem's payment failed before it could have
+	// settled, and the slice stays claimable (NIP-CASH §Errors).
+	ERROR_PAYMENT_FAILED         = nipcash.ErrCodePaymentFailed
 	ERROR_EXPIRED                = "EXPIRED"
 	ERROR_RESTRICTED             = "RESTRICTED"
 	ERROR_BAD_REQUEST            = "BAD_REQUEST"
@@ -327,3 +373,7 @@ const (
 const (
 	LSPS1_EVENT_NOTIFICATION = "lsps1.notification"
 )
+
+// CashTokenHRP is the bech32 prefix of this Hub's bills (`lokicash1...`). The
+// provenance labels are nmilat's and the same for every prefix.
+const CashTokenHRP = "lokicash"

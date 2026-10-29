@@ -24,8 +24,7 @@ import {
 import { Button } from "src/components/ui/button";
 import { useIdentityAuthorities } from "src/hooks/useIdentityAuthorities";
 import { useInfo } from "src/hooks/useInfo";
-import { useLSPSManagement } from "src/hooks/useLSPSManagement";
-import { IdentityAuthority, LSP } from "src/types";
+import { IdentityAuthority } from "src/types";
 import { request } from "src/utils/request";
 
 export function Services() {
@@ -42,16 +41,7 @@ export function Services() {
     messageboardNwcUrl: "",
     enableSwap: true,
     enableMessageboardNwc: true,
-    lsps: [],
   });
-
-  // LSP Management Hook
-  const {
-    lsps: backendLSPs,
-    fetchLSPs,
-    saveLSPChanges,
-    initialized: lspInitialized,
-  } = useLSPSManagement();
 
   // Identity Authority Management Hook
   const {
@@ -82,40 +72,15 @@ export function Services() {
         mempoolApi: info.mempoolUrl || "",
         enableSwap: info.enableSwap ?? true,
         enableMessageboardNwc: info.enableMessageboardNwc ?? true,
-        // LSPs are handled separately via backendLSPs + community merge below
       }));
     }
   }, [info]);
 
   useEffect(() => {
-    fetchLSPs();
-  }, [fetchLSPs]);
-
-  useEffect(() => {
     fetchIdentityAuthorities();
   }, [fetchIdentityAuthorities]);
 
-  // Sync local LSPs with backend LSPs whenever backend updates and we aren't dirty
-  // Also merge with community LSPs
-  // Sync local LSPs with backend LSPs whenever backend updates and we aren't dirty
-  const hasSyncedLSPs = useRef(false);
-
-  // Sync local LSPs with backend LSPs whenever backend updates and we aren't dirty
-  // We use hasSyncedLSPs to force the initial sync once backend data is ready
-  useEffect(() => {
-    if (lspInitialized) {
-      if (!hasSyncedLSPs.current) {
-        // First load: force sync
-        setConfig((prev) => ({ ...prev, lsps: backendLSPs }));
-        hasSyncedLSPs.current = true;
-      } else if (!servicesDirty) {
-        // Subsequent updates: sync if clean
-        setConfig((prev) => ({ ...prev, lsps: backendLSPs }));
-      }
-    }
-  }, [backendLSPs, servicesDirty, lspInitialized]);
-
-  // Sync local Identity Authorities with backend the same way as LSPs above.
+  // Sync local Identity Authorities with the backend once, then while clean.
   const hasSyncedAuthorities = useRef(false);
   useEffect(() => {
     if (authoritiesInitialized) {
@@ -146,34 +111,7 @@ export function Services() {
       config.enableSwap !== (info.enableSwap ?? true) ||
       config.enableMessageboardNwc !== (info.enableMessageboardNwc ?? true);
 
-    // Check LSP dirty - simple JSON comparison for now
-    // Note: this assumes ordering maps correctly. We should probably sort or use a deeper comparison if order matters.
-    // Ideally compare contents.
-
-    // Wait, backendLSPs might not have "isCommunity" flags or descriptions fully populated if they came from backend only,
-    // but the local config.lsps has them.
-    // Comparison is tricky.
-    // Let's assume if the user didn't change anything, the merged result is what we have.
-    // But `backendLSPs` is the source of truth for "saved" LSPs.
-    // Actually, `mergeLSPs` modifies the objects.
-    // So comparing `config.lsps` (merged) with `backendLSPs` (raw) will ALWAYS be different if descriptions are added.
-    // We should compare the "Saveable" parts: pubkey, host, name, active.
-
-    // Helper to strip extra fields
-    const strip = (lsps: LSP[]) =>
-      lsps
-        .map((l) => ({
-          pubkey: l.pubkey,
-          host: l.host,
-          name: l.name,
-          active: l.active,
-        }))
-        .sort((a, b) => a.pubkey.localeCompare(b.pubkey));
-
-    const lspDirtySmart =
-      JSON.stringify(strip(config.lsps)) !== JSON.stringify(strip(backendLSPs));
-
-    // Check Identity Authorities dirty - compare by pubkey/name/relay_urls, same strip-and-sort approach as LSPs.
+    // Check Identity Authorities dirty - compare by pubkey/name/relay_urls, sorted.
     const stripAuthorities = (authorities: IdentityAuthority[]) =>
       authorities
         .map((a) => ({
@@ -187,13 +125,13 @@ export function Services() {
       JSON.stringify(stripAuthorities(localAuthorities)) !==
       JSON.stringify(stripAuthorities(backendAuthorities));
 
-    const hasChanges = settingsDirty || lspDirtySmart || authoritiesDirtySmart;
+    const hasChanges = settingsDirty || authoritiesDirtySmart;
 
     setServicesDirty(hasChanges);
     if (!hasChanges) {
       setValidationErrors([]);
     }
-  }, [info, config, backendLSPs, localAuthorities, backendAuthorities]);
+  }, [info, config, localAuthorities, backendAuthorities]);
 
   async function updateSettings(payload: Record<string, any>) {
     try {
@@ -228,17 +166,11 @@ export function Services() {
     }
 
     try {
-      // 1. Save LSPs via atomic hook
-      // We pass the ORIGINAL backendLSPs and the NEW config.lsps
-      // The hook calculates diffs and issues Add/Delete/Toggle requests
-      if (config.lsps && backendLSPs) {
-        await saveLSPChanges(backendLSPs, config.lsps);
-      }
-
-      // 2. Save Identity Authorities via the same diff-based approach
+      // Trusted LSPs are saved at once from the catalogue, not here.
+      // 1. Save Identity Authorities via the same diff-based approach
       await saveIdentityAuthorityChanges(backendAuthorities, localAuthorities);
 
-      // 3. Save other settings via UpdateSettings
+      // 2. Save other settings via UpdateSettings
       await updateSettings({
         relay: config.relay,
         trustedNwcRelay: config.trustedNwcRelay,
@@ -249,11 +181,11 @@ export function Services() {
         messageboardNwcUrl: config.messageboardNwcUrl,
         enableSwap: config.enableSwap,
         enableMessageboardNwc: config.enableMessageboardNwc,
-        // LSPs and Identity Authorities omitted, handled above
+        // Identity Authorities omitted, handled above
       });
 
       // Reload
-      await Promise.all([reloadInfo(), fetchLSPs()]);
+      await reloadInfo();
       toast.success("Services updated successfully");
 
       setServicesDirty(false);

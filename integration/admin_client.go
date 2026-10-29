@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
 type adminClient struct {
@@ -92,6 +94,7 @@ func (c *adminClient) doBody(method, path string, body, out any) error {
 type adminApp struct {
 	ID           uint   `json:"id"`
 	WalletPubkey string `json:"walletPubkey"`
+	Kind         string `json:"kind"`
 }
 
 type adminListAppsResponse struct {
@@ -144,19 +147,10 @@ func deleteCircleChildPath(hubAppID, childAppID uint) string {
 	return fmt.Sprintf("/api/apps/%d/circle/children/%d", hubAppID, childAppID)
 }
 
-// deleteCircleChild reclaims childAppID's remaining balance to its parent
-// hub and hard-deletes it (service.ReclaimAndDeleteSubWallet), which
-// cascade-deletes the CircleWalletMembership row the one-active-wallet-per-
-// identity cap check queries - freeing that requester pubkey to mint a new
-// circle wallet under this hub again.
-//
-// Retries on "a payment is still settling into this wallet" - a real,
-// expected-transient guard in ReclaimAndDeleteSubWallet (service/
-// cash_cleanup_service.go) against deleting a wallet out from under a
-// payment that hasn't finished settling yet, whose own doc comment says
-// "the caller retries". Immediately re-running this test suite right after
-// a prior run's last real payment can race that settlement, so a bare,
-// unretried delete call would spuriously fail cleanup here.
+// deleteCircleChild is the host's delete of a member wallet: it moves the
+// wallet to Closing (NIP-CW §Lifecycle and Deletion) and never sweeps its
+// balance. The wallet keeps its identity's membership until it is deleted.
+// Retries on "still settling", kept for older hosts.
 func (c *adminClient) deleteCircleChild(hubAppID, childAppID uint) error {
 	const maxAttempts = 5
 	var err error
@@ -324,6 +318,10 @@ type adminCreateAppRequest struct {
 	CircleFeesPpm           int             `json:"circleFeesPpm,omitempty"`
 	CirclePerWalletMaxMloki int             `json:"circlePerWalletMaxMloki,omitempty"`
 	CircleMinBudgetRenewal  string          `json:"circleMinBudgetRenewal,omitempty"`
+	// CircleGraceSecs and CircleDustThresholdMloki: the lifecycle settings; 0
+	// takes the server's defaults.
+	CircleGraceSecs          int64 `json:"circleGraceSecs,omitempty"`
+	CircleDustThresholdMloki int64 `json:"circleDustThresholdMloki,omitempty"`
 }
 
 // adminFollowSet mirrors api.FollowSetRequest: a version of a follow set the
@@ -339,6 +337,7 @@ type adminCreateAppResponse struct {
 	ID             uint   `json:"id"`
 	WalletPubkey   string `json:"walletPubkey"`
 	PairingUri     string `json:"pairingUri"`
+	CashHubToken   string `json:"cashHubToken"`
 	CircleHubToken string `json:"circleHubToken"`
 }
 
@@ -393,15 +392,17 @@ type adminCashWalletRecipient struct {
 
 // adminCreateCashWalletRequest mirrors api.CreateCashWalletRequest.
 type adminCreateCashWalletRequest struct {
-	Recipients    []adminCashWalletRecipient `json:"recipients"`
-	ExpirySecs    int                        `json:"expiry_secs,omitempty"`
-	MintSignature bool                       `json:"mint_signature,omitempty"`
+	Recipients []adminCashWalletRecipient `json:"recipients"`
+	ExpirySecs int                        `json:"expiry_secs,omitempty"`
+	// RequestID and Expiration make the mint recoverable; createCashWallet fills
+	// them when the test leaves them empty.
+	RequestID  string `json:"request_id,omitempty"`
+	Expiration int64  `json:"expiration,omitempty"`
 }
 
 // adminCreateCashWalletResponse mirrors api.CreateCashWalletResponse.
 type adminCreateCashWalletResponse struct {
 	AppID      uint                       `json:"app_id"`
-	PairingURI string                     `json:"pairing_uri"`
 	CashToken  string                     `json:"cash_token"`
 	ExpiresAt  *int64                     `json:"expires_at,omitempty"`
 	Recipients []adminCashWalletRecipient `json:"recipients"`
@@ -414,6 +415,10 @@ type adminCreateCashWalletResponse struct {
 // specifically to give this path — which had unit coverage but zero
 // live-node coverage — an integration-level entry point at all.
 func (c *adminClient) createCashWallet(hubAppID uint, req adminCreateCashWalletRequest) (adminCreateCashWalletResponse, error) {
+	if req.RequestID == "" {
+		req.RequestID = nwcclient.NewRequestID()
+		req.Expiration = time.Now().Add(nwcclient.MintDeadline).Unix()
+	}
 	var resp adminCreateCashWalletResponse
 	err := c.doBody(http.MethodPost, fmt.Sprintf("/api/apps/%d/cash-wallets", hubAppID), req, &resp)
 	return resp, err
@@ -570,4 +575,22 @@ func unclaimedMlokiForWallet(t *testing.T, admin *adminClient, hubAppID uint, wa
 		total += c.AmountMloki
 	}
 	return total
+}
+
+// cashHubDeleteBlockers is GET /api/cash-hubs/:id/delete-check: what still
+// keeps a Cash Hub from being deleted.
+func (c *adminClient) cashHubDeleteBlockers(hubAppID uint) ([]string, error) {
+	var check struct {
+		Blockers []struct {
+			Kind string `json:"kind"`
+		} `json:"blockers"`
+	}
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/cash-hubs/%d/delete-check", hubAppID), &check); err != nil {
+		return nil, err
+	}
+	kinds := make([]string, 0, len(check.Blockers))
+	for _, b := range check.Blockers {
+		kinds = append(kinds, b.Kind)
+	}
+	return kinds, nil
 }

@@ -2,18 +2,21 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"time"
 
+	"github.com/flokiorg/lokihub/cashorder"
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/lsps2"
-	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/swaps"
 )
 
 type API interface {
+	ListingsAPI
 	CreateApp(createAppRequest *CreateAppRequest) (*CreateAppResponse, error)
 	UpdateApp(app *db.App, updateAppRequest *UpdateAppRequest) error
 	Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, amountMloki uint64) error
@@ -34,6 +37,19 @@ type API interface {
 	// every child unpaginated (used by the pre-delete confirmation UI).
 	ListCircleChildrenBalances(app *db.App, limit uint64, offset uint64) ([]CircleChildBalance, uint64, error)
 	DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResult, error)
+	// SubmitCircleMemberRequest submits a member request the member signed
+	// (NIP-CW §Recovering a Lost Connection) to a circle hub; the result names
+	// the NIP-CW code it was refused with, if any.
+	SubmitCircleMemberRequest(app *db.App, event json.RawMessage) (*circlelife.MemberRequestResult, error)
+	// Order connections and selling terms of a Cash Hub (NIP-CO).
+	CreateOrderConnection(hub *db.App, label string) (*cashorder.Connection, error)
+	ListOrderConnections(hub *db.App) ([]cashorder.Connection, error)
+	RetireOrderConnection(hub *db.App, connAppID uint) error
+	GetOrderTerms(hub *db.App) (*cashorder.Settings, error)
+	PutOrderTerms(hub *db.App, s cashorder.Settings) error
+	// SetCircleAccepting opens or closes a circle hub to new members (NIP-CW
+	// §The Circle Wallet Hub Connection, accepting).
+	SetCircleAccepting(app *db.App, accepting bool) error
 	// DeleteCircleWalletChild removes a single circle_wallet child in any state
 	// (empty or with a remaining balance), unlike DeleteCircleHub which only
 	// operates on the whole hub at once.
@@ -140,19 +156,8 @@ type API interface {
 	UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, state string) error
 	LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, error)
 
-	// LSP Management
-	HandleListLSPs(ctx context.Context) ([]manager.SettingsLSP, error)
-	HandleAddLSP(ctx context.Context, req *AddLSPRequest) (*manager.SettingsLSP, error)
-	HandleUpdateLSP(ctx context.Context, pubkey string, req *UpdateLSPRequest) error
-	HandleDeleteLSP(ctx context.Context, pubkey string) error
-
-	// Legacy wrappers (to be deprecated)
-	ListLSPs() ([]manager.SettingsLSP, error)
-	GetSelectedLSPs() ([]manager.SettingsLSP, error)
-	AddSelectedLSP(pubkey string) error
-	RemoveSelectedLSP(pubkey string) error
-	AddLSP(name, uri string) error
-	RemoveLSP(pubkey string) error
+	// LSP catalogue (NIP-LSP announcements, WP-26)
+	LSPCatalogueAPI
 
 	// Invoice Fee Estimation
 	EstimateInvoiceFee(ctx context.Context, invoice string) (uint64, error)
@@ -264,6 +269,29 @@ type App struct {
 	CircleFeesPpm           *int    `json:"circleFeesPpm,omitempty"`
 	CirclePerWalletMaxMloki *int    `json:"circlePerWalletMaxMloki,omitempty"`
 	CircleMinBudgetRenewal  *string `json:"circleMinBudgetRenewal,omitempty"`
+	// CircleDefaultExpSecs is the lifetime a join naming none gets (0 = never);
+	// CirclePerWalletMaxReceiveMloki the ceiling on a member's max_receive.
+	CircleDefaultExpSecs           *int   `json:"circleDefaultExpSecs,omitempty"`
+	CirclePerWalletMaxReceiveMloki *int64 `json:"circlePerWalletMaxReceiveMloki,omitempty"`
+	// The circle money model (NIP-CW §Own Funds and Caps): holdings ceiling,
+	// routing-fee reserve rule, optional outbound ceiling and its period.
+	CircleHoldingsCeilingMloki *int64  `json:"circleHoldingsCeilingMloki,omitempty"`
+	CircleFeeReservePpm        *int    `json:"circleFeeReservePpm,omitempty"`
+	CircleFeeReserveMinMloki   *int64  `json:"circleFeeReserveMinMloki,omitempty"`
+	CircleOutboundCeilingMloki *int64  `json:"circleOutboundCeilingMloki,omitempty"`
+	CircleOutboundPeriod       *string `json:"circleOutboundPeriod,omitempty"`
+	// CircleGraceSecs and CircleDustThresholdMloki: the lifecycle settings
+	// (NIP-CW §Lifecycle and Deletion).
+	CircleGraceSecs          *int64 `json:"circleGraceSecs,omitempty"`
+	CircleDustThresholdMloki *int64 `json:"circleDustThresholdMloki,omitempty"`
+	// CircleAccepting is false once the host closed the circle to new members;
+	// CircleTeardownRequestedAt is set once the host tore it down.
+	CircleAccepting           *bool  `json:"circleAccepting,omitempty"`
+	CircleTeardownRequestedAt *int64 `json:"circleTeardownRequestedAt,omitempty"`
+	// CircleRotationEnabled and CircleRotationDelaySecs: member requests
+	// (NIP-CW §Recovering a Lost Connection) and the delay new wallets get.
+	CircleRotationEnabled   *bool  `json:"circleRotationEnabled,omitempty"`
+	CircleRotationDelaySecs *int64 `json:"circleRotationDelaySecs,omitempty"`
 }
 
 // CircleIdentitySummary is the bare identity, used for the circle-creation-time picker.
@@ -383,10 +411,21 @@ type UpdateAppRequest struct {
 	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
 	// update a circle_hub's CircleHubConfig; nil leaves the
 	// corresponding field unchanged. Ignored for other app kinds.
-	CircleMaxExpSecs        *int    `json:"circleMaxExpSecs"`
-	CircleFeesPpm           *int    `json:"circleFeesPpm"`
-	CirclePerWalletMaxMloki *int    `json:"circlePerWalletMaxMloki"`
-	CircleMinBudgetRenewal  *string `json:"circleMinBudgetRenewal"`
+	CircleMaxExpSecs               *int    `json:"circleMaxExpSecs"`
+	CircleDefaultExpSecs           *int    `json:"circleDefaultExpSecs"`
+	CircleFeesPpm                  *int    `json:"circleFeesPpm"`
+	CirclePerWalletMaxMloki        *int    `json:"circlePerWalletMaxMloki"`
+	CirclePerWalletMaxReceiveMloki *int64  `json:"circlePerWalletMaxReceiveMloki"`
+	CircleMinBudgetRenewal         *string `json:"circleMinBudgetRenewal"`
+	CircleHoldingsCeilingMloki     *int64  `json:"circleHoldingsCeilingMloki"`
+	CircleFeeReservePpm            *int    `json:"circleFeeReservePpm"`
+	CircleFeeReserveMinMloki       *int64  `json:"circleFeeReserveMinMloki"`
+	CircleOutboundCeilingMloki     *int64  `json:"circleOutboundCeilingMloki"`
+	CircleOutboundPeriod           *string `json:"circleOutboundPeriod"`
+	CircleGraceSecs                *int64  `json:"circleGraceSecs"`
+	CircleDustThresholdMloki       *int64  `json:"circleDustThresholdMloki"`
+	CircleRotationEnabled          *bool   `json:"circleRotationEnabled"`
+	CircleRotationDelaySecs        *int64  `json:"circleRotationDelaySecs"`
 }
 
 type TransferRequest struct {
@@ -426,6 +465,22 @@ type CreateAppRequest struct {
 	CircleFeesPpm           int    `json:"circleFeesPpm"`
 	CirclePerWalletMaxMloki int    `json:"circlePerWalletMaxMloki"`
 	CircleMinBudgetRenewal  string `json:"circleMinBudgetRenewal"`
+	// CircleDefaultExpSecs (0 = the ceiling) and CirclePerWalletMaxReceiveMloki
+	// (0 = the send ceiling).
+	CircleDefaultExpSecs           int   `json:"circleDefaultExpSecs"`
+	CirclePerWalletMaxReceiveMloki int64 `json:"circlePerWalletMaxReceiveMloki"`
+	// The circle money model; 0 or empty takes lokihub's default.
+	CircleHoldingsCeilingMloki int64  `json:"circleHoldingsCeilingMloki"`
+	CircleFeeReservePpm        int    `json:"circleFeeReservePpm"`
+	CircleFeeReserveMinMloki   int64  `json:"circleFeeReserveMinMloki"`
+	CircleOutboundCeilingMloki int64  `json:"circleOutboundCeilingMloki"`
+	CircleOutboundPeriod       string `json:"circleOutboundPeriod"`
+	// CircleGraceSecs (0 = 7 days) and CircleDustThresholdMloki (0 = 1000).
+	CircleGraceSecs          int64 `json:"circleGraceSecs"`
+	CircleDustThresholdMloki int64 `json:"circleDustThresholdMloki"`
+	// CircleRotationEnabled and CircleRotationDelaySecs (0 = 5 days).
+	CircleRotationEnabled   bool  `json:"circleRotationEnabled"`
+	CircleRotationDelaySecs int64 `json:"circleRotationDelaySecs"`
 	// CircleIdentityId reuses an existing CircleIdentity — when set, CirclePolicy/
 	// CircleIdentityName/ProviderPubkey below are ignored.
 	CircleIdentityId *uint `json:"circleIdentityId"`
@@ -471,12 +526,19 @@ type CashWalletRecipient struct {
 type CreateCashWalletRequest struct {
 	Recipients []CashWalletRecipient `json:"recipients"`
 	ExpirySecs int                   `json:"expiry_secs,omitempty"` // shared by every recipient; 0 => hub's max
+	// RequestID and Expiration make an operator's mint recoverable like one over
+	// NWC (NIP-CASH §request_id, §Deadlines): the id is marked used, Expiration
+	// (unix seconds) is the deadline, and the record commits with the bill.
+	// Optional until the browser sends them (WP-19); Expiration needs RequestID.
+	RequestID  string `json:"request_id,omitempty"`
+	Expiration int64  `json:"expiration,omitempty"`
 }
 
+// CreateCashWalletResponse carries the bill's cash_token, its only credential
+// (NIP-CASH §Minting Cash, Response); there is no URI form.
 type CreateCashWalletResponse struct {
-	AppID      uint   `json:"app_id"`
-	PairingURI string `json:"pairing_uri"`
-	CashToken  string `json:"cash_token"`
+	AppID     uint   `json:"app_id"`
+	CashToken string `json:"cash_token"`
 	// ExpiresAt is omitted when this wallet never expires — the Cash Hub's
 	// own CashMaxExpSecs is 0 ("never") and the request didn't carry its
 	// own ExpirySecs.
@@ -754,9 +816,10 @@ type CashHubDailyPointResponse struct {
 	WrittenOffMloki int64 `json:"written_off_mloki"`
 }
 
+// CashWalletConnectionResponse is a bill's cash_token as issued, its only
+// credential.
 type CashWalletConnectionResponse struct {
-	PairingURI string `json:"pairing_uri"`
-	CashToken  string `json:"cash_token"`
+	CashToken string `json:"cash_token"`
 }
 
 // Identity Authority registry types.
@@ -881,36 +944,31 @@ type SetupRequest struct {
 	Relay                 string `json:"relay"`
 	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
 	MempoolApi            string `json:"mempoolApi"`
-	LSP                   string `json:"lsp"`
 	EnableSwap            *bool  `json:"enableSwap"`
 	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
 }
 
 type SetupLocalRequest struct {
-	UnlockPassword        string            `json:"unlockPassword"`
-	LokihubServicesURL    string            `json:"lokihubServicesURL"`
-	SwapServiceUrl        string            `json:"swapServiceUrl"`
-	Relay                 string            `json:"relay"`
-	MessageboardNwcUrl    string            `json:"messageboardNwcUrl"`
-	MempoolApi            string            `json:"mempoolApi"`
-	LSP                   string            `json:"lsp"` // Deprecated: Use LSPs instead
-	LSPs                  []LSPSettingInput `json:"lsps,omitempty"`
-	EnableMessageboardNwc *bool             `json:"enableMessageboardNwc"`
+	UnlockPassword        string `json:"unlockPassword"`
+	LokihubServicesURL    string `json:"lokihubServicesURL"`
+	SwapServiceUrl        string `json:"swapServiceUrl"`
+	Relay                 string `json:"relay"`
+	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
+	MempoolApi            string `json:"mempoolApi"`
+	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
 }
 
 type SetupManualRequest struct {
-	UnlockPassword        string            `json:"unlockPassword"`
-	FLNDAddress           string            `json:"flndAddress"`
-	FLNDCertHex           string            `json:"flndCertHex"`
-	FLNDMacaroonHex       string            `json:"flndMacaroonHex"`
-	LokihubServicesURL    string            `json:"lokihubServicesURL"`
-	SwapServiceUrl        string            `json:"swapServiceUrl"`
-	Relay                 string            `json:"relay"`
-	MessageboardNwcUrl    string            `json:"messageboardNwcUrl"`
-	MempoolApi            string            `json:"mempoolApi"`
-	LSP                   string            `json:"lsp"` // Deprecated: Use LSPs instead
-	LSPs                  []LSPSettingInput `json:"lsps,omitempty"`
-	EnableMessageboardNwc *bool             `json:"enableMessageboardNwc"`
+	UnlockPassword        string `json:"unlockPassword"`
+	FLNDAddress           string `json:"flndAddress"`
+	FLNDCertHex           string `json:"flndCertHex"`
+	FLNDMacaroonHex       string `json:"flndMacaroonHex"`
+	LokihubServicesURL    string `json:"lokihubServicesURL"`
+	SwapServiceUrl        string `json:"swapServiceUrl"`
+	Relay                 string `json:"relay"`
+	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
+	MempoolApi            string `json:"mempoolApi"`
+	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
 }
 
 type SetupStatusResponse struct {
@@ -957,10 +1015,25 @@ type CircleChildBalance struct {
 	RequesterPubkey string `json:"requesterPubkey"`
 	AppPubkey       string `json:"appPubkey"`
 	BalanceMloki    int64  `json:"balanceMloki"`
-	// Frozen is true once the member has left the circle, so the wallet can't
-	// pay or take new invoices. Nil when membership isn't known without a relay
-	// fetch (a follow set not cached yet).
-	Frozen *bool `json:"frozen,omitempty"`
+	// State is the wallet's lifecycle state (NIP-CW §Lifecycle and Deletion):
+	// active, suspended, expired or closing; GraceEndsAt when its grace period
+	// ends (unix, nil while it has none); ExpiresAt its expiry (nil: never).
+	State       string `json:"state"`
+	GraceEndsAt *int64 `json:"graceEndsAt,omitempty"`
+	ExpiresAt   *int64 `json:"expiresAt,omitempty"`
+	// DustThresholdMloki is the most the Hub may keep when the wallet goes.
+	DustThresholdMloki int64 `json:"dustThresholdMloki"`
+	// Frozen is true while a member request froze the wallet: its key is
+	// refused everything until an unfreeze or a completed rotation.
+	Frozen bool `json:"frozen"`
+	// PendingRotation is the wallet's pending move to a new connection key.
+	PendingRotation *CirclePendingRotation `json:"pendingRotation,omitempty"`
+}
+
+// CirclePendingRotation is a pending rotation as the host sees it.
+type CirclePendingRotation struct {
+	ConnectionPubkey string `json:"connectionPubkey"`
+	CompletesAt      int64  `json:"completesAt"`
 }
 
 // ListCircleChildrenBalancesResponse is the paginated response for
@@ -978,6 +1051,10 @@ type DeleteCircleHubResult struct {
 	HubDeleted      bool   `json:"hubDeleted"`
 	DeletedChildIDs []uint `json:"deletedChildIds"`
 	SkippedChildIDs []uint `json:"skippedChildIds"`
+	// ClosingChildIDs are the wallets the teardown moved to Closing, or found
+	// Expired or Closing already: each goes once its grace is over and it holds
+	// at most dust (NIP-CW §Lifecycle and Deletion).
+	ClosingChildIDs []uint `json:"closingChildIds"`
 }
 
 type InfoResponseRelay struct {
@@ -985,12 +1062,17 @@ type InfoResponseRelay struct {
 	Online bool   `json:"online"`
 }
 
+// LSPInfo is a trusted LSP (WP-26): Pubkey is the node id LSPS uses, empty
+// until resolved; Status and Usable are its announcement's.
 type LSPInfo struct {
+	NodeKey string `json:"nodeKey"`
 	Name    string `json:"name"`
 	Pubkey  string `json:"pubkey"`
 	Host    string `json:"host"`
 	Website string `json:"website"`
 	Active  bool   `json:"active"`
+	Status  string `json:"status"`
+	Usable  bool   `json:"usable"`
 }
 
 type InfoResponse struct {
@@ -1124,17 +1206,8 @@ type UpdateSettingsRequest struct {
 	SearchRelay           *string              `json:"searchRelay"`
 	MessageboardNwcUrl    string               `json:"messageboardNwcUrl"`
 	MempoolApi            string               `json:"mempoolApi"`
-	LSPs                  []LSPSettingInput    `json:"lsps,omitempty"`
 	EnableSwap            *bool                `json:"enableSwap"`
 	EnableMessageboardNwc *bool                `json:"enableMessageboardNwc"`
-}
-
-type LSPSettingInput struct {
-	Name        string `json:"name"`
-	Pubkey      string `json:"pubkey"`
-	Host        string `json:"host"`
-	Active      bool   `json:"active"`
-	IsCommunity bool   `json:"isCommunity"`
 }
 
 type SetNodeAliasRequest struct {

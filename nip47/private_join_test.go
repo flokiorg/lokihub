@@ -65,14 +65,14 @@ func joinParams(t *testing.T, memberPriv, hubWalletPubkey string, maxAmount uint
 	t.Helper()
 	connection, err := nipcw.NewConnectionKey()
 	require.NoError(t, err)
-	req, err := nipcw.CreateCircleWalletParams{
+	prepared, err := nipcw.CreateCircleWalletParams{
 		Credential:      nipcw.BySigning(memberPriv),
 		Connection:      connection,
 		MaxAmountMillis: maxAmount,
 		Expiry:          time.Hour,
-	}.Request(hubWalletPubkey)
+	}.Prepare(hubWalletPubkey, time.Now())
 	require.NoError(t, err)
-	b, err := json.Marshal(req)
+	b, err := json.Marshal(prepared.Request)
 	require.NoError(t, err)
 	return string(b)
 }
@@ -139,7 +139,7 @@ func TestPrivateJoin_ItemProofSignedByAnotherKey_Refused(t *testing.T) {
 	res, served := h.serve(t, "x", string(tampered), assembler, strings.Repeat("06", 32))
 	require.True(t, served, "the sender holds the hub connection, so the refusal is an error")
 	require.NotNil(t, res.Error, "a join signed by another key must not be served")
-	assert.Equal(t, constants.ERROR_NOT_FOUND, res.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, res.Error.Code)
 	assert.Nil(t, res.Result)
 	assert.Empty(t, h.children(t), "no wallet is issued")
 

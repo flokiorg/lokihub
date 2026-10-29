@@ -54,14 +54,13 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: params,
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		require.NotEmpty(t, created.PairingURI)
 
 		// All three recipients share the SAME connection. Bill methods now travel over
 		// the private transport, which authorizes PER ITEM — so the connection carries the
 		// bill's token, and each recipient names itself with ActAs before acting. The
 		// shared-connection property under test is unchanged; what changed is that the
 		// hub can now tell which sharer is calling.
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, recipients[0].privkey)
+		shared := mustConnectBill(t, created.CashToken, recipients[0].privkey)
 
 		var totalMloki uint64
 		for _, r := range recipients {
@@ -138,7 +137,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		outsiderPub, err := nostr.GetPublicKey(outsiderPriv)
 		require.NoError(t, err)
 
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, outsiderPriv)
+		shared := mustConnectBill(t, created.CashToken, outsiderPriv)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration wrong-identity test")
 		proof := buildClaimProofEvent(t, outsiderPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
@@ -166,7 +165,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+		shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 		boundInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration proof-binding test (bound)")
 		attackerInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration proof-binding test (attacker)")
@@ -182,7 +181,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityValue: beneficiaryPub,
 			IdentityEvent: eventJSON(t, proof),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 		// The legitimate, correctly-bound claim must still succeed afterward.
 		correctResult := ClaimFundsResult{}
@@ -212,7 +211,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Expiry:     happyPathExpirySecs,
 		}, &walletB))
 
-		sharedB := mustConnectBill(t, walletB.PairingURI, walletB.CashToken, beneficiaryPriv)
+		sharedB := mustConnectBill(t, walletB.CashToken, beneficiaryPriv)
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cross-wallet replay test")
 
 		// Proof is bound (d-tag) to wallet A's pubkey...
@@ -226,7 +225,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityValue: beneficiaryPub,
 			IdentityEvent: eventJSON(t, proof),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("GetBudget_Rejected_GetInfo_Allowed", func(t *testing.T) {
@@ -238,7 +237,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, created.PairingURI)
+		shared := mustConnectBill(t, created.CashToken, "").Client
 
 		var budget GetBudgetResult
 		err = shared.Call(ctxT(t), "get_budget", struct{}{}, &budget)
@@ -257,7 +256,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, created.PairingURI)
+		shared := mustConnectBill(t, created.CashToken, "").Client
 
 		var txs ListTransactionsResult
 		err = shared.Call(ctxT(t), "list_transactions", ListTransactionsParams{Limit: 10}, &txs)
@@ -283,7 +282,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimedPriv)
+		shared := mustConnectBill(t, created.CashToken, claimedPriv)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cash_status status test")
 		proof := buildClaimProofEvent(t, claimedPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
@@ -323,7 +322,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv)
+		shared := mustConnectBill(t, created.CashToken, claimantPriv)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration connection_key claim test")
 		attestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
@@ -361,7 +360,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, realClaimantPriv)
+		shared := mustConnectBill(t, created.CashToken, realClaimantPriv)
 
 		attestation := buildIAAttestationEvent(t, iaPriv, connectionKey, realClaimantPub, time.Hour)
 
@@ -378,7 +377,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, attackerProof),
 			AttestationEvent: eventJSON(t, attestation),
 		}, &attackerResult)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 		// The real claimant's own claim, using the same attestation, must still succeed.
 		realInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration attestation-theft test (real claimant)")
@@ -412,7 +411,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv)
+		shared := mustConnectBill(t, created.CashToken, claimantPriv)
 
 		// Signed with an expiration timestamp already in the past.
 		expiredAttestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, -time.Hour)
@@ -429,7 +428,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, proof),
 			AttestationEvent: eventJSON(t, expiredAttestation),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 		// A fresh attestation for the same slice must still succeed afterward.
 		freshAttestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
@@ -466,7 +465,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv)
+		shared := mustConnectBill(t, created.CashToken, claimantPriv)
 
 		noExpiryAttestation := &nostr.Event{
 			Kind:      nostrKindIAAttestation,
@@ -487,7 +486,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, proof),
 			AttestationEvent: eventJSON(t, noExpiryAttestation),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("ConnectionKeyMode_AttestationSignedByImposterIA_Rejected", func(t *testing.T) {
@@ -512,7 +511,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, imposterIAPriv)
+		shared := mustConnectBill(t, created.CashToken, imposterIAPriv)
 
 		imposterAttestation := buildIAAttestationEvent(t, imposterIAPriv, connectionKey, claimantPub, time.Hour)
 
@@ -528,7 +527,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, proof),
 			AttestationEvent: eventJSON(t, imposterAttestation),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("ConnectionKeyMode_AttestationForgedSignature_Rejected", func(t *testing.T) {
@@ -551,7 +550,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv)
+		shared := mustConnectBill(t, created.CashToken, claimantPriv)
 
 		forged := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
 		// Claims to be signed by the real IA pubkey, but the signature itself
@@ -570,7 +569,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, proof),
 			AttestationEvent: eventJSON(t, forged),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("StaleClaimProof_Rejected", func(t *testing.T) {
@@ -582,11 +581,11 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+		shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration stale-proof test")
 
-		// Signed well outside cashRedeemIdentityFreshnessWindow (5 minutes) —
+		// Signed well outside the claim proof freshness window (5 minutes) —
 		// defense-in-depth on top of the invoice/wallet binding, so even a
 		// correctly-bound proof must be rejected once it's stale.
 		staleProof := buildClaimProofEvent(t, beneficiaryPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now().Add(-10*time.Minute))
@@ -597,7 +596,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityValue: beneficiaryPub,
 			IdentityEvent: eventJSON(t, staleProof),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 		// The slice must remain claimable with a fresh proof against the same
 		// invoice afterward.
@@ -622,7 +621,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+		shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 		// cash_redeem charges its per-bill limiter only once a request is
 		// well-formed (cash_redeem_controller.go step 4): a decodable invoice and
@@ -665,7 +664,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     2, // seconds - deliberately short so the wallet expires mid-test
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+		shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 		time.Sleep(3 * time.Second)
 
@@ -678,6 +677,6 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityValue: beneficiaryPub,
 			IdentityEvent: eventJSON(t, proof),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_EXPIRED)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 }

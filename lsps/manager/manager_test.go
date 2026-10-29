@@ -193,18 +193,18 @@ func TestLiquidityManager_StartInterceptor(t *testing.T) {
 
 	// Add an Active LSP
 	activeLSPPubkey := "03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	err = m.AddLSP("TrustedLSP", activeLSPPubkey+"@1.2.3.4:5521")
+	err = m.addTestLSP("TrustedLSP", activeLSPPubkey+"@1.2.3.4:5521")
 	if err != nil {
 		t.Fatalf("AddLSP failed: %v", err)
 	}
-	err = m.AddSelectedLSP(activeLSPPubkey)
+	err = m.SetTrusted(activeLSPPubkey, true)
 	if err != nil {
 		t.Fatalf("AddSelectedLSP failed: %v", err)
 	}
 
 	// Add an Inactive LSP
 	inactiveLSPPubkey := "03bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	err = m.AddLSP("OtherLSP", inactiveLSPPubkey+"@1.2.3.4:5521")
+	err = m.addTestLSP("OtherLSP", inactiveLSPPubkey+"@1.2.3.4:5521")
 	if err != nil {
 		t.Fatalf("AddLSP failed: %v", err)
 	}
@@ -283,8 +283,8 @@ func TestLiquidityManager_StartInterceptor(t *testing.T) {
 
 	// 4. Test Mixed Case Active LSP Selection -> Expect ZeroConf=true
 	mixedCasePubkey := "03DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
-	assert.NoError(t, m.AddLSP("MixedLSP", mixedCasePubkey+"@1.2.3.4:5521"))
-	assert.NoError(t, m.AddSelectedLSP(mixedCasePubkey))
+	assert.NoError(t, m.addTestLSP("MixedLSP", mixedCasePubkey+"@1.2.3.4:5521"))
+	assert.NoError(t, m.SetTrusted(mixedCasePubkey, true))
 
 	req4 := lnclient.ChannelAcceptRequest{
 		ID:         "04",

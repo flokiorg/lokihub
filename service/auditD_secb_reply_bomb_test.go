@@ -40,7 +40,7 @@ func auditDSecBMaximalRoster(t *testing.T, id string) transport.Result {
 			RedeemFeeMillis:     18446744073709551615,
 			NetRedeemableMillis: 18446744073709551615,
 			MinTransferMillis:   18446744073709551615,
-			ExpiresAt:           &expiresAt,
+			ExpiresAt:           nipcash.Expiry{At: expiresAt, Present: true},
 		}
 	}
 	body, err := json.Marshal(nipcash.CashStatusResult{Recipients: recipients})
@@ -99,7 +99,7 @@ func TestAuditDSecB_OversizeResultGuardIsOrderDependent(t *testing.T) {
 	limits := transport.DefaultLimits()
 	nonce := strings.Repeat("ab", 32)
 
-	huge, err := json.Marshal(map[string]string{"x": strings.Repeat("y", limits.MaxEnvelopeBytes)})
+	huge, err := json.Marshal(map[string]string{"x": strings.Repeat("y", 65535)})
 	require.NoError(t, err)
 	oversize := transport.Result{ID: "too-big", ResultType: nipcash.MethodCashStatus, Result: huge}
 	small := transport.Result{ID: "ok", ResultType: nipcash.MethodCashStatus,

@@ -284,6 +284,66 @@ func TestArchiveAndDeleteDrainedCashBillTx_Guards(t *testing.T) {
 			"a bill still holding funds must never be force-deleted")
 	})
 
+	t.Run("refuses while a sibling slice's payout is in flight", func(t *testing.T) {
+		// Slice A settled; slice B (zero fee, so the balance is already 0) is
+		// still paying out. B's claim and payment row must survive so a failure
+		// can release it.
+		hashA, hashB := randomHex32(t), randomHex32(t)
+		bill := newCashBill(t, gormDB, hub, 0, []db.CashWalletClaim{
+			{AmountMloki: 1000, ClaimedAt: &claimed, PaymentHash: hashA, Preimage: "preimage-a"},
+			{AmountMloki: 2000, ClaimedAt: &claimed, PaymentHash: hashB},
+		})
+		guards := DrainGuards{IsolatedBalance: queries.GetIsolatedBalance, HasPendingIncoming: queries.HasPendingIncoming, HasPendingOutgoing: queries.HasPendingOutgoing}
+		err := gormDB.Transaction(func(tx *gorm.DB) error {
+			return ArchiveAndDeleteDrainedCashBillTx(tx, bill, guards, time.Now())
+		})
+		require.ErrorIs(t, err, ErrBillNotDrained)
+		assert.EqualValues(t, 1, countRows(t, gormDB, &db.App{}, "id = ?", bill.ID))
+		assert.EqualValues(t, 2, countRows(t, gormDB, &db.CashWalletClaim{}, "wallet_app_id = ?", bill.ID))
+
+		// Once B's payout resolves, the drain goes through.
+		require.NoError(t, gormDB.Model(&db.CashWalletClaim{}).
+			Where("wallet_app_id = ? AND payment_hash = ?", bill.ID, hashB).
+			Update("preimage", "preimage-b").Error)
+		require.NoError(t, gormDB.Transaction(func(tx *gorm.DB) error {
+			return ArchiveAndDeleteDrainedCashBillTx(tx, bill, guards, time.Now())
+		}))
+		assert.Zero(t, countRows(t, gormDB, &db.App{}, "id = ?", bill.ID))
+	})
+
+	t.Run("a payout the ledger shows settled is done without its preimage", func(t *testing.T) {
+		hash := randomHex32(t)
+		bill := newCashBill(t, gormDB, hub, 0, []db.CashWalletClaim{
+			{AmountMloki: 1000, ClaimedAt: &claimed, PaymentHash: hash},
+		})
+		require.NoError(t, gormDB.Create(&db.Transaction{
+			AppId: &bill.ID, Type: constants.TRANSACTION_TYPE_OUTGOING, State: constants.TRANSACTION_STATE_SETTLED,
+			PaymentHash: hash,
+		}).Error)
+		require.NoError(t, gormDB.Transaction(func(tx *gorm.DB) error {
+			return ArchiveAndDeleteDrainedCashBillTx(tx, bill, DrainGuards{IsolatedBalance: queries.GetIsolatedBalance, HasPendingIncoming: queries.HasPendingIncoming, HasPendingOutgoing: queries.HasPendingOutgoing}, time.Now())
+		}))
+		assert.Zero(t, countRows(t, gormDB, &db.App{}, "id = ?", bill.ID))
+	})
+
+	t.Run("refuses while a payment out of the bill is pending", func(t *testing.T) {
+		bill := newCashBill(t, gormDB, hub, 0, []db.CashWalletClaim{
+			{AmountMloki: 1000, ClaimedAt: &claimed},
+		})
+		require.NoError(t, gormDB.Create(&db.Transaction{
+			AppId:       &bill.ID,
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			State:       constants.TRANSACTION_STATE_PENDING,
+			AmountMloki: 0,
+			PaymentHash: randomHex32(t),
+		}).Error)
+		err := gormDB.Transaction(func(tx *gorm.DB) error {
+			return ArchiveAndDeleteDrainedCashBillTx(tx, bill, DrainGuards{IsolatedBalance: queries.GetIsolatedBalance, HasPendingIncoming: queries.HasPendingIncoming, HasPendingOutgoing: queries.HasPendingOutgoing}, time.Now())
+		})
+		require.ErrorIs(t, err, ErrBillNotDrained)
+		assert.EqualValues(t, 1, countRows(t, gormDB, &db.App{}, "id = ?", bill.ID))
+	})
+
 	t.Run("archives when genuinely drained", func(t *testing.T) {
 		bill := newCashBill(t, gormDB, hub, 0, []db.CashWalletClaim{
 			{AmountMloki: 1000, ClaimedAt: &claimed},
@@ -350,7 +410,6 @@ func TestDeriveSliceOutcome(t *testing.T) {
 		{"a claimed slice ignores the bill outcome", db.CashWalletClaim{ClaimedAt: &claimed}, db.CashBillOutcomeExpired, db.CashSliceStatusRedeemed},
 		{"unclaimed on an expired bill", db.CashWalletClaim{}, db.CashBillOutcomeExpired, db.CashSliceStatusExpired},
 		{"unclaimed on a written-off bill", db.CashWalletClaim{}, db.CashBillOutcomeWrittenOff, db.CashSliceStatusWrittenOff},
-		{"unclaimed on a void bill", db.CashWalletClaim{}, db.CashBillOutcomeVoid, db.CashSliceStatusVoid},
 		// The distinction that matters: an operator deleting a bill cuts a
 		// recipient off before their window passed, which is not "expired".
 		{"unclaimed on an operator-deleted bill is reclaimed", db.CashWalletClaim{}, db.CashBillOutcomeDeleted, db.CashSliceStatusReclaimed},
@@ -366,3 +425,36 @@ func TestDeriveSliceOutcome(t *testing.T) {
 type assertErr string
 
 func (e assertErr) Error() string { return string(e) }
+
+// U-11.1: a destroyed bill's tombstone reason is the terminal state of the last
+// of its slices to end; written-off has none.
+func TestBillReason(t *testing.T) {
+	t1 := time.Now().Add(-2 * time.Minute)
+	t2 := time.Now().Add(-time.Minute)
+	target := uint(9)
+	str := func(s string) *string { return &s }
+	cases := []struct {
+		name    string
+		claims  []db.CashWalletClaim
+		outcome string
+		want    *string
+	}{
+		{"last claim redeemed", []db.CashWalletClaim{
+			{ClaimedAt: &t1, EndedAs: db.CashSliceStatusTransferred, SpunOffToWalletAppID: &target},
+			{ClaimedAt: &t2, EndedAs: db.CashSliceStatusRedeemed}}, db.CashBillOutcomeDrained, str("redeemed")},
+		{"last claim consolidated", []db.CashWalletClaim{
+			{ClaimedAt: &t2, EndedAs: db.CashSliceStatusConsolidated, SpunOffToWalletAppID: &target},
+			{ClaimedAt: &t1, EndedAs: db.CashSliceStatusRedeemed}}, db.CashBillOutcomeDrained, str("consolidated")},
+		{"a spin-off with no recorded state is a transfer", []db.CashWalletClaim{
+			{ClaimedAt: &t2, SpunOffToWalletAppID: &target}}, db.CashBillOutcomeDrained, str("transferred")},
+		{"an unclaimed slice ends with the expiry sweep", []db.CashWalletClaim{
+			{ClaimedAt: &t2, EndedAs: db.CashSliceStatusRedeemed}, {}}, db.CashBillOutcomeExpired, str("expired")},
+		{"an operator delete reclaims", []db.CashWalletClaim{{}}, db.CashBillOutcomeDeleted, str("reclaimed")},
+		{"written-off has no reason", []db.CashWalletClaim{{}}, db.CashBillOutcomeWrittenOff, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, billReason(c.claims, c.outcome))
+		})
+	}
+}

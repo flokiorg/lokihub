@@ -54,6 +54,8 @@ func TestCashAuditRedeemFeeSecA_ReconcileHasAppKindGuard_CrossFeatureLedgerCorru
 	// The redeem-fee mechanism has no business touching this pair at all.
 	circleHub := &db.App{Name: "circle-hub", AppPubkey: auditRandHex32(), Kind: db.AppKindCircleHub}
 	require.NoError(t, svc.DB.Create(circleHub).Error)
+	_, err = tests.AddCircleHubConfig(svc, circleHub.ID)
+	require.NoError(t, err)
 
 	circleWallet := &db.App{
 		Name:        "circle-wallet",

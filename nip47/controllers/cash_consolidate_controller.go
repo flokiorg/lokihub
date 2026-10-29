@@ -2,12 +2,15 @@ package controllers
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"math"
 	"time"
 
+	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -25,14 +28,13 @@ import (
 // handler) — its secret would sit in plaintext in a request encrypted only
 // under the CALLING connection's shared key, decryptable by any co-recipient
 // of a shared calling wallet with no claim on that foreign cash note.
-// maxConsolidateSources mirrors mint_cash's/the hub config's own
+// maxConsolidateSourcesCap mirrors mint_cash's/the hub config's own
 // maxRecipientsPerWallet=100 cap (cashwallet/create.go, apps/cash_hub_service.go)
 // — the same "cap every multi-item Cash batch" convention, applied here since
 // this feature shipped without it. Without a ceiling, one rate-limited
 // cash_consolidate request could bundle an arbitrary number of independent
-// custody lookups and proof verifications, diluting the per-request
-// cashClaimLimiter tick by however many sources are packed in.
-const maxConsolidateSources = 100
+// custody lookups and proof verifications in one call.
+const maxConsolidateSourcesCap = 100
 
 // consolidateSourceParam is no longer used to parse the real request
 // (HandleCashConsolidateEvent decodes straight into github.com/ohstr/nmilat/
@@ -53,6 +55,7 @@ type consolidateSourceParam struct {
 type cashConsolidateParams struct {
 	Sources     []consolidateSourceParam     `json:"sources"`
 	NewIdentity cashTransferNewIdentityParam `json:"new_identity"`
+	RequestID   string                       `json:"request_id,omitempty"`
 }
 
 type cashConsolidateResponse struct {
@@ -68,417 +71,295 @@ type cashConsolidateResponse struct {
 	ExpiresAt       *int64 `json:"expires_at,omitempty"`
 }
 
-// resolvedConsolidateSource is one source after custody + authorization checks
-// have passed and before the atomic claim: the located wallet app, the slice's
-// identity, and the slice's own inherited terms.
-type resolvedConsolidateSource struct {
-	walletApp     *db.App
-	identityType  string
-	identityValue string
-	claim         *db.CashWalletClaim
-	// proofPubkey is the real Nostr pubkey that signed this source's
-	// identity_event — same as cash_transfer_controller.go's
-	// callerProofPubkey. Used to encrypt the merged wallet's delivery to
-	// the caller (see the delivery step below), not identityValue, since
-	// a connection_key source's identityValue is a connection_key hash,
-	// not a pubkey usable for ECDH.
-	proofPubkey string
-}
-
-// HandleCashConsolidateEvent combines several same-hub slices this node
-// custodies into one new cash token (NIP-CASH §Consolidating Tokens).
+// HandleCashConsolidateEvent combines several same-hub slices this node holds
+// into one new bill (NIP-CASH §Consolidating Tokens), in the spec's order:
 //
-// SECURITY / STATUS: the validation, custody, same-hub, proof, sum/ceiling and
-// earliest-expiry checks below are the novel surface; the fund movement and
-// nested-encrypted delivery reuse cashwallet.Consolidate and encryptForRecipient,
-// which are covered elsewhere. Covered end to end against a live node by
-// integration/cash_consolidate_test.go and cash_consolidate_adversarial_test.go,
-// on top of the unit/guard suites in this package and cashwallet.
+//  1. the item's target is sources[0]; at least two sources, none repeated, none
+//     cash-mode (BAD_REQUEST); at most the announced cap (QUOTA_EXCEEDED)
+//  2. every source's claim proof, examined alike; any failure of any kind is
+//     one UNAUTHORIZED; the item proof is sources[0]'s claim signer's; then the
+//     request_id is marked
+//  3. every source's state: claimed or expired, another Hub, an untrusted IA
+//     (RESTRICTED)
+//  4. new_identity (BAD_REQUEST, untrusted IA RESTRICTED)
+//  5. an overflow-checked sum within the Hub's ceiling (QUOTA_EXCEEDED)
+//  6. the earliest expiry, identical terms (RESTRICTED), the live-bill cap
+//     (QUOTA_EXCEEDED)
+//  7. one commit: every source claimed, the merged bill, its funding, every
+//     proof consumed, the record
+//  8. delivery: nested-encrypted to sources[0]'s signer for a pubkey
+//     new_identity, in the clear for connection_key or cash
 //
-// Scope: sources MAY be pubkey or connection_key identified (each proven by
-// its own signed identity_event, connection_key additionally requiring a
-// live-trusted attestation_event); new_identity MAY be pubkey, connection_key,
-// or cash (the merged wallet is owned by that identity; its token is
-// delivered encrypted to the CALLER when new_identity is a pubkey — same as
-// cash_transfer — or in the clear within the outer NIP-47 response for
-// connection_key/cash, which have no real pubkey to ECDH against). Cash-mode
-// SOURCES remain deferred: unlike connection_key (a
-// signed proof, immune to this), a cash-mode source's secret has no signature
-// and would sit in plaintext in a request encrypted only under the CALLING
-// connection's shared key, decryptable by any co-recipient of a shared
-// calling wallet with no claim on that foreign cash note.
-func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
+// A cash-mode source is not accepted: its secret would sit in a request
+// encrypted to the calling bill, readable by that bill's co-recipients.
+func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags, call *PrivateCall) {
 	params := &nipcash.CashConsolidateRequest{}
 	if resp := decodeRequest(nip47Request, params); resp != nil {
 		publishResponse(resp, tags)
 		return
 	}
+	method := nip47Request.Method
+	refuse := func(code, message string) { respondError(publishResponse, method, code, message) }
 
-	logger.Logger.Info().
-		Uint("app_id", app.ID).
-		Int("source_count", len(params.Sources)).
-		Msg("Handling cash_consolidate request")
-
+	// The private loop refused a missing, malformed or used request_id at I6 and
+	// I7; this is the same refusal for a caller that reached here another way.
+	if call == nil || !call.Meta.DeadlinePresent {
+		refuse(constants.ERROR_BAD_REQUEST, "cash_consolidate needs a deadline")
+		return
+	}
+	if !nipcash.ValidRequestID(params.RequestID) {
+		refuse(constants.ERROR_BAD_REQUEST, "request_id is required: 32 to 64 lowercase hex characters")
+		return
+	}
 	if app.Kind != db.AppKindCashWallet {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "cash_consolidate requires a cash_wallet app")
+		refuse(constants.ERROR_RESTRICTED, "cash_consolidate requires a cash_wallet app")
+		return
+	}
+
+	logger.Logger.Info().Uint("app_id", app.ID).Int("source_count", len(params.Sources)).Msg("Handling cash_consolidate request")
+
+	// Step 1.
+	if len(params.Sources) == 0 || app.WalletPubkey == nil || params.Sources[0].WalletPubkey != *app.WalletPubkey {
+		refuse(constants.ERROR_BAD_REQUEST, "the item's target must be the first source's wallet_pubkey")
 		return
 	}
 	if len(params.Sources) < 2 {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "consolidate requires at least two sources")
+		refuse(constants.ERROR_BAD_REQUEST, "consolidate requires at least two sources")
 		return
 	}
-	if len(params.Sources) > maxConsolidateSources {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			fmt.Sprintf("at most %d sources per consolidate, got %d", maxConsolidateSources, len(params.Sources)))
-		return
-	}
-	// The merged wallet's owner: pubkey or connection_key (live IA-trust
-	// validated below, same as mint_cash/cash_transfer), or cash (caller
-	// supplies their own commitment — see the cash-mode branch below for why).
-	newIdentityType := params.NewIdentity.IdentityType
-	if newIdentityType != db.CashIdentityPubkey && newIdentityType != db.CashIdentityConnectionKey && newIdentityType != db.CashIdentityCash {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			fmt.Sprintf("new_identity.identity_type must be %q, %q, or %q",
-				db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash))
-		return
-	}
-	// Rate limit, charged only now that the request is a real attempt.
-	//
-	// Shares the claim limiter with cash_redeem/cash_transfer: a captured proof (or,
-	// on those methods, a cash secret) is a presentation surface worth limiting even
-	// without a signature to forge, and separate budgets would let an attacker split
-	// attempts across methods to double their allowance.
-	//
-	// Charged after the shape checks above for the same reason as the other two
-	// controllers: one envelope carries up to 32 items, each dispatched here
-	// separately, so charging first let a single envelope of malformed requests spend
-	// a shared bill's whole hourly allowance and lock out every other recipient.
-	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_consolidate")
-		return
-	}
-
-	deps := cashwallet.Deps{
-		AppsService:         controller.appsService,
-		TransactionsService: controller.transactionsService,
-		LNClient:            controller.lnClient,
-		Keys:                controller.keys,
-		DB:                  controller.db,
-		RelayURLs:           controller.cfg.GetRelayUrls(),
-		IAChecker:           controller.iaChecker,
-	}
-	// Cash mode is validated separately from ValidateIdentityShape (which only
-	// knows pubkey/connection_key — same split cash_transfer's own
-	// new_identity validation already uses): the caller's own commitment MUST
-	// be supplied here rather than generated and returned by the node — see
-	// the cash-mode-target delivery note below for why — shaped as a 64-char
-	// lowercase hex sha256, exactly like cash_transfer's cash-mode target.
-	if newIdentityType == db.CashIdentityCash {
-		if params.NewIdentity.IAPubkey != "" {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"new_identity must not carry ia_pubkey when identity_type is cash")
-			return
-		}
-		if decoded, decErr := hex.DecodeString(params.NewIdentity.IdentityValue); decErr != nil || len(decoded) != 32 {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"new_identity.identity_value is required for a cash-mode target and must be a 64-character lowercase "+
-					"hex commitment (sha256 of a secret you generate and keep yourself) — the wallet never mints "+
-					"or returns a cash secret over the shared connection")
-			return
-		}
-	} else if err := cashwallet.ValidateIdentityShape(deps, newIdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey); err != nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
-		return
-	}
-	targetHash := newIdentityHash(newIdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey)
-
-	// 1. Resolve + authorize every source (read-only), before any claim. Reject
-	// the whole request on the first failure so nothing is ever half-claimed.
-	// Batch the custody lookup: one `wallet_pubkey IN (...)` query resolves every
-	// source this node holds, instead of a round-trip per source (the query hits
-	// idx_apps_pubkey_lookup). A pubkey absent from the map is simply not
-	// custodied here and rejected per-source below.
-	sourceWalletPubkeys := make([]string, len(params.Sources))
-	for i := range params.Sources {
-		sourceWalletPubkeys[i] = params.Sources[i].WalletPubkey
-	}
-	custodied, cErr := controller.loadCustodiedSources(sourceWalletPubkeys)
-	if cErr != nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to load source wallets")
-		return
-	}
-
-	resolved := make([]resolvedConsolidateSource, 0, len(params.Sources))
-	// Keyed on (wallet, identity), not wallet alone: NIP-CASH defines a
-	// "source" as a distinct (wallet, identity) slice, and one wallet
-	// routinely holds several slices at once (the ordinary state of a
-	// freshly-minted multi-recipient wallet before any recipient has
-	// acted) — see §Data Model, "a wallet's total funding MUST equal the
-	// sum of its slices." Keying on the wallet alone incorrectly rejected
-	// a spec-conformant consolidate of two distinct, individually-proven
-	// slices that happen to share one wallet_pubkey.
-	type seenKey struct {
-		walletAppID   uint
-		identityType  string
-		identityValue string
-	}
-	seen := map[seenKey]bool{}
-	var hubID *uint
-	var total uint64
-	var earliest *time.Time
-	var minTransfer int64
-	var redeemFee int
-	var redeemFeeBase int64
-	proofEventIDs := make([]string, 0, len(params.Sources))
-	// iaTrustCache memoizes IsTrusted per ia_pubkey for this call only — see
-	// resolveConsolidateSource's doc comment for why (TOCTOU: one consistent
-	// trust snapshot across every connection_key source in the batch).
-	iaTrustCache := make(map[string]bool)
-
-	for i := range params.Sources {
-		rs, evID, code, msg := controller.resolveConsolidateSource(params, i, targetHash, custodied, iaTrustCache)
-		if code != "" {
-			respondError(publishResponse, nip47Request.Method, code, fmt.Sprintf("source %d: %s", i, msg))
-			return
-		}
-		key := seenKey{walletAppID: rs.walletApp.ID, identityType: rs.identityType, identityValue: rs.identityValue}
+	type sliceKey struct{ wallet, identityType, identityValue string }
+	seen := make(map[sliceKey]bool, len(params.Sources))
+	for _, src := range params.Sources {
+		key := sliceKey{src.WalletPubkey, src.IdentityType, src.IdentityValue}
 		if seen[key] {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "the same source slice appears twice")
+			refuse(constants.ERROR_BAD_REQUEST, "the same source slice appears twice")
 			return
 		}
 		seen[key] = true
-
-		// Same-hub (v1). Every source must descend from one Cash Hub.
-		if rs.walletApp.ParentAppID == nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, fmt.Sprintf("source %d has no parent hub", i))
+		if src.CashSecret != "" {
+			refuse(constants.ERROR_BAD_REQUEST, "cash-mode sources are not accepted by cash_consolidate")
 			return
 		}
-		if hubID == nil {
-			hubID = rs.walletApp.ParentAppID
-		} else if *hubID != *rs.walletApp.ParentAppID {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "all sources must belong to the same Cash Hub")
+	}
+	if limit := controller.maxConsolidateSources(); len(params.Sources) > limit {
+		refuse(constants.ERROR_QUOTA_EXCEEDED, fmt.Sprintf("at most %d sources per consolidate, got %d", limit, len(params.Sources)))
+		return
+	}
+
+	// Step 2: every source's proof, before any other check on any source.
+	sources, ok := controller.authorizeConsolidateSources(params, call.ItemSigner)
+	if !ok {
+		refuse(constants.ERROR_UNAUTHORIZED, consolidateUnauthorized)
+		return
+	}
+	// The call limit, keyed by the verified signer (sources[0]'s, which signed the
+	// item proof) and shared with cash_redeem and cash_transfer.
+	if !controller.claimCallAllowed(call.ItemSigner) {
+		refuse(constants.ERROR_RATE_LIMITED, "too many calls by this signer; retry later")
+		return
+	}
+	if err := cashrequest.New(controller.db).MarkUsed(params.RequestID, method); err != nil {
+		if errors.Is(err, cashrequest.ErrRequestReused) {
+			refuse(constants.ERROR_REQUEST_REUSED, "this request_id was already used on this node")
 			return
 		}
+		refuse(constants.ERROR_INTERNAL, "could not record this request_id, please retry")
+		return
+	}
 
-		// Merged terms: conservative bound on every inherited value
-		// (§Consolidating Tokens). Expiry = earliest; min_transfer/redeem_fee
-		// must agree across sources.
-		amt := uint64(rs.claim.AmountMloki) //nolint:gosec // non-negative
-		// Bounded by MaxInt64, not MaxUint64: Consolidate casts the final total
-		// to int64 for CashWalletClaim.AmountMloki (a DB int64 column). The
-		// hub-ceiling check below (PerWalletMaxMloki > 0 && total > ceiling)
-		// already makes this cast safe today, since PerWalletMaxMloki is a Go
-		// int validated strictly positive at both hub creation and update
-		// (apps/cash_hub_service.go) — so any total that clears the ceiling is
-		// necessarily <= that ceiling <= MaxInt64. This guard is defense-in-
-		// depth against that invariant changing, not a currently-reachable
-		// wrap: this codebase's established 0-means-unlimited convention
-		// (already used for MaxExpSecs/MinTransferMloki/RedeemFeePpm) makes a
-		// future "PerWalletMaxMloki == 0 means no ceiling" a plausible
-		// addition this cast shouldn't depend on being caught elsewhere.
-		// Mirrors cashwallet/create.go's identical guard on mint_cash's own
-		// recipient-sum overflow.
-		if amt > uint64(math.MaxInt64)-total {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "consolidated amount overflows")
+	// Step 3: each source's state.
+	hubID := sources[0].bill.ParentAppID
+	now := hubclock.Now()
+	for i, s := range sources {
+		switch {
+		case s.claim.ClaimedAt != nil:
+			refuse(constants.ERROR_RESTRICTED, fmt.Sprintf("source %d was already claimed or is no longer available", i))
 			return
-		}
-		total += amt
-		if len(resolved) == 0 {
-			minTransfer = rs.claim.MinTransferMloki
-			redeemFee = rs.claim.RedeemFeePpm
-			redeemFeeBase = rs.claim.RedeemFeeBaseMloki
-		} else {
-			// The base joins this check because it is half of one quoted price. Merging
-			// slices that agreed on the per-million part but not the flat part would
-			// silently re-price whichever side lost, and the merged bill would quote a
-			// fee its sources never agreed to.
-			if rs.claim.MinTransferMloki != minTransfer || rs.claim.RedeemFeePpm != redeemFee ||
-				rs.claim.RedeemFeeBaseMloki != redeemFeeBase {
-				respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-					"sources disagree on min_transfer_millis/redeem_fee_ppm/redeem_fee_base; only same-terms slices may be consolidated")
-				return
-			}
-		}
-		// Conservative bound: the merged expiry is the earliest finite one
-		// among the sources; a nil (never-expires) source contributes nothing,
-		// so if every source is never, earliest stays nil (merged never).
-		if rs.walletApp.ExpiresAt != nil {
-			if earliest == nil || rs.walletApp.ExpiresAt.Before(*earliest) {
-				earliest = rs.walletApp.ExpiresAt
-			}
-		}
-
-		resolved = append(resolved, *rs)
-		if evID != "" {
-			proofEventIDs = append(proofEventIDs, evID)
+		case s.bill.ExpiresAt != nil && now.After(*s.bill.ExpiresAt):
+			refuse(constants.ERROR_RESTRICTED, fmt.Sprintf("source %d is past its expiry", i))
+			return
+		case s.bill.ParentAppID == nil || hubID == nil || *s.bill.ParentAppID != *hubID:
+			refuse(constants.ERROR_RESTRICTED, "all sources must belong to the same Cash Hub")
+			return
+		case s.iaUntrusted:
+			refuse(constants.ERROR_RESTRICTED, fmt.Sprintf("the Identity Authority of source %d is no longer trusted", i))
+			return
 		}
 	}
 
-	// 2. Hub-ceiling check on the merged total.
+	// Step 4: new_identity, validated as cash_transfer validates it.
+	newType, newValue, newIA := params.NewIdentity.IdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey
+	if code, message := validateNewIdentity(controller.iaChecker, newType, newValue, newIA); code != "" {
+		refuse(code, message)
+		return
+	}
+
+	// Step 5: the sum, within the Hub's per-wallet ceiling.
 	hubApp := controller.appsService.GetAppById(*hubID)
 	if hubApp == nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not load the sources' Cash Hub")
+		refuse(constants.ERROR_INTERNAL, "could not load the sources' Cash Hub")
 		return
 	}
 	hubConfig, err := controller.appsService.GetCashHubConfig(hubApp.ID)
 	if err != nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not load the Cash Hub config")
+		refuse(constants.ERROR_INTERNAL, "could not load the Cash Hub config")
 		return
 	}
+	var total uint64
+	for _, s := range sources {
+		amt := uint64(s.claim.AmountMloki) //nolint:gosec // non-negative
+		if amt > uint64(math.MaxInt64)-total {
+			refuse(constants.ERROR_BAD_REQUEST, "consolidated amount overflows")
+			return
+		}
+		total += amt
+	}
 	if hubConfig.PerWalletMaxMloki > 0 && total > uint64(hubConfig.PerWalletMaxMloki) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+		refuse(constants.ERROR_QUOTA_EXCEEDED,
 			fmt.Sprintf("consolidated amount %d exceeds the hub's per-wallet ceiling of %d", total, hubConfig.PerWalletMaxMloki))
 		return
 	}
 
-	// 3. Claim every source terminal, tracking for rollback. If any claim fails,
-	// unclaim the ones already taken and reject — nothing half-consolidated.
-	// unclaimAll skips any source app ID listed in strandedAppIDs: those are
-	// sources whose compensating reverse-transfer inside Consolidate itself
-	// failed, so their real balance is short by whatever they contributed —
-	// restoring their claim to the full original amount would let the caller
-	// believe they have more than the wallet can actually pay out. Every other
-	// claimed source (never funded, or successfully reversed) is unclaimed as
-	// before.
-	claimed := make([]resolvedConsolidateSource, 0, len(resolved))
-	unclaimAll := func(strandedAppIDs []uint) {
-		stranded := make(map[uint]bool, len(strandedAppIDs))
-		for _, id := range strandedAppIDs {
-			stranded[id] = true
-		}
-		for _, rs := range claimed {
-			if stranded[rs.walletApp.ID] {
-				logger.Logger.Error().Uint("wallet_app_id", rs.walletApp.ID).
-					Msg("Source claim intentionally left in place after a cash_consolidate rollback — its contribution is stranded in the deliberately-retained merged wallet pending manual reconciliation")
-				continue
-			}
-			if err := controller.appsService.UnclaimCashSlice(rs.walletApp.ID, rs.identityType, rs.identityValue); err != nil {
-				logger.Logger.Error().Err(err).Uint("wallet_app_id", rs.walletApp.ID).
-					Msg("Failed to roll back a source claim during cash_consolidate; manual reconciliation may be needed")
-			}
-		}
-	}
-	sources := make([]cashwallet.ConsolidateSource, 0, len(resolved))
-	for _, rs := range resolved {
-		amt, err := controller.appsService.ClaimCashSlice(rs.walletApp.ID, rs.identityType, rs.identityValue)
-		if err != nil {
-			unclaimAll(nil)
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "a source slice was already claimed or is no longer available")
+	// Step 6: the merged terms. The earliest finite expiry; a never-expiring
+	// source contributes nothing. The floor and both fee parts are one set of
+	// terms and must agree, or the merge would re-price whichever side lost.
+	var earliest *time.Time
+	first := sources[0].claim
+	for _, s := range sources {
+		if s.claim.MinTransferMloki != first.MinTransferMloki || s.claim.RedeemFeePpm != first.RedeemFeePpm ||
+			s.claim.RedeemFeeBaseMloki != first.RedeemFeeBaseMloki {
+			refuse(constants.ERROR_RESTRICTED,
+				"sources disagree on min_transfer_millis/redeem_fee_ppm/redeem_fee_base; only same-terms slices may be consolidated")
 			return
 		}
-		claimed = append(claimed, rs)
-		sources = append(sources, cashwallet.ConsolidateSource{WalletApp: rs.walletApp, AmountMloki: uint64(amt)}) //nolint:gosec // non-negative
-	}
-
-	// 4. Consume each proof's single-use replay guard now that authorization
-	// has fully succeeded and the sources are claimed (mirrors cash_transfer).
-	// releaseProofGuards drops ONLY the guards THIS request actually inserted —
-	// never the pre-existing guard that caused a mid-consume failure (that one
-	// belongs to whatever earlier request legitimately consumed the proof;
-	// deleting it would reopen a replay). This lets a rejected request avoid
-	// permanently burning a caller's (or a captured victim's) still-valid,
-	// unused proofs without un-burning anyone else's.
-	insertedProofs := make([]string, 0, len(proofEventIDs))
-	releaseProofGuards := func() {
-		for _, evID := range insertedProofs {
-			_ = controller.db.Where("event_id = ?", evID).Delete(&db.CashTransferProof{}).Error
-		}
-	}
-	for _, evID := range proofEventIDs {
-		if err := controller.db.Create(&db.CashTransferProof{AppID: app.ID, EventID: evID}).Error; err != nil {
-			releaseProofGuards()
-			unclaimAll(nil)
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "a source proof was already used")
+		// Ordered and not-ordered sources are never merged (NIP-CASH §Consolidating
+		// Tokens); a merge of ordered sources is ordered.
+		if s.claim.Ordered != first.Ordered {
+			refuse(constants.ERROR_RESTRICTED, "ordered and not-ordered slices cannot be consolidated together")
 			return
 		}
-		insertedProofs = append(insertedProofs, evID)
+		if e := s.bill.ExpiresAt; e != nil && (earliest == nil || e.Before(*earliest)) {
+			earliest = e
+		}
 	}
-
-	// 5. Create + fund the merged wallet (compensating rollback on failure).
-	result, strandedSourceAppIDs, err := cashwallet.Consolidate(ctx, deps, cashwallet.ConsolidateParams{
-		HubApp:             hubApp,
-		Sources:            sources,
-		NewIdentityType:    params.NewIdentity.IdentityType,
-		NewIdentityValue:   params.NewIdentity.IdentityValue,
-		NewIAPubkey:        params.NewIdentity.IAPubkey,
-		MinTransferMloki:   minTransfer,
-		RedeemFeePpm:       redeemFee,
-		RedeemFeeBaseMloki: redeemFeeBase,
-		ExpiresAt:          earliest,
-	})
+	// A merge spends no lineage's spin-off allowance, and the live-bill cap
+	// bounds it only when it adds a bill: one that drains a source bill (takes
+	// its last live slice) does not raise the count, so it passes at the cap.
+	ending, err := controller.billsEndedBy(sources)
 	if err != nil {
-		// By here step 4 fully succeeded, so insertedProofs == proofEventIDs;
-		// releaseProofGuards drops exactly this request's guards. unclaimAll
-		// skips any source Consolidate reports as stranded (its compensating
-		// reversal failed — see unclaimAll's own doc comment above).
-		unclaimAll(strandedSourceAppIDs)
-		releaseProofGuards()
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to consolidate Cash wallet slices")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to consolidate slices")
+		refuse(constants.ERROR_INTERNAL, "failed to check this hub's live bills")
+		return
+	}
+	if code, message, _ := controller.spinOffLimitRefusal(sources[0].bill, 1-ending, false); code != "" {
+		refuse(code, message)
 		return
 	}
 
-	// Informational bookkeeping links (db.CashWalletClaim.SpunOffToWalletAppID) —
-	// mirrors cash_transfer's identical split-target recording. Every source's
-	// claim records the merged wallet its value moved to; unlike a split (one
-	// source, one or two targets, so the reverse App.SplitFromWalletAppID
-	// pointer also fits), a consolidate is many-to-one, and
-	// SplitFromWalletAppID is a single pointer that can't name N sources — so
-	// only the forward direction is recorded here. An operator can still find
-	// every source that fed a given merged wallet by querying claims WHERE
-	// spun_off_to_wallet_app_id = that wallet's ID; SpunOffToWalletAppID isn't
-	// unique per target. Never fails the response: the funds have already
-	// moved and the merged wallet is live either way.
-	for _, rs := range resolved {
-		if setErr := controller.appsService.SetCashSliceSplitTarget(rs.walletApp.ID, rs.identityType, rs.identityValue, result.WalletApp.ID); setErr != nil {
-			logger.Logger.Error().Err(setErr).Uint("source_wallet_id", rs.walletApp.ID).Uint("new_wallet_id", result.WalletApp.ID).
-				Msg("Failed to record consolidate target on a source slice")
+	// Step 7: one commit.
+	signer := sources[0].signer
+	var delivery *string
+	if newType == db.CashIdentityPubkey {
+		delivery = &signer
+	}
+	meta := cashConsolidateResponse{AmountMillis: total}
+	if earliest != nil {
+		at := earliest.Unix()
+		meta.ExpiresAt = &at
+	}
+	resultMeta, err := json.Marshal(struct {
+		AmountMillis uint64 `json:"amount_millis"`
+		ExpiresAt    *int64 `json:"expires_at,omitempty"`
+	}{meta.AmountMillis, meta.ExpiresAt})
+	if err != nil {
+		refuse(constants.ERROR_INTERNAL, "could not record this call")
+		return
+	}
+	record := &db.CashRequestRecord{
+		RequestID:          params.RequestID,
+		Method:             method,
+		HubAppID:           hubApp.ID,
+		TargetWalletPubkey: *app.WalletPubkey,
+		TargetConnPubkey:   app.AppPubkey,
+		AuthorizerKind:     "pubkey",
+		Authorizer:         signer,
+		Deadline:           call.Meta.Deadline,
+		DeliveryPubkey:     delivery,
+		ResultMeta:         string(resultMeta),
+	}
+	inputs := make([]cashwallet.ConsolidateSource, len(sources))
+	proofs := make([]cashwallet.ClaimProof, len(sources))
+	for i, s := range sources {
+		inputs[i] = cashwallet.ConsolidateSource{
+			WalletApp: s.bill,
+			Slice: apps.SliceRef{ClaimID: s.claim.ID, IdentityType: s.claim.IdentityType,
+				IdentityValue: s.claim.IdentityValue, TransferCount: s.claim.TransferCount},
+			AmountMloki: uint64(s.claim.AmountMloki), //nolint:gosec // non-negative
 		}
+		proofs[i] = cashwallet.ClaimProof{EventID: s.proofID, CreatedAt: s.proofCreatedAt, Method: method}
+	}
+	unfinal := make([]*string, len(sources))
+	for i, s := range sources {
+		unfinal[i] = s.claim.UnfinalPaymentIDs
+	}
+	unfinalIDs, err := db.MergePaymentIDs(unfinal...)
+	if err != nil {
+		refuse(constants.ERROR_INTERNAL, "could not read the sources' order payments")
+		return
+	}
+	result, err := cashwallet.Consolidate(ctx, controller.cashDeps(), cashwallet.ConsolidateParams{
+		HubApp:             hubApp,
+		Sources:            inputs,
+		NewIdentityType:    newType,
+		NewIdentityValue:   newValue,
+		NewIAPubkey:        newIA,
+		MinTransferMloki:   first.MinTransferMloki,
+		RedeemFeePpm:       first.RedeemFeePpm,
+		RedeemFeeBaseMloki: first.RedeemFeeBaseMloki,
+		Ordered:            first.Ordered,
+		UnfinalPaymentIDs:  unfinalIDs,
+		ExpiresAt:          earliest,
+		Proofs:             proofs,
+		Record:             record,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, apps.ErrSliceClaimed):
+			refuse(constants.ERROR_RESTRICTED, "a source slice was already claimed or is no longer available")
+		case errors.Is(err, cashwallet.ErrProofUsed):
+			refuse(constants.ERROR_UNAUTHORIZED, consolidateUnauthorized)
+		default:
+			controller.respondCommitError(publishResponse, method, app, err, "failed to consolidate slices")
+		}
+		return
 	}
 
-	// 6. Deliver the merged token. When new_identity is a pubkey, NIP-44
-	// encrypted to the CALLER's own proof pubkey (resolved[0].proofPubkey) —
-	// same convention as cash_transfer's spin-off delivery, and for the same
-	// reason: this protects the token from a co-recipient of the calling
-	// connection it travels back over, not from new_identity's own owner (a
-	// pubkey-mode token isn't secret to begin with — redeeming one needs a
-	// signature, not just the string; see the cash/connection_key case
-	// below). The caller decrypts it themselves and hands it to new_identity
-	// out of band, exactly like a cash_transfer gift. A cash-mode or
-	// connection_key target has no real pubkey to ECDH against yet (cash-mode
-	// never has one; connection_key doesn't until an Identity Authority
-	// attests a real pubkey to it later), so the token travels in the clear
-	// within the already end-to-end-encrypted outer NIP-47 response instead —
-	// same as mint_cash's own cash/connection_key recipient delivery.
-	// Funds have already moved either way, so a delivery failure is
-	// operator-recoverable, never a rollback (the token is recoverable via
-	// the admin API).
+	// Step 8: deliver. A pubkey new_identity's token is nested-encrypted to the
+	// caller (sources[0]'s signer), who hands it on, so no co-recipient of the
+	// calling bill reads it. connection_key and cash targets have no pubkey to
+	// encrypt to yet and travel in the clear inside the outer encryption, as a
+	// mint's do. The bill is committed either way, so a delivery failure is
+	// recoverable by the operator, never a rollback.
 	newWalletPubkey := ""
 	if result.WalletApp.WalletPubkey != nil {
 		newWalletPubkey = *result.WalletApp.WalletPubkey
 	}
-	encryptedToken := result.CashToken
-	if newIdentityType == db.CashIdentityPubkey {
+	token := result.CashToken
+	if newType == db.CashIdentityPubkey {
 		newWalletPrivKey, keyErr := controller.keys.GetAppWalletKey(result.WalletApp.ID)
 		if keyErr != nil {
 			logger.Logger.Error().Err(keyErr).Uint("new_wallet_id", result.WalletApp.ID).Msg("Consolidated but could not derive delivery key")
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
+			refuse(constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
 			return
 		}
-		enc, encErr := encryptForRecipient(resolved[0].proofPubkey, newWalletPrivKey, result.CashToken)
+		enc, encErr := encryptForRecipient(signer, newWalletPrivKey, result.CashToken)
 		if encErr != nil {
 			logger.Logger.Error().Err(encErr).Uint("new_wallet_id", result.WalletApp.ID).Msg("Consolidated but could not encrypt token")
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
+			refuse(constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
 			return
 		}
-		encryptedToken = enc
+		token = enc
 	}
 
-	var expiresAt *int64
-	if result.WalletApp.ExpiresAt != nil {
-		ts := result.WalletApp.ExpiresAt.Unix()
-		expiresAt = &ts
-	}
 	logger.Logger.Info().
 		Uint("new_wallet_id", result.WalletApp.ID).
 		Int("source_count", len(sources)).
@@ -486,26 +367,201 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		Msg("Cash wallet slices consolidated")
 
 	publishResponse(&models.Response{
-		ResultType: nip47Request.Method,
+		ResultType: method,
 		Result: cashConsolidateResponse{
 			AmountMillis:    result.AmountMloki,
 			NewWalletPubkey: newWalletPubkey,
-			NewWalletToken:  encryptedToken,
-			ExpiresAt:       expiresAt,
+			NewWalletToken:  token,
+			ExpiresAt:       meta.ExpiresAt,
 		},
 	}, tags)
 
-	// A consolidate drains its sources exactly as a full split does — their
-	// value now lives in the new wallet — so each one that has nothing left
-	// gets the same archive-and-delete treatment.
-	//
-	// Uniformity is the point, not tidiness. A bill the hub deleted is met
-	// with silence; one it kept answers a request naming a spent slice with an
-	// error. If consolidate alone left its sources behind, that error would
-	// tell anyone who had ever seen those tokens that this hub issued them and
-	// that they were spent (NIP-CASH §Lifecycle and Deletion).
-	for _, source := range sources {
-		controller.maybeAutoDeleteDrainedCashWallet(source.WalletApp)
+	// The sources are drained, so each one that holds nothing more gets the same
+	// archive-and-delete every drain mechanism gets (NIP-CASH §Lifecycle and
+	// Deletion): a deleted bill is met with silence, a kept one would answer that
+	// its slice was spent.
+	for _, s := range sources {
+		controller.maybeAutoDeleteDrainedCashWallet(s.bill)
+	}
+}
+
+// consolidateUnauthorized is the one refusal for every step-2 failure, whatever
+// it is (NIP-CASH §Consolidating Tokens, step 2): a source not held, no slice for
+// its identity, a proof or attestation that fails.
+const consolidateUnauthorized = "sources not authorized"
+
+// authorizedSource is a source whose claim proof verified.
+// billsEndedBy counts the source bills a merge drains: those whose every
+// unclaimed slice is one of its sources.
+func (controller *nip47Controller) billsEndedBy(sources []authorizedSource) (int, error) {
+	taken := map[uint]int{}
+	for _, s := range sources {
+		taken[s.bill.ID]++
+	}
+	ending := 0
+	for billID, n := range taken {
+		var live int64
+		if err := controller.db.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ? AND claimed_at IS NULL", billID).
+			Count(&live).Error; err != nil {
+			return 0, err
+		}
+		if live <= int64(n) {
+			ending++
+		}
+	}
+	return ending, nil
+}
+
+type authorizedSource struct {
+	bill           *db.App
+	claim          *db.CashWalletClaim
+	signer         string
+	proofID        string
+	proofCreatedAt int64
+	// iaUntrusted: the attestation holds but its IA is off the allowlist, which
+	// step 3 refuses with RESTRICTED once every proof verified.
+	iaUntrusted bool
+}
+
+// authorizeConsolidateSources verifies every source's claim proof (NIP-CASH
+// §Consolidating Tokens, step 2) against the slice its identity holds on the
+// bill named, bound to m cash_consolidate, that slice's committed amount,
+// new_identity and this call's source list. Every source is examined the same
+// way, whatever an earlier one showed, and the result is one yes or no; the item
+// proof must be sources[0]'s claim signer's.
+func (controller *nip47Controller) authorizeConsolidateSources(params *nipcash.CashConsolidateRequest, itemSigner string) ([]authorizedSource, bool) {
+	pubkeys := make([]string, len(params.Sources))
+	for i, s := range params.Sources {
+		pubkeys[i] = s.WalletPubkey
+	}
+	// A malformed wallet_pubkey makes no hash, so every proof fails below.
+	sourcesHash, _ := nipcash.SourcesHash(pubkeys)
+	held, err := controller.loadCustodiedSources(pubkeys)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to load consolidate sources")
+		return nil, false
+	}
+	newIdentityHash := nipcash.NewIdentityHashOf(params.NewIdentity.IdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey)
+	// One trust snapshot for the whole call.
+	trust := map[string]bool{}
+	iaTrusted := func(ia string) bool {
+		if v, ok := trust[ia]; ok {
+			return v
+		}
+		v, err := controller.iaChecker.IsTrusted(ia)
+		v = err == nil && v
+		trust[ia] = v
+		return v
+	}
+	store := cashrequest.New(controller.db)
+
+	out := make([]authorizedSource, len(params.Sources))
+	ok := true
+	for i, src := range params.Sources {
+		bill := held[src.WalletPubkey]
+		claim := &db.CashWalletClaim{}
+		if bill != nil {
+			// The slice this identity holds, claimed or not: its state is step 3's.
+			// Its live slice comes first; a claimed one is history it may also have.
+			if err := controller.db.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ?",
+				bill.ID, src.IdentityType, src.IdentityValue).
+				Order("CASE WHEN claimed_at IS NULL THEN 0 ELSE 1 END").Order("id DESC").Limit(1).Find(claim).Error; err != nil {
+				claim = &db.CashWalletClaim{}
+			}
+		}
+		amount := uint64(max(claim.AmountMloki, 0)) //nolint:gosec // non-negative
+		verdict, err := nipcash.VerifyClaimProof(src.IdentityEvent, nipcash.ClaimExpectation{
+			Binding: nipcash.ClaimBinding{
+				Method:          constants.NIP47MethodCashConsolidate,
+				Wallet:          src.WalletPubkey,
+				NewIdentityHash: newIdentityHash,
+				AmountMillis:    &amount,
+				SourcesHash:     sourcesHash,
+			},
+			SliceType:   src.IdentityType,
+			SliceValue:  src.IdentityValue,
+			SliceIA:     claim.IAPubkey,
+			Attestation: src.AttestationEvent,
+			IATrusted:   iaTrusted,
+			Consumed: func(id string) bool {
+				used, err := store.IsProofConsumed(id)
+				return err == nil && used
+			},
+		}, time.Now())
+		var claimErr *nipcash.ClaimError
+		untrusted := err != nil && errors.As(err, &claimErr) && claimErr.Code == constants.ERROR_RESTRICTED
+		if (err != nil && !untrusted) || bill == nil || claim.ID == 0 {
+			ok = false
+			continue
+		}
+		signer := verdict.Signer
+		if untrusted {
+			signer = proofSigner(src.IdentityEvent)
+		}
+		out[i] = authorizedSource{bill: bill, claim: claim, signer: signer, proofID: proofID(src.IdentityEvent, verdict),
+			proofCreatedAt: eventCreatedAt(src.IdentityEvent), iaUntrusted: untrusted}
+	}
+	if !ok || itemSigner == "" || itemSigner != out[0].signer {
+		return nil, false
+	}
+	return out, true
+}
+
+// proofSigner and proofID read a claim proof whose only failure was its IA's
+// trust, so its id and signature verified.
+func proofSigner(raw string) string {
+	var ev struct {
+		PubKey string `json:"pubkey"`
+	}
+	_ = json.Unmarshal([]byte(raw), &ev)
+	return ev.PubKey
+}
+
+func proofID(raw string, v nipcash.ClaimVerdict) string {
+	if v.RecomputedID != "" {
+		return v.RecomputedID
+	}
+	var ev struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal([]byte(raw), &ev)
+	return ev.ID
+}
+
+// maxConsolidateSources is the announced max_consolidate_sources, at most 100.
+func (controller *nip47Controller) maxConsolidateSources() int {
+	limit := controller.cfg.PrivateEnvelopeLimits().MaxConsolidateSources
+	if limit <= 0 || limit > maxConsolidateSourcesCap {
+		return maxConsolidateSourcesCap
+	}
+	return limit
+}
+
+// validateNewIdentity validates a transfer's or consolidate's new_identity: a
+// pubkey or connection_key as a mint recipient (an untrusted IA RESTRICTED), or
+// cash as the caller's own commitment, never generated here. "" when valid.
+func validateNewIdentity(ia cashwallet.IATrustChecker, identityType, identityValue, iaPubkey string) (string, string) {
+	switch identityType {
+	case db.CashIdentityCash:
+		if iaPubkey != "" {
+			return constants.ERROR_BAD_REQUEST, "new_identity must not carry ia_pubkey when identity_type is cash"
+		}
+		if !nipcash.ValidCommitment(identityValue) {
+			return constants.ERROR_BAD_REQUEST, "new_identity.identity_value is required for a cash-mode target and must be a 64-character " +
+				"lowercase hex commitment (sha256 of a secret you generate and keep yourself); the hub never mints or returns a cash secret"
+		}
+		return "", ""
+	case db.CashIdentityPubkey, db.CashIdentityConnectionKey:
+		if err := cashwallet.ValidateIdentityShape(cashwallet.Deps{IAChecker: ia}, identityType, identityValue, iaPubkey); err != nil {
+			if errors.Is(err, cashwallet.ErrRestricted) {
+				return constants.ERROR_RESTRICTED, err.Error()
+			}
+			return constants.ERROR_BAD_REQUEST, err.Error()
+		}
+		return "", ""
+	default:
+		return constants.ERROR_BAD_REQUEST, fmt.Sprintf("new_identity.identity_type must be %q, %q, or %q",
+			db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash)
 	}
 }
 
@@ -533,112 +589,4 @@ func (controller *nip47Controller) loadCustodiedSources(sourceWalletPubkeys []st
 		}
 	}
 	return custodied, nil
-}
-
-// resolveConsolidateSource locates a source wallet (from the pre-loaded custody
-// map), verifies its pubkey or connection_key identity proof, and returns the
-// resolved slice. code == "" means success; otherwise (code, msg) is the error
-// to surface. evID is the proof's event id, to be replay-guarded by the caller
-// once every source has passed. iaTrustCache memoizes IsTrusted per ia_pubkey
-// across the whole batch (see HandleCashConsolidateEvent's call site) so every
-// connection_key source in one request is checked against a single
-// point-in-time trust snapshot, not a fresh live query each — closing a narrow
-// TOCTOU window a per-source live re-check would otherwise leave open across a
-// multi-source batch.
-func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.CashConsolidateRequest, i int, targetHash string, custodied map[string]*db.App, iaTrustCache map[string]bool) (rs *resolvedConsolidateSource, evID, code, msg string) {
-	src := params.Sources[i]
-	if src.WalletPubkey == "" {
-		return nil, "", constants.ERROR_BAD_REQUEST, "wallet_pubkey is required"
-	}
-	// A cash_secret has no signature and no binding to the request that
-	// carries it — presenting it just IS the authorization. Unlike
-	// cash_transfer/cash_redeem (which never name a foreign wallet_pubkey and
-	// always act on the calling connection's own app, so a cash secret only
-	// ever transits over its own single-recipient wallet's connection),
-	// cash_consolidate lets a source name ANY wallet this node custodies. If
-	// that source were a cash-mode wallet OTHER than the caller's own connection,
-	// its secret would sit in plaintext in a request encrypted only under the
-	// CALLING connection's shared key — decryptable by every co-recipient of a
-	// multi-identity calling wallet, none of whom have any claim on that
-	// foreign cash note. Rejected outright rather than scoped to
-	// "self only": unlike connection_key (a signed proof, immune to this),
-	// cash mode genuinely needs a new bound-proof protocol addition to be safe as
-	// a source — see the design doc; still deferred.
-	if src.CashSecret != "" {
-		return nil, "", constants.ERROR_BAD_REQUEST, "cash-mode sources are not supported by cash_consolidate yet"
-	}
-
-	// Custody: the source MUST be a cash_wallet this node itself issued.
-	walletApp, ok := custodied[src.WalletPubkey]
-	if !ok {
-		return nil, "", constants.ERROR_NOT_FOUND, "no cash_wallet this node custodies matches wallet_pubkey"
-	}
-
-	if src.IdentityType != db.CashIdentityPubkey && src.IdentityType != db.CashIdentityConnectionKey {
-		return nil, "", constants.ERROR_BAD_REQUEST, "identity_type must be pubkey or connection_key"
-	}
-	if src.IdentityValue == "" || src.IdentityEvent == "" {
-		return nil, "", constants.ERROR_BAD_REQUEST, "identity_type, identity_value, and identity_event are required"
-	}
-	if src.IdentityType == db.CashIdentityConnectionKey && src.AttestationEvent == "" {
-		return nil, "", constants.ERROR_BAD_REQUEST, "attestation_event is required when identity_type is connection_key"
-	}
-	identityType := src.IdentityType
-	identityValue := src.IdentityValue
-
-	claim, err := controller.appsService.GetCashWalletClaim(walletApp.ID, identityType, identityValue)
-	if err != nil {
-		return nil, "", constants.ERROR_INTERNAL, "failed to look up the source slice"
-	}
-	if claim == nil {
-		return nil, "", constants.ERROR_NOT_FOUND, "no unclaimed slice registered for this identity on the source"
-	}
-
-	var identityEvent nostr.Event
-	if err := json.Unmarshal([]byte(src.IdentityEvent), &identityEvent); err != nil {
-		return nil, "", constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON"
-	}
-
-	var attestationEvent nostr.Event
-	attestationEventID := ""
-	if identityType == db.CashIdentityConnectionKey {
-		if err := json.Unmarshal([]byte(src.AttestationEvent), &attestationEvent); err != nil {
-			return nil, "", constants.ERROR_BAD_REQUEST, "attestation_event is not valid JSON"
-		}
-		attestationEventID = attestationEvent.ID
-	}
-
-	// The proof binds to the source's own wallet pubkey (d-tag), the merged
-	// new_identity (targetHash), and the slice's full amount — a consolidate
-	// consumes each source whole.
-	fullAmount := uint64(claim.AmountMloki) //nolint:gosec // non-negative
-	if err := verifyTransferIdentityEvent(&identityEvent, identityType, identityValue, src.WalletPubkey, targetHash, fullAmount, attestationEventID); err != nil {
-		return nil, "", constants.ERROR_BAD_REQUEST, err.Error()
-	}
-
-	if identityType == db.CashIdentityConnectionKey {
-		trusted, cached := iaTrustCache[claim.IAPubkey]
-		if !cached {
-			trusted, err = controller.iaChecker.IsTrusted(claim.IAPubkey)
-			if err != nil {
-				return nil, "", constants.ERROR_INTERNAL, "failed to check Identity Authority trust"
-			}
-			iaTrustCache[claim.IAPubkey] = trusted
-		}
-		if !trusted {
-			return nil, "", constants.ERROR_RESTRICTED, "the Identity Authority for this source has been revoked"
-		}
-		if err := VerifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, identityValue); err != nil {
-			return nil, "", constants.ERROR_BAD_REQUEST, err.Error()
-		}
-	}
-	evID = identityEvent.ID
-
-	return &resolvedConsolidateSource{
-		walletApp:     walletApp,
-		identityType:  identityType,
-		identityValue: identityValue,
-		claim:         claim,
-		proofPubkey:   identityEvent.PubKey,
-	}, evID, "", ""
 }

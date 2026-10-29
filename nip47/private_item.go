@@ -23,8 +23,9 @@ import (
 // arrive silently, as a working feature nobody asked for.
 //
 // So the private transport serves exactly what a bill is for, plus the circle join
-// the user scoped in. Anything absent is omitted from the response rather than
-// answered with an error, so the allowlist leaks nothing about what a hub supports.
+// the user scoped in. Anything absent is answered NOT_IMPLEMENTED (I5), and only
+// once the item's bill proof has verified: a sender who cannot prove possession of
+// the target still learns nothing.
 //
 // mint_cash is deliberately NOT here. It is gated by CASH_HUB_SCOPE and belongs to
 // a Cash Hub app connection, which stays on kind 23194 — and it is also the one
@@ -35,7 +36,12 @@ var privateServableMethods = map[string]struct{}{
 	constants.NIP47MethodCashRedeem:         {},
 	constants.NIP47MethodCashTransfer:       {},
 	constants.NIP47MethodCashConsolidate:    {},
+	constants.NIP47MethodCashLookup:         {},
 	constants.NIP47MethodCreateCircleWallet: {},
+	constants.NIP47MethodCashOrder:          {},
+	// Served only while the item's Cash Hub offers on-chain withdrawals (I5).
+	constants.NIP47MethodCashWithdrawQuote: {},
+	constants.NIP47MethodCashWithdraw:      {},
 }
 
 // IsPrivateServableMethod reports whether a method may be served over the private
@@ -96,6 +102,7 @@ func (c *itemResponseCollector) result(itemID string) (transport.Result, bool, e
 		out.Error = &transport.ResultError{
 			Code:    c.response.Error.Code,
 			Message: c.response.Error.Message,
+			Detail:  c.response.Error.Detail,
 		}
 		// An error and a result together would be ambiguous, and the response
 		// codec rejects it — so never carry both, even if a handler set both.

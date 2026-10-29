@@ -3,13 +3,18 @@ package controllers
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/testknobs"
 	"strconv"
 	"time"
 
+	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -64,6 +69,24 @@ type cashTransferParams struct {
 	// slice's own MinTransferMloki (0 = no floor) — enforced by
 	// handleCashTransferSplit.
 	AmountMillis *uint64 `json:"amount_millis,omitempty"`
+
+	// ZapTarget makes this a zap transfer (NIP-CZ); nil when absent.
+	ZapTarget *string `json:"zap_target,omitempty"`
+
+	// RemainderCommitment is the fresh commitment a partial split of a cash
+	// slice gives its remainder.
+	RemainderCommitment string `json:"remainder_commitment,omitempty"`
+
+	// RequestID is REQUIRED (NIP-CASH §request_id).
+	RequestID string `json:"request_id,omitempty"`
+}
+
+// PrivateCall is what the private transport knows about an item beyond its
+// params: its call metadata (the deadline is the envelope's not_after) and the
+// pubkey that signed its item proof, "" for a proofless item.
+type PrivateCall struct {
+	Meta       models.CallMeta
+	ItemSigner string
 }
 
 // cashTransferResponse never carries a secret of any kind — IdentityValue is
@@ -117,6 +140,11 @@ type cashTransferResponse struct {
 	// same nested-encrypted way as NewWalletToken.
 	RemainderWalletPubkey string `json:"remainder_wallet_pubkey,omitempty"`
 	RemainderWalletToken  string `json:"remainder_wallet_token,omitempty"`
+	// IssuedAt and ExpiresAt are a zap transfer's zap bill's, exactly as signed,
+	// and present only on a zap transfer; ExpiresAt is 0, not omitted, for a bill
+	// that never expires (NIP-CASH §Transferring and Splitting a Slice, Response).
+	IssuedAt  *uint64 `json:"issued_at,omitempty"`
+	ExpiresAt *uint64 `json:"expires_at,omitempty"`
 }
 
 // newIdentityHash binds a transfer proof to a specific target identity —
@@ -130,729 +158,587 @@ type cashTransferResponse struct {
 // redeem the transferred slice even though identity_value (the connection_key
 // string itself) never changed. Always "" for pubkey/cash-mode targets, which
 // have no ia_pubkey concept, so their hash is unaffected by this field.
-// noSliceRegisteredMessage is the NOT_FOUND message for a claim lookup that
-// found no UNCLAIMED slice for (walletAppID, identityType, identityValue) —
-// shared by cash_transfer and cash_redeem. Best-effort enriches the generic
-// message with a breadcrumb when the slice DOES exist but was already split
-// off into a new dedicated wallet: exactly the situation a client built
-// against the pre-two-wallet-split contract hits on its natural retry for a
-// "remainder" it believes it still holds on this connection.
-// This doesn't fix that client's underlying assumption, but turns a silent
-// dead end into an actionable one. Diagnostic-only: any failure in the lookup
-// itself silently falls back to the generic message rather than affecting
-// the response.
-func (controller *nip47Controller) noSliceRegisteredMessage(walletAppID uint, identityType, identityValue string) string {
-	const generic = "no slice registered for this identity"
-	var priorClaim db.CashWalletClaim
-	err := controller.db.Where(
-		"wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND spun_off_to_wallet_app_id IS NOT NULL",
-		walletAppID, identityType, identityValue,
-	).First(&priorClaim).Error
-	if err != nil {
-		return generic
-	}
-	return generic + " — its value was already split off into a new dedicated wallet by an earlier call; " +
-		"check cash_status or that earlier call's own response for the new connection, this one no longer holds it"
-}
-
 func newIdentityHash(identityType, identityValue, iaPubkey string) string {
 	sum := sha256.Sum256([]byte(identityType + ":" + identityValue + ":" + iaPubkey))
 	return hex.EncodeToString(sum[:])
 }
 
-func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
+func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags, call *PrivateCall) {
 	params := &nipcash.CashTransferRequest{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
 		publishResponse(resp, tags)
 		return
 	}
+	method := nip47Request.Method
+	refuse := func(code, message string) { respondError(publishResponse, method, code, message) }
 
-	isCashCurrent := params.CashSecret != ""
-
-	logger.Logger.Info().
-		Uint("app_id", app.ID).
-		Str("new_identity_type", params.NewIdentity.IdentityType).
-		Bool("cash_current", isCashCurrent).
-		Msg("Handling cash_transfer request")
-
-	// 1. cash_transfer only ever makes sense against a cash_wallet.
+	// The private loop refused a missing, malformed or used request_id at I6 and
+	// I7; this is the same refusal for a caller that reached here another way.
+	if call == nil || !call.Meta.DeadlinePresent {
+		refuse(constants.ERROR_BAD_REQUEST, "cash_transfer needs a deadline")
+		return
+	}
+	if !nipcash.ValidRequestID(params.RequestID) {
+		refuse(constants.ERROR_BAD_REQUEST, "request_id is required: 32 to 64 lowercase hex characters")
+		return
+	}
 	if app.Kind != db.AppKindCashWallet {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "cash_transfer requires a cash_wallet app")
+		refuse(constants.ERROR_RESTRICTED, "cash_transfer requires a cash_wallet app")
 		return
 	}
 
-	// 2. Determine the caller's current identity. A cash-secret proof and
-	// an identity-bound one are mutually exclusive param shapes.
-	var currentIdentityType, currentIdentityValue string
-	if isCashCurrent {
+	// Step 1 (NIP-CASH §Transferring and Splitting a Slice, Processing Algorithm):
+	// a present, empty zap_target is refused first.
+	if params.ZapTarget != nil && *params.ZapTarget == "" {
+		refuse(constants.ERROR_BAD_REQUEST, "zap_target is present and empty")
+		return
+	}
+
+	// The credential's shape: a cash secret, or an identity with its claim proof,
+	// never both.
+	isCashSource := params.CashSecret != ""
+	if isCashSource {
 		if params.IdentityType != "" || params.IdentityValue != "" || params.IdentityEvent != "" || params.AttestationEvent != "" {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			refuse(constants.ERROR_BAD_REQUEST,
 				"cash_secret is mutually exclusive with identity_type, identity_value, identity_event, and attestation_event")
 			return
 		}
-		secretBytes, hexErr := hex.DecodeString(params.CashSecret)
-		if hexErr != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "cash_secret must be hex")
+		if !nipcash.ValidCashSecret(params.CashSecret) {
+			refuse(constants.ERROR_BAD_REQUEST, "cash_secret must be 64 lowercase hex characters")
 			return
 		}
-		hash := sha256.Sum256(secretBytes)
-		currentIdentityType = db.CashIdentityCash
-		currentIdentityValue = hex.EncodeToString(hash[:])
 	} else {
 		if params.IdentityType == "" || params.IdentityValue == "" || params.IdentityEvent == "" {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"identity_type, identity_value, and identity_event are all required")
+			refuse(constants.ERROR_BAD_REQUEST, "identity_type, identity_value, and identity_event are all required")
 			return
 		}
 		if params.IdentityType != db.CashIdentityPubkey && params.IdentityType != db.CashIdentityConnectionKey {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			refuse(constants.ERROR_BAD_REQUEST,
 				fmt.Sprintf("identity_type must be %q or %q", db.CashIdentityPubkey, db.CashIdentityConnectionKey))
 			return
 		}
 		if params.IdentityType == db.CashIdentityConnectionKey && params.AttestationEvent == "" {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"attestation_event is required when identity_type is connection_key")
+			refuse(constants.ERROR_BAD_REQUEST, "attestation_event is required when identity_type is connection_key")
 			return
 		}
-		currentIdentityType = params.IdentityType
-		currentIdentityValue = params.IdentityValue
 	}
 
-	// 3. new_identity's own type must be recognized before anything else
-	// checks it — computed here (from the raw request, not yet validated
-	// for trust) so the proof-binding hash below reflects exactly what the
-	// caller asked for, independent of whether it turns out to be valid.
-	newIdentityType := params.NewIdentity.IdentityType
-	if newIdentityType != db.CashIdentityPubkey && newIdentityType != db.CashIdentityConnectionKey && newIdentityType != db.CashIdentityCash {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			fmt.Sprintf("new_identity.identity_type must be %q, %q, or %q",
-				db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash))
-		return
-	}
-	// Unlike mint_cash's cash-mode recipient (identity_value forbidden —
-	// the Hub generates it), a cash-mode new_identity here MUST carry a
-	// caller-supplied identity_value: see the cash-mode branch below for why.
-	// Shape is validated there, after the proof; this hash binds the proof to
-	// whatever the caller submitted, valid or not (including IAPubkey, "" if
-	// omitted), exactly as it does for every other target type/field.
-	targetHash := newIdentityHash(newIdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey)
+	logger.Logger.Info().
+		Uint("app_id", app.ID).
+		Str("new_identity_type", params.NewIdentity.IdentityType).
+		Bool("cash_source", isCashSource).
+		Msg("Handling cash_transfer request")
 
-	// 4. Rate limit, charged only now that the request is a real attempt.
-	//
-	// Shares cashClaimLimiter and its budget with cash_redeem, deliberately:
-	// transferring OUT of a cash-mode slice is also a secret-presentation surface
-	// with no signature to forge, exactly like redeeming one. Separate budgets would
-	// let an attacker double their effective guess allowance by splitting attempts
-	// across both methods.
-	//
-	// Moved after the param validation above for the same reason as in
-	// cash_redeem_controller: one envelope carries up to 32 items, each dispatched
-	// here separately, so charging before validation let a co-recipient spend a
-	// shared bill's whole hourly allowance with a single envelope of malformed
-	// requests. A real secret-guess is well-formed and still reaches this line.
-	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_transfer")
+	// Locate the slice: none is NOT_FOUND; only a claimed or terminal one, or a
+	// bill past its expiry, is RESTRICTED.
+	claim, code, message := controller.locateSlice(app, isCashSource, params.IdentityType, params.IdentityValue)
+	if code != "" {
+		refuse(code, message)
 		return
 	}
 
-	// 5. Read-only lookup of the slice being transferred BEFORE touching the
-	// atomic transfer guard, so a proof that fails verification never
-	// briefly occupies (and can never grief) a legitimate concurrent
-	// transfer or claim — same ordering rationale as cash_redeem.
-	claim, err := controller.appsService.GetCashWalletClaim(app.ID, currentIdentityType, currentIdentityValue)
-	if err != nil {
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to look up Cash wallet claim")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to look up claim")
-		return
-	}
-	if claim == nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND,
-			controller.noSliceRegisteredMessage(app.ID, currentIdentityType, currentIdentityValue))
-		return
-	}
-
-	// 6. Resolve the requested transfer amount. Omitted, or equal to the
-	// slice's current full amount as read just above, means "transfer it
-	// all". Anything less is a partial split. This read is a best-effort
-	// bound only — the atomic operation below (ReassignCashSliceIdentity or
-	// ClaimCashSlice) always re-validates against the slice's live state with
-	// its own fresh read, so a concurrent transfer between this read and that
-	// one can only ever produce a safe rejection, never an incorrect transfer.
-	//
-	// Only the request's own shape is checked here. Whether the amount fits the
-	// slice's balance waits until the caller is authenticated (step 7): NIP-CASH
-	// orders the proof first, and an answer naming the balance would otherwise
-	// tell anyone holding the connection what the slice holds.
-	requestedAmount := uint64(claim.AmountMloki) //nolint:gosec // AmountMloki is always non-negative
+	// The amount the claim proof binds: an omitted amount_millis is the slice's
+	// full amount, never unbound. Bounded against the slice only at step 3.
+	requested := uint64(claim.AmountMloki) //nolint:gosec // non-negative
 	if params.AmountMillis != nil {
-		if *params.AmountMillis == 0 {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "amount_millis must be positive")
-			return
-		}
-		requestedAmount = *params.AmountMillis
+		requested = *params.AmountMillis
 	}
 
-	// 7. Verify the caller is authorized to transfer this slice.
-	//
-	// callerProofPubkey is the pubkey that signed identity_event — the
-	// caller's own authenticated identity, captured here (rather than
-	// re-derived later) since it's only available while identityEvent is in
-	// scope. Used only by the split path below, to encrypt that new wallet's
-	// connection to the caller and no one else. Stays empty when
-	// isCashCurrent, which is fine: a cash-mode slice's wallet can never be
-	// multi-recipient (see the invariant note in the cash-mode branch below),
-	// so a cash-mode split (which can only happen via a PARTIAL amount,
-	// since a full cash-mode transfer is always in-place) still only
-	// ever needs the cash secret itself as proof — there is no signed
-	// identity_event to pull a caller pubkey from either way, so the
-	// recipient-facing encryption for that case is skipped below.
-	var callerProofPubkey string
-	// proofEventID is identityEvent.ID, captured for the same "only available
-	// while identityEvent is in scope" reason as callerProofPubkey above.
-	// Used only by the split path's rollback (handleCashTransferSplit) to
-	// release the single-use replay guard below if the split fails and rolls
-	// back, so a caller who hits a transient failure can retry with the
-	// exact same proof rather than needing a brand-new one. Stays empty for
-	// isCashCurrent, same as callerProofPubkey.
-	var proofEventID string
-	if !isCashCurrent {
-		var identityEvent nostr.Event
-		if err := json.Unmarshal([]byte(params.IdentityEvent), &identityEvent); err != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON")
+	// Authorize.
+	var claimSigner string
+	var proofs []cashwallet.ClaimProof
+	if isCashSource {
+		commitment, err := nipcash.CashCommitment(params.CashSecret)
+		if err != nil || subtle.ConstantTimeCompare([]byte(commitment), []byte(claim.IdentityValue)) != 1 {
+			refuse(constants.ERROR_UNAUTHORIZED, "this cash_secret does not open this slice")
 			return
 		}
-		walletPubkey := ""
-		if app.WalletPubkey != nil {
-			walletPubkey = *app.WalletPubkey
-		}
-		var attestationEvent nostr.Event
-		attestationEventID := ""
-		if currentIdentityType == db.CashIdentityConnectionKey {
-			if err := json.Unmarshal([]byte(params.AttestationEvent), &attestationEvent); err != nil {
-				respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "attestation_event is not valid JSON")
-				return
-			}
-			attestationEventID = attestationEvent.ID
-		}
-		if err := verifyTransferIdentityEvent(&identityEvent, currentIdentityType, currentIdentityValue, walletPubkey, targetHash, requestedAmount, attestationEventID); err != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
-			return
-		}
-		// NOTE: the single-use replay guard (db.CashTransferProof) is
-		// deliberately NOT inserted here — only once every remaining check
-		// that can reject this request for a reason unrelated to the atomic
-		// operation itself (the live IA-trust re-check below, and step 8's
-		// new_identity validation) has also passed. A proof that fails one of
-		// those later checks never touched the slice, so burning it here
-		// would force a legitimate caller to sign an entirely new kind-23198
-		// event to retry even though nothing happened. callerProofPubkey/proofEventID are captured now, while
-		// identityEvent is in scope, but the actual insert happens right
-		// before step 9's split/reassign decision.
-		callerProofPubkey = identityEvent.PubKey
-		proofEventID = identityEvent.ID
-
-		// Same live IA re-check cash_redeem does — a compromised/retired
-		// Identity Authority must be cut off immediately, including for
-		// cash_transfer, not only cash_redeem.
-		if currentIdentityType == db.CashIdentityConnectionKey {
-			trusted, err := controller.iaChecker.IsTrusted(claim.IAPubkey)
-			if err != nil {
-				logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to check Identity Authority trust")
-				respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to check Identity Authority trust")
-				return
-			}
-			if !trusted {
-				respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "the Identity Authority for this claim has been revoked")
-				return
-			}
-			if err := VerifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, currentIdentityValue); err != nil {
-				respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
-				return
-			}
-		}
-	}
-	// isCashCurrent: nothing further to verify — step 5's hash-matched
-	// lookup was the entire proof, identical in spirit to a cash-mode redeem.
-
-	// 7b. The caller is authenticated, so the amount can now be bounded by the
-	// slice's balance, and the error may name it.
-	if requestedAmount > uint64(claim.AmountMloki) { //nolint:gosec // AmountMloki is always non-negative
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			fmt.Sprintf("amount_millis %d exceeds this slice's own balance of %d", requestedAmount, claim.AmountMloki))
-		return
-	}
-	isFullTransfer := requestedAmount == uint64(claim.AmountMloki) //nolint:gosec // AmountMloki is always non-negative
-
-	// 8. Validate new_identity now that the caller is authenticated:
-	// pubkey/connection_key shape + live IA trust (reuses exactly the
-	// validation mint_cash applies to a recipient entry — not
-	// duplicated), or shape validation for a cash-mode target's caller-supplied
-	// commitment.
-	var newIdentityValueToStore, newIAPubkeyToStore string
-	switch newIdentityType {
-	case db.CashIdentityCash:
-		// The cash secret itself MUST be caller-supplied (as a commitment,
-		// never the raw secret) rather than generated here and returned in
-		// this response. Unlike mint_cash's cash-mode response — which
-		// travels over the Hub's own single-owner connection — this response
-		// travels over the SHARED cash_wallet connection, decryptable by every
-		// recipient who ever held it (NIP-47 response encryption derives its
-		// key from (clientPubkey, walletPrivkey), and every recipient shares
-		// the same client keypair). A server-minted secret handed back here
-		// would be readable by any co-recipient before the caller could ever
-		// deliver it. The caller generates their own secret locally and keeps
-		// it; the wallet only ever sees and stores its hash — mirroring how a
-		// connection_key target is already caller-chosen, not server-issued.
-		if params.NewIdentity.IAPubkey != "" {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"new_identity must not carry ia_pubkey when identity_type is cash")
-			return
-		}
-		if decoded, decErr := hex.DecodeString(params.NewIdentity.IdentityValue); decErr != nil || len(decoded) != 32 {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"new_identity.identity_value is required for a cash-mode target and must be a 64-character lowercase "+
-					"hex commitment (sha256 of a secret you generate and keep yourself) — the wallet never mints "+
-					"or returns a cash secret over the shared connection")
-			return
-		}
-		newIdentityValueToStore = params.NewIdentity.IdentityValue
-	default:
-		if err := cashwallet.ValidateIdentityShape(cashwallet.Deps{IAChecker: controller.iaChecker},
-			newIdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey); err != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
-			return
-		}
-		newIdentityValueToStore = params.NewIdentity.IdentityValue
-		newIAPubkeyToStore = params.NewIdentity.IAPubkey
-	}
-
-	// Single-use replay guard: a captured proof (any co-recipient sharing
-	// this cash_wallet connection can decrypt every request sent over it,
-	// including this one) must not be resubmittable within its own freshness
-	// window — see db.CashTransferProof's doc comment. Inserted here, after
-	// every step-7/8 check that doesn't touch the slice has already passed,
-	// so a request that fails one of THOSE checks never burns the proof (see
-	// the comment above callerProofPubkey/proofEventID's capture in step 7).
-	// Empty for isCashCurrent, which has no signed proof to consume.
-	if proofEventID != "" {
-		if err := controller.db.Create(&db.CashTransferProof{AppID: app.ID, EventID: proofEventID}).Error; err != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event has already been used")
-			return
-		}
-	}
-
-	// 9. Decide in-place reassignment vs. split.
-	//
-	// A PARTIAL transfer (requestedAmount < the slice's current full amount)
-	// ALWAYS splits off a brand-new dedicated wallet for the carved-off
-	// piece: there is no "in-place" concept for a partial amount, since the
-	// giver keeps the remainder under their own, unchanged identity — only
-	// the carved-off piece needs a home, and it always gets a fresh
-	// connection, never one shared with the remainder or anyone else.
-	//
-	// A FULL transfer (requestedAmount == the slice's current full amount)
-	// to a pubkey/connection_key target is ALWAYS reassigned in place —
-	// exactly today's behavior, unconditional on the wallet's recipient
-	// history, since redeeming or transferring an identity-bound slice
-	// always requires a real signed proof, never just presenting a shared
-	// secret, so reusing the connection is safe regardless of who else has
-	// ever held it.
-	//
-	// A FULL transfer to a CASH target reassigns in place ONLY if the
-	// wallet has (and has always had) exactly one recipient — "always had"
-	// meaning the LIFETIME set: live claim rows plus any that DeleteCashClaim
-	// archived away (NIP-CASH:569-571, :1489-1497): a cash-mode redemption/transfer's
-	// entire proof is its raw secret, transmitted in the request body, so
-	// handing a cash note a connection any former co-recipient might
-	// still be listening on would hand them everything needed to steal it
-	// the moment it's ever redeemed. Every other cash-mode-target case (a
-	// wallet that has ever had more than one recipient) splits instead —
-	// see handleCashTransferSplit.
-	split := !isFullTransfer
-	if isFullTransfer && newIdentityType == db.CashIdentityCash {
-		allClaims, err := controller.appsService.ListClaimsForWallet(app.ID)
+	} else {
+		verdict, err := controller.verifyTransferClaimProof(app, claim, params, requested)
 		if err != nil {
-			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to list Cash wallet claims")
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to list claims")
-			return
-		}
-		split = len(allClaims) != 1
-		if split && isCashCurrent {
-			// Structurally unreachable: a cash-mode slice's wallet can never
-			// have more than one recipient (cashwallet.Resolve requires a
-			// cash-mode recipient to be the wallet's only one at creation, and
-			// no later operation ever adds a second claim row to an existing
-			// wallet), so isCashCurrent implies allClaims is exactly 1.
-			// Rejected defensively rather than trusting that invariant blindly.
-			//
-			// Deliberately still keyed on the LIVE count, not the lifetime one
-			// checked below: a wallet that reached cash mode through the old
-			// in-place bug legitimately has one live claim AND an archive row,
-			// and it must SPLIT rather than be refused with this message, which
-			// would be both misleading and a dead end for its holder.
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED,
-				"a cash-mode slice's wallet can never have more than one recipient")
-			return
-		}
-		if !split {
-			// The live count is exactly 1, but the rule above is "has and has
-			// ALWAYS HAD exactly one recipient". DeleteCashClaim hard-deletes a
-			// claim row, so a wallet that always had two reads as one the moment
-			// an operator removes a co-recipient — and that co-recipient still
-			// holds this wallet's connection secret, which is derived from the
-			// app ID (cashwallet/create.go:549) and therefore cannot be rotated.
-			// Reassigning in place would hand them a cash secret they can
-			// front-run at redemption.
-			//
-			// Live rows and archive rows are disjoint and their union is the
-			// lifetime set, so the existence of any archive row for this wallet
-			// is exactly "a recipient was removed".
-			hadRemovedRecipient, err := controller.appsService.HasArchivedSliceForWallet(app.ID)
-			if err != nil {
-				// Fail closed. Treating an unreadable history as "always solo"
-				// would reintroduce the exact hole this check exists to close.
-				logger.Logger.Error().Err(err).Uint("app_id", app.ID).
-					Msg("Failed to check Cash wallet recipient history")
-				respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
-					"failed to check wallet recipient history")
+			var claimErr *nipcash.ClaimError
+			if errors.As(err, &claimErr) && claimErr.Code == constants.ERROR_RESTRICTED {
+				refuse(constants.ERROR_RESTRICTED, "the Identity Authority for this claim is no longer trusted")
 				return
 			}
-			split = hadRemovedRecipient
-		}
-		if !split && allClaims[0].TransferCount > 0 {
-			// The archive check above catches a recipient being REMOVED. It does not
-			// catch a recipient being REPLACED, and the lifetime recipient set grows
-			// either way.
-			//
-			// An in-place reassignment (AppsService.ReassignCashSliceIdentity) rewrites
-			// this claim's identity and writes NO archive row — live rows and archive
-			// rows stay disjoint, so their union is NOT the lifetime set after a
-			// handoff, and the interface comment on HasArchivedSliceForWallet saying an
-			// archive row is "the only way to recover a wallet's lifetime recipient
-			// count" is wrong. TransferCount is the other way: it is an exact count of
-			// those handoffs.
-			//
-			// Without this, two ordinary calls hand a cash secret to a previous owner.
-			// Alice (sole recipient) full-transfers to Bob's pubkey, which correctly
-			// reassigns in place, because a pubkey redemption still needs Bob's own
-			// signature. Alice necessarily still holds the bill's token, and its pairing
-			// secret is derived from the app ID (cashwallet/create.go:549) so it cannot
-			// be rotated. Bob then full-transfers to a CASH target: the gate sees one
-			// live claim and no archive row, concludes "always solo", and reassigns in
-			// place again — onto the connection Alice still reads. A cash redemption
-			// carries its raw cash_secret in the request body, so Alice takes it off the
-			// wire and front-runs the single-winner ClaimCashSlice, recovering a bill she
-			// already sold.
-			//
-			// Splitting instead costs a fresh wallet and token, which is the same price
-			// the removed-recipient case already pays, and is the safe direction: the new
-			// wallet's secret is derived from a new app ID that no previous owner has.
-			split = true
-		}
-	}
-
-	if !split {
-		// In-place reassignment only ever applies to a full transfer —
-		// AmountMillis is unchanged by construction, so there's nothing to
-		// pass beyond the identities themselves.
-		amount, err := controller.appsService.ReassignCashSliceIdentity(app.ID,
-			currentIdentityType, currentIdentityValue,
-			newIdentityType, newIdentityValueToStore, newIAPubkeyToStore)
-		if err != nil {
-			// A race loss against a concurrent claim/transfer of this exact
-			// slice (constants.ErrNotFound) gets NOT_FOUND, matching
-			// cash_redeem's identical race-loss case — not the generic
-			// BAD_REQUEST every other validation failure here uses, since a
-			// race loss isn't caused by anything wrong with the request itself.
-			// ReassignCashSliceIdentity's ErrNotFound-wrapped errors are
-			// deliberately crafted, safe-to-show messages ("no slice
-			// registered...", "already been redeemed or transferred"); any
-			// OTHER error is a raw, unwrapped internal failure (e.g. a DB
-			// error) that must never be echoed to the caller verbatim —
-			// mirrors cash_redeem's and cash_consolidate's fixed-message
-			// pattern for the same class of failure.
-			code := constants.ERROR_BAD_REQUEST
-			message := "failed to reassign this slice's identity"
-			if errors.Is(err, constants.ErrNotFound) {
-				code = constants.ERROR_NOT_FOUND
-				message = err.Error()
-			} else {
-				logger.Logger.Error().Err(err).Uint("app_id", app.ID).
-					Msg("Unexpected failure reassigning a cash_transfer slice's identity")
-			}
-			// Release the single-use replay guard: ReassignCashSliceIdentity
-			// is one atomic UPDATE with no fund movement of its own — unlike
-			// the split path, a failure here means nothing happened at all,
-			// so (mirroring handleCashTransferSplit's own rollback) this
-			// proof never actually authorized a completed operation and must
-			// stay usable for a retry within its own freshness window.
-			// Best-effort: if this delete itself fails, the proof stays
-			// consumed and a legitimate retry needs a fresh one — safe (just
-			// an availability inconvenience), never a security gap.
-			if proofEventID != "" {
-				if delErr := controller.db.Where("event_id = ?", proofEventID).Delete(&db.CashTransferProof{}).Error; delErr != nil {
-					logger.Logger.Error().Err(delErr).Uint("app_id", app.ID).
-						Msg("Failed to release cash_transfer proof replay guard after a lost in-place reassignment race")
-				}
-			}
-			respondError(publishResponse, nip47Request.Method, code, message)
+			refuse(constants.ERROR_UNAUTHORIZED, "identity_event does not authorize this transfer: "+claimReason(err))
 			return
 		}
+		// The item proof and the claim proof must be one signer's, or whoever
+		// assembled the item could re-point a captured claim proof.
+		if !nipcash.ItemSignerMatchesClaim(call.ItemSigner, verdict) {
+			refuse(constants.ERROR_UNAUTHORIZED, "the item proof was not signed by the claim proof's signer")
+			return
+		}
+		claimSigner = verdict.Signer
+		proofs = []cashwallet.ClaimProof{{EventID: verdict.RecomputedID, CreatedAt: eventCreatedAt(params.IdentityEvent), Method: method}}
+	}
 
-		logger.Logger.Info().
-			Uint("app_id", app.ID).
-			Str("new_identity_type", newIdentityType).
-			Msg("Cash wallet slice transferred")
-
-		// IdentityValue is safe to echo back for every mode, including
-		// cash: it is always either a public identity (pubkey/
-		// connection_key) or a one-way commitment the caller already
-		// supplied — never a secret the wallet itself generated.
-		publishResponse(&models.Response{
-			ResultType: nip47Request.Method,
-			Result: cashTransferResponse{
-				AmountMillis:  uint64(amount), //nolint:gosec // AmountMloki is always non-negative
-				IdentityType:  newIdentityType,
-				IdentityValue: newIdentityValueToStore,
-			},
-		}, tags)
+	// The call limit, keyed by the verified claim signer or the slice's
+	// commitment, never by the bill, and shared with cash_redeem and
+	// cash_consolidate.
+	limitKey := claimSigner
+	if isCashSource {
+		limitKey = claim.IdentityValue
+	}
+	if !controller.claimCallAllowed(limitKey) {
+		refuse(constants.ERROR_RATE_LIMITED, "too many calls by this signer; retry later")
 		return
 	}
 
-	controller.handleCashTransferSplit(ctx, nip47Request, app, currentIdentityType, currentIdentityValue, requestedAmount,
-		newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, callerProofPubkey, proofEventID, claim, publishResponse, tags)
+	// The call is authorized: its request_id is used from now on, whatever
+	// happens to it (NIP-CASH §request_id). A concurrent call that marked it
+	// first wins.
+	if err := cashrequest.New(controller.db).MarkUsed(params.RequestID, method); err != nil {
+		if errors.Is(err, cashrequest.ErrRequestReused) {
+			refuse(constants.ERROR_REQUEST_REUSED, "this request_id was already used on this node")
+			return
+		}
+		refuse(constants.ERROR_INTERNAL, "could not record this request_id, please retry")
+		return
+	}
+
+	// A zap transfer's source is bound to a pubkey (NIP-CZ).
+	isZap := params.ZapTarget != nil
+	if isZap && claim.IdentityType != db.CashIdentityPubkey {
+		refuse(constants.ERROR_RESTRICTED, "a zap transfer's source must be bound to a pubkey")
+		return
+	}
+
+	// Step 2: new_identity. A cash target is the caller's own commitment: the hub
+	// never generates a secret, since this reply travels over a connection every
+	// co-recipient can read.
+	newType := params.NewIdentity.IdentityType
+	newValue := params.NewIdentity.IdentityValue
+	newIA := params.NewIdentity.IAPubkey
+	if isZap && newType != db.CashIdentityPubkey {
+		refuse(constants.ERROR_BAD_REQUEST, "a zap transfer's new_identity must be a pubkey")
+		return
+	}
+	if code, message := validateNewIdentity(controller.iaChecker, newType, newValue, newIA); code != "" {
+		refuse(code, message)
+		return
+	}
+
+	// Step 3: the amount, against the slice's committed amount (never rewritten).
+	if requested == 0 {
+		refuse(constants.ERROR_BAD_REQUEST, "amount_millis must be positive")
+		return
+	}
+	if requested > uint64(claim.AmountMloki) { //nolint:gosec // non-negative
+		refuse(constants.ERROR_BAD_REQUEST, fmt.Sprintf("amount_millis %d exceeds this slice's own balance of %d", requested, claim.AmountMloki))
+		return
+	}
+	full := requested == uint64(claim.AmountMloki) //nolint:gosec // non-negative
+	// A zap transfer always spins off.
+	spinOff, err := isZap, error(nil)
+	if !isZap {
+		spinOff, err = controller.transferSpinsOff(app, claim, full, newType, newValue)
+	}
+	if err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to read a Cash wallet's recipient history")
+		refuse(constants.ERROR_INTERNAL, "failed to check wallet recipient history")
+		return
+	}
+
+	// Step 4: a partial split leaves no dust, and a cash source's remainder takes
+	// a fresh commitment so the source's secret opens nothing once it commits.
+	remainder := uint64(claim.AmountMloki) - requested                       //nolint:gosec // requested <= amount
+	if floor := uint64(max(claim.MinTransferMloki, 0)); !full && floor > 0 { //nolint:gosec // non-negative
+		if requested < floor {
+			refuse(constants.ERROR_RESTRICTED, fmt.Sprintf("amount_millis %d is below this slice's min_transfer_millis floor of %d", requested, floor))
+			return
+		}
+		if remainder < floor {
+			refuse(constants.ERROR_RESTRICTED, fmt.Sprintf("the %d remainder this split would leave behind is below this slice's min_transfer_millis floor of %d", remainder, floor))
+			return
+		}
+	}
+	partialCash := isCashSource && !full
+	if (params.RemainderCommitment != "") != partialCash {
+		refuse(constants.ERROR_BAD_REQUEST, "remainder_commitment is required for, and only for, a partial split of a cash slice")
+		return
+	}
+	if partialCash && (!nipcash.ValidCommitment(params.RemainderCommitment) || params.RemainderCommitment == claim.IdentityValue) {
+		refuse(constants.ERROR_BAD_REQUEST, "remainder_commitment must be a fresh 64-character lowercase hex commitment")
+		return
+	}
+
+	// The record commits with the transfer (NIP-CASH §The Record): its authorizer
+	// is the claim signer, or the source's commitment for a cash slice, whose
+	// tokens travel in the clear.
+	record := func(resultMeta any) (*db.CashRequestRecord, error) {
+		kind, authorizer := "pubkey", claimSigner
+		var delivery *string
+		if isCashSource {
+			kind, authorizer = "commitment", claim.IdentityValue
+		} else {
+			delivery = &claimSigner
+		}
+		return transferRecord(params.RequestID, app, call.Meta.Deadline, kind, authorizer, delivery, resultMeta)
+	}
+	source := apps.SliceRef{ClaimID: claim.ID, IdentityType: claim.IdentityType, IdentityValue: claim.IdentityValue, TransferCount: claim.TransferCount}
+
+	if spinOff {
+		newBills := 1
+		if remainder > 0 {
+			newBills = 2
+		}
+		code, message, refund := controller.spinOffLimitRefusal(app, newBills, true)
+		if code != "" {
+			refuse(code, message)
+			return
+		}
+		remainderType, remainderValue, remainderIA := claim.IdentityType, claim.IdentityValue, claim.IAPubkey
+		if partialCash {
+			remainderType, remainderValue, remainderIA = db.CashIdentityCash, params.RemainderCommitment, ""
+		}
+		var zap *cashwallet.ZapParams
+		if isZap {
+			zap = &cashwallet.ZapParams{Target: *params.ZapTarget, Sender: claim.IdentityValue}
+		}
+		controller.handleCashTransferSplit(ctx, method, app, claim, requested, remainder,
+			newType, newValue, newIA, remainderType, remainderValue, remainderIA,
+			claimSigner, source, proofs, zap, record, publishResponse, tags, refund)
+		return
+	}
+
+	// Step 5: in place. Only a full transfer reaches here, so the amount is the
+	// slice's own; the identity change, the consumed proof and the record commit
+	// together.
+	rec, err := record(cashTransferResponse{AmountMillis: requested, IdentityType: newType, IdentityValue: newValue})
+	if err != nil {
+		refuse(constants.ERROR_INTERNAL, "could not record this call")
+		return
+	}
+	if err := cashwallet.Reassign(ctx, controller.cashDeps(), cashwallet.ReassignParams{
+		WalletApp:        app,
+		Source:           source,
+		NewIdentityType:  newType,
+		NewIdentityValue: newValue,
+		NewIAPubkey:      newIA,
+		Proofs:           proofs,
+		Record:           rec,
+	}); err != nil {
+		controller.respondCommitError(publishResponse, method, app, err, "failed to reassign this slice's identity")
+		return
+	}
+
+	logger.Logger.Info().Uint("app_id", app.ID).Str("new_identity_type", newType).Msg("Cash wallet slice transferred")
+
+	// identity_value is always a public identity or a commitment the caller
+	// supplied, never a secret this hub generated.
+	publishResponse(&models.Response{
+		ResultType: method,
+		Result:     cashTransferResponse{AmountMillis: requested, IdentityType: newType, IdentityValue: newValue},
+	}, tags)
 }
 
-// handleCashTransferSplit moves a full or partial amount out of a slice and
-// into a brand-new, dedicated, single-slice cash_wallet under the same hub —
-// the unified split path HandleCashTransferEvent's step 9 routes to whenever
-// an in-place reassignment isn't safe or doesn't apply (see that step's own
-// comment for exactly when). newIdentityType/newIdentityValueToStore/
-// newIAPubkeyToStore describe the new wallet's sole recipient (any identity
-// mode, not cash-mode-only); recipientPubkey is the pubkey that just proved
-// ownership of the slice being split (identity_event's signer, empty for a
-// cash-mode caller) — the new wallet's connection is encrypted to this
-// pubkey and no one else, so it never touches the shared connection this
-// response itself travels over.
-//
-// Ordering mirrors cash_redeem_controller.go's own claim-then-pay-then-
-// rollback-on-failure shape: the source slice is claimed FIRST (an exclusive,
-// atomic commit point — see ClaimCashSlice), then the new wallets are created
-// and funded; any failure after that rolls the claim back (UnclaimCashSlice),
-// so a caller who hits an error here can safely retry — including with the
-// exact same identity_event, since rollback also releases proofEventID's
-// single-use guard (db.CashTransferProof) rather than leaving a proof that
-// never actually authorized anything permanently burned.
-func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, nip47Request *models.Request, app *db.App,
-	currentIdentityType, currentIdentityValue string, requestedAmount uint64,
-	newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, recipientPubkey, proofEventID string,
-	claim *db.CashWalletClaim, publishResponse publishFunc, tags nostr.Tags) {
-	// Enforce the slice's own min_transfer_millis floor (0 = none) on BOTH the
-	// carved piece and the remainder it would leave behind — a split that would
-	// carve off, or leave behind, unmovable dust is rejected before anything is
-	// claimed (NIP-CASH §Transferring and Splitting a Slice). claim.AmountMloki is immutable (no operation rewrites it in place),
-	// so this pre-claim read can't be raced smaller underneath the claim below.
-	if floor := uint64(claim.MinTransferMloki); floor > 0 { //nolint:gosec // MinTransferMloki is non-negative
-		remainder := uint64(claim.AmountMloki) - requestedAmount //nolint:gosec // requestedAmount <= claim.AmountMloki, bounded by step 6
-		if requestedAmount < floor {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				fmt.Sprintf("amount_millis %d is below this slice's min_transfer_millis floor of %d", requestedAmount, floor))
-			return
-		}
-		if remainder != 0 && remainder < floor {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				fmt.Sprintf("the %d remainder this split would leave behind is below this slice's min_transfer_millis floor of %d", remainder, floor))
-			return
+// locateSlice finds the slice a transfer acts on (NIP-CASH
+// §Transferring and Splitting a Slice, step 1): the unclaimed slice registered
+// to the identity, or for a cash secret the wallet's cash-mode slice. None is
+// NOT_FOUND (a removed slice counts as none); a claimed or terminal one, or a
+// bill past its expiry, is RESTRICTED.
+func (controller *nip47Controller) locateSlice(app *db.App, isCash bool, identityType, identityValue string) (*db.CashWalletClaim, string, string) {
+	q := controller.db.Where("wallet_app_id = ?", app.ID)
+	if isCash {
+		q = q.Where("identity_type = ?", db.CashIdentityCash)
+	} else {
+		q = q.Where("identity_type = ? AND identity_value = ?", identityType, identityValue)
+	}
+	var claims []db.CashWalletClaim
+	if err := q.Order("id").Find(&claims).Error; err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to look up Cash wallet claim")
+		return nil, constants.ERROR_INTERNAL, "failed to look up claim"
+	}
+	var live *db.CashWalletClaim
+	for i := range claims {
+		if claims[i].ClaimedAt == nil {
+			live = &claims[i]
+			break
 		}
 	}
+	switch {
+	case len(claims) == 0:
+		return nil, constants.ERROR_NOT_FOUND, "no slice registered for this identity"
+	case live == nil:
+		message := "this slice was already redeemed or transferred"
+		for _, c := range claims {
+			if c.SpunOffToWalletAppID != nil {
+				message += " — its value was split off into a new dedicated wallet by an earlier call; " +
+					"check cash_status or that call's own response for the new connection"
+				break
+			}
+		}
+		return nil, constants.ERROR_RESTRICTED, message
+	case app.ExpiresAt != nil && hubclock.Now().After(*app.ExpiresAt):
+		return nil, constants.ERROR_RESTRICTED, "this cash wallet is past its redemption deadline"
+	}
+	return live, "", ""
+}
 
-	// Claim the source slice TERMINAL — the operation's commit point. Its whole
-	// amount re-emerges as one or two fresh dedicated wallets; nothing is ever
-	// decremented in place, so a wallet's committed amount stays immutable for
-	// its life (NIP-CASH §Transferring and Splitting a Slice). This replaces the old
-	// decrement-in-place partial split.
-	claimedFull, err := controller.appsService.ClaimCashSlice(app.ID, currentIdentityType, currentIdentityValue)
+// verifyTransferClaimProof verifies a transfer's kind-23198 claim proof with
+// nmilat (NIP-CASH §Claim Proofs): its exact tags, its binding to this wallet, m
+// cash_transfer, this new_identity and this concrete amount, its freshness, that
+// it is unused, and its signer (for a connection_key slice, through a live
+// attestation by a trusted IA).
+func (controller *nip47Controller) verifyTransferClaimProof(app *db.App, claim *db.CashWalletClaim, params *nipcash.CashTransferRequest, amount uint64) (nipcash.ClaimVerdict, error) {
+	wallet := ""
+	if app.WalletPubkey != nil {
+		wallet = *app.WalletPubkey
+	}
+	store := cashrequest.New(controller.db)
+	return nipcash.VerifyClaimProof(params.IdentityEvent, nipcash.ClaimExpectation{
+		Binding: nipcash.ClaimBinding{
+			Method:          constants.NIP47MethodCashTransfer,
+			Wallet:          wallet,
+			NewIdentityHash: nipcash.NewIdentityHashOf(params.NewIdentity.IdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey),
+			AmountMillis:    &amount,
+		},
+		SliceType:   claim.IdentityType,
+		SliceValue:  claim.IdentityValue,
+		SliceIA:     claim.IAPubkey,
+		Attestation: params.AttestationEvent,
+		IATrusted: func(ia string) bool {
+			trusted, err := controller.iaChecker.IsTrusted(ia)
+			if err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to check Identity Authority trust")
+			}
+			return err == nil && trusted
+		},
+		Consumed: func(id string) bool {
+			used, err := store.IsProofConsumed(id)
+			return err == nil && used
+		},
+	}, time.Now())
+}
+
+// claimReason is a claim-proof refusal's reason, without nmilat's prefix.
+func claimReason(err error) string {
+	var claimErr *nipcash.ClaimError
+	if errors.As(err, &claimErr) {
+		return claimErr.Reason
+	}
+	return "it does not verify"
+}
+
+// eventCreatedAt is a claim proof's created_at, the retention anchor of its
+// consumed id; 0 when it does not parse (it verified, so it does).
+func eventCreatedAt(raw string) int64 {
+	var ev struct {
+		CreatedAt int64 `json:"created_at"`
+	}
+	_ = json.Unmarshal([]byte(raw), &ev)
+	return ev.CreatedAt
+}
+
+// transferSpinsOff decides a transfer's outcome (NIP-CASH §Which outcome a
+// request produces): a partial split always spins off. A full transfer to a
+// pubkey or connection_key is in place, unless that identity already holds
+// another unclaimed slice on this wallet. A slice of its whose payout is still in
+// flight counts as held: a failed payout releases it, and the wallet would then
+// hold two live slices for one identity. A full transfer to cash is in place
+// only on a wallet that has, and has always had, exactly one recipient.
+func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashWalletClaim, full bool, newType, newValue string) (bool, error) {
+	if !full {
+		return true, nil
+	}
+	if newType != db.CashIdentityCash {
+		var held int64
+		err := controller.db.Model(&db.CashWalletClaim{}).
+			Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND id <> ?",
+				app.ID, newType, newValue, claim.ID).
+			Where("claimed_at IS NULL OR (payment_hash <> '' AND preimage = '')").
+			Count(&held).Error
+		return held > 0, err
+	}
+	// Cash: a cash redemption carries its raw secret in the request body, so a
+	// cash slice may stay on a connection only no one else ever held. "Always had"
+	// is the lifetime set: live claims, archived (removed) slices, and in-place
+	// handoffs, which TransferCount counts. The pairing secret derives from the app
+	// id and cannot be rotated, so every former holder still reads this connection.
+	all, err := controller.appsService.ListClaimsForWallet(app.ID)
 	if err != nil {
-		// Same NOT_FOUND-vs-BAD_REQUEST distinction as the in-place transfer
-		// path above — a race loss is NOT_FOUND, everything else BAD_REQUEST.
-		// Same err.Error()-is-only-safe-for-the-ErrNotFound-case reasoning too:
-		// any other failure is a raw internal error that must not be echoed
-		// to the caller verbatim.
-		code := constants.ERROR_BAD_REQUEST
-		message := "failed to claim this slice"
-		if errors.Is(err, constants.ErrNotFound) {
-			code = constants.ERROR_NOT_FOUND
-			message = err.Error()
-		} else {
-			logger.Logger.Error().Err(err).Uint("app_id", app.ID).
-				Msg("Unexpected failure claiming a cash_transfer slice for split")
-		}
-		respondError(publishResponse, nip47Request.Method, code, message)
-		return
+		return false, err
 	}
-	remainderAmount := uint64(claimedFull) - requestedAmount //nolint:gosec // claimedFull >= requestedAmount, bounded by HandleCashTransferEvent step 6
+	if len(all) != 1 || claim.TransferCount > 0 {
+		return true, nil
+	}
+	removed, err := controller.appsService.HasArchivedSliceForWallet(app.ID)
+	if err != nil {
+		return false, err
+	}
+	return removed, nil
+}
 
-	// releaseProof drops the single-use proof replay guard so a caller who hits
-	// a failure can retry with the identical proof, regardless of whether the
-	// source claim itself gets restored.
-	releaseProof := func() {
-		if proofEventID != "" {
-			if delErr := controller.db.Where("event_id = ?", proofEventID).Delete(&db.CashTransferProof{}).Error; delErr != nil {
-				logger.Logger.Error().Err(delErr).Uint("app_id", app.ID).
-					Msg("Failed to release cash_transfer proof replay guard after a rolled-back split")
+// spinOffLimitRefusal bounds spin-offs (NIP-CASH §Security Considerations for
+// Cash-Mode Slices): the live bills under the Cash Hub (QUOTA_EXCEEDED), for a
+// call that adds newBills (one that adds none passes the cap), then, when
+// lineage is set, per bill lineage per hour (RATE_LIMITED). The cap is read
+// first, so a call it refuses spends none of the lineage's allowance. "" when
+// the spin-off may proceed; refund then gives the allowance back, for a call
+// whose commit does not happen.
+func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int, lineage bool) (code, message string, refund func()) {
+	refund = func() {}
+	env := controller.cfg.GetEnv()
+	limit := env.CashMaxLiveBillsPerHub
+	// A regtest test hook may override either limit (testknobs; inert otherwise).
+	if v, ok := testknobs.LiveWalletCap(); ok {
+		limit = v
+	}
+	if limit > 0 && app.ParentAppID != nil && newBills > 0 {
+		var live int64
+		if err := controller.db.Model(&db.App{}).
+			Where("parent_app_id = ? AND kind = ?", *app.ParentAppID, db.AppKindCashWallet).Count(&live).Error; err != nil {
+			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to count a Cash Hub's live bills")
+			return constants.ERROR_INTERNAL, "failed to check this hub's live bills", refund
+		}
+		if live+int64(newBills) > int64(limit) {
+			return constants.ERROR_QUOTA_EXCEEDED, fmt.Sprintf("this Cash Hub holds its maximum of %d live bills", limit), refund
+		}
+	}
+	if lineage {
+		key := strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10)
+		if testknobs.SpinOffRateSet() {
+			// The test override keeps no refundable allowance: refund stays a no-op.
+			if !testknobs.AllowSpinOff(key, hubclock.Now()) {
+				return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills; retry later", refund
+			}
+		} else if controller.lineageLimiter != nil {
+			if !controller.lineageLimiter.Allow(key, env.CashLineageSpinOffsPerHour) {
+				return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later", refund
+			}
+			if r, ok := controller.lineageLimiter.(refunder); ok {
+				refund = func() { r.Refund(key) }
 			}
 		}
 	}
-	// rollback releases the proof AND restores the source slice to its full
-	// original amount. Only safe to call when the source's real balance
-	// genuinely still backs that full amount — see the SplitInTwo call site
-	// below for the case where it does not.
-	rollback := func() {
-		releaseProof()
-		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, currentIdentityType, currentIdentityValue); unclaimErr != nil {
-			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).
-				Msg("Failed to roll back a claimed slice after a failed cash_transfer split")
-		}
-	}
+	return "", "", refund
+}
 
+// handleCashTransferSplit spins a slice off into one or two new dedicated bills
+// (NIP-CASH §Spinning a Slice Off Into a Dedicated Wallet): the carved bill for
+// new_identity and, for a partial split, the remainder bill. The source claim,
+// the new bills, their funding, the consumed proof and the record are one
+// commit (cashwallet.SplitInTwo): a failure leaves the slice claimable and the
+// proof unused. Each token is nested-encrypted to deliverTo, the claim signer, or
+// returned in the clear for a cash source (single-recipient by construction).
+// refund gives back the lineage's spin-off allowance when nothing commits.
+func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, method string, app *db.App,
+	claim *db.CashWalletClaim, amount, remainder uint64,
+	newType, newValue, newIA, remainderType, remainderValue, remainderIA string,
+	deliverTo string, source apps.SliceRef, proofs []cashwallet.ClaimProof, zap *cashwallet.ZapParams,
+	record func(resultMeta any) (*db.CashRequestRecord, error), publishResponse publishFunc, tags nostr.Tags, refund func()) {
+	committed := false
+	defer func() {
+		if !committed {
+			refund()
+		}
+	}()
 	if app.ParentAppID == nil {
-		rollback()
 		logger.Logger.Error().Uint("app_id", app.ID).Msg("cash_wallet has no parent hub; cannot split off a slice")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to split off slice")
+		respondError(publishResponse, method, constants.ERROR_INTERNAL, "failed to split off slice")
 		return
 	}
 	hubApp := controller.appsService.GetAppById(*app.ParentAppID)
 	if hubApp == nil {
-		rollback()
 		logger.Logger.Error().Uint("app_id", app.ID).Uint("hub_app_id", *app.ParentAppID).Msg("cash_wallet's parent hub no longer exists")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to split off slice")
+		respondError(publishResponse, method, constants.ERROR_INTERNAL, "failed to split off slice")
 		return
 	}
 
-	// Both new wallets inherit the source slice's own expiry, floor, and fee —
-	// a split relocates an existing entitlement, never grants, shortens, or
-	// lengthens one (NIP-CASH's inheritance rule). The carved piece goes to
-	// new_identity; the remainder (when > 0) goes back to the caller's OWN
-	// current identity in its own fresh wallet.
-	result, sourceFundsIntact, err := cashwallet.SplitInTwo(ctx, cashwallet.Deps{
-		AppsService:         controller.appsService,
-		TransactionsService: controller.transactionsService,
-		LNClient:            controller.lnClient,
-		Keys:                controller.keys,
-		DB:                  controller.db,
-		RelayURLs:           controller.cfg.GetRelayUrls(),
-	}, cashwallet.SplitInTwoParams{
+	meta := cashTransferResponse{AmountMillis: amount, IdentityType: newType, IdentityValue: newValue}
+	if remainder > 0 {
+		meta.RemainingAmountMillis = &remainder
+	}
+	rec, err := record(meta)
+	if err != nil {
+		respondError(publishResponse, method, constants.ERROR_INTERNAL, "could not record this call")
+		return
+	}
+	// Both new bills inherit the source slice's expiry, floor and fee: a split
+	// relocates an entitlement, never grants, shortens or lengthens one.
+	result, err := cashwallet.SplitInTwo(ctx, controller.cashDeps(), cashwallet.SplitInTwoParams{
 		HubApp:                 hubApp,
 		SourceWalletApp:        app,
-		CarvedIdentityType:     newIdentityType,
-		CarvedIdentityValue:    newIdentityValueToStore,
-		CarvedIAPubkey:         newIAPubkeyToStore,
-		CarvedAmountMloki:      requestedAmount,
-		RemainderIdentityType:  currentIdentityType,
-		RemainderIdentityValue: currentIdentityValue,
-		RemainderIAPubkey:      claim.IAPubkey,
-		RemainderAmountMloki:   remainderAmount,
+		Source:                 source,
+		CarvedIdentityType:     newType,
+		CarvedIdentityValue:    newValue,
+		CarvedIAPubkey:         newIA,
+		CarvedAmountMloki:      amount,
+		RemainderIdentityType:  remainderType,
+		RemainderIdentityValue: remainderValue,
+		RemainderIAPubkey:      remainderIA,
+		RemainderAmountMloki:   remainder,
 		MinTransferMloki:       claim.MinTransferMloki,
 		RedeemFeePpm:           claim.RedeemFeePpm,
 		RedeemFeeBaseMloki:     claim.RedeemFeeBaseMloki,
+		Ordered:                claim.Ordered,
+		UnfinalPaymentIDs:      claim.UnfinalPaymentIDs,
 		ExpiresAt:              app.ExpiresAt,
+		Proofs:                 proofs,
+		Record:                 rec,
+		Zap:                    zap,
 	})
 	if err != nil {
-		if sourceFundsIntact {
-			rollback()
-		} else {
-			// The carved wallet's compensating reverse-transfer itself failed:
-			// the source's real balance is short by the carved amount, which is
-			// still sitting in the (deliberately retained) carved wallet. The
-			// proof is released so the caller isn't permanently burned, but the
-			// source claim is intentionally NOT restored — doing so would let
-			// the caller believe they have the full original amount when the
-			// wallet can't actually pay it out.
-			releaseProof()
-			logger.Logger.Error().Uint("app_id", app.ID).
-				Msg("Split-off compensation failed; source slice intentionally left claimed pending manual reconciliation")
-		}
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to split off Cash wallet slice")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to split off slice")
+		controller.respondCommitError(publishResponse, method, app, err, "failed to split off slice")
 		return
 	}
+	committed = true
 
-	// The funds have moved, so the source slice is terminal on every path from
-	// here, including a connection that can't be delivered below. A drained
-	// source is auto-deleted after the response either way (NIP-CASH
-	// §Lifecycle and Deletion: one policy for every drain mechanism).
-	// Best-effort; the expiry sweep remains the fallback.
+	// The commit is done, so the source slice is terminal on every path from here,
+	// including a connection that cannot be delivered below. A drained source is
+	// auto-deleted after the response (NIP-CASH §Lifecycle and Deletion).
 	defer controller.maybeAutoDeleteDrainedCashWallet(app)
 
-	// deliver returns a new wallet's clear pubkey plus its token — nested-
-	// encrypted to the caller's proof pubkey (so no co-recipient of THIS shared
-	// connection can read it, exactly as before), or in the clear for a
-	// cash-mode caller whose source wallet is structurally single-recipient
-	// (there is no co-holder to defend against). Funds have already moved by
-	// this point, so a delivery failure is operator-recoverable, never a
-	// rollback (§Spinning a Slice Off).
 	deliver := func(w *cashwallet.SplitResult) (pubkey, token string, ok bool) {
 		if w.WalletApp.WalletPubkey != nil {
 			pubkey = *w.WalletApp.WalletPubkey
 		}
-		if recipientPubkey == "" {
+		if deliverTo == "" {
 			return pubkey, w.CashToken, true
 		}
 		privKey, keyErr := controller.keys.GetAppWalletKey(w.WalletApp.ID)
 		if keyErr != nil {
 			logger.Logger.Error().Err(keyErr).Uint("new_wallet_id", w.WalletApp.ID).
-				Msg("Failed to derive split-off wallet key; funds moved but could not be delivered")
+				Msg("Failed to derive split-off wallet key; the bill committed but could not be delivered")
 			return "", "", false
 		}
-		enc, encErr := encryptForRecipient(recipientPubkey, privKey, w.CashToken)
+		enc, encErr := encryptForRecipient(deliverTo, privKey, w.CashToken)
 		if encErr != nil {
 			logger.Logger.Error().Err(encErr).Uint("new_wallet_id", w.WalletApp.ID).
-				Msg("Failed to encrypt split-off wallet token; funds moved but could not be delivered")
+				Msg("Failed to encrypt split-off wallet token; the bill committed but could not be delivered")
 			return "", "", false
 		}
 		return pubkey, enc, true
 	}
 
-	// Informational bookkeeping links (db.CashWalletClaim.SpunOffToWalletAppID /
-	// db.App.SplitFromWalletAppID) — the source slice records the carved wallet
-	// it spun off to, and the carved wallet records its source. Never fail here:
-	// the funds have already moved and both wallets are live.
-	if setErr := controller.appsService.SetCashSliceSplitTarget(app.ID, currentIdentityType, currentIdentityValue, result.Carved.WalletApp.ID); setErr != nil {
-		logger.Logger.Error().Err(setErr).Uint("app_id", app.ID).Uint("new_wallet_id", result.Carved.WalletApp.ID).
-			Msg("Failed to record split target on the source slice")
-	}
-	if setSrcErr := controller.appsService.SetCashWalletSplitSource(result.Carved.WalletApp.ID, app.ID); setSrcErr != nil {
-		logger.Logger.Error().Err(setSrcErr).Uint("app_id", app.ID).Uint("new_wallet_id", result.Carved.WalletApp.ID).
-			Msg("Failed to record split source on the carved wallet")
-	}
-
 	carvedPubkey, carvedToken, ok := deliver(result.Carved)
 	if !ok {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
+		respondError(publishResponse, method, constants.ERROR_INTERNAL,
 			"slice was split off but its connection could not be delivered; contact the wallet operator")
 		return
 	}
-
 	resp := cashTransferResponse{
-		AmountMillis:    requestedAmount,
-		IdentityType:    newIdentityType,
-		IdentityValue:   newIdentityValueToStore,
+		AmountMillis:    amount,
+		IdentityType:    newType,
+		IdentityValue:   newValue,
 		NewWalletPubkey: carvedPubkey,
 		NewWalletToken:  carvedToken,
+	}
+	if z := result.Carved.Zap; z != nil {
+		issued, expires := z.IssuedAt, z.ExpiresAt
+		resp.IssuedAt, resp.ExpiresAt = &issued, &expires
 	}
 	if result.Remainder != nil {
 		remPubkey, remToken, ok := deliver(result.Remainder)
 		if !ok {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
+			respondError(publishResponse, method, constants.ERROR_INTERNAL,
 				"slice was split off but the remainder connection could not be delivered; contact the wallet operator")
 			return
 		}
-		if setSrcErr := controller.appsService.SetCashWalletSplitSource(result.Remainder.WalletApp.ID, app.ID); setSrcErr != nil {
-			logger.Logger.Error().Err(setSrcErr).Uint("app_id", app.ID).Uint("new_wallet_id", result.Remainder.WalletApp.ID).
-				Msg("Failed to record split source on the remainder wallet")
-		}
-		resp.RemainingAmountMillis = &remainderAmount
+		resp.RemainingAmountMillis = &remainder
 		resp.RemainderWalletPubkey = remPubkey
 		resp.RemainderWalletToken = remToken
 	}
@@ -860,11 +746,71 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	logger.Logger.Info().
 		Uint("app_id", app.ID).
 		Uint("carved_wallet_id", result.Carved.WalletApp.ID).
-		Uint64("carved_amount_mloki", requestedAmount).
-		Uint64("remainder_amount_mloki", remainderAmount).
+		Uint64("carved_amount_mloki", amount).
+		Uint64("remainder_amount_mloki", remainder).
 		Msg("Cash wallet slice split off into fresh dedicated wallet(s)")
 
-	publishResponse(&models.Response{ResultType: nip47Request.Method, Result: resp}, tags)
+	publishResponse(&models.Response{ResultType: method, Result: resp}, tags)
+}
+
+// transferRecord is a transfer's record: its target is this bill, its result_meta
+// the reply's non-secret fields other than the new bills, which the record's bill
+// rows carry.
+func transferRecord(requestID string, bill *db.App, deadline int64, authorizerKind, authorizer string, delivery *string, resultMeta any) (*db.CashRequestRecord, error) {
+	raw, err := json.Marshal(resultMeta)
+	if err != nil {
+		return nil, err
+	}
+	target := ""
+	if bill.WalletPubkey != nil {
+		target = *bill.WalletPubkey
+	}
+	return &db.CashRequestRecord{
+		RequestID:          requestID,
+		Method:             constants.NIP47MethodCashTransfer,
+		HubAppID:           derefUint(bill.ParentAppID),
+		TargetWalletPubkey: target,
+		TargetConnPubkey:   bill.AppPubkey,
+		AuthorizerKind:     authorizerKind,
+		Authorizer:         authorizer,
+		Deadline:           deadline,
+		DeliveryPubkey:     delivery,
+		ResultMeta:         string(raw),
+	}, nil
+}
+
+func derefUint(p *uint) uint {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+// cashDeps are the services a cash commit needs.
+func (controller *nip47Controller) cashDeps() cashwallet.Deps {
+	return cashwallet.Deps{
+		AppsService:         controller.appsService,
+		TransactionsService: controller.transactionsService,
+		LNClient:            controller.lnClient,
+		Keys:                controller.keys,
+		DB:                  controller.db,
+		RelayURLs:           controller.cfg.GetRelayUrls(),
+		IAChecker:           controller.iaChecker,
+		Hooks:               controller.cashHooks,
+	}
+}
+
+// respondCommitError answers a failed cash commit. Nothing was committed: the
+// outcomes NIP-CASH names get their code and a fixed message; anything else is
+// logged and answered with fallback, never echoing an internal error.
+func (controller *nip47Controller) respondCommitError(publishResponse publishFunc, method string, app *db.App, err error, fallback string) {
+	code := mapCashWalletErrorCode(err)
+	if errors.Is(err, cashrequest.ErrDeadlinePassed) || errors.Is(err, apps.ErrSliceClaimed) || errors.Is(err, cashwallet.ErrProofUsed) {
+		respondError(publishResponse, method, code, commitErrorMessage(err))
+		return
+	}
+	logger.Logger.Error().Err(err).Uint("app_id", app.ID).Str("method", method).Msg("Cash commit failed; nothing was committed")
+	respondError(publishResponse, method, code, fallback)
 }
 
 // maybeAutoDeleteDrainedCashWallet deletes app if it has no unclaimed slices
@@ -892,80 +838,4 @@ func (controller *nip47Controller) maybeAutoDeleteDrainedCashWallet(app *db.App)
 	}
 	logger.Logger.Info().Uint("app_id", app.ID).
 		Msg("Archived and auto-deleted fully-drained Cash wallet")
-}
-
-// verifyTransferIdentityEvent checks a kind-23198 transfer proof — the same
-// event kind and most of the same checks as verifyClaimIdentityEvent
-// (cash_redeem_controller.go), except bound to the transfer's *target*
-// identity via a new_identity_hash tag instead of an invoice's bolt11_hash,
-// AND to the specific amount_millis this request resolves to (NIP-CASH
-// §Transferring and Splitting a Slice: "a proof MUST NOT be replayable to
-// authorize a DIFFERENT amount_millis than the one it was signed for" — an
-// omitted request amount_millis, i.e. a full transfer, is bound to the exact
-// live amount resolved for it, never left unbound). Caller passes the
-// already-resolved requestedAmount (§Processing Algorithm step 1's
-// "treating an omitted amount_millis as bound to the slice's full current
-// amount" rule already applied) — this function only compares it against
-// what the proof itself commits to.
-//
-// The identity/target binding alone isn't enough once splitting exists: an
-// in-place full reassignment naturally self-invalidates a replayed proof
-// (the slice's registered identity changes, so the proof's signer no longer
-// matches), but a partial split leaves the SAME identity registered on the
-// source slice — so, unlike before splitting existed, a captured proof
-// would otherwise remain "valid" for repeat reuse within its freshness
-// window. Callers MUST additionally insert a db.CashTransferProof row (see
-// its own doc comment) immediately after this function returns nil, to
-// make every proof single-use regardless of amount.
-//
-// Deliberately a separate function rather than a refactor of
-// verifyClaimIdentityEvent to accept either binding: that function is
-// already security-critical and covered by its own focused tests: safer to
-// duplicate its structure once, here, than to risk it while generalizing it.
-func verifyTransferIdentityEvent(ev *nostr.Event, identityType, identityValue, walletPubkey, newIdentityHashTag string, requestedAmount uint64, attestationEventID string) error {
-	if ev.Kind != nostrKindClaimProof {
-		return fmt.Errorf("identity_event must be kind %d, got %d", nostrKindClaimProof, ev.Kind)
-	}
-	valid, err := ev.CheckSignature()
-	if err != nil || !valid {
-		return fmt.Errorf("identity_event has invalid signature")
-	}
-	if !ev.CheckID() {
-		return fmt.Errorf("identity_event id does not match its content")
-	}
-	dTag := ev.Tags.Find("d")
-	if len(dTag) < 2 || dTag[1] != walletPubkey {
-		return fmt.Errorf("identity_event d-tag does not match this wallet")
-	}
-	hashTag := ev.Tags.Find("new_identity_hash")
-	if len(hashTag) < 2 || hashTag[1] != newIdentityHashTag {
-		return fmt.Errorf("identity_event is not bound to this new_identity")
-	}
-	amountTag := ev.Tags.Find("amount_millis")
-	if len(amountTag) < 2 || amountTag[1] != strconv.FormatUint(requestedAmount, 10) {
-		return fmt.Errorf("identity_event is not bound to this amount_millis")
-	}
-	now := time.Now()
-	evTime := ev.CreatedAt.Time()
-	if evTime.Before(now.Add(-cashRedeemIdentityFreshnessWindow)) || evTime.After(now.Add(time.Minute)) {
-		return fmt.Errorf("identity_event is stale or has a future timestamp")
-	}
-
-	if identityType == db.CashIdentityConnectionKey {
-		connKeyTag := ev.Tags.Find("connection_key")
-		if len(connKeyTag) < 2 || connKeyTag[1] != identityValue {
-			return fmt.Errorf("identity_event connection_key tag does not match identity_value")
-		}
-		eTag := ev.Tags.FindWithValue("e", attestationEventID)
-		if len(eTag) == 0 {
-			return fmt.Errorf("identity_event must reference the attestation event via an e-tag")
-		}
-		return nil
-	}
-
-	// pubkey mode: the event's own signer IS the proof of ownership.
-	if ev.PubKey != identityValue {
-		return fmt.Errorf("identity_event must be signed by identity_value")
-	}
-	return nil
 }

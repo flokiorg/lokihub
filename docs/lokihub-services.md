@@ -20,44 +20,44 @@ for a new user.
 | Main Nostr relay | where NIP-47 wallet-connect traffic actually flows |
 | General relay list | everyday Nostr stuff |
 | Search relay | profile and contact-list lookups (Circle Wallet's following checks) |
-| LSP(s) | who you buy Lightning liquidity from |
+| LSP(s) | who you buy Lightning liquidity from, picked from their NIP-LSP announcements |
 | Block explorer | on-chain data, mempool-style API |
 | Swap service | on-chain ⇄ Lightning swaps |
 | Messageboard relay (optional) | an experimental nostr-messageboard integration |
 | Identity Authorities | who's trusted to vouch for a Cash Hub connection-key claim — see [NIP-CASH](https://github.com/ohstr/nips/blob/main/NIP-CASH.md) |
 
-## The built-in defaults list
+## Where the LSP list comes from
 
-Right now only the LSP list is actually seeded this way, from a small `services.json` file Lokihub keeps
-in its own `lokihub-services` repo — the same pattern the [App Store](lokihub-appstore.md) uses for its
-catalog: a separate repo, served over HTTPS, updatable without an app release. The other rows in the
-table above don't currently have a synced default source. Despite the internal name, this isn't a
-crowdsourced or community-editable list — it's Lokihub's own short list of known-good LSPs, there so a
-new user doesn't have to hand-type a raw connection string. The source is configurable too, for pointing
-at your own mirror.
+LSPs announce themselves: each publishes one NIP-LSP announcement (kind 10735), signed by its Lightning
+node key, listing its addresses, the LSPS services it sells and their parameters. Lokihub reads these
+announcements from its relays for its own chain and network, at most 200, and shows them unranked on the
+Services screen. Nothing is trusted by default: you tick the LSPs you trust, and only those are ever
+contacted or used. There is no built-in list and no `pubkey@host` input; you can add an LSP by its node
+key, and its announcement supplies the rest.
 
 ```mermaid
 sequenceDiagram
-    participant Ticker as every few hours
-    participant Sync as catalog sync
-    participant Remote as lokihub-services repo
-    participant Cache as local cache
+    participant LSP
+    participant Relay
+    participant Hub as Lokihub
     participant You as Services screen
-
-    Ticker->>Sync: time to check in
-    Sync->>Remote: fetch the list
-    Remote-->>Sync: here's what's suggested
-    Sync->>Cache: save it
-    You->>Cache: read the cached list
-    You->>You: merge with whatever you already added by hand
-    You-->>You: pick one, or type in your own
+    LSP->>Relay: announcement (kind 10735)
+    Hub->>Relay: read announcements, newest per node
+    You->>Hub: trust this LSP
+    Hub->>LSP: connect, LSPS0 list_protocols, LSPS1/LSPS2 get_info
+    LSP-->>Hub: live terms
+    Hub-->>You: live check: same as announced, or worse
 ```
 
-The merge is meant to be additive — a default suggestion pre-fills the form rather than replacing what
-you typed. One edge case falls outside that: entries are matched by pubkey, so if an LSP you added by
-hand shares a pubkey with one that later shows up on the community list, the sync overwrites that
-entry's name, host, and description with the community version (it does preserve whether you'd marked it
-active). Only a pubkey collision triggers this — an LSP you added under a different key is never touched.
+An announcement only advertises. Its title, description and website are the LSP's own claims; the
+Services screen shows the node id beside every title, marks two LSPs claiming the same name, and shows
+whether the node is in your own node's view of the network. The newest announcement of each node is
+remembered even when it fails a check, so a relay serving an older one cannot bring it back. A paused
+LSP sells nothing new, and a closed one disappears from the list (existing channels stay). Before a
+purchase the live LSPS answers decide: when they are worse than announced, Lokihub shows both and asks
+again.
+
+`services.json` still provides the rates, currencies, info and FAQ, but no LSPs.
 
 ## Where the trust actually lives
 

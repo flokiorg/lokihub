@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"net/url"
 
 	"github.com/nbd-wtf/go-nostr"
 
@@ -20,11 +19,9 @@ import (
 
 // --- mint_cash ---
 //
-// A cash_wallet's connection is now shared by every recipient named in one
-// mint_cash call — there is no more per-recipient encrypted reveal or
-// separate claim_cash_wallet step. The plaintext pairing_uri comes back
-// directly in the response, over the already end-to-end-encrypted NIP-47
-// channel the hub itself is using.
+// A bill's connection is shared by every recipient named in one mint_cash
+// call, and its cash_token is the whole credential: the reply carries no other
+// connection form.
 
 type CashWalletRecipientParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "cash"
@@ -36,8 +33,6 @@ type CashWalletRecipientParam struct {
 type MintCashParams struct {
 	Recipients []CashWalletRecipientParam `json:"recipients"`
 	Expiry     int                        `json:"expiry,omitempty"`
-	// MintSignature opts the issued token into mint provenance (§Mint Provenance).
-	MintSignature bool `json:"mint_signature,omitempty"`
 }
 
 type CashWalletRecipientResult struct {
@@ -49,7 +44,6 @@ type CashWalletRecipientResult struct {
 
 type MintCashResult struct {
 	WalletPubkey string                      `json:"wallet_pubkey"`
-	PairingURI   string                      `json:"pairing_uri"`
 	CashToken    string                      `json:"cash_token"`
 	ExpiresAt    int64                       `json:"expires_at"`
 	Recipients   []CashWalletRecipientResult `json:"recipients"`
@@ -163,9 +157,8 @@ type ConsolidateSourceParam struct {
 }
 
 type CashConsolidateParams struct {
-	Sources       []ConsolidateSourceParam     `json:"sources"`
-	NewIdentity   CashTransferNewIdentityParam `json:"new_identity"`
-	MintSignature bool                         `json:"mint_signature,omitempty"`
+	Sources     []ConsolidateSourceParam     `json:"sources"`
+	NewIdentity CashTransferNewIdentityParam `json:"new_identity"`
 }
 
 // CashConsolidateResult's NewWalletToken is the merged lokicash1... token,
@@ -209,11 +202,12 @@ type CashStatusParams struct {
 
 type CashStatusResult struct {
 	Recipients []RecipientStatus `json:"recipients"`
-	// Error/RetainedUntil carry the spent-bill tombstone instead of a roster:
-	// a bill this hub has destroyed, still inside its retention window,
-	// answers {"error":"spent","retained_until":<unix>} rather than falling
-	// silent (NIP-CASH §Cash Status). Both are absent on a roster response.
-	Error         string `json:"error,omitempty"`
+	// Status/Reason/RetainedUntil carry the spent-bill tombstone instead of a
+	// roster: a bill this hub has destroyed, still inside its retention window,
+	// answers {"status":"spent","reason":…,"retained_until":<unix>} (NIP-CASH
+	// §Answering About a Destroyed Bill). All are absent on a roster response.
+	Status        string `json:"status,omitempty"`
+	Reason        string `json:"reason,omitempty"`
 	RetainedUntil *int64 `json:"retained_until,omitempty"`
 }
 
@@ -227,8 +221,10 @@ type CreateCircleWalletParams struct {
 	// something else.
 	ConnectionPubkey string `json:"connection_pubkey"`
 	MaxAmount        uint64 `json:"max_amount"`
-	Expiry           int    `json:"expiry"`
-	BudgetRenewal    string `json:"budget_renewal,omitempty"`
+	// MaxReceive is sent as max_amount when left 0 (bindJoinProof).
+	MaxReceive    uint64 `json:"max_receive,omitempty"`
+	Expiry        int    `json:"expiry"`
+	BudgetRenewal string `json:"budget_renewal,omitempty"`
 	// IdentityEvent is a JSON-encoded, freshly-signed kind-23199 proof that
 	// the caller controls Pubkey, bound to this specific hub via its d-tag
 	// and to ConnectionPubkey via its connection tag (see
@@ -260,16 +256,18 @@ func circleConnectionPubkey(memberPubkey string) string {
 	return pub
 }
 
-// CircleWalletURI is the connection string the member builds for itself from
-// the join's details and its own secret (NIP-CW §Response): the Hub sends
-// neither.
-func CircleWalletURI(details CircleWalletDetails, memberPubkey string) string {
-	query := url.Values{}
-	for _, relay := range details.Relays {
-		query.Add("relay", relay)
-	}
-	query.Set("secret", circleConnectionSecret(memberPubkey))
-	return "nostr+walletconnect://" + details.WalletPubkey + "?" + query.Encode()
+// circleWalletConnection is what a member connects through: the wallet pubkey
+// and relays from the join's details and its own secret (NIP-CW §Response); the
+// Hub sends neither a URI nor the secret.
+type circleWalletConnection struct {
+	WalletPubkey string
+	Relays       []string
+	Secret       string
+}
+
+// CircleWalletConnection is the member's connection to its circle wallet.
+func CircleWalletConnection(details CircleWalletDetails, memberPubkey string) circleWalletConnection {
+	return circleWalletConnection{WalletPubkey: details.WalletPubkey, Relays: details.Relays, Secret: circleConnectionSecret(memberPubkey)}
 }
 
 // CreateCircleWalletResult carries exactly one field on purpose: the join is
@@ -302,15 +300,19 @@ type GetBudgetResult struct {
 	TotalBudget   uint64  `json:"total_budget"`
 	RenewsAt      *uint64 `json:"renews_at,omitempty"`
 	RenewalPeriod string  `json:"renewal_period"`
+	// A Circle Wallet's receive cap and what counts against it this period.
+	TotalReceiveBudget *uint64 `json:"total_receive_budget,omitempty"`
+	UsedReceiveBudget  *uint64 `json:"used_receive_budget,omitempty"`
 }
 
 type GetInfoResult struct {
-	Alias         *string           `json:"alias"`
-	Pubkey        *string           `json:"pubkey"`
-	Network       *string           `json:"network"`
-	Methods       []string          `json:"methods"`
-	Notifications []string          `json:"notifications"`
-	CircleWallet  *CircleWalletInfo `json:"circle_wallet,omitempty"`
+	Alias          *string           `json:"alias"`
+	Pubkey         *string           `json:"pubkey"`
+	Network        *string           `json:"network"`
+	Methods        []string          `json:"methods"`
+	PrivateMethods []string          `json:"private_methods"`
+	Notifications  []string          `json:"notifications"`
+	CircleWallet   *CircleWalletInfo `json:"circle_wallet,omitempty"`
 }
 
 // CircleWalletInfo mirrors nip47/controllers/get_info_controller.go's

@@ -130,10 +130,11 @@ func TestCashStatusScope_MineForANonRecipientReturnsNothing(t *testing.T) {
 	svc, wallet, _, _ := scopeFixture(t)
 	stranger, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
+	// NIP-CASH §Scoping the Roster: no rows, but NOT_FOUND.
 	response := callStatus(t, svc, wallet, statusRequest(t, nipcash.ScopeMine), &CashStatusCaller{IdentityValue: stranger})
-	require.Nil(t, response.Error)
-	result := response.Result.(nipcash.CashStatusResult)
-	assert.Empty(t, result.Recipients, "a non-recipient must get no rows, never the full roster")
+	require.NotNil(t, response.Error, "a non-recipient must get no rows, never the full roster")
+	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
+	assert.Nil(t, response.Result)
 }
 
 // TestCashStatusScope_CashModeBillScopesToItsCashRows documents an honest limit.

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -127,8 +128,11 @@ func (svc *service) startNostr(ctx context.Context) error {
 
 	svc.nip47Service.StartNotifier(ctx, pool)
 	svc.nip47Service.StartNip47InfoPublisher(ctx, pool, svc.lnClient)
-	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher, svc.PruneExpiredSpentBills,
+	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher,
 		time.Duration(svc.cfg.GetEnv().CashSplitLinkRetentionDays)*24*time.Hour)
+	StartOrphanRedeemSweep(ctx, svc.db, apps.NewAppsService(svc.db, svc.eventPublisher, svc.keys, svc.cfg), svc.GetLNClient, svc.eventPublisher)
+	StartCircleLifecycleService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher)
+	svc.startOrderJobs(ctx, pool)
 	StartNostrSocialCacheRefresher(ctx, svc.db, svc.socialCache, pool)
 
 	// Start LSPS5 listener
@@ -167,7 +171,6 @@ func (svc *service) startNostr(ctx context.Context) error {
 	// Keeps the relay gate in step when a Cash Hub's spent-bill retention
 	// changes: raising it brings wallets back into range that the sweep has
 	// already dropped.
-	svc.eventPublisher.RegisterSubscriber(&cashRetentionConsumer{svc: svc})
 
 	// Fresh per startNostr call, like nostrGroup above: ReloadNostr can
 	// re-invoke this while the app runs, and the set must be rebuilt from the
@@ -301,11 +304,6 @@ func (svc *service) startAllExistingAppsWalletSubscriptions(ctx context.Context,
 			pubkeys = append(pubkeys, *app.WalletPubkey)
 		}
 		svc.walletRegistry.Add(pubkeys...)
-		// Destroyed cash bills still inside their hub's retention window: the
-		// relay gate has to let their requests through for the handler to
-		// answer "spent" (nip47.tryReplySpentBill). Their timers did not
-		// survive this restart, so the set is rebuilt from the archive.
-		svc.walletRegistry.Add(svc.retainedSpentBillPubkeys()...)
 
 		// One consumer for every wallet: with a shared subscription there is
 		// no per-wallet subscription left to cancel on deletion, so the
@@ -493,8 +491,7 @@ func (svc *service) StartApp(encryptionKey string) error {
 			logger.Logger.Error().Err(err).Msg("Failed to start LiquidityManager")
 		} else {
 			logger.Logger.Info().Msg("LiquidityManager started")
-			// Sync system LSPs asynchronously
-			// Start background sync service
+			// services.json (rates, currencies, info, faq; no LSPs).
 			svc.shutdownGroup.Go(func() error {
 				url := svc.cfg.GetLokihubServicesURL()
 				lm.StartSyncService(ctx, url)
@@ -503,7 +500,9 @@ func (svc *service) StartApp(encryptionKey string) error {
 		}
 	}
 
+	svc.startLSPCatalogue(ctx, lspManager)
 	svc.publishAllAppInfoEvents()
+	svc.startListings(ctx)
 
 	svc.startupState = "Connecting To Relay"
 	err = svc.startNostr(ctx)
@@ -559,6 +558,11 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 	info, err := lnClient.GetInfo(ctx)
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
+	}
+	if refusal := testBuildNetworkRefusal(buildHasTestHooks, info, err); refusal != nil {
+		svc.lnClient = nil
+		_ = lnClient.Shutdown()
+		return refusal
 	}
 	if info != nil {
 		svc.eventPublisher.SetGlobalProperty("node_id", info.Pubkey)

@@ -83,9 +83,19 @@ func TestPrivateEnvelopeLimits_HubSettingBeatsEnv(t *testing.T) {
 		PadBucketBytes:        8 * 1024,
 		MaxVerifyBudget:       60,
 		MaxConsolidateSources: 20,
+		MaxRequestAgeSeconds:  600,
 	}
 	require.NoError(t, cfg.SetPrivateEnvelopeLimits(stored))
 	assert.Equal(t, stored, cfg.PrivateEnvelopeLimits())
+
+	// H only increases.
+	lower := stored
+	lower.MaxRequestAgeSeconds = 300
+	require.Error(t, cfg.SetPrivateEnvelopeLimits(lower))
+	unnamed := stored
+	unnamed.MaxRequestAgeSeconds = 0
+	require.NoError(t, cfg.SetPrivateEnvelopeLimits(unnamed), "a caller that does not name H keeps it")
+	assert.EqualValues(t, 600, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
 }
 
 // TestPrivateEnvelopeLimits_DerivesConsolidateCapFromEnvelopeSize is the coupling
@@ -207,4 +217,19 @@ func TestPrivateEnvelopeLimits_StoredPolicyAlwaysValidates(t *testing.T) {
 	got := cfg.PrivateEnvelopeLimits()
 	require.NoError(t, got.Validate(), "the getter must never hand back an unusable policy")
 	assert.Equal(t, transport.DefaultLimits(), got)
+}
+
+// U-1.7: H comes from the env (or the stored setting) within 60..86400; outside
+// that range the whole policy falls back to the defaults.
+func TestPrivateEnvelopeLimits_MaxRequestAge(t *testing.T) {
+	cfg := newEnvelopeTestConfig(t, &AppConfig{})
+	require.EqualValues(t, transport.DefaultLimits().MaxRequestAgeSeconds, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
+
+	cfg = newEnvelopeTestConfig(t, &AppConfig{CashMaxRequestAgeSecs: 600})
+	require.EqualValues(t, 600, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
+
+	for _, bad := range []int{59, 86401} {
+		cfg = newEnvelopeTestConfig(t, &AppConfig{CashMaxRequestAgeSecs: bad})
+		require.Equal(t, transport.DefaultLimits(), cfg.PrivateEnvelopeLimits(), bad)
+	}
 }

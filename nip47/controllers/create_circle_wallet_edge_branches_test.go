@@ -24,7 +24,7 @@ func sendJoin(t *testing.T, svc *tests.TestService, provider *db.App, cache Nost
 	svc.DB.Create(&dbRequestEvent)
 	var published *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, cache).
-		HandleCreateCircleWalletEvent(context.TODO(), nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, context.TODO(), nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			published = r
 		})
 	require.NotNil(t, published)
@@ -88,6 +88,6 @@ func TestHandleCreateCircleWalletEvent_IdenticalRetryAfterNotReady_ReadsAsReplay
 
 	retry := sendJoin(t, svc, provider, &mockSocialCache{authorized: true}, request)
 	require.NotNil(t, retry.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, retry.Error.Code)
-	assert.Contains(t, retry.Error.Message, "already been used")
+	assert.Equal(t, constants.ERROR_REQUEST_REUSED, retry.Error.Code)
+	assert.Contains(t, retry.Error.Message, "already used")
 }

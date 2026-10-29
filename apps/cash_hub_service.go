@@ -1,6 +1,7 @@
 package apps
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/flokiorg/lokihub/db/archive"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/ohstr/nmilat/nipCO"
 	"gorm.io/gorm"
 )
 
@@ -129,12 +131,26 @@ func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, 
 		return nil
 	}
 
-	result := svc.db.Model(&db.CashHubConfig{}).Where("app_id = ?", appID).Updates(updates)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("cash hub config not found for app %d", appID)
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		if err := db.LockApp(tx, appID); err != nil {
+			return err
+		}
+		if perWalletMaxMloki != nil {
+			if err := checkCeilingAgainstOrderTerms(tx, appID, int64(*perWalletMaxMloki)); err != nil {
+				return err
+			}
+		}
+		result := tx.Model(&db.CashHubConfig{}).Where("app_id = ?", appID).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("cash hub config not found for app %d", appID)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	// A retention change must reach bills this Hub has ALREADY destroyed, not
@@ -152,15 +168,6 @@ func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, 
 			return fmt.Errorf("failed to apply new spent retention to archived bills: %w", err)
 		}
 
-		// Tells the service layer to re-sync its relay gate: raising retention
-		// brings wallets back into range that the sweep has already dropped, and
-		// nothing else would notice until a restart.
-		svc.eventPublisher.Publish(&events.Event{
-			Event: "nwc_cash_retention_changed",
-			Properties: map[string]interface{}{
-				"id": appID,
-			},
-		})
 	}
 
 	return nil
@@ -296,56 +303,24 @@ func (svc *appsService) ClaimCashSlice(walletAppID uint, identityType, identityV
 	return claim.AmountMloki, nil
 }
 
-// UnclaimCashSlice reverts ClaimCashSlice, guarded so it can only
-// undo a slice that is currently claimed for this exact identity — never
-// clobbers a different, legitimate claim. Used to roll back when the
-// invoice-amount check or the payment itself subsequently fails.
-func (svc *appsService) UnclaimCashSlice(walletAppID uint, identityType, identityValue string) error {
-	return svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL",
-			walletAppID, identityType, identityValue).
-		Updates(map[string]interface{}{"claimed_at": nil, "payment_hash": ""}).Error
-}
-
-func (svc *appsService) SetCashSliceRedeemPaymentHash(walletAppID uint, identityType, identityValue, paymentHash string) error {
-	return svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash = ?",
-			walletAppID, identityType, identityValue, "").
-		Update("payment_hash", paymentHash).Error
-}
-
 // ReleaseCashSliceForFailedPayment is how a slice comes back after cash_redeem
 // had to keep it claimed because its payment's outcome was unknown. The ledger
 // must show that payment FAILED and nothing pending or settled under its hash,
-// so a payout that went through is never reopened.
+// so a payout that went through is never reopened. The claim and its consumed
+// claim proof go in one transaction, and the slice gets the late-failure
+// cool-down. A payment whose cash_redeem is still deciding its answer is left to
+// that redeem.
 func (svc *appsService) ReleaseCashSliceForFailedPayment(walletAppID uint, paymentHash string) (bool, error) {
-	if paymentHash == "" {
+	if paymentHash == "" || redeemAnswering(paymentHash) {
 		return false, nil
 	}
-	var released int64
+	var released bool
 	err := svc.db.Transaction(func(tx *gorm.DB) error {
-		var failed, live int64
-		ledger := func() *gorm.DB {
-			return tx.Model(&db.Transaction{}).Where("app_id = ? AND type = ? AND payment_hash = ?",
-				walletAppID, constants.TRANSACTION_TYPE_OUTGOING, paymentHash)
-		}
-		if err := ledger().Where("state = ?", constants.TRANSACTION_STATE_FAILED).Count(&failed).Error; err != nil {
-			return err
-		}
-		if err := ledger().Where("state IN ?", []string{constants.TRANSACTION_STATE_PENDING, constants.TRANSACTION_STATE_SETTLED}).Count(&live).Error; err != nil {
-			return err
-		}
-		if failed == 0 || live > 0 {
-			return nil
-		}
-		result := tx.Model(&db.CashWalletClaim{}).
-			Where("wallet_app_id = ? AND payment_hash = ? AND preimage = ? AND claimed_at IS NOT NULL",
-				walletAppID, paymentHash, "").
-			Updates(map[string]interface{}{"claimed_at": nil, "payment_hash": ""})
-		released = result.RowsAffected
-		return result.Error
+		var err error
+		released, err = releaseRedeemClaimTx(tx, walletAppID, paymentHash, svc.lateFailureCooldown(time.Now()), true)
+		return err
 	})
-	return released > 0, err
+	return released, err
 }
 
 // ReassignCashSliceIdentity atomically reassigns one unclaimed slice's
@@ -389,23 +364,9 @@ func (svc *appsService) ReassignCashSliceIdentity(walletAppID uint, currentIdent
 	return claim.AmountMloki, nil
 }
 
-// SetCashSliceSplitTarget records which new wallet a just-claimed
-// slice's value was spun off into — purely informational (see
-// db.CashWalletClaim.SpunOffToWalletAppID doc comment). Called only after the
-// new wallet has been successfully created and funded, so the guard here is
-// defensive rather than load-bearing: nothing else can be racing this exact
-// row once the split has claimed it (ClaimCashSlice).
-func (svc *appsService) SetCashSliceSplitTarget(walletAppID uint, identityType, identityValue string, newWalletAppID uint) error {
-	return svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND spun_off_to_wallet_app_id IS NULL",
-			walletAppID, identityType, identityValue).
-		Update("spun_off_to_wallet_app_id", newWalletAppID).Error
-}
-
 // SetCashSliceRedeemPayment records the payout facts for a slice that was just
 // redeemed over Lightning — purely informational (see the payment-fact fields
-// on db.CashWalletClaim), and the redeem-side mirror of
-// SetCashSliceSplitTarget.
+// on db.CashWalletClaim).
 //
 // Recorded here, at redeem time, because it cannot be recovered later: a
 // Transaction carries no identity, so nothing links a payout back to its slice
@@ -414,12 +375,12 @@ func (svc *appsService) SetCashSliceSplitTarget(walletAppID uint, identityType, 
 //
 // Called only after SendPaymentSync has returned a settled transaction, so the
 // guard is defensive rather than load-bearing — the slice is already terminally
-// claimed by then, and a failed payment is rolled back by UnclaimCashSlice
+// claimed by then, and a failed payment is released (ReleaseRedeemClaim)
 // instead of reaching here.
 func (svc *appsService) SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error {
 	return svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash IN ?",
-			walletAppID, identityType, identityValue, []string{"", payment.PaymentHash}).
+		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash = ?",
+			walletAppID, identityType, identityValue, payment.PaymentHash).
 		Updates(map[string]interface{}{
 			"payment_hash":      payment.PaymentHash,
 			"preimage":          payment.Preimage,
@@ -451,8 +412,8 @@ func (svc *appsService) RecordCashSliceRedeemSettlement(walletAppID uint, paymen
 
 // SetCashWalletSplitSource records, on the NEW wallet's own App row, which
 // source cash_wallet it was split from — purely informational (see
-// db.App.SplitFromWalletAppID doc comment), the reverse of
-// SetCashSliceSplitTarget. Called only after the new wallet has been
+// db.App.SplitFromWalletAppID doc comment), the reverse of the source slice's
+// spun_off_to_wallet_app_id. Called only after the new wallet has been
 // successfully created and funded.
 func (svc *appsService) SetCashWalletSplitSource(newWalletAppID, sourceWalletAppID uint) error {
 	return svc.db.Model(&db.App{}).
@@ -633,4 +594,29 @@ func (svc *appsService) cashHubConfigUpdates(appID uint, perWalletMaxMloki *int,
 		}
 	}
 	return updates, nil
+}
+
+// checkCeilingAgainstOrderTerms refuses a per-wallet ceiling below any kind's
+// max_millis in the Hub's current order terms, naming the kind, so get_info
+// never reports a max_millis above the ceiling (NIP-CO §Terms).
+func checkCeilingAgainstOrderTerms(tx *gorm.DB, hubID uint, perWalletMaxMloki int64) error {
+	var row db.CashOrderTerms
+	err := tx.Where("hub_app_id = ?", hubID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var terms nipCO.Terms
+	if err := json.Unmarshal([]byte(row.TermsJSON), &terms); err != nil {
+		return err
+	}
+	for _, kind := range []string{nipCO.PaymentLightning, nipCO.PaymentOnchain} {
+		if k := terms.Kind(kind); k != nil && (perWalletMaxMloki < 0 || k.MaxMillis > uint64(perWalletMaxMloki)) {
+			return fmt.Errorf("%w: the per-wallet ceiling may not be below the %s order terms' max_millis (%d)",
+				constants.ErrInvalidParams, kind, k.MaxMillis)
+		}
+	}
+	return nil
 }

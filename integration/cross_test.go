@@ -55,11 +55,11 @@ func mintCircleChild(t *testing.T, hub CircleHubConfig) *nwcclient.Client {
 
 	details, err := DecryptCircleWalletDetails(authorizedPrivkey, hubClient.WalletPubkey(), result)
 	require.NoError(t, err)
-	return mustConnect(t, CircleWalletURI(details, authorizedPub))
+	return mustConnectCircleWallet(t, CircleWalletConnection(details, authorizedPub))
 }
 
 // cashChildFixture is a freshly-minted, single-recipient shared Cash wallet:
-// Client is already connected via the wallet's one shared PairingURI, and
+// Client is already connected through the bill's token, and
 // BeneficiaryPrivkey/Pubkey are the recipient's own identity, needed
 // separately to sign a cash_redeem proof (distinct from the connection's own
 // cash credential — see nip47/controllers/cash_redeem_controller.go).
@@ -92,7 +92,7 @@ func mintCashChild(t *testing.T, hub CashHubConfig, amountMloki uint64) cashChil
 	return cashChildFixture{
 		// The beneficiary signs each item's slice proof: the private transport authorizes
 		// per item, so the identity that was implicit in this connection is now named.
-		Client:             mustConnectBill(t, result.PairingURI, result.CashToken, beneficiaryPriv),
+		Client:             mustConnectBill(t, result.CashToken, beneficiaryPriv),
 		WalletPubkey:       result.WalletPubkey,
 		BeneficiaryPrivkey: beneficiaryPriv,
 		BeneficiaryPubkey:  beneficiaryPub,
@@ -228,7 +228,9 @@ func TestCrossHub_GetInfo_AdvertisesExpectedMethods(t *testing.T) {
 		client := mustConnect(t, circleHub.Connection)
 		var info GetInfoResult
 		require.NoError(t, client.Call(ctxT(t), "get_info", struct{}{}, &info))
-		require.Contains(t, info.Methods, constants.NIP47MethodCreateCircleWallet)
+		// Joins are private-only: listed in private_methods, never in methods.
+		require.NotContains(t, info.Methods, constants.NIP47MethodCreateCircleWallet)
+		require.Contains(t, info.PrivateMethods, constants.NIP47MethodCreateCircleWallet)
 	})
 }
 

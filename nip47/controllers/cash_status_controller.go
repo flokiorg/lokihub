@@ -93,14 +93,21 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to list recipients")
 		return
 	}
+	claims = oneRowPerIdentity(claims)
 	if scope == nipcash.ScopeMine {
 		claims = claimsForCaller(claims, caller)
+		// "mine" comes from the item-proof signer alone (NIP-CASH §Scoping the Roster,
+		// XQ-5): a caller it names no row for gets NOT_FOUND, never a wider roster. A
+		// connection_key holder reads scope "all" and picks its row.
+		if len(claims) == 0 {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "no slice of this bill is registered for the identity that signed this item")
+			return
+		}
 	}
 
-	var expiresAt *int64
+	var expiresAt nipcash.Expiry
 	if app.ExpiresAt != nil {
-		ts := app.ExpiresAt.Unix()
-		expiresAt = &ts
+		expiresAt = nipcash.Expiry{At: app.ExpiresAt.Unix(), Present: true}
 	}
 
 	recipients := make([]nipcash.RecipientStatus, len(claims))
@@ -109,6 +116,7 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		status := nipcash.RecipientStatus{
 			IdentityType:        c.IdentityType,
 			IdentityValue:       c.IdentityValue,
+			IAPubkey:            iaPubkeyOf(c),
 			AmountMillis:        uint64(c.AmountMloki), //nolint:gosec // AmountMloki is always non-negative
 			Claimed:             c.ClaimedAt != nil,
 			RedeemFeeMillis:     redeemFeeMloki,
@@ -123,9 +131,11 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		recipients[i] = status
 	}
 
+	result := nipcash.CashStatusResult{Recipients: recipients}
+	controller.addWithdrawStatus(app, claims, &result, caller)
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
-		Result:     nipcash.CashStatusResult{Recipients: recipients},
+		Result:     result,
 	}, nostr.Tags{})
 }
 
@@ -158,6 +168,36 @@ func resolveCashStatusScope(nip47Request *models.Request, caller *CashStatusCall
 	return params.Scope, nil
 }
 
+// oneRowPerIdentity keeps one row per identity: its live (unclaimed) row when
+// it has one, else its newest claimed row. An identity can hold a claimed
+// history row and a live row on one bill, after a slice was transferred in
+// place to a former holder; the roster shows the slice it holds now, so "mine"
+// is exactly one row (NIP-CASH §Scoping the Roster). Order is kept.
+func oneRowPerIdentity(claims []db.CashWalletClaim) []db.CashWalletClaim {
+	type key struct{ typ, value, ia string }
+	at := map[key]int{}
+	out := make([]db.CashWalletClaim, 0, len(claims))
+	for _, c := range claims {
+		k := key{c.IdentityType, c.IdentityValue, c.IAPubkey}
+		i, seen := at[k]
+		if !seen {
+			at[k] = len(out)
+			out = append(out, c)
+			continue
+		}
+		cur := out[i]
+		switch {
+		case cur.ClaimedAt == nil:
+			// The live row stays.
+		case c.ClaimedAt == nil:
+			out[i] = c
+		case c.ClaimedAt.After(*cur.ClaimedAt) || (c.ClaimedAt.Equal(*cur.ClaimedAt) && c.ID > cur.ID):
+			out[i] = c
+		}
+	}
+	return out
+}
+
 // claimsForCaller narrows a roster to the asking recipient's own row.
 //
 // Returns nothing when no row matches. That is deliberate rather than a fallback
@@ -181,4 +221,14 @@ func claimsForCaller(claims []db.CashWalletClaim, caller *CashStatusCaller) []db
 		}
 	}
 	return out
+}
+
+// iaPubkeyOf is a row's ia_pubkey: a connection_key slice's IA, so its holder can
+// pick its own row from scope "all" (NIP-CASH §Cash Status, CT-STAT-15); none for a
+// pubkey or cash row.
+func iaPubkeyOf(c db.CashWalletClaim) string {
+	if c.IdentityType == db.CashIdentityConnectionKey {
+		return c.IAPubkey
+	}
+	return ""
 }

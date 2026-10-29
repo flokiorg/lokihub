@@ -44,9 +44,18 @@ func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword
 		// Explicit, since this literal bypasses envconfig.Process's struct-tag
 		// defaults (0 means "no limit" for these two fields, so leaving them
 		// zero-value here would silently disable rate-limit tests).
-		CashWalletRateLimitPerHour:      10,
-		CashWalletClaimRateLimitPerHour: 20,
-		CircleWalletRateLimitPerHour:    3,
+		CashWalletRateLimitPerHour:   10,
+		CashClaimCallsPerHour:        120,
+		CircleWalletRateLimitPerHour: 3,
+		// Off: the mock invoices never expire. The policy tests turn it on.
+		CashRedeemMaxInvoiceExpirySecs:    0,
+		CashRedeemMaxFinalCLTV:            2880,
+		CashRedeemInflightPerHub:          32,
+		CashRedeemInflightNode:            256,
+		CashRedeemLateFailureCooldownSecs: 600,
+		CashRedeemRouteMarginPpm:          2000,
+		CashRedeemRouteMarginMinMillis:    1000,
+		CashRedeemReplyWaitSecs:           20,
 	}
 
 	cfg, err := config.NewConfig(

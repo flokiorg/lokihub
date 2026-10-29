@@ -1,18 +1,10 @@
 package controllers
 
-// The fee-shape fix (`f6e0124`) rests on one invariant, asserted in its own commit
-// message: **payout + route_cap == the slice**. The Hub does not pay for routing; it
-// withholds enough to cover it and caps the route at what it withheld.
-//
-// Until now nothing checked that the cap ever reached the node. The mock's
-// SendPaymentSync discarded all three of its arguments and returned a fixed preimage,
-// so the whole guarantee was asserted at the arithmetic layer and nowhere else — a
-// regression that dropped `routeCap` on the floor, or passed the gross amount, or
-// passed a cap on a fee-free same-node redeem, would have left every test green while
-// the Hub went back to paying for other people's routes out of its own balance.
-//
-// This is the test that gap was hiding. It reads tests.MockLn's recordings
-// (SendPaymentSyncCalls), added for exactly this.
+// U-8.2: every external redemption caps its route at the quoted fee plus the
+// Hub's margin, max(CASH_REDEEM_ROUTE_MARGIN_PPM × amount / 1e6,
+// CASH_REDEEM_ROUTE_MARGIN_MIN_MILLIS), never the generic reserve (NIP-CASH
+// §Redeeming a Slice step 4). It reads tests.MockLn's recordings
+// (SendPaymentSyncCalls) so the cap is checked where it reaches the node.
 
 import (
 	"testing"
@@ -41,29 +33,34 @@ func TestCashRedeem_RouteCapReachesTheNode(t *testing.T) {
 		why          string
 	}{
 		{
-			name:       "proportional_fee_caps_the_route_at_what_was_withheld",
+			name:       "proportional_fee_plus_the_minimum_margin",
 			sliceMloki: 1000, feePpm: 100_000, // 10% => fee 100
-			wantPayout: 900, wantRouteCap: ptrUint64(100),
-			why: "the invariant: 900 paid out + 100 route cap == the 1000 slice",
+			wantPayout: 900, wantRouteCap: ptrUint64(1100),
+			why: "fee 100 + max(2000 ppm of 1000, 1000)",
 		},
 		{
-			name:       "flat_base_caps_the_route_too",
+			name:       "flat_base_plus_the_minimum_margin",
 			sliceMloki: 10_000, feeBaseMloki: 500,
-			wantPayout: 9500, wantRouteCap: ptrUint64(500),
-			why: "the base is the half of f6e0124 that makes small slices pay for themselves",
+			wantPayout: 9500, wantRouteCap: ptrUint64(1500),
+			why: "fee 500 + max(20, 1000)",
 		},
 		{
-			name:       "base_plus_proportional_cap_is_their_sum",
+			name:       "base_plus_proportional_plus_margin",
 			sliceMloki: 10_000, feeBaseMloki: 500, feePpm: 100_000, // 500 + 1000
-			wantPayout: 8500, wantRouteCap: ptrUint64(1500),
-			why: "both components are withheld, so both are available to the route",
+			wantPayout: 8500, wantRouteCap: ptrUint64(2500),
+			why: "fee 1500 + max(20, 1000)",
 		},
 		{
-			name:       "no_fee_configured_passes_NO_cap",
+			name:       "no_fee_is_still_capped_by_the_margin",
 			sliceMloki: 1000,
-			wantPayout: 1000, wantRouteCap: nil,
-			why: "zero is not a cap: a Hub that withheld nothing made no promise, so it " +
-				"keeps the old reserve rather than failing every external redeem",
+			wantPayout: 1000, wantRouteCap: ptrUint64(1000),
+			why: "a Hub with no fee still bounds its routing loss, never the generic reserve",
+		},
+		{
+			name:       "a_large_slice_takes_the_proportional_margin",
+			sliceMloki: 10_000_000,
+			wantPayout: 10_000_000, wantRouteCap: ptrUint64(20_000),
+			why: "2000 ppm of 10 000 000 is over the 1000 minimum",
 		},
 	}
 
@@ -115,14 +112,8 @@ func TestCashRedeem_RouteCapReachesTheNode(t *testing.T) {
 				"NO route cap reached the node, so the Hub is back to paying for the "+
 					"holder's chosen route out of its own balance — %s", c.why)
 			assert.Equal(t, *c.wantRouteCap, *calls[0].FeeLimitMloki,
-				"the route cap is not the fee that was withheld — %s", c.why)
+				"the route cap is not fee + margin — %s", c.why)
 
-			// The invariant itself, stated as arithmetic rather than inferred from the
-			// two assertions above.
-			//nolint:gosec // every row's sliceMloki is a positive literal
-			assert.Equal(t, uint64(c.sliceMloki), *calls[0].Amount+*calls[0].FeeLimitMloki,
-				"payout + route_cap != slice: the Hub either eats the difference or "+
-					"pockets it, and f6e0124 exists so that it does neither")
 		})
 	}
 }

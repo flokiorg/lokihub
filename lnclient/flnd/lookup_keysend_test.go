@@ -188,3 +188,33 @@ func TestSendKeysend_AfterABrokenStreamTheNodeDecides(t *testing.T) {
 		})
 	}
 }
+
+// A node run with routerrpc.usestatusinitiated sends INITIATED first. That, like
+// IN_FLIGHT and UNKNOWN, is not an outcome: reading it as a failure would let a
+// redeemed slice be claimed and paid again while the first HTLC is still out.
+func TestSendPayment_OnlyAFinalStatusIsAnOutcome(t *testing.T) {
+	notFinal := []lnrpc.Payment_PaymentStatus{lnrpc.Payment_INITIATED, lnrpc.Payment_IN_FLIGHT, lnrpc.Payment_UNKNOWN} //nolint:staticcheck // a node may still report the deprecated UNKNOWN status
+
+	t.Run("keysend reads through to success", func(t *testing.T) {
+		updates := []*lnrpc.Payment{}
+		for _, st := range notFinal {
+			updates = append(updates, &lnrpc.Payment{Status: st})
+		}
+		updates = append(updates, &lnrpc.Payment{Status: lnrpc.Payment_SUCCEEDED, PaymentPreimage: keysendPreimage, FeeMsat: 2})
+		router := &fakeRouter{send: &paymentStream{updates: updates}}
+		resp, err := newFakeFLND(&fakeLightning{}, router).SendKeysend(5_000, strings.Repeat("02", 33), nil, keysendPreimage)
+		require.NoError(t, err)
+		assert.Equal(t, uint64(2), resp.Fee)
+	})
+
+	for _, st := range notFinal {
+		t.Run("a stream ending at "+st.String()+" is pending, not failed", func(t *testing.T) {
+			router := &fakeRouter{
+				send:  &paymentStream{updates: []*lnrpc.Payment{{Status: st}}},
+				track: &paymentStream{updates: []*lnrpc.Payment{{Status: st}}},
+			}
+			_, err := newFakeFLND(&fakeLightning{}, router).SendKeysend(5_000, strings.Repeat("02", 33), nil, keysendPreimage)
+			require.ErrorIs(t, err, lnclient.ErrPaymentPending)
+		})
+	}
+}

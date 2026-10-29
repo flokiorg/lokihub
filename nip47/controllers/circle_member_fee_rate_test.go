@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"github.com/flokiorg/lokihub/apps"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -23,7 +24,7 @@ func TestCreateCircleWallet_RecordsTheHubRateOnTheWallet(t *testing.T) {
 
 	provider := createCircleHub(t, svc, 7200, 1_000_000)
 	rate := 7_500
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, &rate, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{FeesPpm: &rate}))
 
 	response := joinCircle(t, context.TODO(), svc, provider, nostr.GeneratePrivateKey())
 	require.Nil(t, response.Error, "%+v", response.Error)
@@ -45,7 +46,7 @@ func TestCircleWallet_HubRateChange_LeavesTheMemberRate(t *testing.T) {
 	joined := 10_000
 	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", wallet.ID).Update("circle_fees_ppm", joined).Error)
 	raised := 50_000
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(*wallet.ParentAppID, nil, &raised, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(*wallet.ParentAppID, apps.CircleHubConfigPatch{FeesPpm: &raised}))
 
 	nip47Request := &models.Request{}
 	require.NoError(t, json.Unmarshal([]byte(nip47PayInvoiceJson), nip47Request))

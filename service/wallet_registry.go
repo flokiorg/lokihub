@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 )
 
@@ -187,101 +186,4 @@ func (r *walletRegistry) Remove(walletPubkeys ...string) {
 // suppressed. See walletRegistry.count.
 func (r *walletRegistry) Len() int {
 	return int(r.count.Load())
-}
-
-// spentBillRetained reports whether walletPubkey belongs to a destroyed cash
-// bill its hub still answers "spent" about.
-//
-// The archive is the only source of truth: CashBillArchive.EndedAt plus the
-// hub's SpentRetentionSecs. Nothing about the window is held in memory, so a
-// restart resumes it exactly where it left off.
-//
-// Deliberately NOT floored by walletRetentionAfterDelete. That grace is about
-// the relay gate — keeping an in-flight request reachable — and is applied at
-// the gate, by the RemoveAfterGrace branch a false answer here falls back to.
-// Conflating the two is what let this function and the handler disagree about
-// the same deadline, so the answering window now has exactly one definition
-// (db.SpentBillRetainedUntil), which is also the retained_until a caller is
-// told.
-func (svc *service) spentBillRetained(walletPubkey string) bool {
-	return db.SpentBillStillAnswerable(svc.db, walletPubkey, time.Now())
-}
-
-// retainedSpentBillPubkeys lists the wallet pubkeys of destroyed cash bills
-// whose hub still answers "spent" about them — used to rebuild the set on
-// startup, since the window lives in the archive rather than in memory.
-//
-// One statement, whatever the archive holds. It used to pluck every candidate
-// and then call spentBillRetained per row, which is two more queries each:
-// 2N+1 in total, measured at 100,001 statements and 15.6 s on postgres for 50k
-// archived bills, all of it before the hub answers anything. A request arriving
-// in that window meets silence, which a caller cannot distinguish from a spent
-// bill or a dead hub — the exact ambiguity the tombstone exists to remove.
-//
-// The deadline comes from the materialised retained_until; whether a policy
-// exists at all still comes from the join, so a hub whose retention was disabled
-// or whose config is gone drops out live. Same shape as db.SpentBillRetainedUntil,
-// deliberately: one definition of "still answerable", expressed once in SQL.
-// registryNow is the clock the two retention-boundary queries below read. A
-// variable only so a test can stand exactly on retained_until.
-var registryNow = time.Now
-
-func (svc *service) retainedSpentBillPubkeys() []string {
-	if svc.db == nil {
-		return nil
-	}
-	var pubkeys []string
-	err := svc.db.Table("cash_bill_archives").
-		Joins("JOIN cash_hub_configs ON cash_hub_configs.app_id = cash_bill_archives.hub_app_id").
-		Where("cash_hub_configs.spent_retention_secs > 0").
-		// >= not >, to match db.RetentionWindowOpen's !now.After(deadline): the window
-		// is open THROUGH the deadline instant. With > this gate closed one second
-		// before the replier stopped answering, so at exactly retained_until the bill
-		// was unregistered while still contractually answerable — the caller got
-		// silence at the one instant the tombstone exists to cover.
-		Where("cash_bill_archives.retained_until >= ?", registryNow()).
-		Pluck("cash_bill_archives.wallet_pubkey", &pubkeys).Error
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to reload retained spent-bill wallets")
-		return nil
-	}
-	return pubkeys
-}
-
-// pruneExpiredSpentBillsBatch is how many expired wallets one pass deregisters.
-// Bounded for the same reason the cash cleanup sweep is: a tick should do a
-// known amount of work, not however much has accumulated.
-const pruneExpiredSpentBillsBatch = 500
-
-// PruneExpiredSpentBills drops registry entries whose retention window has
-// passed. Called from the periodic cash sweep, so the set converges on the
-// archive without any long-lived timer.
-//
-// Bounded and indexed: it asks only for wallets that have actually expired,
-// rather than reading every archive row and re-deriving each one's deadline. The
-// old shape was 2N+1 statements per tick — 100,001 and 26.2 s on postgres at 50k
-// archived bills, extrapolating past the five-minute tick interval at a million,
-// so the sweep could never finish before the next one began.
-func (svc *service) PruneExpiredSpentBills() {
-	if svc.db == nil || svc.walletRegistry == nil {
-		return
-	}
-
-	var expired []string
-	err := svc.db.Table("cash_bill_archives").
-		// < not <=, the mirror of the gate above: a bill is reclaimable only once the
-		// window has actually closed, and at exactly retained_until it has not.
-		Where("retained_until IS NOT NULL AND retained_until < ?", registryNow()).
-		Limit(pruneExpiredSpentBillsBatch).
-		Pluck("wallet_pubkey", &expired).Error
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to query expired spent-bill wallets")
-		return
-	}
-	if len(expired) == 0 {
-		return
-	}
-
-	// One call, so the registry is touched once for the whole batch.
-	svc.walletRegistry.Remove(expired...)
 }

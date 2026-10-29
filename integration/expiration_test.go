@@ -36,19 +36,12 @@ const shortLivedExpirySecs = 2
 // deletion.
 func waitPastExpiry() { time.Sleep(3 * time.Second) }
 
-// TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive
-// mints a real, short-lived circle_wallet child and lets it actually expire,
-// then checks every one of its granted methods individually rather than
-// assuming expiry is all-or-nothing. It isn't: get_info and get_budget are
-// both on permissions.GetAlwaysGrantedMethods() and bypass the generic
-// scope-permission gate entirely (nip47/event_handler.go checks that list
-// BEFORE ever consulting HasPermission/AppPermission.ExpiresAt) - so they
-// keep answering normally forever, while every money-moving method
-// (get_balance, make_invoice, pay_invoice, list_transactions) is rejected
-// with ERROR_EXPIRED the moment the wallet's own expiry passes. A circle
-// wallet child's balance sits inert but visible/reportable, not
-// invisible, once expired.
-func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t *testing.T) {
+// TestCircleWallet_Expiry_PayoutsAndReadsSurvive mints a real, short-lived
+// circle_wallet child and lets it expire. An Expired wallet (NIP-CW §What a
+// Circle Wallet Connection Allows) still serves get_info, get_balance,
+// list_transactions and payouts, so its member can move the balance out
+// during the grace; make_invoice and get_budget are refused RESTRICTED.
+func TestCircleWallet_Expiry_PayoutsAndReadsSurvive(t *testing.T) {
 	cfg := requireConfig(t)
 	privkey := newTestPrivkey(t)
 	hub, _, _ := createEphemeralCircleHub(t, cfg, "circle-expiry-hub", circlePolicyAllowlist, []string{privkey},
@@ -68,8 +61,8 @@ func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t 
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := CircleWalletURI(circleDetails, pubkey)
-	child := mustConnect(t, pairingURI)
+	memberConn := CircleWalletConnection(circleDetails, pubkey)
+	child := mustConnectCircleWallet(t, memberConn)
 
 	// Sanity: fully live before expiry, so what we observe afterward is
 	// actually caused by expiry and not some unrelated setup mistake.
@@ -78,46 +71,38 @@ func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t 
 
 	waitPastExpiry()
 
-	t.Run("GetBalance_Expired_Rejected", func(t *testing.T) {
+	t.Run("GetBalance_Expired_Served", func(t *testing.T) {
 		var result GetBalanceResult
-		err := child.Call(ctxT(t), "get_balance", struct{}{}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_EXPIRED)
+		require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &result))
 	})
 
-	t.Run("MakeInvoice_Expired_Rejected", func(t *testing.T) {
+	t.Run("MakeInvoice_Expired_Restricted", func(t *testing.T) {
 		var result MakeInvoiceResult
 		err := child.Call(ctxT(t), "make_invoice", MakeInvoiceParams{Amount: 1000, Description: "integration expired-wallet make_invoice test"}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_EXPIRED)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
-	t.Run("PayInvoice_Expired_Rejected", func(t *testing.T) {
+	t.Run("PayInvoice_Expired_Served", func(t *testing.T) {
 		var result PayInvoiceResult
-		// Permission expiry is checked generically in event_handler.go before
-		// any request reaches pay_invoice_controller.go, so an empty/invalid
-		// invoice string still surfaces ERROR_EXPIRED rather than a param
-		// validation error - see get_budget_controller.go's own comment on
-		// this same dispatch-order guarantee.
+		// Served: an empty invoice reaches the controller's own validation
+		// instead of the state gate.
 		err := child.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: ""}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_EXPIRED)
+		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
 
-	t.Run("ListTransactions_Expired_Rejected", func(t *testing.T) {
+	t.Run("ListTransactions_Expired_Served", func(t *testing.T) {
 		var result ListTransactionsResult
-		err := child.Call(ctxT(t), "list_transactions", ListTransactionsParams{Limit: 10}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_EXPIRED)
+		require.NoError(t, child.Call(ctxT(t), "list_transactions", ListTransactionsParams{Limit: 10}, &result))
 	})
 
-	t.Run("GetInfo_Expired_StillReachable", func(t *testing.T) {
+	t.Run("GetInfo_Expired_Served", func(t *testing.T) {
 		var result GetInfoResult
-		require.NoError(t, child.Call(ctxT(t), "get_info", struct{}{}, &result),
-			"get_info is always-granted (permissions.GetAlwaysGrantedMethods) - it must survive the wallet's own expiry")
+		require.NoError(t, child.Call(ctxT(t), "get_info", struct{}{}, &result))
 	})
 
-	t.Run("GetBudget_Expired_StillReachable", func(t *testing.T) {
+	t.Run("GetBudget_Expired_Restricted", func(t *testing.T) {
 		var result GetBudgetResult
-		require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &result),
-			"get_budget is always-granted too - an expired circle wallet's budget stays reportable even though it can no longer move money")
-		require.EqualValues(t, circleHappyPathAmountMloki, result.TotalBudget)
+		requireNWCErrorCode(t, child.Call(ctxT(t), "get_budget", struct{}{}, &result), constants.ERROR_RESTRICTED)
 	})
 }
 
@@ -151,7 +136,7 @@ func TestCashHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *te
 		Recipients: onePubkeyRecipient(beneficiaryPub, childAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	child := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+	child := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 	waitPastExpiry()
 
@@ -208,8 +193,8 @@ func TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *
 	}, &created))
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := CircleWalletURI(circleDetails, pubkey)
-	child := mustConnect(t, pairingURI)
+	memberConn := CircleWalletConnection(circleDetails, pubkey)
+	child := mustConnectCircleWallet(t, memberConn)
 
 	waitPastExpiry()
 

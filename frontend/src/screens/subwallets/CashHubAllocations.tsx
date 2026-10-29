@@ -401,13 +401,9 @@ export const CashHubAllocations = React.forwardRef<
   // by wallet_app_id, not the claim id — several claim rows can share the
   // same wallet/connection.
   const [revealApp, setRevealApp] = React.useState<App | undefined>(undefined);
-  const [revealUri, setRevealUri] = React.useState<string | undefined>(
-    undefined
-  );
-  // Companion strings for the same connection — lokicashToken is always
-  // derivable alongside pairing_uri (both endpoints return it); cashSecret
-  // is populated only right after creating a cash-mode wallet, and only
-  // that once (NIP-CASH §Cash-Mode Slices: it is never retrievable again).
+  // The bill's cash_token, its only credential; cashSecret is populated only
+  // right after creating a cash-mode wallet, and only that once (NIP-CASH
+  // §Cash-Mode Slices: it is never retrievable again).
   const [revealLokicashToken, setRevealLokicashToken] = React.useState<
     string | undefined
   >(undefined);
@@ -458,7 +454,6 @@ export const CashHubAllocations = React.forwardRef<
       ]);
       if (revealedApp && connection) {
         setRevealApp(revealedApp);
-        setRevealUri(connection.pairing_uri);
         setRevealLokicashToken(connection.cash_token);
         setRevealCashSecret(undefined);
         setRevealSummary(summary);
@@ -804,7 +799,6 @@ export const CashHubAllocations = React.forwardRef<
         const createdApp = await request<App>(`/api/apps/${result.app_id}`);
         if (createdApp) {
           setRevealApp(createdApp);
-          setRevealUri(result.pairing_uri);
           setRevealLokicashToken(result.cash_token);
           setRevealCashSecret(result.recipients[0]?.cash_secret);
           setRevealSummary({
@@ -2001,17 +1995,15 @@ export const CashHubAllocations = React.forwardRef<
         </DialogContent>
       </Dialog>
 
-      {revealApp && revealUri && (
+      {revealApp && revealLokicashToken && (
         <RevealConnectionDialog
           app={revealApp}
-          pairingUri={revealUri}
           lokicashToken={revealLokicashToken}
           cashSecret={revealCashSecret}
           walletSummary={revealSummary}
           mode={revealMode}
           primaryFormat="lokicash"
           onClose={() => {
-            setRevealUri(undefined);
             setRevealApp(undefined);
             setRevealLokicashToken(undefined);
             setRevealCashSecret(undefined);
