@@ -38,6 +38,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
@@ -2968,7 +2969,7 @@ func (api *api) applyAllowlistTx(tx *gorm.DB, identityID uint, changes *[]circle
 	for _, pk := range pubkeys {
 		members[pk] = true
 	}
-	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, time.Now())
+	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, hubclock.Now())
 	*changes = applied
 	return err
 }
