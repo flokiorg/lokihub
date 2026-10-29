@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Refuses a recipient or `new_identity` whose `identity_value` or `ia_pubkey`
+  has uppercase hex, in `mint_cash` and `cash_transfer`. Such a slice could
+  never be claimed, because claim proofs and attestations carry lowercase keys.
 - Funds an on-chain payout's replacement (an RBF bump, or the invalidation a
   cancel needs) from the inputs its broadcast version already spends. The node
   no longer lists a coin an unmined transaction of its own spends, so a
