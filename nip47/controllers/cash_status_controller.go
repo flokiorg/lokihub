@@ -93,9 +93,8 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to list recipients")
 		return
 	}
-	claims = oneRowPerIdentity(claims)
 	if scope == nipcash.ScopeMine {
-		claims = claimsForCaller(claims, caller)
+		claims = claimsForCaller(oneRowPerIdentity(claims), caller)
 		// "mine" comes from the item-proof signer alone (NIP-CASH §Scoping the Roster,
 		// XQ-5): a caller it names no row for gets NOT_FOUND, never a wider roster. A
 		// connection_key holder reads scope "all" and picks its row.
@@ -103,6 +102,8 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "no slice of this bill is registered for the identity that signed this item")
 			return
 		}
+	} else {
+		claims = everySliceLiveFirst(claims)
 	}
 
 	var expiresAt nipcash.Expiry
@@ -168,11 +169,37 @@ func resolveCashStatusScope(nip47Request *models.Request, caller *CashStatusCall
 	return params.Scope, nil
 }
 
+// everySliceLiveFirst lists every slice (NIP-CASH cash_status: "every slice this
+// wallet was ever created or split into"), each identity's rows together with
+// the one oneRowPerIdentity picks first, so a client taking the first row that
+// matches it reads the slice it holds now.
+func everySliceLiveFirst(claims []db.CashWalletClaim) []db.CashWalletClaim {
+	type key struct{ typ, value, ia string }
+	keyOf := func(c db.CashWalletClaim) key { return key{c.IdentityType, c.IdentityValue, c.IAPubkey} }
+	rest := map[key][]db.CashWalletClaim{}
+	preferred := oneRowPerIdentity(claims)
+	picked := make(map[uint]bool, len(preferred))
+	for _, c := range preferred {
+		picked[c.ID] = true
+	}
+	for _, c := range claims {
+		if !picked[c.ID] {
+			rest[keyOf(c)] = append(rest[keyOf(c)], c)
+		}
+	}
+	out := make([]db.CashWalletClaim, 0, len(claims))
+	for _, c := range preferred {
+		out = append(out, c)
+		out = append(out, rest[keyOf(c)]...)
+	}
+	return out
+}
+
 // oneRowPerIdentity keeps one row per identity: its live (unclaimed) row when
 // it has one, else its newest claimed row. An identity can hold a claimed
 // history row and a live row on one bill, after a slice was transferred in
-// place to a former holder; the roster shows the slice it holds now, so "mine"
-// is exactly one row (NIP-CASH §Scoping the Roster). Order is kept.
+// place to a former holder; "mine" shows the slice it holds now, exactly one row
+// (NIP-CASH §Scoping the Roster). Order is kept.
 func oneRowPerIdentity(claims []db.CashWalletClaim) []db.CashWalletClaim {
 	type key struct{ typ, value, ia string }
 	at := map[key]int{}
