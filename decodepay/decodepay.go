@@ -79,7 +79,6 @@ type Bolt11 struct {
 	CreatedAt       int64
 	Expiry          int64
 	AmountMloki     int64
-	Network         string
 	Route           [][]Hop
 	// MinFinalCLTVExpiry is the final hop's CLTV delta the invoice asks for.
 	MinFinalCLTVExpiry int64
@@ -124,7 +123,6 @@ func Decode(bolt11 string) (*Bolt11, error) {
 		CreatedAt:       int64(inv.CreatedAt),
 		Expiry:          int64(inv.Expiry),
 		AmountMloki:     int64(inv.MLoki),
-		Network:         "flokicoin",
 		Route:           routes,
 
 		MinFinalCLTVExpiry: int64(inv.MinFinalCLTVExpiry),
