@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Bounds how long a cash commit holds the database write lock while the node
+  signs its bills: all of a commit's signatures share one budget of 3 s plus
+  25 ms a bill, and the node identity is read once per commit. A slow node
+  could hold the lock for up to 3 s per bill.
 - Records a private item's request event only while its target bill still
   exists, under a lock the bill's delete waits on. A bill deleted by a sibling
   item's split in the same envelope logged a `FOREIGN KEY constraint failed`
