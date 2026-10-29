@@ -47,6 +47,8 @@ type Bolt11 struct {
 	AmountMloki     int64
 	Network         string
 	Route           [][]Hop
+	// MinFinalCLTVExpiry is the final hop's CLTV delta the invoice asks for.
+	MinFinalCLTVExpiry int64
 }
 
 func Decode(bolt11 string) (*Bolt11, error) {
@@ -86,5 +88,7 @@ func Decode(bolt11 string) (*Bolt11, error) {
 		AmountMloki:     int64(inv.MLoki),
 		Network:         "flokicoin",
 		Route:           routes,
+
+		MinFinalCLTVExpiry: int64(inv.MinFinalCLTVExpiry),
 	}, nil
 }

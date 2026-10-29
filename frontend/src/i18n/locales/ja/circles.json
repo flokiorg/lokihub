@@ -201,20 +201,7 @@
     "description": "このサークルのメンバー向けにすでに作成されたウォレット。",
     "empty": "まだサークルウォレットは作成されていません。",
     "selectWallet": "サークルウォレットを選択",
-    "frozenBadge": "凍結中",
-    "frozenHint": "このメンバーはサークルを離れました。再び追加されるまで、このウォレットは支払いも新しい請求書の作成もできません。",
-    "removeTitle": "このサークルウォレットを削除しますか？",
-    "removeDescription": "残高はこのハブに払い戻され、NWC 接続は即座に使用できなくなります。元に戻すことはできません。",
-    "removeSelectedTitle_one": "{{count}} 件のサークルウォレットを削除しますか？",
-    "removeSelectedTitle_other": "{{count}} 件のサークルウォレットを削除しますか？",
-    "removeSelectedDescription": "残高はこのハブに払い戻され、NWC 接続は即座に使用できなくなります。元に戻すことはできません。",
-    "removedToast": "サークルウォレットを削除しました",
-    "removedSelectedToast_one": "{{count}} 件のサークルウォレットを削除しました",
-    "removedSelectedToast_other": "{{count}} 件のサークルウォレットを削除しました",
-    "errors": {
-      "remove": "サークルウォレットの削除に失敗しました",
-      "removeSelected": "選択したサークルウォレットの削除に失敗しました"
-    }
+    "errors": {}
   },
   "cashHubAllocations": {
     "durationDays_one": "{{count}} 日",
@@ -341,26 +328,11 @@
     }
   },
   "disconnectCircleHub": {
-    "title": "このサークルを削除してもよろしいですか？",
     "checking": "メンバーウォレットの残高を確認しています…",
-    "allEmpty": "このサークルのすべてのメンバーウォレットは空です。サークルを削除すると、すべてのメンバーウォレットも削除されます。",
-    "hasBalance_one": "このサークルには残高が残っているメンバーウォレットが {{count}} 件あります。",
-    "hasBalance_other": "このサークルには残高が残っているメンバーウォレットが {{count}} 件あります。",
     "colName": "名前",
     "colPubkey": "公開鍵",
     "colBalance": "残高（loki）",
-    "totalSummary_one": "合計 {{total}} loki（{{count}} 件のウォレット）。",
-    "totalSummary_other": "合計 {{total}} loki（{{count}} 件のウォレット）。",
-    "sweepSummary": "「すべて削除」すると、{{total}} loki がメイン残高に移ります。メンバーウォレットの残高すべてと、ハブ自身の {{hub}} loki です。メンバーはウォレットとその履歴を失います。",
-    "sweepPartialToast": "空にして削除したウォレット：{{count}}",
-    "sweepPartialDescription": "支払いが終わるまで残したウォレット：{{count}}。サークルは削除されていません。しばらくしてからもう一度お試しください。",
-    "deleteEmptyOnly": "空のものだけ削除",
-    "deleteAll": "すべて削除",
     "deletedToast": "サークルを削除しました",
-    "partialDeleteToast_one": "空のウォレットを {{count}} 件削除しました",
-    "partialDeleteToast_other": "空のウォレットを {{count}} 件削除しました",
-    "partialDeleteDescription_one": "残高または処理中の支払いがあるウォレットが {{count}} 件そのままになっています — サークルは削除されませんでした。",
-    "partialDeleteDescription_other": "残高または処理中の支払いがあるウォレットが {{count}} 件そのままになっています — サークルは削除されませんでした。",
     "errors": {
       "load": "サークルウォレットの読み込みに失敗しました",
       "delete": "サークルの削除に失敗しました"

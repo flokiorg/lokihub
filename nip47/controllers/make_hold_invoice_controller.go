@@ -44,12 +44,15 @@ func (controller *nip47Controller) HandleMakeHoldInvoiceEvent(ctx context.Contex
 		return
 	}
 
-	release, refusal := controller.reserveCircleReceiveCap(appId, makeHoldInvoiceParams.Amount)
-	if refusal != nil {
-		publishResponse(&models.Response{ResultType: nip47Request.Method, Error: refusal}, nostr.Tags{})
+	// A Circle Wallet cannot issue a hold invoice: it is outside what its
+	// connection allows (NIP-CW §What a Circle Wallet Connection Allows), and
+	// its only held payments are the ones its Hub settles.
+	if controller.circleWalletApp(appId) != nil {
+		publishResponse(&models.Response{ResultType: nip47Request.Method, Error: &models.Error{
+			Code: constants.ERROR_RESTRICTED, Message: "a circle wallet cannot issue a hold invoice",
+		}}, nostr.Tags{})
 		return
 	}
-	defer release()
 
 	logger.Logger.Info().
 		Interface("requestEventId", requestEventId).

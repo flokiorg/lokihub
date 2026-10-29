@@ -31,8 +31,8 @@ const numGeneratedUnauthorizedIdentities = 5
 const hubPerWalletMaxMloki = 1_000_000
 
 // circleHappyPathAmountMloki is the max_amount a test member joins with: twice
-// the smallest cap a join accepts (fee reserve + 1 loki), so it clears the
-// floor with room for a payment.
+// the fee reserve plus 1 loki, so the wallet can pay outside the node with
+// room to spare.
 const circleHappyPathAmountMloki = 2 * constants.MIN_CIRCLE_WALLET_MAX_MLOKI
 
 func TestCircleHubs(t *testing.T) {
@@ -91,30 +91,11 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, identityEvent),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_QUOTA_EXCEEDED)
+		requireNWCErrorCode(t, err, nipcw.ErrLimitExceeded)
 	})
 
-	// Any max_amount below 1000 mloki (one whole loki) used
-	// to floor to a stored budget cap of exactly 0, which the payment layer
-	// treats as "no cap at all" - a silent, complete bypass of the member's
-	// own quoted spend cap. Every value in [0, 999] mloki must now be
-	// rejected outright, before a wallet is ever created.
-	t.Run("CreateWallet_SubLokiMaxAmount_Rejected", func(t *testing.T) {
-		for _, maxAmount := range []uint64{0, 1, 500, 999} {
-			t.Run(fmt.Sprintf("max_amount_%d", maxAmount), func(t *testing.T) {
-				identityEvent := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(),
-					fmt.Sprintf("SubLokiMaxAmount%d", maxAmount))
-				var result CreateCircleWalletResult
-				err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
-					Pubkey:        member0Pub,
-					MaxAmount:     maxAmount,
-					Expiry:        happyPathExpirySecs,
-					IdentityEvent: eventJSON(t, identityEvent),
-				}, &result)
-				requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
-			})
-		}
-	})
+	// A max_amount under 1 loki is accepted as a cap of 0, never "no cap"
+	// (TestCircleFollowups_JoinSmallCap): member0 must stay free to join below.
 
 	t.Run("CreateWallet_BudgetRenewalTighterThanFloor", func(t *testing.T) {
 		// "daily" is the tightest possible rank, so it is rejected against
@@ -129,7 +110,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			BudgetRenewal: constants.BUDGET_RENEWAL_DAILY,
 			IdentityEvent: eventJSON(t, identityEvent),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, nipcw.ErrLimitExceeded)
 	})
 
 	t.Run("CreateWallet_IdentityEvent_Missing_Rejected", func(t *testing.T) {
@@ -140,7 +121,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:    happyPathExpirySecs,
 			// IdentityEvent intentionally omitted.
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("CreateWallet_IdentityEvent_MalformedJSON_Rejected", func(t *testing.T) {
@@ -151,7 +132,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: "not valid json",
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	// The direct regression test for the impersonation gap the identity-proof
@@ -168,7 +149,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, forged),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	// A proof validly signed by the requester but bound (via its d-tag) to a
@@ -186,7 +167,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, ev),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("CreateWallet_IdentityEvent_Stale_Rejected", func(t *testing.T) {
@@ -199,7 +180,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, ev),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("CreateWallet_IdentityEvent_FutureTimestamp_Rejected", func(t *testing.T) {
@@ -212,7 +193,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, ev),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	// CRITICAL regression test: go-nostr's CheckSignature() verifies the
@@ -233,18 +214,15 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: tamperedJSON,
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
-	// A captured proof (the circle_hub connection is shared/public, so anyone
-	// holding it can decrypt every request sent over it, including this one)
-	// must not be resubmittable. The first call is deliberately rejected for
-	// an unrelated reason (amount too large) so the identity proof itself is
-	// verified and recorded by the replay guard without minting a wallet;
-	// the second call, with a valid amount but the identical identity_event,
-	// must still be rejected - specifically because the proof was already
-	// used, not because of anything amount-related.
+	// A captured proof must not be resubmittable: it is bound to its terms and
+	// single-use once it reaches the replay guard.
 	t.Run("CreateWallet_IdentityEvent_Replayed_Rejected", func(t *testing.T) {
+		// A refusal before the replay guard (NIP-CW step 3) consumes nothing,
+		// but the proof stays bound to the terms it was first sent with: the
+		// same proof under other terms is UNAUTHORIZED (check 7).
 		ev := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(), "IdentityEventReplayed")
 		evJSON := eventJSON(t, ev)
 
@@ -255,7 +233,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: evJSON,
 		}, &first)
-		requireNWCErrorCode(t, err1, constants.ERROR_QUOTA_EXCEEDED)
+		requireNWCErrorCode(t, err1, nipcw.ErrLimitExceeded)
 
 		var second CreateCircleWalletResult
 		err2 := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -264,7 +242,23 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: evJSON,
 		}, &second)
-		requireNWCErrorCode(t, err2, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err2, nipcw.ErrUnauthorized)
+
+		// A proof that passed the replay guard is consumed whatever the join's
+		// outcome: a non-member's proof is refused RESTRICTED, and sent again
+		// it is REQUEST_REUSED.
+		strangerPriv := newTestPrivkey(t)
+		strangerPub := mustPubkey(t, strangerPriv)
+		strangerJSON := eventJSON(t, distinctCircleWalletIdentityEvent(t, strangerPriv, hubClient.WalletPubkey(), "IdentityEventReplayed-stranger"))
+		params := CreateCircleWalletParams{
+			Pubkey:        strangerPub,
+			MaxAmount:     circleHappyPathAmountMloki,
+			Expiry:        happyPathExpirySecs,
+			IdentityEvent: strangerJSON,
+		}
+		var third, fourth CreateCircleWalletResult
+		requireNWCErrorCode(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, params, &third), constants.ERROR_RESTRICTED)
+		requireNWCErrorCode(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, params, &fourth), nipcw.ErrRequestReused)
 	})
 
 	// A malformed requester pubkey is rejected before the identity_event is
@@ -284,7 +278,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 					MaxAmount: circleHappyPathAmountMloki,
 					Expiry:    happyPathExpirySecs,
 				}, &result)
-				requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+				requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 			})
 		}
 	})
@@ -349,7 +343,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		errForAuthorizedTarget := attempt(member0Pub)
 		errForUnauthorizedTarget := attempt(mustPubkey(t, newTestPrivkey(t)))
 
-		assert.Equal(t, constants.ERROR_BAD_REQUEST, errForAuthorizedTarget.Code)
+		assert.Equal(t, constants.ERROR_UNAUTHORIZED, errForAuthorizedTarget.Code)
 		assert.Equal(t, errForAuthorizedTarget.Code, errForUnauthorizedTarget.Code,
 			"spoofing an authorized vs unauthorized identity must return identical error codes - otherwise the code itself becomes a membership oracle")
 	})
@@ -408,9 +402,9 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 						"an omitted expiry must default to the hub's own max_exp_secs, not produce an already-expired wallet")
 				}
 
-				pairingURI := CircleWalletURI(details, member.pub)
+				memberConn := CircleWalletConnection(details, member.pub)
 
-				child := mustConnect(t, pairingURI)
+				child := mustConnectCircleWallet(t, memberConn)
 
 				var balance GetBalanceResult
 				require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance))
@@ -446,7 +440,9 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	t.Run("GetInfo_HubAdvertisesCreateCircleWallet", func(t *testing.T) {
 		var info GetInfoResult
 		require.NoError(t, hubClient.Call(ctxT(t), "get_info", struct{}{}, &info))
-		require.Contains(t, info.Methods, constants.NIP47MethodCreateCircleWallet)
+		// Joins are private-only: listed in private_methods, never in methods.
+		require.NotContains(t, info.Methods, constants.NIP47MethodCreateCircleWallet)
+		require.Contains(t, info.PrivateMethods, constants.NIP47MethodCreateCircleWallet)
 		require.NotNil(t, info.CircleWallet)
 		assert.Equal(t, int64(hubPerWalletMaxMloki), info.CircleWallet.PerWalletMaxMillis)
 		assert.Equal(t, constants.BUDGET_RENEWAL_MONTHLY, info.CircleWallet.MinBudgetRenewal)

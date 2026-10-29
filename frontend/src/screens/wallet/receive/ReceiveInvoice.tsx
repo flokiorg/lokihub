@@ -1,4 +1,14 @@
 import {
+  defaultLSP,
+  lspDisabledReason,
+  readLastUsedLSP,
+  rememberLSP,
+} from "src/components/lsps/catalogue";
+import {
+  NoTrustedLSP,
+  TrustedLSPItems,
+} from "src/components/lsps/TrustedLSPItems";
+import {
   ArrowLeftIcon,
   CopyIcon,
   InfoIcon,
@@ -39,7 +49,6 @@ import { Label } from "src/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "src/components/ui/select";
@@ -105,10 +114,15 @@ export default function ReceiveInvoice() {
     }
   }, [invoiceData]);
 
-  // Initialize selectedLspPubkey with the first available LSP
+  // The last used trusted LSP selling now, else the first (WP-26).
+  const trustedLSPs = info?.lsps ?? [];
+  const selectableLSPs = trustedLSPs.filter((l) => !lspDisabledReason(l));
   React.useEffect(() => {
-    if (info?.lsps?.length && !selectedLspPubkey) {
-      setSelectedLspPubkey(info.lsps[0].pubkey);
+    if (!selectedLspPubkey) {
+      const d = defaultLSP(info?.lsps ?? [], readLastUsedLSP());
+      if (d) {
+        setSelectedLspPubkey(d);
+      }
     }
   }, [info, selectedLspPubkey]);
 
@@ -220,7 +234,8 @@ export default function ReceiveInvoice() {
       let cltvDelta = 0;
       let jitLSP = "";
 
-      const firstLSP = selectedLspPubkey || info?.lsps?.[0]?.pubkey;
+      const firstLSP =
+        selectedLspPubkey || defaultLSP(info?.lsps ?? [], readLastUsedLSP());
       // Calculate amount in mloki (1 sat = 1000 mloki)
       const inputAmountMloki =
         (parseInputAmount(+amountDisplay, inputUnit) || 0) * 1000;
@@ -315,6 +330,7 @@ export default function ReceiveInvoice() {
             jitSCID = buyRes.interceptScid;
             cltvDelta = buyRes.cltvExpiryDelta;
             jitLSP = buyRes.lspNodeID;
+            rememberLSP(firstLSP);
           }
         } catch (e: any) {
           console.error("Failed to buy liquidity", e);
@@ -335,7 +351,7 @@ export default function ReceiveInvoice() {
           description,
           lspJitChannelSCID: jitSCID,
           lspCltvExpiryDelta: cltvDelta || 144,
-          lspPubkey: jitSCID ? jitLSP || info?.lsps?.[0]?.pubkey : undefined,
+          lspPubkey: jitSCID ? jitLSP || firstLSP : undefined,
           lspFeeBaseMloki: jitSCID ? feeMloki : undefined, // Base Fee = Calculated Fee
           lspFeeProportionalMillionths: jitSCID ? 0 : undefined, // Proportional Fee = 0 (All fees in base)
         } as CreateInvoiceRequest),
@@ -380,7 +396,9 @@ export default function ReceiveInvoice() {
             (parseAmount(+amountDisplay) * 1000 || transaction?.amount || 0) >=
               0.8 * balances.lightning.totalReceivable &&
             !jitApplied && (
-              <LowReceivingCapacityAlert jitAvailable={!!info?.lsps?.length} />
+              <LowReceivingCapacityAlert
+                jitAvailable={selectableLSPs.length > 0}
+              />
             )}
           <div>
             {transaction ? (
@@ -485,7 +503,8 @@ export default function ReceiveInvoice() {
                     autoFocus
                   />
                 </div>
-                {needsJit && info?.lsps && info.lsps.length > 0 && (
+                {needsJit && trustedLSPs.length === 0 && <NoTrustedLSP />}
+                {needsJit && trustedLSPs.length > 0 && (
                   <div className="rounded-lg border bg-muted/50 p-4 grid gap-4">
                     {/* 1. LSP Selection Header */}
                     <div className="flex flex-col sm:flex-row gap-4 sm:items-end justify-between">
@@ -507,11 +526,7 @@ export default function ReceiveInvoice() {
                             />
                           </SelectTrigger>
                           <SelectContent>
-                            {info.lsps.map((lsp) => (
-                              <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
-                                {lsp.name || `${lsp.pubkey.slice(0, 8)}...`}
-                              </SelectItem>
-                            ))}
+                            <TrustedLSPItems lsps={trustedLSPs} />
                           </SelectContent>
                         </Select>
                       </div>

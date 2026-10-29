@@ -42,18 +42,50 @@ type AppConfig struct {
 	LokihubStoreURL     string `envconfig:"LOKIHUB_STORE_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"`
 	MessageboardNwcUrl  string `envconfig:"MESSAGEBOARD_NWC_URL"`
 
-	EnableSwap            bool   `envconfig:"ENABLE_SWAP" default:"false"`
-	EnableMessageboardNwc bool   `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
-	LSP                   string `envconfig:"LSP"`
+	EnableSwap            bool `envconfig:"ENABLE_SWAP" default:"false"`
+	EnableMessageboardNwc bool `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
 
 	// CashWalletRateLimitPerHour caps mint_cash calls per calling app
 	// pubkey. 0 disables the limit entirely (useful for dev/integration testing
 	// against a shared long-lived hub).
 	CashWalletRateLimitPerHour int `envconfig:"CASH_WALLET_RATE_LIMIT_PER_HOUR" default:"10"`
-	// CashWalletClaimRateLimitPerHour caps cash_redeem calls per calling cash_wallet
-	// app pubkey (separate limiter from CashWalletRateLimitPerHour). 0 disables
-	// the limit entirely.
-	CashWalletClaimRateLimitPerHour int `envconfig:"CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR" default:"20"`
+	// CashClaimCallsPerHour caps the cash_redeem, cash_transfer and
+	// cash_consolidate calls one verified claim signer, or one cash-mode
+	// commitment, may make per hour; the three share it. Never keyed by a bill.
+	// 0 disables the limit.
+	CashClaimCallsPerHour int `envconfig:"CASH_CLAIM_CALLS_PER_HOUR" default:"120"`
+	// CashRedeemMaxInvoiceExpirySecs and CashRedeemMaxFinalCLTV are the redeem
+	// invoice policy: an invoice whose expiry or final CLTV delta exceeds them is
+	// refused RESTRICTED before the claim. 0 disables the check. The CLTV limit
+	// is in blocks: 2880 is two days of one-minute Flokicoin blocks, above flnd's
+	// own invoice default (800).
+	CashRedeemMaxInvoiceExpirySecs int `envconfig:"CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS" default:"86400"`
+	CashRedeemMaxFinalCLTV         int `envconfig:"CASH_REDEEM_MAX_FINAL_CLTV" default:"2880"`
+	// CashRedeemInflightPerHub and CashRedeemInflightNode bound the cash_redeem
+	// payouts in flight per Cash Hub and node-wide; over either a redeem is
+	// RATE_LIMITED before it claims anything. 0 disables that bound.
+	CashRedeemInflightPerHub int `envconfig:"CASH_REDEEM_INFLIGHT_PER_HUB" default:"32"`
+	CashRedeemInflightNode   int `envconfig:"CASH_REDEEM_INFLIGHT_NODE" default:"256"`
+	// CashRedeemLateFailureCooldownSecs is how long a slice whose payout failed
+	// only after cash_redeem answered is refused RATE_LIMITED for another
+	// redeem. 0 disables the cool-down.
+	CashRedeemLateFailureCooldownSecs int `envconfig:"CASH_REDEEM_LATE_FAILURE_COOLDOWN_SECS" default:"600"`
+	// CashRedeemRouteMarginPpm and CashRedeemRouteMarginMinMillis are the margin
+	// over the quoted redeem fee that an external redeem may pay for its route:
+	// fee + max(ppm × amount / 1e6, min).
+	CashRedeemRouteMarginPpm       int `envconfig:"CASH_REDEEM_ROUTE_MARGIN_PPM" default:"2000"`
+	CashRedeemRouteMarginMinMillis int `envconfig:"CASH_REDEEM_ROUTE_MARGIN_MIN_MILLIS" default:"1000"`
+	// CashRedeemReplyWaitSecs is how long cash_redeem waits for its payment
+	// before answering INTERNAL with the slice kept claimed. 0 means 20.
+	CashRedeemReplyWaitSecs int `envconfig:"CASH_REDEEM_REPLY_WAIT_SECS" default:"20"`
+	// CashLineageSpinOffsPerHour bounds how often one bill's lineage spins off
+	// new bills, per hour (NIP-CASH §Security Considerations for Cash-Mode
+	// Slices); over it a spin-off is RATE_LIMITED. 0 disables the limit.
+	CashLineageSpinOffsPerHour int `envconfig:"CASH_LINEAGE_SPIN_OFFS_PER_HOUR" default:"20"`
+	// CashMaxLiveBillsPerHub caps the live bills under one Cash Hub that a
+	// spin-off or consolidate may create; over it the call is QUOTA_EXCEEDED. A
+	// mint is the hub owner's own call and is not bounded. 0 disables the cap.
+	CashMaxLiveBillsPerHub int `envconfig:"CASH_MAX_LIVE_BILLS_PER_HUB" default:"10000"`
 	// CircleWalletRateLimitPerHour caps create_circle_wallet calls per calling
 	// app pubkey. 0 disables the limit entirely.
 	CircleWalletRateLimitPerHour int `envconfig:"CIRCLE_WALLET_RATE_LIMIT_PER_HOUR" default:"3"`
@@ -63,6 +95,8 @@ type AppConfig struct {
 	// Hub SHOULD NOT keep that longer than its audit policy needs. Amounts and
 	// outcomes stay. 0 keeps the links forever.
 	CashSplitLinkRetentionDays int `envconfig:"CASH_SPLIT_LINK_RETENTION_DAYS" default:"90"`
+	// WithdrawEnv are the on-chain withdrawal tunables (config/withdraw.go).
+	WithdrawEnv
 
 	// The four knobs below bound one private-transport batch envelope. They are
 	// node-level rather than per-Cash-Hub on purpose: the transport gate runs
@@ -94,6 +128,14 @@ type AppConfig struct {
 	// (~952 bytes), so 100 sources is a ~96 KB item, past NIP-44's 65535-byte
 	// ceiling and therefore impossible to encrypt at any envelope size.
 	PrivateEnvelopeMaxConsolidateSources int `envconfig:"PRIVATE_ENVELOPE_MAX_CONSOLIDATE_SOURCES" default:"0"`
+	// PrivateInboxEventsPerMin is how many envelopes a minute the hub decrypts
+	// from one relay connection; the rest are dropped undecrypted. 0 disables
+	// the limit.
+	PrivateInboxEventsPerMin int `envconfig:"PRIVATE_INBOX_EVENTS_PER_MIN" default:"600"`
+	// CashMaxRequestAgeSecs is the horizon H (NIP-CASH §Deadlines): how far past
+	// arrival a request's deadline may lie, and the record-retention unit. 0 means
+	// the default (300); accepted 60 to 86400.
+	CashMaxRequestAgeSecs int `envconfig:"CASH_MAX_REQUEST_AGE_SECS" default:"0"`
 }
 
 func (c *AppConfig) GetBaseFrontendUrl() string {
@@ -155,8 +197,6 @@ type Config interface {
 	EnableMessageboardNwc() bool
 	SetEnableMessageboardNwc(value bool) error
 	GetDefaultWorkDir() string
-	GetLSP() string
-	SetLSP(value string) error
 	GetCachedServicesJSON() string
 	SetCachedServicesJSON(json string) error
 }

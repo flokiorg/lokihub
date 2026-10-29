@@ -11,6 +11,8 @@ package integration
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -185,62 +187,54 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 	}
 
 	return CircleHubConfig{
-		Name:       name,
-		Connection: resp.PairingUri,
-		Members:    CircleMembers{AuthorizedPrivkeys: authorizedPrivkeys},
+		Name:           name,
+		Connection:     resp.CircleHubToken,
+		CircleHubToken: resp.CircleHubToken,
+		Members:        CircleMembers{AuthorizedPrivkeys: authorizedPrivkeys},
 	}, resp.ID, admin
 }
+
+// ephemeralCircleGraceSecs and ephemeralCircleDustMloki are every ephemeral
+// circle hub's grace and dust threshold: long enough that a test sees the
+// state it set, short and large enough that the lifecycle job deletes a torn-
+// down hub's wallets, and then the hub, soon after the test.
+const (
+	ephemeralCircleGraceSecs = 30
+	ephemeralCircleDustMloki = 100_000_000
+)
+
+// pendingCircleIdentities holds the ids of the ephemeral circle identities
+// whose hubs were torn down; TestZZZ_NoLeakedEphemeralFixtures deletes them.
+var pendingCircleIdentities sync.Map
 
 // createEphemeralCircleHubApp creates the circle_hub described by req,
 // registers the cleanup that removes its children, the hub and its identity,
 // and root-funds it.
 func createEphemeralCircleHubApp(t *testing.T, admin *adminClient, req adminCreateAppRequest, opts ephemeralCircleHubOpts) adminCreateAppResponse {
 	t.Helper()
+	if req.CircleGraceSecs == 0 {
+		req.CircleGraceSecs = ephemeralCircleGraceSecs
+	}
+	if req.CircleDustThresholdMloki == 0 {
+		req.CircleDustThresholdMloki = ephemeralCircleDustMloki
+	}
 	resp, err := admin.createApp(req)
 	require.NoError(t, err)
 
-	// Registered first so it runs LAST (t.Cleanup is LIFO), after the hub app
-	// below is deleted: apps.DeleteCircleIdentity refuses while any circle_hub
-	// still references it, and every ephemeral hub here gets its own
-	// brand-new identity (CircleIdentityName is always set, never
-	// CircleIdentityId). Without this, the identity itself outlives the hub
-	// forever (see TestCreateCircleHub_IdentitySurvivesHubDeletion - by
-	// design, identities are meant to be reusable across hubs) and, for
-	// circlePolicyFollowSet, keeps getting swept by the background social
-	// cache refresher (nostr_social_cache.go's runSocialCacheRefresh) every
-	// 5 minutes indefinitely - this was found live accumulating hundreds of
-	// leaked relay-backed identities, each still being re-queried
-	// against the general relays and contributing to the "too many
-	// concurrent REQs" notices/timeouts this suite has hit.
+	// Deleting a circle_hub tears it down (NIP-CW §Lifecycle and Deletion): its
+	// wallets go to Closing and the lifecycle job deletes each once its grace
+	// ends, then the hub. Ephemeral hubs use a short grace and a dust threshold
+	// above anything a test funds, so that happens within minutes; the
+	// identity can only go after its hub, so TestZZZ_NoLeakedEphemeralFixtures
+	// deletes it once the hub is gone.
 	if identityID, err := admin.getCircleIdentityID(resp.ID); err != nil {
 		t.Logf("cleanup: failed to resolve ephemeral circle_hub app_id=%d's own circle identity id, cannot clean it up (%v)", resp.ID, err)
 	} else {
-		t.Cleanup(func() {
-			if err := admin.deleteCircleIdentity(identityID); err != nil {
-				t.Logf("cleanup: failed to delete ephemeral circle identity id=%d (%v)", identityID, err)
-			}
-		})
+		pendingCircleIdentities.Store(identityID, true)
 	}
-	// Registered before the sweep below so it runs second (t.Cleanup is
-	// LIFO): every child this hub ever mints, across every subtest that
-	// uses it, must be reclaimed/deleted before the hub itself can be -
-	// apps.DeleteApp refuses a circle_hub with any circle_wallet children
-	// still attached.
 	t.Cleanup(func() {
-		if err := admin.deleteApp(resp.ID); err != nil {
-			t.Logf("cleanup: failed to delete ephemeral circle_hub app_id=%d (%v)", resp.ID, err)
-		}
-	})
-	t.Cleanup(func() {
-		children, err := admin.listCircleChildren(resp.ID)
-		if err != nil {
-			t.Logf("cleanup: failed to list circle children for ephemeral hub app_id=%d (%v)", resp.ID, err)
-			return
-		}
-		for _, child := range children {
-			if err := admin.deleteCircleChild(resp.ID, child.AppID); err != nil {
-				t.Logf("cleanup: failed to delete ephemeral circle child app_id=%d (%v)", child.AppID, err)
-			}
+		if err := admin.deleteApp(resp.ID); err != nil && !strings.Contains(err.Error(), "not found") {
+			t.Logf("cleanup: failed to tear down ephemeral circle_hub app_id=%d (%v)", resp.ID, err)
 		}
 	})
 
@@ -326,7 +320,9 @@ func createEphemeralCashHub(t *testing.T, cfg *Config, name string, expiresAt *t
 	// apps.DeleteApp refuses a cash_hub with any cash_wallet children still
 	// attached.
 	t.Cleanup(func() {
-		if err := admin.deleteApp(resp.ID); err != nil {
+		// A mint's request record (NIP-CASH Q23) or an order (NIP-CO) keeps the
+		// hub until it drops; TestZZZ_NoLeakedEphemeralFixtures accepts that.
+		if err := admin.deleteApp(resp.ID); err != nil && !strings.Contains(err.Error(), "cannot be deleted yet") {
 			t.Logf("cleanup: failed to delete ephemeral cash_hub app_id=%d (%v)", resp.ID, err)
 		}
 	})
@@ -350,7 +346,7 @@ func createEphemeralCashHub(t *testing.T, cfg *Config, name string, expiresAt *t
 
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
 
-	return CashHubConfig{Name: name, Connection: resp.PairingUri}, resp.ID, admin
+	return CashHubConfig{Name: name, Connection: resp.CashHubToken, CashHubToken: resp.CashHubToken}, resp.ID, admin
 }
 
 // ephemeralSimpleWalletFundLoki is root-funded into every ephemeral simple

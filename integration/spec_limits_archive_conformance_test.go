@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/ohstr/nmilat/nipcash"
 	nipcashclient "github.com/ohstr/nmilat/nipcash/client"
 	"github.com/ohstr/nmilat/nipcash/transport"
 )
@@ -38,9 +38,9 @@ func TestSpec_Ceilings_AnnouncedLimitsAreSelfConsistent(t *testing.T) {
 
 	// Read the announcement the way a client does: recover the hub identity from the bill's
 	// own mint signature, then fetch and verify the kind-11190 event against it.
-	tok, err := lokicash.Decode(created.CashToken)
+	tok, err := nipcash.Decode(created.CashToken)
 	require.NoError(t, err)
-	minter, ok := lokicash.VerifyMint(tok)
+	minter, ok := nipcash.VerifyProvenance(tok)
 	require.True(t, ok, "bill carries no verifiable provenance, so no announcement can be found")
 	hubXOnly, err := transport.NormalizeNodeIdentity(minter)
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestSpec_Archive_IsUnreachableOverNWC(t *testing.T) {
 		Expiry:     happyPathExpirySecs,
 	}, &created))
 
-	bill := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+	bill := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 	// Drain it in full, which empties the bill and has the Hub destroy it.
 	invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spec archive drain")
@@ -158,10 +158,10 @@ func TestSpec_Archive_IsUnreachableOverNWC(t *testing.T) {
 		require.Empty(t, status.Recipients,
 			"cash_status returned %d archived roster row(s) for a destroyed bill; a tombstone may say it is spent, never who held it",
 			len(status.Recipients))
-		require.Equal(t, "spent", status.Error,
+		require.Equal(t, "spent", status.Status,
 			"cash_status answered a destroyed bill with something other than a tombstone (error=%q); an empty roster is not enough — the reply must identify itself as the retention exception, or this assertion would also pass for a Hub serving the bill as though it were live",
-			status.Error)
-		t.Logf("cash_status on a destroyed bill: tombstone, error=%q, no roster", status.Error)
+			status.Status)
+		t.Logf("cash_status on a destroyed bill: tombstone, error=%q, no roster", status.Status)
 	} else {
 		t.Logf("cash_status on a destroyed bill: silent (%v)", statusErr)
 	}

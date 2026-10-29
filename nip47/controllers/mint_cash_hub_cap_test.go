@@ -61,7 +61,7 @@ func TestMintCash_HubCap_SeparateControllers_AtMostOneFunded(t *testing.T) {
 				} else {
 					codes = append(codes, r.Error.Code)
 				}
-			})
+			}, testMintMeta())
 		}(i)
 	}
 	close(ready)
@@ -73,11 +73,11 @@ func TestMintCash_HubCap_SeparateControllers_AtMostOneFunded(t *testing.T) {
 		switch c {
 		case "OK":
 			ok++
-		case "NOT_READY":
+		case "RATE_LIMITED":
 			notReady++
 		}
 	}
 	if ok != 1 || notReady != n-1 {
-		t.Fatalf("hub creation slot did not serialize separate controllers: %d OK, %d NOT_READY of %d", ok, notReady, n)
+		t.Fatalf("hub creation slot did not serialize separate controllers: %d OK, %d RATE_LIMITED of %d", ok, notReady, n)
 	}
 }

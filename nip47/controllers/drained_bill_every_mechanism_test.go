@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -72,7 +71,7 @@ func TestHandleCashConsolidateEvent_DrainedSourceIsDeleted(t *testing.T) {
 	caller := guardCashWallet(t, svc, hub)
 	ownerPriv := nostr.GeneratePrivateKey()
 	ownerPub, _ := nostr.GetPublicKey(ownerPriv)
-	_, secretHash, err := cashwallet.GenerateCashSecret()
+	_, secretHash, err := tests.GenerateCashSecret()
 	require.NoError(t, err)
 
 	const amount1, amount2 = uint64(123_000), uint64(1_000)

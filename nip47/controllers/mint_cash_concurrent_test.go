@@ -86,7 +86,7 @@ func TestHandleMintCashEvent_ConcurrentCreation_ExactlyOneSucceeds(t *testing.T)
 			defer wg.Done()
 			<-ready
 			controller.HandleMintCashEvent(ctx, a.req, a.eventID, hub,
-				func(r *models.Response, _ nostr.Tags) { responses <- r })
+				func(r *models.Response, _ nostr.Tags) { responses <- r }, testMintMeta())
 		}()
 	}
 	close(ready)
@@ -98,8 +98,8 @@ func TestHandleMintCashEvent_ConcurrentCreation_ExactlyOneSucceeds(t *testing.T)
 		if r.Error == nil {
 			successes++
 		} else {
-			assert.Equal(t, constants.ERROR_NOT_READY, r.Error.Code)
-			assert.Contains(t, r.Error.Message, "already in progress")
+			assert.Equal(t, constants.ERROR_RATE_LIMITED, r.Error.Code)
+			assert.Contains(t, r.Error.Message, "in progress")
 			lockRejections++
 		}
 	}

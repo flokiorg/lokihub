@@ -69,4 +69,30 @@ type Response struct {
 type Error struct {
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
+	// Detail refines a withdrawal refusal (NIP-CASH §Errors): one of nmilat's
+	// eight values, on the private transport only.
+	Detail string `json:"detail,omitempty"`
 }
+
+// CallMeta is what the transport knows about a call before its controller runs
+// (NIP-CASH §Deadlines): when it arrived and the deadline it carried.
+type CallMeta struct {
+	// Transport is "standard" (kind 23194) or "private" (the envelope transport).
+	Transport string
+	// ArrivedAt is the unix second the request arrived, taken before decryption.
+	ArrivedAt int64
+	// Deadline is the call's deadline: the request's expiration tag on the
+	// standard transport, the envelope's not_after on the private one.
+	Deadline int64
+	// DeadlinePresent is false when the request carried no deadline.
+	DeadlinePresent bool
+	// DeadlineMalformed is set when the request carried a deadline that does not
+	// parse (two expiration tags, or one that is not unsigned decimal).
+	DeadlineMalformed bool
+}
+
+// Transports of a CallMeta.
+const (
+	TransportStandard = "standard"
+	TransportPrivate  = "private"
+)

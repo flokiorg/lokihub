@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 
 // Mock LNClient for testing
 type mockLNClient struct {
+	// failFirst sends fail with this error before one succeeds.
+	failFirst      []error
 	sendCalls      []sendCall
 	msgChan        chan lnclient.CustomMessage
 	errChan        chan error
@@ -34,6 +37,11 @@ func newMockLNClient() *mockLNClient {
 func (m *mockLNClient) SendCustomMessage(ctx context.Context, peerPubkey string, msgType uint32, data []byte) error {
 	if m.shouldFailSend {
 		return context.Canceled
+	}
+	if len(m.failFirst) > 0 {
+		err := m.failFirst[0]
+		m.failFirst = m.failFirst[1:]
+		return err
 	}
 	m.sendCalls = append(m.sendCalls, sendCall{peerPubkey, msgType, data})
 	return nil
@@ -216,4 +224,22 @@ func TestFLNDTransport_SubscribeCustomMessages(t *testing.T) {
 	}
 
 	cancel()
+}
+
+// A peer whose connection is being replaced is retried; any other error is not.
+func TestSendCustomMessage_RetriesWhilePeerReconnects(t *testing.T) {
+	m := newMockLNClient()
+	m.failFirst = []error{errors.New("rpc error: code = Unknown desc = peer exiting"),
+		errors.New("rpc error: code = Unknown desc = peer 03ab disconnected")}
+	tr := NewFLNDTransport(m)
+	if err := tr.SendCustomMessage(context.Background(), "03ab", 37913, []byte("{}")); err != nil {
+		t.Fatalf("expected the send to succeed after the peer came back: %v", err)
+	}
+	if len(m.sendCalls) != 1 {
+		t.Fatalf("expected one delivered message, got %d", len(m.sendCalls))
+	}
+	m.failFirst = []error{errors.New("message too odd")}
+	if err := tr.SendCustomMessage(context.Background(), "03ab", 37913, []byte("{}")); err == nil {
+		t.Fatal("expected a non-churn error to be returned at once")
+	}
 }

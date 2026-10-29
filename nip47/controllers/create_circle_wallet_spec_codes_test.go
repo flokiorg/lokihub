@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcw"
@@ -29,7 +30,7 @@ func joinCircleWith(t *testing.T, svc *tests.TestService, provider *db.App, cach
 
 	var published *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, cache).
-		HandleCreateCircleWalletEvent(context.TODO(), nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, context.TODO(), nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			published = r
 		})
 	require.NotNil(t, published)
@@ -103,9 +104,27 @@ func TestCreateCircleWallet_ResolvedMaxAmountInEncryptedDetails(t *testing.T) {
 	memberPub, _ := nostr.GetPublicKey(member)
 	connection, err := nipcw.ConnectionKeyFromSecret(testConnectionSecret(memberPub))
 	require.NoError(t, err)
-	parsed, err := nipcw.CreateCircleWalletParams{Credential: nipcw.BySigning(member), Connection: connection, MaxAmountMillis: 100_500}.
-		ParseResult(*provider.WalletPubkey, raw)
+	prepared, err := nipcw.CreateCircleWalletParams{Credential: nipcw.BySigning(member), Connection: connection, MaxAmountMillis: 100_500}.
+		Prepare(*provider.WalletPubkey, time.Now())
 	require.NoError(t, err)
-	require.NotNil(t, parsed.MaxAmountMillis)
-	assert.Equal(t, uint64(100_000), *parsed.MaxAmountMillis)
+	parsed, err := prepared.ParseResult(raw)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(100_000), parsed.MaxAmountMillis)
+}
+
+// A Hub that is not accepting joins refuses every one RESTRICTED and consumes
+// nothing (NIP-CW §The Circle Wallet Hub Connection).
+func TestCreateCircleWallet_NotAccepting_Restricted(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	provider := createCircleHub(t, svc, 7200, 1_000_000)
+	require.NoError(t, svc.DB.Model(&db.CircleHubConfig{}).Where("app_id = ?", provider.ID).Update("accepting_joins", false).Error)
+
+	response := joinCircleWith(t, svc, provider, &mockSocialCache{authorized: true}, nostr.GeneratePrivateKey(), 100_000)
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
+	var proofs int64
+	require.NoError(t, svc.DB.Model(&db.CircleWalletIdentityProof{}).Count(&proofs).Error)
+	assert.Zero(t, proofs, "nothing is consumed")
 }

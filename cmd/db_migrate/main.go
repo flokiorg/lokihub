@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/logger"
 )
 
@@ -36,17 +37,28 @@ var expectedTables = []string{
 	"cash_wallet_claims",
 	"circle_wallet_identity_proofs",
 	"circle_wallet_memberships",
-	"cash_transfer_proofs",
-	"cash_stranded_funds",
+	"cash_consumed_proofs",
+	"private_served_nonces",
+	"circle_join_records",
+	"circle_rotations",
+	"cash_used_request_ids",
+	"cash_request_records",
+	"cash_request_record_bills",
+	"cash_horizon",
 	// The cash bill archive. Retained forever and carried across a migration
 	// like any other table: it is the only record that a spent bill ever
 	// existed, since the bill's own app row is hard-deleted the moment it is
 	// drained.
 	"cash_bill_archives",
 	"cash_bill_slice_archives",
-	// mint_cash's replay guard — losing it forgets every served key, so a caller's
-	// retry could mint a second wallet on the new database.
-	"cash_mint_idempotencies",
+	"cash_order_connections",
+	"cash_order_terms",
+	"cash_orders",
+	"cash_order_addresses",
+	"cash_order_payments",
+	// Offer listings (WP-25).
+	"offer_listings",
+	"listing_node_states",
 }
 
 func main() {
@@ -144,6 +156,16 @@ func main() {
 }
 
 func migrateDB(from, to *gorm.DB) error {
+	// A source made before the current schema is refused here exactly as lokihub
+	// refuses it at startup; copying it would carry its rows past that guard.
+	var mark []db.UserConfig
+	if err := from.Where(&db.UserConfig{Key: migrations.SchemaEpochKey}).Limit(1).Find(&mark).Error; err != nil {
+		return fmt.Errorf("failed to read the source schema epoch: %w", err)
+	}
+	if len(mark) == 0 || mark[0].Value != migrations.SchemaEpoch {
+		return migrations.ErrDatabasePredatesSchema
+	}
+
 	tx := to.Begin()
 	defer tx.Rollback()
 
@@ -180,6 +202,11 @@ func migrateDB(from, to *gorm.DB) error {
 	}
 
 	logger.Logger.Info().Msg("migrating user_configs...")
+	// The destination was created with its own epoch mark; the source's rows,
+	// its mark included, replace it.
+	if err := tx.Where(&db.UserConfig{Key: migrations.SchemaEpochKey}).Delete(&db.UserConfig{}).Error; err != nil {
+		return fmt.Errorf("failed to clear the destination schema epoch: %w", err)
+	}
 	if err := migrateTable[db.UserConfig](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate user_configs: %w", err)
 	}
@@ -237,14 +264,30 @@ func migrateDB(from, to *gorm.DB) error {
 		return fmt.Errorf("failed to migrate circle_wallet_identity_proofs: %w", err)
 	}
 
-	logger.Logger.Info().Msg("migrating cash_transfer_proofs...")
-	if err := migrateTable[db.CashTransferProof](from, tx); err != nil {
-		return fmt.Errorf("failed to migrate cash_transfer_proofs: %w", err)
-	}
-
-	logger.Logger.Info().Msg("migrating cash_stranded_funds...")
-	if err := migrateTable[db.CashStrandedFund](from, tx); err != nil {
-		return fmt.Errorf("failed to migrate cash_stranded_funds: %w", err)
+	for _, step := range []struct {
+		name string
+		run  func(from, to *gorm.DB) error
+	}{
+		{"cash_consumed_proofs", migrateTable[db.CashConsumedProof]},
+		{"private_served_nonces", migrateTable[db.PrivateServedNonce]},
+		{"circle_join_records", migrateTable[db.CircleJoinRecord]},
+		{"circle_rotations", migrateTable[db.CircleRotation]},
+		{"cash_used_request_ids", migrateTable[db.CashUsedRequestID]},
+		{"cash_request_records", migrateTable[db.CashRequestRecord]},
+		{"cash_request_record_bills", migrateTable[db.CashRequestRecordBill]},
+		{"cash_horizon", migrateTable[db.CashHorizon]},
+		{"cash_order_connections", migrateTable[db.CashOrderConnection]},
+		{"cash_order_terms", migrateTable[db.CashOrderTerms]},
+		{"cash_orders", migrateTable[db.CashOrder]},
+		{"cash_order_addresses", migrateTable[db.CashOrderAddress]},
+		{"cash_order_payments", migrateTable[db.CashOrderPayment]},
+		{"offer_listings", migrateTable[db.OfferListing]},
+		{"listing_node_states", migrateTable[db.ListingNodeState]},
+	} {
+		logger.Logger.Info().Msg("migrating " + step.name + "...")
+		if err := step.run(from, tx); err != nil {
+			return fmt.Errorf("failed to migrate %s: %w", step.name, err)
+		}
 	}
 
 	logger.Logger.Info().Msg("migrating cash_bill_archives...")
@@ -257,9 +300,8 @@ func migrateDB(from, to *gorm.DB) error {
 		return fmt.Errorf("failed to migrate cash_bill_slice_archives: %w", err)
 	}
 
-	logger.Logger.Info().Msg("migrating cash_mint_idempotencies...")
-	if err := migrateTable[db.CashMintIdempotency](from, tx); err != nil {
-		return fmt.Errorf("failed to migrate cash_mint_idempotencies: %w", err)
+	if err := migrateWithdrawTables(from, tx); err != nil {
+		return err
 	}
 
 	logger.Logger.Info().Msg("migrating swaps...")

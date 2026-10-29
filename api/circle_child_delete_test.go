@@ -1,18 +1,18 @@
 package api
 
-// Covers DeleteCircleWalletChild: unlike DeleteCircleHub (which only ever
-// operates on the whole hub at once), this removes a single circle_wallet
-// child in any state — reclaiming any remaining balance back to the hub
-// before deleting the child app, the same way DeleteCashHubAllocation handles
-// a claimed Cash wallet (see service.ReclaimAndDeleteSubWallet).
+// Covers DeleteCircleWalletChild, the host's delete of one member wallet: it
+// moves the wallet to Closing (NIP-CW §Lifecycle and Deletion) and never moves
+// its balance; the wallet goes once its grace is over and it holds at most dust.
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
@@ -28,60 +28,6 @@ func newCircleHub(t *testing.T, svc *tests.TestService, perWalletMaxMloki, maxEx
 	)
 	require.NoError(t, err)
 	return hub
-}
-
-func TestDeleteCircleWalletChild_Empty_DeletesChild(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCircleHub(t, svc, 100_000, 3600)
-	child := createCircleChild(t, svc, hub, "member")
-
-	theAPI := newTestAPIWithService(t, svc)
-	err = theAPI.DeleteCircleWalletChild(hub.ID, child.ID)
-	require.NoError(t, err)
-
-	var count int64
-	svc.DB.Model(&db.App{}).Where("id = ?", child.ID).Count(&count)
-	assert.Zero(t, count, "the empty circle wallet child must be deleted")
-}
-
-func TestDeleteCircleWalletChild_WithBalance_ReclaimsToHub(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	// Recognised as a self-payment so the reclaim transfer's incoming leg on
-	// the hub settles synchronously.
-	svc.LNClient.(*tests.MockLn).Pubkey = selfPaymentPubkey
-
-	hub := newCircleHub(t, svc, 300_000, 3600)
-	// Needs pay_invoice (unlike createCircleChild's default GET_BALANCE_SCOPE-only
-	// helper) since reclaiming pays out of this child back to the hub.
-	child, _, err := svc.AppsService.CreateApp(
-		"member", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
-		[]string{constants.PAY_INVOICE_SCOPE}, db.AppKindCircleWallet, &hub.ID, db.ParentKindCircle, nil,
-	)
-	require.NoError(t, err)
-
-	// MockInvoice (used for the reclaim transfer) encodes a fixed 123_000 mloki
-	// amount that the mock LN client validates against regardless of the
-	// requested amount — fund well above that so the reclaim payment validates.
-	const fundedMloki = 200_000
-	tests.FundApp(svc, child.ID, fundedMloki, "fundtxhash")
-
-	theAPI := newTestAPIWithService(t, svc)
-	err = theAPI.DeleteCircleWalletChild(hub.ID, child.ID)
-	require.NoError(t, err)
-
-	var count int64
-	svc.DB.Model(&db.App{}).Where("id = ?", child.ID).Count(&count)
-	assert.Zero(t, count, "the circle wallet child must be deleted")
-
-	// The child's balance must be transferred back to the hub, not destroyed.
-	hubBalance := queries.GetIsolatedBalance(svc.DB, hub.ID)
-	assert.Greater(t, hubBalance, int64(0), "hub must gain balance after the reclaim transfer")
 }
 
 func TestDeleteCircleWalletChild_WrongHub_Rejected(t *testing.T) {
@@ -119,25 +65,35 @@ func TestDeleteCircleWalletChild_NonCircleHub_Rejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "not a circle_hub")
 }
 
-// A payment still going out of the wallet keeps it alive: deleting it would
-// cascade-delete the outgoing row before the node reports how it ended.
-func TestDeleteCircleWalletChild_PendingOutgoing_Refused(t *testing.T) {
+// A host delete moves the wallet to Closing, starting its grace, and frees the
+// member to join again; its balance stays where it is (U-16.2).
+func TestDeleteCircleWalletChild_MovesToClosing_BalanceUntouched(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	hub := newCircleHub(t, svc, 300_000, 3600)
 	child := createCircleChild(t, svc, hub, "member")
-	tests.FundApp(svc, child.ID, 200_000, "pending-out-fund")
-	require.NoError(t, svc.DB.Create(&db.Transaction{
-		AppId: &child.ID, Type: constants.TRANSACTION_TYPE_OUTGOING,
-		State: constants.TRANSACTION_STATE_PENDING, AmountMloki: 50_000, PaymentHash: "child-pending-out",
-	}).Error)
+	require.NoError(t, svc.DB.Create(&db.CircleWalletMembership{CircleHubAppID: hub.ID, RequesterPubkey: tests.RandomHex32(), WalletAppID: child.ID}).Error)
+	tests.FundApp(svc, child.ID, 200_000, tests.RandomHex32())
 
-	err = newTestAPIWithService(t, svc).DeleteCircleWalletChild(hub.ID, child.ID)
-	require.ErrorIs(t, err, constants.ErrInvalidParams)
+	before := time.Now().Unix()
+	require.NoError(t, newTestAPIWithService(t, svc).DeleteCircleWalletChild(hub.ID, child.ID))
 
-	var count int64
-	svc.DB.Model(&db.App{}).Where("id = ?", child.ID).Count(&count)
-	assert.Equal(t, int64(1), count, "the wallet stays until the payment ends")
+	var closing db.App
+	require.NoError(t, svc.DB.First(&closing, child.ID).Error, "the wallet stays, paying out only")
+	assert.Equal(t, circlelife.StateClosing, closing.CircleState)
+	require.NotNil(t, closing.CircleGraceEndsAt)
+	assert.GreaterOrEqual(t, *closing.CircleGraceEndsAt, before+constants.CIRCLE_DEFAULT_GRACE_SECS)
+	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, child.ID), "nothing is swept")
+	assert.Zero(t, queries.GetIsolatedBalance(svc.DB, hub.ID))
+	var memberships int64
+	require.NoError(t, svc.DB.Model(&db.CircleWalletMembership{}).Where("wallet_app_id = ?", child.ID).Count(&memberships).Error)
+	assert.Zero(t, memberships, "a Closing wallet no longer counts for the one-wallet rule")
+
+	// Again: nothing changes, the grace is not restarted (U-16.9).
+	graceEnds := *closing.CircleGraceEndsAt
+	require.NoError(t, newTestAPIWithService(t, svc).DeleteCircleWalletChild(hub.ID, child.ID))
+	require.NoError(t, svc.DB.First(&closing, child.ID).Error)
+	assert.Equal(t, graceEnds, *closing.CircleGraceEndsAt)
 }

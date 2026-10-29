@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	nmilatnip01 "github.com/ohstr/nmilat/nip01"
+	"github.com/ohstr/nmilat/nipcw"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -103,6 +105,15 @@ type nostrSocialCache struct {
 	// private transport's inbox key (NIP-CW §Hidden Members). Nil, or an
 	// error, means no hidden entry can be read.
 	inboxKey func() (string, error)
+	// retiredInboxKeys returns the retired inbox keys still in use: those of an
+	// index some Active or Suspended Circle Wallet was issued under (NIP-CW
+	// §Hidden Members, inbox rotation). Nil means none.
+	retiredInboxKeys func() []string
+
+	// onResolved is called after each successful resolution of a set, with the
+	// set it resolved to, so the Hubs using it apply the membership (NIP-CW
+	// §Membership). An unresolved or failed refresh never calls it.
+	onResolved func(provider, d string, set *FollowSet)
 
 	// floor is the newest version of each set read so far, keyed like cache
 	// and guarded by mu. Never evicted, and saved through persistDB, so a
@@ -394,7 +405,7 @@ func supersedes(a, b *nostr.Event) bool {
 // public `p` tags plus the `hidden_p` entries inboxPrivKey decrypts. NIP-51
 // private items in `content` are never read, and no tag other than `d`, `p`
 // and `hidden_p` affects membership. Title and description are display-only.
-func parseFollowSet(ev *nostr.Event, d, inboxPrivKey string) *FollowSet {
+func parseFollowSet(ev *nostr.Event, d string, inboxPrivKeys ...string) *FollowSet {
 	set := &FollowSet{
 		Provider:  ev.PubKey,
 		D:         d,
@@ -403,12 +414,13 @@ func parseFollowSet(ev *nostr.Event, d, inboxPrivKey string) *FollowSet {
 		members:   make(map[string]struct{}),
 	}
 
-	var conversationKey [32]byte
-	canDecrypt := false
-	if inboxPrivKey != "" {
-		key, err := nip44.GenerateConversationKey(ev.PubKey, inboxPrivKey)
-		if err == nil {
-			conversationKey, canDecrypt = key, true
+	var conversationKeys [][32]byte
+	for _, inboxPrivKey := range inboxPrivKeys {
+		if inboxPrivKey == "" {
+			continue
+		}
+		if key, err := nip44.GenerateConversationKey(ev.PubKey, inboxPrivKey); err == nil {
+			conversationKeys = append(conversationKeys, key)
 		}
 	}
 
@@ -441,22 +453,36 @@ func parseFollowSet(ev *nostr.Event, d, inboxPrivKey string) *FollowSet {
 		}
 	}
 
-	if !canDecrypt {
-		return set
-	}
 	for _, payload := range hiddenTags {
 		// An entry this hub can't open may be meant for another hub sharing
-		// the identity, so it is skipped without error (§Hidden Members).
-		plaintext, err := nip44.Decrypt(payload, conversationKey)
-		if err != nil || !nostr.IsValid32ByteHex(plaintext) {
-			continue
-		}
-		if _, dup := set.members[plaintext]; !dup {
-			set.members[plaintext] = struct{}{}
-			set.Hidden = append(set.Hidden, plaintext)
+		// the identity, so it is skipped without error (§Hidden Members). Each
+		// is tried with the current inbox key and every retired one in use.
+		for _, conversationKey := range conversationKeys {
+			plaintext, err := nip44.Decrypt(payload, conversationKey)
+			if err != nil || !nostr.IsValid32ByteHex(plaintext) {
+				continue
+			}
+			if _, dup := set.members[plaintext]; !dup {
+				set.members[plaintext] = struct{}{}
+				set.Hidden = append(set.Hidden, plaintext)
+			}
+			break
 		}
 	}
 	return set
+}
+
+// hiddenMemberKeys are the inbox keys hidden_p entries are tried with: the
+// current one and every retired one still in use.
+func (s *nostrSocialCache) hiddenMemberKeys() []string {
+	keys := []string{}
+	if key := s.hiddenMemberKey(); key != "" {
+		keys = append(keys, key)
+	}
+	if s.retiredInboxKeys != nil {
+		keys = append(keys, s.retiredInboxKeys()...)
+	}
+	return keys
 }
 
 // hiddenMemberKey resolves the inbox key, or "" when none is available.
@@ -490,25 +516,29 @@ func (s *nostrSocialCache) queryAndStore(ctx context.Context, pool *nostr.Simple
 		Kinds:   []int{db.KindFollowSet},
 		Tags:    nostr.TagMap{"d": []string{d}},
 	})
-	selected := selectFollowSetEvent(events, provider, d)
+	selected, resolved := s.resolve(events, provider, d)
 
-	if selected == nil {
+	if !resolved {
 		// A caller-side cancellation is not a confirmed miss: no warning.
 		if ctx.Err() == nil {
 			logger.Logger.Warn().Str("address", followSetKey(provider, d)).Strs("relays", relayUrls).
-				Msg("No follow set found")
+				Msg("No follow set version this hub may adopt was found")
 		}
-		// Preserve the last known-good set instead of dropping it — a
-		// transient relay hiccup must not look like the owner revoked
-		// everyone. A genuine change still lands on the next successful fetch.
+		// A failed refresh leaves the last successful resolution in force
+		// (NIP-CW §Membership): a transient relay hiccup, or a relay serving
+		// an older version, must not look like the owner revoked everyone.
 		// Stale entries are evicted first, so relays that stay unreachable
 		// can't keep an old set, and the members it lists, alive forever.
 		s.mu.Lock()
 		s.evictStaleUnlocked()
 		existing, ok := s.cache[followSetKey(provider, d)]
+		floor := s.floor[followSetKey(provider, d)]
 		s.mu.Unlock()
 		if ok {
 			return existing, nil
+		}
+		if floor != nil {
+			return s.storeUnlessOlder(followSetKey(provider, d), parseFollowSet(floor, d, s.hiddenMemberKeys()...)), nil
 		}
 		// NIP-CW §Membership: a set not found yet is unresolved, never empty.
 		// Nothing is cached, so the next request retries.
@@ -518,8 +548,57 @@ func (s *nostrSocialCache) queryAndStore(ctx context.Context, pool *nostr.Simple
 		return nil, constants.ErrCircleMembershipUnresolved
 	}
 
-	set := parseFollowSet(selected, d, s.hiddenMemberKey())
-	return s.store(set), nil
+	set := s.store(parseFollowSet(selected, d, s.hiddenMemberKeys()...))
+	s.resolvedTo(provider, d, set)
+	return set, nil
+}
+
+// resolve applies nmilat's ResolveFollowSet to fetched events (NIP-CW
+// §Membership): the version to adopt, or false for a failed refresh (no
+// eligible version, or one older than the last resolution, Q21). A version
+// dated more than 15 minutes ahead is ignored.
+func (s *nostrSocialCache) resolve(events []nostr.Event, provider, d string) (*nostr.Event, bool) {
+	s.mu.RLock()
+	floor := s.floor[followSetKey(provider, d)]
+	s.mu.RUnlock()
+	var last *nipcw.Resolution
+	if floor != nil {
+		last = &nipcw.Resolution{EventID: floor.ID, CreatedAt: int64(floor.CreatedAt)}
+	}
+	converted := make([]*nmilatnip01.Event, 0, len(events))
+	for i := range events {
+		converted = append(converted, toNip01Event(&events[i]))
+	}
+	resolution, ok := nipcw.ResolveFollowSet(converted, nipcw.FollowSetAddress{Provider: provider, D: d}, s.hiddenMemberKeys(), time.Now(), last)
+	if !ok || resolution == nil {
+		return nil, false
+	}
+	for i := range events {
+		if events[i].ID == resolution.EventID {
+			return &events[i], true
+		}
+	}
+	if floor != nil && floor.ID == resolution.EventID {
+		return floor, true
+	}
+	return nil, false
+}
+
+// resolvedTo hands a successful resolution to the Hubs using the set.
+func (s *nostrSocialCache) resolvedTo(provider, d string, set *FollowSet) {
+	if s.onResolved != nil && set != nil {
+		s.onResolved(provider, d, set)
+	}
+}
+
+// toNip01Event converts a go-nostr event into nmilat's; both are NIP-01 events.
+func toNip01Event(ev *nostr.Event) *nmilatnip01.Event {
+	tags := make([][]string, 0, len(ev.Tags))
+	for _, tag := range ev.Tags {
+		tags = append(tags, []string(tag))
+	}
+	return &nmilatnip01.Event{ID: ev.ID, PubKey: ev.PubKey, CreatedAt: uint64(ev.CreatedAt), Kind: ev.Kind, //nolint:gosec // unix seconds
+		Tags: tags, Content: ev.Content, Sig: ev.Sig}
 }
 
 // store caches set unless a newer version of it is already cached or was
@@ -532,7 +611,7 @@ func (s *nostrSocialCache) store(set *FollowSet) *FollowSet {
 	floor := s.floor[key]
 	s.mu.RUnlock()
 	if floor != nil && supersedes(floor, set.Event) {
-		set = parseFollowSet(floor, set.D, s.hiddenMemberKey())
+		set = parseFollowSet(floor, set.D, s.hiddenMemberKeys()...)
 	}
 
 	kept := s.storeUnlessOlder(key, set)
@@ -670,7 +749,9 @@ func (s *nostrSocialCache) RefreshFollowSet(ctx context.Context, provider, d str
 // storePublished caches a set this hub just signed, so membership reflects it
 // without waiting for relays to serve it back.
 func (s *nostrSocialCache) storePublished(ev *nostr.Event, d string) *FollowSet {
-	return s.store(parseFollowSet(ev, d, s.hiddenMemberKey()))
+	set := s.store(parseFollowSet(ev, d, s.hiddenMemberKeys()...))
+	s.resolvedTo(ev.PubKey, d, set)
+	return set
 }
 
 // WarmGeneralRelays re-connects s.sharedPool to the current

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/ohstr/nmilat/nipcash"
 	nipcashclient "github.com/ohstr/nmilat/nipcash/client"
 	"github.com/ohstr/nmilat/nipcash/transport"
+	"github.com/ohstr/nmilat/nipcw"
 )
 
 // privateCall places ONE bill-method request over the private transport and returns the
@@ -42,12 +45,23 @@ func privateCall(t *testing.T, billToken, method string, params any, signerPriv 
 	return privateCallCtx(t, ctx, billToken, method, params, signerPriv, result)
 }
 
+// forgedBillKeys holds marked tokens whose bill proofs a test signs with a key of
+// its own: a stranger who knows the wallet pubkey but not the connection secret.
+var forgedBillKeys sync.Map
+
+// strangerMark separates a token from the marker naming its forged bill key.
+const strangerMark = "#stranger-"
+
 // privateCallCtx is privateCall with the caller's own deadline. Separate because a
 // SILENCE assertion needs to bound its own wait — a probe that hangs for the default
 // 30s turns "the hub went quiet" into a test that takes half a minute per poll.
 func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string, params any, signerPriv string, result any) error {
 	t.Helper()
 
+	forgedKey, forged := forgedBillKeys.Load(billToken)
+	if i := strings.Index(billToken, strangerMark); i >= 0 {
+		billToken = billToken[:i]
+	}
 	tok, err := nipcash.Decode(billToken)
 	require.NoError(t, err, "decode bill token")
 
@@ -59,7 +73,27 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 	hubXOnly, err := transport.NormalizeNodeIdentity(minter)
 	require.NoError(t, err, "normalize hub identity")
 
-	session, err := (&nipcashclient.Client{}).NewBatchSession(ctx, hubXOnly, tok.RelayURLs)
+	billKey := tok.Secret
+	if forged {
+		billKey = forgedKey.(string)
+	}
+	return privateTargetCall(t, ctx, privateTarget{walletPubkey: tok.WalletPubkey, billKey: billKey, hubXOnly: hubXOnly, relays: tok.RelayURLs},
+		method, params, signerPriv, result)
+}
+
+// privateTarget is what a private item needs about its target: the wallet pubkey it
+// names, the key that signs its bill proof, and the Hub identity and relays that find
+// the Hub's announcement.
+type privateTarget struct {
+	walletPubkey, billKey, hubXOnly string
+	relays                          []string
+}
+
+// privateTargetCall places one item at target over the private transport.
+func privateTargetCall(t *testing.T, ctx context.Context, target privateTarget, method string, params any, signerPriv string, result any) error {
+	t.Helper()
+	hubXOnly := target.hubXOnly
+	session, err := (&nipcashclient.Client{}).NewBatchSession(ctx, hubXOnly, target.relays)
 	require.NoError(t, err, "fetch the hub's kind-11190 announcement")
 
 	limits := session.Limits()
@@ -71,18 +105,35 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 
 	rawParams, err := json.Marshal(params)
 	require.NoError(t, err, "marshal params")
+	// cash_transfer and cash_consolidate are calls: they carry a request_id
+	// (NIP-CASH §request_id). A test that sets its own, or none on purpose with
+	// an explicit null, keeps it.
+	if method == nipcash.MethodCashTransfer || method == nipcash.MethodCashConsolidate {
+		rawParams, err = nwcclient.WithRequestID(rawParams)
+		require.NoError(t, err)
+	}
+	if method == nipcash.MethodCashConsolidate {
+		rawParams = rebindConsolidateProofs(t, rawParams)
+	}
+	// An item carrying a claim proof is signed by that proof's signer (NIP-CASH
+	// §Claim Proofs); a bearer item stays bearer.
+	if signerPriv != "" {
+		if claimSigner := claimSignerOf(rawParams); claimSigner != "" {
+			signerPriv = claimSigner
+		}
+	}
 	paramsHash, err := transport.CanonicalParamsHash(rawParams)
 	require.NoError(t, err)
 
 	binding := transport.ProofBinding{
-		Target: tok.WalletPubkey, HubXOnly: hubXOnly, Method: method,
+		Target: target.walletPubkey, HubXOnly: hubXOnly, Method: method,
 		ParamsHash: paramsHash, Nonce: nonce, NotAfter: notAfter,
 	}
 	item := transport.Item{
-		ID: "1", Target: tok.WalletPubkey, Method: method, Params: rawParams,
+		ID: "1", Target: target.walletPubkey, Method: method, Params: rawParams,
 	}
 	// Always a bill proof: required on every item whatever the identity mode.
-	billProof, err := transport.BuildBillProof(tok.Secret, binding)
+	billProof, err := transport.BuildBillProof(target.billKey, binding)
 	require.NoError(t, err)
 	item.BillProof = billProof
 	// A slice proof only when a signer was given. Omitting it is how a test reaches the
@@ -98,6 +149,11 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 		Nonce: nonce, ReplyTo: replyTo, Items: []transport.Item{item},
 	}
 	plaintext, err := env.Encode(limits)
+	if err != nil {
+		// The SDK refuses to build what the Hub must refuse (a proof and a cash
+		// secret together, say); an adversarial test sends it anyway, unpadded.
+		plaintext, err = json.Marshal(env)
+	}
 	require.NoError(t, err, "encode envelope")
 
 	request, convKey, err := transport.WrapRequest(plaintext, session.Inbox())
@@ -159,7 +215,14 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 				if r.Error != nil {
 					// The same shape the standard transport produced, so every
 					// existing code assertion in this suite still applies.
-					return &nwcclient.NWCError{Code: r.Error.Code, Message: r.Error.Message}
+					return &nwcclient.NWCError{Code: r.Error.Code, Message: r.Error.Message, Detail: r.Error.Detail}
+				}
+				// A value method naming a destroyed bill is answered with its tombstone
+				// (NIP-CASH §Serving an Envelope, I4): nothing moved, so never a success.
+				if method != nipcash.MethodCashStatus {
+					if tomb, ok := nipcash.ParseTombstone(r.Result); ok {
+						return &billGoneError{Tombstone: *tomb}
+					}
 				}
 				if result != nil && len(r.Result) > 0 {
 					if err := json.Unmarshal(r.Result, result); err != nil {
@@ -182,6 +245,29 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 // an omission is not an error code and not a success: it is the hub declining to say
 // anything, which a test asserting on a REASON must never accept.
 var errPrivateOmitted = errors.New("private transport: the hub omitted this item (information-free by design)")
+
+// mustConnectStranger is a bill connection held by someone who knows the bill's
+// wallet pubkey and relays (public on the relay) but not its connection secret:
+// its bill proofs are signed with a key of its own.
+func mustConnectStranger(t *testing.T, token string) *billConn {
+	t.Helper()
+	marked := token + strangerMark + nostr.GeneratePrivateKey()[:8]
+	forgedBillKeys.Store(marked, nostr.GeneratePrivateKey())
+	return &billConn{t: t, token: marked}
+}
+
+// billGoneError is a value method answered with the destroyed bill's tombstone.
+type billGoneError struct{ Tombstone nipcash.Tombstone }
+
+func (e *billGoneError) Error() string {
+	return fmt.Sprintf("private transport: the bill is destroyed (spent, reason %q)", e.Tombstone.Reason)
+}
+
+// isBillGone reports a value method answered with a tombstone.
+func isBillGone(err error) bool {
+	var gone *billGoneError
+	return errors.As(err, &gone)
+}
 
 // requirePrivateOmitted asserts the hub said nothing about an item, which is the correct
 // answer for an unknown bill, a proof that did not verify, or possession it could not
@@ -244,12 +330,16 @@ func (b *billConn) Bearer() *billConn {
 // mustConnectBill dials a bill by its TOKEN — required rather than preferred, since the
 // private transport recovers the hub identity from the token's own mint signature, which a
 // pairing URI does not carry.
-//
-// pairingURI is still needed for the non-bill methods the embedded client serves.
-func mustConnectBill(t *testing.T, pairingURI, token, signerPriv string) *billConn {
+func mustConnectBill(t *testing.T, token, signerPriv string) *billConn {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := nwcclient.ConnectBill(ctx, token)
+	require.NoError(t, err, "connect to the bill")
+	client.Logger = t.Logf
+	t.Cleanup(client.Close)
 	return &billConn{
-		Client:     mustConnect(t, pairingURI),
+		Client:     client,
 		t:          t,
 		token:      token,
 		signerPriv: signerPriv,
@@ -264,4 +354,22 @@ func mustConnectBill(t *testing.T, pairingURI, token, signerPriv string) *billCo
 // bill connection around — and those helpers do not care which transport carries the call.
 type billCaller interface {
 	Call(ctx context.Context, method string, params, result any) error
+}
+
+// privateJoinCall sends a join to the Circle Wallet Hub of circlehub1 over the
+// private transport (NIP-CW §Private Join), the only transport that serves it. The
+// suite's proofs are bound to the request's terms here, and the item proof is
+// signed by the proof's signer, the joining pubkey.
+func privateJoinCall(t *testing.T, ctx context.Context, circlehub1 string, params, result any) error {
+	t.Helper()
+	conn, err := nipcw.DecodeCircleHubConnection(circlehub1)
+	require.NoError(t, err)
+	raw, err := json.Marshal(params)
+	require.NoError(t, err)
+	raw, signer := bindJoinProof(t, raw)
+	if signer == "" {
+		signer = nostr.GeneratePrivateKey()
+	}
+	return privateTargetCall(t, ctx, privateTarget{walletPubkey: conn.Pubkey, billKey: conn.Secret, hubXOnly: conn.HubIdentity, relays: conn.Relays},
+		nipcw.MethodCreateCircleWallet, json.RawMessage(raw), signer, result)
 }

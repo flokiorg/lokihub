@@ -9,11 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // NIP-CASH §Consolidating Tokens and §Security Considerations: a many-source
@@ -31,7 +30,7 @@ func TestHandleCashConsolidateEvent_MergedBillTakesEarliestExpiryAndAttestsTotal
 	caller := guardCashWallet(t, svc, hub)
 	ownerPriv := nostr.GeneratePrivateKey()
 	ownerPub, _ := nostr.GetPublicKey(ownerPriv)
-	_, secretHash, err := cashwallet.GenerateCashSecret()
+	_, secretHash, err := tests.GenerateCashSecret()
 	require.NoError(t, err)
 
 	// tests.MockInvoice is fixed at 123,000 mloki; see
@@ -72,14 +71,14 @@ func TestHandleCashConsolidateEvent_MergedBillTakesEarliestExpiryAndAttestsTotal
 	require.NotNil(t, merged.ExpiresAt)
 	assert.True(t, merged.ExpiresAt.Equal(earliest), "merged expiry %v, want the earliest source's %v", merged.ExpiresAt, earliest)
 
-	token, err := lokicash.Decode(result.NewWalletToken)
+	token, err := nipcash.Decode(result.NewWalletToken)
 	require.NoError(t, err)
-	require.NotNil(t, token.AttestedAmount)
-	assert.Equal(t, amount1+amount2, *token.AttestedAmount)
+	require.NotNil(t, token.AttestedAmountMillis)
+	assert.Equal(t, amount1+amount2, *token.AttestedAmountMillis)
 	// The signature is recoverable, so a signature over any other amount still
 	// "verifies", just to some other key. Provenance holds only if it recovers
 	// to this node's own key.
-	minter, ok := lokicash.VerifyMint(token)
+	minter, ok := nipcash.VerifyProvenance(token)
 	require.True(t, ok)
 	nodeKey := hex.EncodeToString(mockLN.SigningKey.PubKey().SerializeCompressed())
 	assert.Equal(t, nodeKey, minter, "the merged bill's provenance must be this node's signature over the amount it attests")

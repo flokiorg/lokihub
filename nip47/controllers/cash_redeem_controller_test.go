@@ -61,7 +61,7 @@ func newFundedCashWallet(t *testing.T, svc *tests.TestService, hub *db.App, tota
 // tags (connection_key + e-tag referencing the attestation event).
 func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash string, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
 	t.Helper()
-	tags := nostr.Tags{{"d", walletPubkey}, {"bolt11_hash", bolt11Hash}}
+	tags := nostr.Tags{{"d", walletPubkey}, {"m", "cash_redeem"}, {"bolt11_hash", bolt11Hash}}
 	tags = append(tags, extraTags...)
 	ev := &nostr.Event{
 		Kind:      nostrKindClaimProof,
@@ -85,7 +85,7 @@ func buildIAAttestationEvent(t *testing.T, iaPrivkey, connectionKey, claimantNos
 		{"d", connectionKey},
 		{"p", claimantNostrPubkey},
 		{"platform", "discord"},
-		{"evidence", `{"version":1,"platform":"discord","auth_type":"public_post","user_id":"test-user"}`},
+		{"evidence", tests.TestAttestationEvidence(connectionKey)},
 	}
 	if expiration != nil {
 		tags = append(tags, nostr.Tag{"expiration", strconv.FormatInt(*expiration, 10)})
@@ -126,7 +126,7 @@ func handleClaimFundsFor(t *testing.T, svc *tests.TestService, controller *nip47
 	var response *models.Response
 	controller.HandleCashRedeemEvent(context.TODO(), nip47Request, dbRequestEvent.ID, app, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nostr.Tags{})
+	}, nostr.Tags{}, testPrivateCall(params.IdentityEvent))
 	return response
 }
 
@@ -330,7 +330,7 @@ func TestHandleCashRedeemEvent_HappyPath_ConnectionKeyMode(t *testing.T) {
 	iaPrivkey := nostr.GeneratePrivateKey()
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	registerTrustedIA(t, svc, iaPubkey)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 
@@ -386,7 +386,7 @@ func TestHandleCashRedeemEvent_ProofBoundToDifferentInvoice_Rejected(t *testing.
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 
 	// The slice must remain unclaimed — the attacker gained nothing.
 	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, claimantPubkey)
@@ -425,7 +425,7 @@ func TestHandleCashRedeemEvent_ReplaySameProofSameInvoice_AfterSuccess_Rejected(
 	// a no-op failure, not a second payout.
 	second := handleClaimFundsFor(t, svc, controller, wallet, params)
 	require.NotNil(t, second.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, second.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, second.Error.Code)
 }
 
 // TestHandleCashRedeemEvent_SettleRacesFailure_NotDoubleClaimable is the
@@ -524,7 +524,7 @@ func TestHandleCashRedeemEvent_SettleRacesFailure_NotDoubleClaimable(t *testing.
 
 	replay := handleClaimFundsFor(t, svc, controller, wallet, params)
 	require.NotNil(t, replay.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, replay.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, replay.Error.Code)
 }
 
 func TestHandleCashRedeemEvent_ForgedIdentity_NoMatchingSlice_Rejected(t *testing.T) {
@@ -593,7 +593,7 @@ func TestHandleCashRedeemEvent_IdentityEventReplayedAcrossWallets_Rejected(t *te
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 
 	// Wallet A's own slice must remain untouched/claimable — this wasn't a valid claim there either.
 	claimOnA, err := svc.AppsService.GetCashWalletClaim(walletA.ID, db.CashIdentityPubkey, claimantPubkey)
@@ -672,7 +672,7 @@ func TestHandleCashRedeemEvent_StaleIdentityEvent_Rejected(t *testing.T) {
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 }
 
 func TestHandleCashRedeemEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing.T) {
@@ -686,7 +686,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing
 	realIAPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	registerTrustedIA(t, svc, realIAPubkey)
 	imposterIAPrivkey := nostr.GeneratePrivateKey() // signs the attestation, but isn't the recorded IA for this slice
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 
@@ -708,7 +708,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 }
 
 // TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant_Rejected
@@ -733,7 +733,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	iaPrivkey := nostr.GeneratePrivateKey()
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	registerTrustedIA(t, svc, iaPubkey)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 
 	realClaimantPrivkey := nostr.GeneratePrivateKey()
 	realClaimantPubkey, _ := nostr.GetPublicKey(realClaimantPrivkey)
@@ -761,7 +761,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 
 	// The slice must remain intact and claimable by the real claimant.
 	realProof := buildClaimProofEvent(t, realClaimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
@@ -791,9 +791,12 @@ func TestHandleCashRedeemEvent_RateLimited(t *testing.T) {
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
 
+	// Spend the claimant's own allowance: the limit is keyed by the verified
+	// signer, never by the bill.
 	controller := NewTestNip47Controller(svc)
-	for i := 0; i < cashRedeemRateLimitPerHour; i++ {
-		controller.cashClaimLimiter.Allow(wallet.AppPubkey, cashRedeemRateLimitPerHour)
+	limit := svc.Cfg.GetEnv().CashClaimCallsPerHour
+	for i := 0; i < limit; i++ {
+		controller.cashClaimLimiter.Allow("claim:"+claimantPubkey, limit)
 	}
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
@@ -889,7 +892,7 @@ func TestHandleCashRedeemEvent_Cash_WrongSecret_Rejected(t *testing.T) {
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 
 	// The real slice must remain unclaimed — a wrong guess burned nothing.
 	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityCash, secretHash)
@@ -1042,7 +1045,7 @@ func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	validExpiration := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
 
 	baseTags := func() nostr.Tags {
@@ -1068,17 +1071,17 @@ func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
 		{
 			name:      "missing platform tag rejected",
 			tags:      append(baseTags(), nostr.Tag{"evidence", `{"version":1}`}),
-			wantError: "#platform tag is required",
+			wantError: `"platform" tag is required`,
 		},
 		{
 			name:      "empty platform tag rejected",
 			tags:      append(baseTags(), nostr.Tag{"platform", ""}, nostr.Tag{"evidence", `{"version":1}`}),
-			wantError: "#platform tag is required",
+			wantError: `"platform" tag is required`,
 		},
 		{
 			name:      "missing evidence tag rejected",
 			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}),
-			wantError: "#evidence tag is required",
+			wantError: `"evidence" tag is required`,
 		},
 		{
 			name:      "malformed evidence tag rejected",
@@ -1087,7 +1090,7 @@ func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
 		},
 		{
 			name:      "platform and evidence present accepted",
-			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", `{"version":1,"platform":"discord"}`}),
+			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", tests.TestAttestationEvidence(connectionKey)}),
 			wantError: "",
 		},
 	}

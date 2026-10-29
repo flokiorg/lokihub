@@ -129,8 +129,7 @@ func TestHandleCashTransferEvent_PartialSplit_LegacyClientSilentlyStrandsRemaind
 	// The legacy client's only lead is the connection it already holds
 	// (wallet/currentPubkey) -- exactly what the OLD contract would have kept
 	// serving the remainder on. Acting on that belief now fails, but the
-	// failure message must carry a breadcrumb toward where the value went
-	// (noSliceRegisteredMessage, cash_transfer_controller.go).
+	// failure message must carry a breadcrumb toward where the value went.
 	retryProof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityPubkey, newPubkey, "", 3000, nil, time.Now())
 	retry := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
@@ -139,7 +138,7 @@ func TestHandleCashTransferEvent_PartialSplit_LegacyClientSilentlyStrandsRemaind
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
 	})
 	require.NotNil(t, retry.Error, "the legacy client's natural next call, against the connection it still believes holds its change, must fail")
-	assert.Equal(t, constants.ERROR_NOT_FOUND, retry.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, retry.Error.Code, "a slice already claimed is RESTRICTED (NIP-CASH §Transferring and Splitting a Slice, step 1)")
 	assert.Contains(t, retry.Error.Message, "split off into a new dedicated wallet",
 		"the failure message must give a forwarding hint toward the new wallet the value actually moved to")
 	assert.Contains(t, retry.Error.Message, "cash_status")

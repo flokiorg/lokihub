@@ -16,14 +16,15 @@ import (
 )
 
 // End-to-end checks for the circle audit follow-ups (#148): the cap floor,
-// Delete All moving money to the main balance, the frozen flag in the
-// hub's wallet list, and all-or-nothing hub settings updates.
+// closing a circle (teardown, no sweep), each wallet's state in the hub's
+// wallet list, and all-or-nothing hub settings updates.
 
 type followupsCircleChild struct {
 	AppID           uint   `json:"appId"`
 	RequesterPubkey string `json:"requesterPubkey"`
 	BalanceMloki    int64  `json:"balanceMloki"`
-	Frozen          *bool  `json:"frozen"`
+	State           string `json:"state"`
+	Frozen          bool   `json:"frozen"`
 }
 
 func listFollowupsCircleChildren(t *testing.T, admin *adminClient, hubID uint) []followupsCircleChild {
@@ -35,15 +36,15 @@ func listFollowupsCircleChildren(t *testing.T, admin *adminClient, hubID uint) [
 	return resp.Children
 }
 
-func frozenOf(t *testing.T, admin *adminClient, hubID uint, member string) *bool {
+func stateOf(t *testing.T, admin *adminClient, hubID uint, member string) string {
 	t.Helper()
 	for _, child := range listFollowupsCircleChildren(t, admin, hubID) {
 		if child.RequesterPubkey == member {
-			return child.Frozen
+			return child.State
 		}
 	}
 	require.Failf(t, "member wallet not listed", "member %s has no wallet under hub %d", member, hubID)
-	return nil
+	return ""
 }
 
 // joinWithCap asks hub for a wallet capped at maxAmountMloki. Each call signs a
@@ -65,34 +66,39 @@ func joinWithCap(t *testing.T, hub CircleHubConfig, memberPriv string, maxAmount
 	}
 	details, err := DecryptCircleWalletDetails(memberPriv, hubClient.WalletPubkey(), result)
 	require.NoError(t, err)
-	return mustConnect(t, CircleWalletURI(details, memberPub)), nil
+	return mustConnectCircleWallet(t, CircleWalletConnection(details, memberPub)), nil
 }
 
-// A cap the 10-loki fee reserve would swallow is refused; the floor itself
-// is accepted.
-func TestCircleFollowups_JoinCapFloor(t *testing.T) {
+// A join has no floor on max_amount (NIP-CW step 6 checks ceilings only, and
+// get_info advertises none): a cap under 1 loki is accepted and resolved to a
+// cap of 0, never "no cap"; one under the fee reserve plus 1 loki is accepted,
+// rounded down to whole loki.
+func TestCircleFollowups_JoinSmallCap(t *testing.T) {
 	cfg := requireConfig(t)
 	for _, policy := range []string{circlePolicyAllowlist, circlePolicyFollowSet} {
 		t.Run(policy, func(t *testing.T) {
-			member := newTestPrivkey(t)
-			hub, _, _ := createEphemeralCircleHub(t, cfg, "followups-cap-floor-"+policy, policy, []string{member},
+			zero, small := newTestPrivkey(t), newTestPrivkey(t)
+			hub, _, _ := createEphemeralCircleHub(t, cfg, "followups-small-cap-"+policy, policy, []string{zero, small},
 				ephemeralCircleHubOpts{FundLoki: 1_000})
 
-			_, err := joinWithCap(t, hub, member, constants.MIN_CIRCLE_WALLET_MAX_MLOKI-1)
-			requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
-
-			child, err := joinWithCap(t, hub, member, constants.MIN_CIRCLE_WALLET_MAX_MLOKI)
-			require.NoError(t, err)
-			var budget GetBudgetResult
-			require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget))
-			assert.EqualValues(t, constants.MIN_CIRCLE_WALLET_MAX_MLOKI, budget.TotalBudget)
+			for _, tc := range []struct {
+				member         string
+				asked, applied uint64
+			}{{zero, 999, 0}, {small, constants.MIN_CIRCLE_WALLET_MAX_MLOKI - 1, constants.MIN_CIRCLE_WALLET_MAX_MLOKI - 1_000}} {
+				child, err := joinWithCap(t, hub, tc.member, tc.asked)
+				require.NoError(t, err, "max_amount %d", tc.asked)
+				var budget GetBudgetResult
+				require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget))
+				assert.EqualValues(t, tc.applied, budget.TotalBudget, "max_amount %d", tc.asked)
+			}
 		})
 	}
 }
 
-// The hub's wallet list shows a wallet frozen once its member leaves, and
-// working again once they are back.
-func TestCircleFollowups_FrozenFlagFollowsMembership(t *testing.T) {
+// The hub's wallet list shows a wallet Suspended once its member leaves (an
+// allowlist edit is a resolution, applied at once), and Active again once they
+// are back within its grace (NIP-CW §Membership).
+func TestCircleFollowups_StateFollowsMembership(t *testing.T) {
 	cfg := requireConfig(t)
 	member := newTestPrivkey(t)
 	memberPub := mustPubkey(t, member)
@@ -100,19 +106,13 @@ func TestCircleFollowups_FrozenFlagFollowsMembership(t *testing.T) {
 		ephemeralCircleHubOpts{FundLoki: 1_000})
 	_ = mintCircleChildFor(t, hub, member)
 
-	frozen := frozenOf(t, admin, hubID, memberPub)
-	require.NotNil(t, frozen)
-	assert.False(t, *frozen)
+	assert.Equal(t, "active", stateOf(t, admin, hubID, memberPub))
 
 	require.NoError(t, admin.removeCircleAllowlistMember(hubID, memberPub))
-	frozen = frozenOf(t, admin, hubID, memberPub)
-	require.NotNil(t, frozen)
-	assert.True(t, *frozen, "a member who left has a frozen wallet")
+	assert.Equal(t, "suspended", stateOf(t, admin, hubID, memberPub), "a member who left has a Suspended wallet")
 
 	require.NoError(t, admin.addCircleAllowlistMember(hubID, memberPub))
-	frozen = frozenOf(t, admin, hubID, memberPub)
-	require.NotNil(t, frozen)
-	assert.False(t, *frozen, "adding them back unfreezes it")
+	assert.Equal(t, "active", stateOf(t, admin, hubID, memberPub), "adding them back within the grace makes it Active again")
 }
 
 type followupsTransaction struct {
@@ -140,40 +140,38 @@ func mainBalanceTransfersIn(t *testing.T, admin *adminClient) []followupsTransac
 	return out
 }
 
-// Delete All moves a funded member wallet and the hub's own balance to the
-// main balance as a recorded transfer, then deletes both.
-func TestCircleFollowups_DeleteAllSweepsToMainBalance(t *testing.T) {
+// Closing a circle tears it down (NIP-CW §Lifecycle and Deletion): the funded
+// member wallet moves to Closing and keeps its balance, nothing reaches the
+// main balance, the hub stays while it has a wallet and takes no new joins.
+func TestCircleFollowups_CloseCircleKeepsBalances(t *testing.T) {
 	cfg := requireConfig(t)
 	member := newTestPrivkey(t)
-	const hubFundLoki = 1_000
+	memberPub := mustPubkey(t, member)
 	hub, hubID, admin := createEphemeralCircleHub(t, cfg, "followups-delete-all", circlePolicyAllowlist, []string{member},
-		ephemeralCircleHubOpts{FundLoki: hubFundLoki})
+		ephemeralCircleHubOpts{FundLoki: 1_000})
 	child := mintCircleChildFor(t, hub, member)
 	const childFundMloki = 7_000
-	fundCircleChild(t, cfg, child, childFundMloki, "followups delete-all (fund)")
+	fundCircleChild(t, cfg, child, childFundMloki, "followups close circle (fund)")
 	require.Eventually(t, func() bool { return balanceOf(t, child) == childFundMloki }, 10*time.Second, 200*time.Millisecond)
 	before := len(mainBalanceTransfersIn(t, admin))
 
 	var result struct {
 		HubDeleted      bool   `json:"hubDeleted"`
-		DeletedChildIDs []uint `json:"deletedChildIds"`
-		SkippedChildIDs []uint `json:"skippedChildIds"`
+		ClosingChildIDs []uint `json:"closingChildIds"`
 	}
 	require.NoError(t, admin.doBody(http.MethodPost, fmt.Sprintf("/api/apps/%d/circle/delete", hubID),
 		map[string]string{"mode": "all"}, &result))
-	assert.True(t, result.HubDeleted)
-	assert.Len(t, result.DeletedChildIDs, 1)
-	assert.Empty(t, result.SkippedChildIDs)
+	assert.False(t, result.HubDeleted, "the hub stays while it has a wallet")
+	assert.Len(t, result.ClosingChildIDs, 1)
 
-	transfers := mainBalanceTransfersIn(t, admin)
-	require.Len(t, transfers, before+1, "one recorded transfer into the main balance")
-	assert.EqualValues(t, hubFundLoki*1000+childFundMloki, transfers[0].Amount,
-		"the hub's balance, including what the wallet held, reaches the main balance")
-	assert.Equal(t, "settled", transfers[0].State)
+	assert.Equal(t, "closing", stateOf(t, admin, hubID, memberPub))
+	assert.EqualValues(t, childFundMloki, balanceOf(t, child), "the member's balance is never swept")
+	assert.Len(t, mainBalanceTransfersIn(t, admin), before, "nothing moved to the main balance")
 
-	var app map[string]interface{}
-	err := admin.do(http.MethodGet, fmt.Sprintf("/api/apps/%d", hubID), &app)
-	assert.Error(t, err, "the hub is gone")
+	// A Closing wallet still pays out.
+	invoice := mintInvoiceFromSimpleWallet(t, cfg, 1_000, "followups close circle (payout)")
+	var paid PayInvoiceResult
+	require.NoError(t, child.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: invoice.Invoice}, &paid))
 }
 
 // A rejected hub setting leaves the whole update unsaved.

@@ -8,6 +8,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/ohstr/nmilat/nipcash"
+
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 )
@@ -27,7 +30,8 @@ import (
 var ErrBillNotDrained = errors.New("cash bill is not fully drained")
 
 // DrainGuards are the ledger reads the drain check needs. Callers pass
-// queries.GetIsolatedBalance and queries.HasPendingIncoming; taking them as
+// queries.GetIsolatedBalance, queries.HasPendingIncoming and
+// queries.HasPendingOutgoing; taking them as
 // functions rather than importing them keeps this package a leaf (see the
 // package comment) AND guarantees both reads happen on the caller's own
 // transaction handle, which is the whole point of re-checking inside the
@@ -35,6 +39,7 @@ var ErrBillNotDrained = errors.New("cash bill is not fully drained")
 type DrainGuards struct {
 	IsolatedBalance    func(tx *gorm.DB, appID uint) int64
 	HasPendingIncoming func(tx *gorm.DB, appID uint) bool
+	HasPendingOutgoing func(tx *gorm.DB, appID uint) bool
 }
 
 // archiveSliceBatchSize matches CreateCashWalletClaimsTx's own batching.
@@ -119,6 +124,7 @@ func ArchiveAndDeleteCashBillTx(tx *gorm.DB, app *db.App, outcome string, reclai
 		EndedAt:              now,
 		ExpiresAt:            live.ExpiresAt,
 		Outcome:              outcome,
+		Reason:               billReason(claims, outcome),
 		TotalMloki:           total,
 		FundedMloki:          funded,
 		ReclaimedMloki:       reclaimedMloki,
@@ -144,25 +150,20 @@ func ArchiveAndDeleteCashBillTx(tx *gorm.DB, app *db.App, outcome string, reclai
 		return fmt.Errorf("failed to archive cash bill %d: %w", live.ID, err)
 	}
 
-	// Resolving this inside the transaction rather than after the delete (as
-	// the cleanup service used to, in a separate autocommit statement) means a
-	// crash can no longer leave a resolved-in-spirit stranded-fund record open
-	// against a wallet that no longer exists.
-	if err := tx.Model(&db.CashStrandedFund{}).
-		Where("retained_wallet_app_id = ? AND resolved_at IS NULL", live.ID).
-		Update("resolved_at", now).Error; err != nil {
-		return fmt.Errorf("failed to resolve stranded funds for cash bill %d: %w", live.ID, err)
-	}
-
 	if err := tx.Delete(&db.App{}, live.ID).Error; err != nil {
 		return fmt.Errorf("failed to delete cash bill %d: %w", live.ID, err)
+	}
+	// The records that created this bill may now be droppable (NIP-CASH §The Record).
+	if err := cashrequest.OnBillArchivedTx(tx, live.ID); err != nil {
+		return fmt.Errorf("failed to update the request records of cash bill %d: %w", live.ID, err)
 	}
 	return nil
 }
 
 // ArchiveAndDeleteDrainedCashBillTx is ArchiveAndDeleteCashBillTx with the
 // drain guard re-evaluated INSIDE tx: every slice claimed, and a real ledger
-// balance of exactly zero, and nothing still settling into it. Returns
+// balance of exactly zero, and nothing still settling into it or paying out of
+// it. Returns
 // ErrBillNotDrained when any of those does not hold.
 //
 // Evaluating the guard inside the transaction is the point. The check used to
@@ -192,6 +193,29 @@ func ArchiveAndDeleteDrainedCashBillTx(tx *gorm.DB, app *db.App, guards DrainGua
 	// reclaims (service.ReclaimAndDeleteSubWallet).
 	if guards.HasPendingIncoming(tx, app.ID) {
 		return fmt.Errorf("%w: a payment is still settling into it", ErrBillNotDrained)
+	}
+	// A sibling slice's payout still in flight is invisible to the balance too:
+	// a zero-fee or same-node redeem has already left the balance at zero while
+	// its payment is out. Deleting now would cascade that claim and its payment
+	// row away, so a failure could no longer release the slice (NIP-CASH
+	// §Redeeming a Slice, step 4) and its value would stay with the node. The
+	// claim is checked as well as the ledger, because the pending payment row
+	// is written only after the claim commits; a payout the ledger shows settled
+	// is done, even when its preimage was not recorded on the slice.
+	var inFlight int64
+	if err := tx.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND claimed_at IS NOT NULL AND payment_hash <> '' AND preimage = ''", app.ID).
+		Where("NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.app_id = cash_wallet_claims.wallet_app_id"+
+			" AND transactions.type = ? AND transactions.state = ? AND transactions.payment_hash = cash_wallet_claims.payment_hash)",
+			constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_SETTLED).
+		Count(&inFlight).Error; err != nil {
+		return fmt.Errorf("failed to count in-flight redeems of cash bill %d: %w", app.ID, err)
+	}
+	if inFlight > 0 {
+		return fmt.Errorf("%w: a slice's payout is still in flight", ErrBillNotDrained)
+	}
+	if guards.HasPendingOutgoing != nil && guards.HasPendingOutgoing(tx, app.ID) {
+		return fmt.Errorf("%w: a payment out of it is still pending", ErrBillNotDrained)
 	}
 	return ArchiveAndDeleteCashBillTx(tx, app, db.CashBillOutcomeDrained, 0, now)
 }
@@ -234,13 +258,56 @@ func DeriveSliceOutcome(claim db.CashWalletClaim, billOutcome string) string {
 		return db.CashSliceStatusExpired
 	case db.CashBillOutcomeWrittenOff:
 		return db.CashSliceStatusWrittenOff
-	case db.CashBillOutcomeVoid:
-		return db.CashSliceStatusVoid
 	default:
 		// "deleted" and "drained": the value went back to the hub, but the
 		// slice's own window had not passed, so this is not "expired".
 		return db.CashSliceStatusReclaimed
 	}
+}
+
+// SliceEndState is the terminal state a slice ended in, in the tombstone's
+// vocabulary: the one its claim recorded, else redeemed or transferred as the
+// claim row shows, else what the bill's own ending made of an unclaimed slice.
+func SliceEndState(claim db.CashWalletClaim, billOutcome string) string {
+	if claim.ClaimedAt != nil {
+		if claim.EndedAs != "" {
+			return claim.EndedAs
+		}
+		if claim.SpunOffToWalletAppID != nil {
+			return db.CashSliceStatusTransferred
+		}
+		return db.CashSliceStatusRedeemed
+	}
+	return DeriveSliceOutcome(claim, billOutcome)
+}
+
+// billReason is a destroyed bill's tombstone reason (NIP-CASH §Answering About
+// a Destroyed Bill): the terminal state of the last of its live slices to end.
+// Slices still unclaimed when the bill is destroyed end with it, so they are the
+// last; otherwise the latest claim is. nil for written-off, which has no reason.
+func billReason(claims []db.CashWalletClaim, billOutcome string) *string {
+	var last *db.CashWalletClaim
+	for i := range claims {
+		c := &claims[i]
+		if c.ClaimedAt == nil {
+			last = c
+			break
+		}
+		if last == nil || c.ClaimedAt.After(*last.ClaimedAt) {
+			last = c
+		}
+	}
+	state := ""
+	if last != nil {
+		state = SliceEndState(*last, billOutcome)
+	} else {
+		state = DeriveSliceOutcome(db.CashWalletClaim{}, billOutcome)
+	}
+	reason := nipcash.TombstoneReason(state)
+	if reason == "" {
+		return nil
+	}
+	return &reason
 }
 
 func buildSliceArchive(wallet *db.App, c db.CashWalletClaim, outcome string, now time.Time) db.CashBillSliceArchive {

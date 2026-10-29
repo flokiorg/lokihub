@@ -117,7 +117,7 @@ func joinCircle(t *testing.T, hubConnection, memberPriv string) (*nwcclient.Clie
 	}
 	details, err := DecryptCircleWalletDetails(memberPriv, hubClient.WalletPubkey(), result)
 	require.NoError(t, err)
-	return mustConnect(t, CircleWalletURI(details, memberPub)), nil
+	return mustConnectCircleWallet(t, CircleWalletConnection(details, memberPub)), nil
 }
 
 func mustJoinCircle(t *testing.T, hubConnection, memberPriv string) *nwcclient.Client {
@@ -135,20 +135,20 @@ func nwcErrorCode(err error) string {
 	return ""
 }
 
-// requireFrozen asserts the wallet refuses everything that moves money while
-// still answering reads, and that its balance is untouched.
+// requireFrozen asserts the wallet is Suspended (NIP-CW §Membership): it can no
+// longer receive or report a budget, still answers reads, and its balance is
+// untouched. Paying out stays allowed and is not exercised here, so the
+// balance check holds.
 func requireFrozen(t *testing.T, cfg *Config, child *nwcclient.Client, balanceMloki int64) {
 	t.Helper()
 	var invoice MakeInvoiceResult
 	requireNWCErrorCode(t, child.Call(ctxT(t), "make_invoice", MakeInvoiceParams{Amount: 1000}, &invoice), constants.ERROR_RESTRICTED)
-
-	payee := mintInvoiceFromSimpleWallet(t, cfg, 1000, "frozen circle wallet pays")
-	var paid PayInvoiceResult
-	requireNWCErrorCode(t, child.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: payee.Invoice}, &paid), constants.ERROR_RESTRICTED)
+	var budget GetBudgetResult
+	requireNWCErrorCode(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget), constants.ERROR_RESTRICTED)
 
 	var balance GetBalanceResult
-	require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance), "a frozen wallet still shows its balance")
-	assert.EqualValues(t, balanceMloki, balance.Balance, "freezing moves no money")
+	require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance), "a suspended wallet still shows its balance")
+	assert.EqualValues(t, balanceMloki, balance.Balance, "suspending moves no money")
 	var txs ListTransactionsResult
 	require.NoError(t, child.Call(ctxT(t), "list_transactions", ListTransactionsParams{Limit: 10}, &txs), "and its history")
 }
@@ -192,7 +192,7 @@ func TestCircleMembershipAudit_ProviderFollowSetRemovalFreezesWallet(t *testing.
 
 	publishProviderSet(t, cfg, providerPriv, d, now-30, memberPub, otherPub)
 	resp, admin := createProviderFollowSetHub(t, cfg, "freeze-provider-set", providerPriv, d)
-	child := mustJoinCircle(t, resp.PairingUri, memberPriv)
+	child := mustJoinCircle(t, resp.CircleHubToken, memberPriv)
 	fundCircleChild(t, cfg, child, membershipAuditAmountMloki, "freeze-provider-set fund")
 	requireWorking(t, cfg, child)
 	balance := balanceOf(t, child)
@@ -223,8 +223,8 @@ func TestCircleMembershipAudit_ManagedFollowSetRemovalFreezesWallet(t *testing.T
 	identityID, err := admin.getCircleIdentityID(resp.ID)
 	require.NoError(t, err)
 
-	publicChild := mustJoinCircle(t, resp.PairingUri, publicPriv)
-	hiddenChild, err := joinCircle(t, resp.PairingUri, hiddenPriv)
+	publicChild := mustJoinCircle(t, resp.CircleHubToken, publicPriv)
+	hiddenChild, err := joinCircle(t, resp.CircleHubToken, hiddenPriv)
 	require.NoError(t, err, "a hidden member is admitted over the standard transport too")
 	fundCircleChild(t, cfg, publicChild, membershipAuditAmountMloki, "freeze-managed public fund")
 	fundCircleChild(t, cfg, hiddenChild, membershipAuditAmountMloki, "freeze-managed hidden fund")
@@ -270,9 +270,9 @@ func TestCircleMembershipAudit_ForgedFollowSetsAdmitNoOne(t *testing.T) {
 
 	refreshCircle(t, admin, resp.ID)
 
-	_, err := joinCircle(t, resp.PairingUri, outsiderPriv)
+	_, err := joinCircle(t, resp.CircleHubToken, outsiderPriv)
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
-	mustJoinCircle(t, resp.PairingUri, memberPriv)
+	mustJoinCircle(t, resp.CircleHubToken, memberPriv)
 }
 
 // The provider removed a member, then the hub restarted while relays only
@@ -296,7 +296,7 @@ func TestCircleMembershipAudit_RestartKeepsRemovedMemberOut(t *testing.T) {
 	resp, admin := createProviderFollowSetHub(t, cfg, "restart-rollback", providerPriv, d)
 	publishProviderSet(t, cfg, providerPriv, d, now-30, keptPub)
 	refreshCircle(t, admin, resp.ID)
-	_, err := joinCircle(t, resp.PairingUri, removedPriv)
+	_, err := joinCircle(t, resp.CircleHubToken, removedPriv)
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 
 	restartCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -308,12 +308,12 @@ func TestCircleMembershipAudit_RestartKeepsRemovedMemberOut(t *testing.T) {
 	// The first answer after startup may be NOT_READY while the hub warms up.
 	deadline := time.Now().Add(90 * time.Second)
 	for {
-		_, err = joinCircle(t, resp.PairingUri, removedPriv)
+		_, err = joinCircle(t, resp.CircleHubToken, removedPriv)
 		if nwcErrorCode(err) != "NOT_READY" || time.Now().After(deadline) {
 			break
 		}
 		time.Sleep(2 * time.Second)
 	}
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
-	mustJoinCircle(t, resp.PairingUri, keptPriv)
+	mustJoinCircle(t, resp.CircleHubToken, keptPriv)
 }

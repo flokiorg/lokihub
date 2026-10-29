@@ -4,7 +4,6 @@ package integration
 
 import (
 	"context"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // clearlyTooLargeAmountMloki is chosen to reliably exceed any sane real
@@ -42,23 +41,20 @@ func onePubkeyRecipient(pubkey string, amountMloki uint64) []CashWalletRecipient
 	}
 }
 
-// requireLokicashMatchesPairingURI asserts lokicashToken decodes to the
-// exact same wallet pubkey, secret, and relay set as pairingURI — either
-// string alone is a fully sufficient connection credential (NIP-CASH §The
-// Lokicash Token), so any divergence between them would mean a recipient
-// using one instead of the other lands on a different wallet than intended.
-// Independent of recipient count or identity mode, since cash_token is
-// wallet-level pairing data, not per-recipient.
-func requireLokicashMatchesPairingURI(t *testing.T, pairingURI, lokicashToken string) {
+// requireBillToken asserts a minted bill's token is the whole credential
+// (NIP-CASH §The Cash Token): it decodes, carries the wallet's connection and
+// a mint provenance signed under cash-mint:v1 that verifies.
+func requireBillToken(t *testing.T, token string) {
 	t.Helper()
-	require.True(t, strings.HasPrefix(lokicashToken, lokicash.HRP+"1"))
-	parsedURI, err := url.Parse(pairingURI)
+	require.True(t, strings.HasPrefix(token, constants.CashTokenHRP+"1"))
+	decoded, err := nipcash.Decode(token)
 	require.NoError(t, err)
-	decoded, err := lokicash.Decode(lokicashToken)
-	require.NoError(t, err)
-	require.Equal(t, parsedURI.Host, decoded.WalletPubkey)
-	require.Equal(t, parsedURI.Query().Get("secret"), decoded.Secret)
-	require.Equal(t, parsedURI.Query()["relay"], decoded.RelayURLs)
+	require.NotEmpty(t, decoded.WalletPubkey)
+	require.NotEmpty(t, decoded.Secret)
+	require.NotEmpty(t, decoded.RelayURLs)
+	require.Equal(t, nipcash.SchemeMintV1, decoded.Scheme)
+	_, ok := nipcash.VerifyProvenance(decoded)
+	require.True(t, ok, "the bill's mint provenance must verify")
 }
 
 func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
@@ -79,13 +75,12 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.NoError(t, err)
 		t.Logf("created cash wallet: pubkey=%s", result.WalletPubkey)
 		require.NotEmpty(t, result.WalletPubkey)
-		require.NotEmpty(t, result.PairingURI, "the connection is shared/known upfront now — no more encrypted reveal")
 		require.Len(t, result.Recipients, 1)
 		require.EqualValues(t, happyPathAmountMloki, result.Recipients[0].AmountMillis)
 
-		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
+		requireBillToken(t, result.CashToken)
 
-		child := mustConnectBill(t, result.PairingURI, result.CashToken, beneficiaryPriv)
+		child := mustConnectBill(t, result.CashToken, beneficiaryPriv)
 
 		var balance CashStatusResult
 		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &balance))
@@ -159,12 +154,11 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		}, &result))
 		require.Len(t, result.Recipients, 2)
 
-		// cash_token is wallet-level, not per-recipient — must still
-		// decode correctly (and to the same connection as pairing_uri) when
-		// the wallet backs more than one slice.
-		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
+		// cash_token is wallet-level, not per-recipient — it must still
+		// decode correctly when the wallet backs more than one slice.
+		requireBillToken(t, result.CashToken)
 
-		child := mustConnectBill(t, result.PairingURI, result.CashToken, priv1)
+		child := mustConnectBill(t, result.CashToken, priv1)
 
 		var recipients CashStatusResult
 		// scope=all: this asserts on BOTH recipients, and the default is now `mine` — the
@@ -200,7 +194,7 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     clearlyTooLargeExpirySecs,
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
 	t.Run("CreateWallet_ConnectionKeyMode_MissingIAPubkey_Rejected", func(t *testing.T) {
@@ -240,7 +234,7 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
 	t.Run("CreateWallet_ConnectionKeyMode_HappyPath", func(t *testing.T) {
@@ -254,36 +248,34 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &result))
-		require.NotEmpty(t, result.PairingURI, "connection_key mode also gets an immediate, shared connection now — no separate claim_cash_wallet reveal step")
 
 		// cash_token generation doesn't depend on recipient identity
 		// mode — it's derived purely from the wallet's own pairing data, not
 		// from any recipient's identity_type.
-		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
+		requireBillToken(t, result.CashToken)
 	})
 
 	t.Run("CreateWallet_Cash_HappyPath_RedeemWithSecret", func(t *testing.T) {
+		secret, commitment := cashSecretAndHash(t)
 		var result MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
-			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "cash", AmountMillis: happyPathAmountMloki},
-			},
-			Expiry: happyPathExpirySecs,
+			Recipients: oneCashRecipient(commitment, happyPathAmountMloki),
+			Expiry:     happyPathExpirySecs,
 		}, &result))
 		require.Len(t, result.Recipients, 1)
-		require.NotEmpty(t, result.Recipients[0].CashSecret, "the plaintext secret must come back exactly once, here")
-		require.Empty(t, result.Recipients[0].IdentityValue, "the internal secret hash must never be surfaced on the wire")
-		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
+		require.Empty(t, result.Recipients[0].CashSecret, "the hub never returns a cash secret")
+		require.Equal(t, commitment, result.Recipients[0].IdentityValue, "the recipients are echoed as sent")
+		requireBillToken(t, result.CashToken)
 
 		// Bearer: a cash-mode bill carries no slice proof — its secret in params IS the
 		// authorization, and an item carrying both is refused (§Bearer Items).
-		child := mustConnectBill(t, result.PairingURI, result.CashToken, "")
+		child := mustConnectBill(t, result.CashToken, "")
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cash-mode redemption")
 		var claimResult ClaimFundsResult
 		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:    invoice.Invoice,
-			CashSecret: result.Recipients[0].CashSecret,
+			CashSecret: secret,
 		}, &claimResult))
 		require.NotEmpty(t, claimResult.Preimage)
 

@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/logger"
 	test_db "github.com/flokiorg/lokihub/tests/db"
 )
@@ -107,6 +108,21 @@ func TestMigrate(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+// A source without the current schema epoch predates it and is refused, as
+// lokihub itself refuses it at startup.
+func TestMigrate_RefusesSourcePredatingSchema(t *testing.T) {
+	env, err := setupTest(t, getTestSqliteURI(2), getTestSqliteURI(3))
+	require.NoError(t, err)
+	defer env.cleanup(t)
+
+	require.NoError(t, env.source.Where(&db.UserConfig{Key: migrations.SchemaEpochKey}).Delete(&db.UserConfig{}).Error)
+	require.ErrorIs(t, migrateDB(env.source, env.dest), migrations.ErrDatabasePredatesSchema)
+
+	var apps int64
+	require.NoError(t, env.dest.Model(&db.App{}).Count(&apps).Error)
+	require.Zero(t, apps, "nothing is copied")
 }
 
 func getTestSqliteURI(dbIndex int) string {

@@ -16,7 +16,7 @@ package main
 //   - cash_transfer_proofs — burnt-nonce replay guards, so every nonce was forgotten.
 //   - cash_hub_configs / circle_hub_configs — each hub's fee, expiry and limit policy.
 //   - circle_identities and their allowlists — Identity Authority trust.
-//   - swaps, forwards, cash_mint_idempotencies.
+//   - swaps, forwards.
 //
 // This test seeds one row in each previously-dropped table and requires it on the
 // other side. It is deliberately a row-count check per table rather than a deep
@@ -24,6 +24,7 @@ package main
 // and a count catches that while staying trivial to extend when a new table is added.
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,14 +59,11 @@ func seedOneRowPerTable(t *testing.T, conn *gorm.DB) []string {
 		{"cash_wallet_claims", &db.CashWalletClaim{
 			WalletAppID: wallet.ID, IdentityType: db.CashIdentityPubkey,
 			IdentityValue: "migclaimant", AmountMloki: 4242}},
-		{"cash_transfer_proofs", &db.CashTransferProof{
-			AppID: wallet.ID, EventID: "migproofevent"}},
-		{"cash_stranded_funds", &db.CashStrandedFund{
-			Operation: "consolidate", SourceWalletAppID: wallet.ID,
-			RetainedWalletAppID: hub.ID, AmountMloki: 7}},
-		{"cash_mint_idempotencies", &db.CashMintIdempotency{
-			HubAppID: hub.ID, IdempotencyKey: "migkey",
-			WalletAppID: wallet.ID, WalletPubkey: walletPub}},
+		{"cash_consumed_proofs", &db.CashConsumedProof{
+			EventID: "migproofevent", ProofCreatedAt: 1, ConsumedAt: 2, Method: "cash_transfer"}},
+		{"private_served_nonces", &db.PrivateServedNonce{Nonce: strings.Repeat("cd", 32), NotAfter: 5}},
+		{"cash_used_request_ids", &db.CashUsedRequestID{RequestID: strings.Repeat("ab", 32), Method: "mint_cash", UsedAt: 3}},
+		{"cash_horizon", &db.CashHorizon{ID: 1, HSecs: 300, UpdatedAt: 4}},
 		{"swaps", &db.Swap{SwapId: "migswap"}},
 	}
 	seeded := []string{"apps"}
@@ -120,8 +118,8 @@ func TestMigrate_EveryExpectedTableIsCopied(t *testing.T) {
 	// that were seeded.
 	for _, table := range []string{
 		"apps", "circle_identities", "circle_identity_allowed_pubkeys",
-		"cash_hub_configs", "cash_wallet_claims", "cash_transfer_proofs",
-		"cash_stranded_funds", "cash_mint_idempotencies", "swaps",
+		"cash_hub_configs", "cash_wallet_claims", "cash_consumed_proofs", "private_served_nonces", "cash_used_request_ids", "cash_horizon",
+		"swaps",
 	} {
 		var n int64
 		require.NoError(t, env.dest.Table(table).Count(&n).Error)

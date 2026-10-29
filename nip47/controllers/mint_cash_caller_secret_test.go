@@ -29,13 +29,13 @@ func TestHandleMintCashEvent_CallerSuppliedCashSecret_Rejected(t *testing.T) {
 	nip47Request := &models.Request{}
 	require.NoError(t, json.Unmarshal([]byte(`{
 		"method": "mint_cash",
-		"params": {"recipients": [{"identity_type":"cash","amount_millis":1000,"cash_secret":"`+callerSecret+`"}], "expiry": 1800}
+		"params": {"request_id":"`+testRequestID()+`","recipients": [{"identity_type":"cash","amount_millis":1000,"cash_secret":"`+callerSecret+`"}], "expiry": 1800}
 	}`), nip47Request))
 
 	dbRequestEvent := &db.RequestEvent{}
 	svc.DB.Create(&dbRequestEvent)
 	var resp *models.Response
-	NewTestNip47Controller(svc).HandleMintCashEvent(context.TODO(), nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) { resp = r })
+	NewTestNip47Controller(svc).HandleMintCashEvent(context.TODO(), nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) { resp = r }, testMintMeta())
 
 	require.NotNil(t, resp.Error, "a caller-supplied cash_secret must be refused, not silently replaced")
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)

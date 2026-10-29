@@ -27,6 +27,8 @@ func newFollowSetTestAPI(t *testing.T) (*api, *mocks.MockService, *tests.TestSer
 	t.Cleanup(ts.Remove)
 	svc := mocks.NewMockService(t)
 	svc.On("NodeNostrIdentity").Return(nodeIdentity, nil).Maybe()
+	// The node signs the circlehub1 string.
+	svc.On("GetLNClient").Return(ts.LNClient).Maybe()
 	return &api{db: ts.DB, appsSvc: ts.AppsService, cfg: ts.Cfg, keys: ts.Keys, svc: svc}, svc, ts
 }
 

@@ -10,14 +10,19 @@ package nwcclient
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcw"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/nip47/cipher"
@@ -28,11 +33,40 @@ import (
 // giving up.
 const DefaultCallTimeout = 30 * time.Second
 
+// MintDeadline is how far ahead a mint_cash call's expiration lies: well inside
+// the Hub's horizon H (at least 60 s, 300 s by default).
+const MintDeadline = 50 * time.Second
+
+// NewRequestID is a fresh request_id: 32 random bytes as lowercase hex.
+func NewRequestID() string {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// WithRequestID adds a fresh request_id to a params object that has none.
+func WithRequestID(params json.RawMessage) (json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(params, &fields); err != nil || fields == nil {
+		return params, err
+	}
+	if _, ok := fields["request_id"]; ok {
+		return params, nil
+	}
+	id, _ := json.Marshal(NewRequestID())
+	fields["request_id"] = id
+	return json.Marshal(fields)
+}
+
 // NWCError is returned by Call when the wallet responds with a NIP-47 error
 // (e.g. QUOTA_EXCEEDED, RESTRICTED, RATE_LIMITED).
 type NWCError struct {
 	Code    string
 	Message string
+	// Detail refines a withdrawal refusal on the private transport (NIP-CASH §Errors).
+	Detail string
 }
 
 func (e *NWCError) Error() string {
@@ -49,6 +83,11 @@ type Client struct {
 	relaysMu sync.Mutex
 	relays   []*nostr.Relay
 
+	// PrivateCall, if set, may serve a call over the private transport instead:
+	// it reports whether it handled the method. Joins to a Circle Wallet Hub go
+	// this way (NIP-CW §Private Join).
+	PrivateCall func(ctx context.Context, method string, params, result any) (bool, error)
+
 	// Logger, if set, receives one line per Call: method, wallet, timing, and
 	// on failure the error/params needed to debug it. Relay-level detail is
 	// only logged when a relay actually fails. Callers typically wire this to
@@ -64,13 +103,77 @@ func (c *Client) logf(format string, args ...any) {
 }
 
 // Connect parses a nostr+walletconnect:// pairing URI and connects to every
-// relay named in it.
+// relay named in it. Only the simple wallet fixtures still get this form; a Cash
+// Hub or Circle Wallet Hub is reached through its signed string.
 func Connect(ctx context.Context, pairingURI string) (*Client, error) {
 	walletPubkey, clientPriv, relayURLs, err := parsePairingURI(pairingURI)
 	if err != nil {
 		return nil, err
 	}
+	return connect(ctx, walletPubkey, clientPriv, relayURLs)
+}
 
+// ConnectCashHub decodes a signed cashhub1 string, verifies its connection
+// signature (NIP-CASH §Connection Signatures) and connects to its relays.
+func ConnectCashHub(ctx context.Context, cashhub1 string) (*Client, error) {
+	c, err := nipcash.DecodeCashHubConnection(cashhub1)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Verify(); err != nil {
+		return nil, fmt.Errorf("cashhub1 connection signature: %w", err)
+	}
+	return connect(ctx, c.Pubkey, c.Secret, c.Relays)
+}
+
+// ConnectCircleHub decodes a signed circlehub1 string, verifies its connection
+// signature and connects to its relays.
+func ConnectCircleHub(ctx context.Context, circlehub1 string) (*Client, error) {
+	c, err := nipcw.DecodeCircleHubConnection(circlehub1)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Verify(); err != nil {
+		return nil, fmt.Errorf("circlehub1 connection signature: %w", err)
+	}
+	return connect(ctx, c.Pubkey, c.Secret, c.Relays)
+}
+
+// ConnectBill connects to a bill's own connection, taken from its token after
+// its mint provenance verifies (NIP-CASH §Mint Provenance). Bills carry no URI
+// form.
+func ConnectBill(ctx context.Context, token string) (*Client, error) {
+	tok, err := nipcash.Decode(token)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := nipcash.VerifyProvenance(tok); !ok {
+		return nil, fmt.Errorf("the bill carries no verifiable mint provenance")
+	}
+	return connect(ctx, tok.WalletPubkey, tok.Secret, tok.RelayURLs)
+}
+
+// ConnectCircleWallet connects a member to its circle wallet from the wallet
+// pubkey and relays its join returned and the member's own secret.
+func ConnectCircleWallet(ctx context.Context, walletPubkey string, relays []string, secret string) (*Client, error) {
+	return connect(ctx, walletPubkey, secret, relays)
+}
+
+// ConnectAny connects through a signed cashhub1 or circlehub1 string, a bill's
+// token, or a pairing URI.
+func ConnectAny(ctx context.Context, connection string) (*Client, error) {
+	switch {
+	case strings.HasPrefix(connection, nipcash.CashHubConnectionHRP+"1"):
+		return ConnectCashHub(ctx, connection)
+	case strings.HasPrefix(connection, nipcw.CircleHubConnectionHRP+"1"):
+		return ConnectCircleHub(ctx, connection)
+	case strings.HasPrefix(connection, constants.CashTokenHRP+"1"):
+		return ConnectBill(ctx, connection)
+	}
+	return Connect(ctx, connection)
+}
+
+func connect(ctx context.Context, walletPubkey, clientPriv string, relayURLs []string) (*Client, error) {
 	clientPub, err := nostr.GetPublicKey(clientPriv)
 	if err != nil {
 		return nil, fmt.Errorf("derive client pubkey: %w", err)
@@ -122,6 +225,11 @@ func (c *Client) ClientPubkey() string {
 // (pass a pointer, or nil to ignore it). On a NIP-47-level error response,
 // Call returns a *NWCError.
 func (c *Client) Call(ctx context.Context, method string, params any, result any) error {
+	if c.PrivateCall != nil {
+		if handled, err := c.PrivateCall(ctx, method, params, result); handled {
+			return err
+		}
+	}
 	ctx, cancel := context.WithTimeout(ctx, DefaultCallTimeout)
 	defer cancel()
 
@@ -133,6 +241,15 @@ func (c *Client) Call(ctx context.Context, method string, params any, result any
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
 		return fmt.Errorf("marshal params: %w", err)
+	}
+	// mint_cash is a call (NIP-CASH §Lost Replies): it carries a request_id, and a
+	// NIP-47 expiration tag is its deadline. A test that sets its own keeps it.
+	var tags nostr.Tags
+	if method == constants.NIP47MethodMintCash {
+		if paramsJSON, err = WithRequestID(paramsJSON); err != nil {
+			return err
+		}
+		tags = append(tags, nostr.Tag{"expiration", strconv.FormatInt(time.Now().Add(MintDeadline).Unix(), 10)})
 	}
 	reqPayload, err := json.Marshal(models.Request{Method: method, Params: paramsJSON})
 	if err != nil {
@@ -148,10 +265,10 @@ func (c *Client) Call(ctx context.Context, method string, params any, result any
 		PubKey:    c.clientPub,
 		CreatedAt: nostr.Now(),
 		Kind:      models.REQUEST_KIND,
-		Tags: nostr.Tags{
+		Tags: append(nostr.Tags{
 			{"p", c.walletPubkey},
 			{"encryption", constants.ENCRYPTION_TYPE_NIP44_V2},
-		},
+		}, tags...),
 		Content: encryptedContent,
 	}
 	if err := requestEvent.Sign(c.clientPriv); err != nil {

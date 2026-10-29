@@ -12,13 +12,9 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// Consolidate's fund movement (create merged wallet, N internal transfers from
-// each source, saga-style compensating rollback on a mid-loop failure) is
-// exercised end to end in the integration suite, where a real node issues the
-// distinct signed invoices each internal transfer decodes — the in-process mock
-// returns a single fixed invoice, so it can't stand in for many distinct
-// transfers. The unit test here covers the input guard that fires before any
-// funding, and the structural contract.
+// Consolidate's commit (every source claim, the merged bill and its funding rows
+// in one transaction) is covered with the other commits in commit_test.go. The
+// test here covers the input guard that fires before anything is written.
 
 func TestConsolidate_RejectsFewerThanTwoSources(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
@@ -34,7 +30,7 @@ func TestConsolidate_RejectsFewerThanTwoSources(t *testing.T) {
 		nil,
 		{{WalletApp: &db.App{}, AmountMloki: 1000}},
 	} {
-		_, _, err := Consolidate(context.TODO(), newTestDeps(svc), ConsolidateParams{
+		_, err := Consolidate(context.TODO(), newTestDeps(svc), ConsolidateParams{
 			HubApp:           hub,
 			Sources:          sources,
 			NewIdentityType:  db.CashIdentityPubkey,

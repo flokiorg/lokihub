@@ -96,23 +96,9 @@ func TestAuditA_SecB_CashModeAfterInPlaceHandoff_MustSplit(t *testing.T) {
 		IdentityEvent: mustMarshal(t, bobProof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
-	// What this test can and cannot observe. The property under test is the ROUTING
-	// DECISION — in place versus carve into a new wallet — and that is fully
-	// observable here. Whether the carve then FUNDS is not: the controller builds its
-	// cashwallet.Deps inline (cash_transfer_controller.go:733), so there is no seam to
-	// pass Deps.FundInternalOverride from a controller test, and the mock LN client
-	// cannot complete the internal transfer. So a post-fix run legitimately ends in
-	// "failed to split off slice" while a pre-fix run succeeds in place.
-	//
-	// That difference is exactly the discrimination we want, and the assertion below is
-	// written on the claim table rather than on the response for that reason: after the
-	// fix the bearer slice is absent from the original wallet whether or not the carve
-	// completed, and before the fix it is present. Completing the carve end to end is
-	// integration-level and belongs with the live suite.
-	if toCash.Error != nil {
-		t.Logf("carve attempted and did not complete in this harness (expected): %s: %s",
-			toCash.Error.Code, toCash.Error.Message)
-	}
+	// The property under test is the ROUTING DECISION — in place versus carve into a
+	// new wallet. The carve is one commit of ledger rows, so it completes here.
+	require.Nil(t, toCash.Error, "the carve must complete")
 
 	// The security property, stated directly: the bearer slice must not live on the
 	// wallet Alice can still reach.
@@ -123,14 +109,11 @@ func TestAuditA_SecB_CashModeAfterInPlaceHandoff_MustSplit(t *testing.T) {
 			"connection to it (the pairing key is derived from the app ID and cannot be rotated), so she reads Bob's raw "+
 			"cash_secret off the wire at redemption and can front-run the single-winner ClaimCashSlice to recover a bill she already sold")
 
-	// And the positive half, to the extent this harness can see it: if the carve DID
-	// complete, it must have landed on a wallet other than the original — whose pairing
-	// secret derives from an app ID no previous owner has.
-	if toCash.Error == nil {
-		cashResult := toCash.Result.(cashTransferResponse)
-		assert.NotEmpty(t, cashResult.NewWalletPubkey,
-			"a cash-mode conversion on a wallet that has changed hands must carve into a NEW wallet")
-		assert.NotEqual(t, *wallet.WalletPubkey, cashResult.NewWalletPubkey)
-	}
+	// And the positive half: the carve landed on a wallet other than the original —
+	// whose pairing secret derives from an app ID no previous owner has.
+	cashResult := toCash.Result.(cashTransferResponse)
+	assert.NotEmpty(t, cashResult.NewWalletPubkey,
+		"a cash-mode conversion on a wallet that has changed hands must carve into a NEW wallet")
+	assert.NotEqual(t, *wallet.WalletPubkey, cashResult.NewWalletPubkey)
 	assert.NotEmpty(t, newSecretHex)
 }

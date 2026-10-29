@@ -5,18 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
 
+	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/transactions"
-
-	"gorm.io/gorm"
 )
 
 // cashRateLimitPerHour is the fallback used by tests, which build a
@@ -25,51 +26,61 @@ import (
 // through controller.cfg.GetEnv().CashWalletRateLimitPerHour instead.
 const cashRateLimitPerHour = 10
 
-// mint_cash's request/response wire structs are github.com/ohstr/nmilat/nipcash's
-// own exported types (nipcash.MintCashRequest/MintCashResult/RecipientParam/
-// RecipientResult) — same wire shape, adopted directly instead of maintaining
-// a parallel copy (nmilat migration). One accepted, tested difference:
-// nipcash.MintCashResult.ExpiresAt is a plain int64 with `omitempty` (omitted
-// when zero) rather than this controller's former *int64 (omitted when nil) —
-// behaviorally identical for every real expiry timestamp, which is never 0.
-
-// mapCashWalletErrorCode maps an error returned by cashwallet.Create to a NIP-47
-// error code. cashwallet.Create is protocol-agnostic, so it returns plain wrapped
-// errors rather than NIP-47 codes directly — this is the NWC-specific translation.
+// mapCashWalletErrorCode maps an error returned by cashwallet to a NIP-47 error
+// code. cashwallet is protocol-agnostic, so it returns plain wrapped errors
+// rather than NIP-47 codes directly — this is the NWC-specific translation.
 func mapCashWalletErrorCode(err error) string {
 	switch {
+	case errors.Is(err, cashrequest.ErrDeadlinePassed):
+		return constants.ERROR_BAD_REQUEST
+	case errors.Is(err, apps.ErrSliceClaimed), errors.Is(err, apps.ErrIdentityHoldsSlice):
+		return constants.ERROR_RESTRICTED
+	case errors.Is(err, cashwallet.ErrProofUsed):
+		return constants.ERROR_UNAUTHORIZED
+	case errors.Is(err, cashwallet.ErrRestricted):
+		return constants.ERROR_RESTRICTED
 	case errors.Is(err, transactions.NewInsufficientBalanceError()):
 		return constants.ERROR_INSUFFICIENT_BALANCE
 	case errors.Is(err, transactions.NewQuotaExceededError()):
 		return constants.ERROR_QUOTA_EXCEEDED
-	case errors.Is(err, constants.ErrInvalidParams),
-		errors.Is(err, cashwallet.ErrMintIdempotencyKeyReused):
+	case errors.Is(err, constants.ErrInvalidParams):
 		return constants.ERROR_BAD_REQUEST
 	default:
 		return constants.ERROR_INTERNAL
 	}
 }
 
-// callerSuppliedCashSecret reports whether a mint_cash request names a cash_secret
-// for any recipient, even an empty one.
-func callerSuppliedCashSecret(raw json.RawMessage) bool {
+// removedMintField names a field mint_cash no longer takes, present in the raw
+// params with any value (even empty): a recipient's cash_secret, or a top-level
+// idempotency_key or min_transfer_millis (NIP-CASH §Minting Cash). Decoding into
+// nipcash.MintCashRequest would drop them silently.
+func removedMintField(raw json.RawMessage) string {
 	var params struct {
-		Recipients []struct {
-			CashSecret *string `json:"cash_secret"`
+		IdempotencyKey    *json.RawMessage `json:"idempotency_key"`
+		MinTransferMillis *json.RawMessage `json:"min_transfer_millis"`
+		Recipients        []struct {
+			CashSecret *json.RawMessage `json:"cash_secret"`
 		} `json:"recipients"`
 	}
 	if json.Unmarshal(raw, &params) != nil {
-		return false
+		return ""
+	}
+	if params.IdempotencyKey != nil {
+		return "idempotency_key"
+	}
+	if params.MinTransferMillis != nil {
+		return "min_transfer_millis"
 	}
 	for _, r := range params.Recipients {
 		if r.CashSecret != nil {
-			return true
+			return "cash_secret"
 		}
 	}
-	return false
+	return ""
 }
 
-func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
+func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, meta models.CallMeta) {
+	// 1. Decode. Nothing is marked: an unreadable request names no usable id.
 	params := &nipcash.MintCashRequest{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
@@ -80,35 +91,46 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 	logger.Logger.Info().
 		Uint("app_id", app.ID).
 		Int("recipient_count", len(params.Recipients)).
-		Int("expiry", params.Expiry).
+		Int64("expiry", params.Expiry).
 		Msg("Handling mint_cash request")
 
-	// 1. App must be cash_hub kind.
+	// The connection must be a Cash Hub's.
 	if app.Kind != db.AppKindCashHub {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "mint_cash requires a cash_hub app")
 		return
 	}
 
-	// 1a. NIP-CASH §Minting Cash: a caller-supplied cash_secret MUST be rejected,
-	// since only the Hub can vouch for its entropy. nipcash.RecipientParam has no
-	// such field, so decoding above dropped it silently; look at the raw params.
-	if callerSuppliedCashSecret(nip47Request.Params) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			"cash_secret is generated by the Hub and must not be supplied")
-		return
-	}
-
-	// 1b. Serialize concurrent mint_cash attempts against this hub
-	// (across this NWC path and the admin HTTP path, api.CreateCashWallet) so
-	// two racing requests can't both pass Resolve's balance pre-check against
-	// the same stale balance before either one's Commit actually transfers
-	// funds out.
+	// 2. [step 1] Serialise mints on this Hub (this NWC path and the admin path,
+	// api.CreateCashWallet). A concurrent mint is refused, never queued.
 	release, ok := cashwallet.LockHub(app.ID)
 	if !ok {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_READY, "wallet creation already in progress for this hub, please retry shortly")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "another mint on this Hub is in progress")
 		return
 	}
 	defer release()
+
+	// 3. [step 2] request_id is REQUIRED; it is marked used now, whatever else is
+	// wrong with the call, so a reused id is REQUEST_REUSED and a later refusal leaves
+	// it used (NIP-CASH §request_id, S-CASH-02, S-CASH-06).
+	if !nipcash.ValidRequestID(params.RequestID) {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			"request_id is required: 32 to 64 lowercase hex characters")
+		return
+	}
+	if err := cashrequest.New(controller.db).MarkUsed(params.RequestID, nip47Request.Method); err != nil {
+		if errors.Is(err, cashrequest.ErrRequestReused) {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_REQUEST_REUSED, "this request_id was already used on this node")
+			return
+		}
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not record this request_id, please retry")
+		return
+	}
+	// The deadline is the request's expiration: present, not passed, and at most H
+	// past its arrival (NIP-CASH §Deadlines).
+	if msg := mintDeadlineProblem(meta, time.Now().Unix(), controller.cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds); msg != "" {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, msg)
+		return
+	}
 
 	recipients := make([]cashwallet.RecipientInput, len(params.Recipients))
 	for i, r := range params.Recipients {
@@ -120,32 +142,27 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		}
 	}
 
-	deps := cashwallet.Deps{
-		AppsService:         controller.appsService,
-		TransactionsService: controller.transactionsService,
-		LNClient:            controller.lnClient,
-		Keys:                controller.keys,
-		DB:                  controller.db,
-		RelayURLs:           controller.cfg.GetRelayUrls(),
-		IAChecker:           controller.iaChecker,
-	}
+	deps := controller.cashDeps()
 
-	// 2. Validate first: identity shapes, IA trust, amount/expiry caps, and hub
-	// balance are all read-only checks, so a request that was always going to
-	// fail never burns rate-limit quota (mirrors create_circle_wallet_controller.go,
-	// where the same ordering applies).
+	// 4. [steps 3 to 6] Recipients, IA trust and refused fields, expiry, and the
+	// Hub's balance, in that order. All read-only, so a request that was always
+	// going to fail never burns rate-limit quota.
+	expiry := params.Expiry
+	if expiry > constants.MAX_EXPIRY_SECS {
+		expiry = constants.MAX_EXPIRY_SECS + 1 // still refused at step 5, without overflowing int
+	}
 	resolved, err := cashwallet.Resolve(ctx, deps, cashwallet.Params{
-		HubApp:         app,
-		Recipients:     recipients,
-		ExpirySecs:     params.Expiry,
-		IdempotencyKey: params.IdempotencyKey,
+		HubApp:       app,
+		Recipients:   recipients,
+		ExpirySecs:   int(expiry),
+		RefusedField: removedMintField(nip47Request.Params),
 	})
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())
 		return
 	}
 
-	// 3. Rate limit per calling app pubkey (NWC-specific; the admin HTTP API has no
+	// 5. Rate limit per calling app pubkey (NWC-specific; the admin HTTP API has no
 	// equivalent caller-facing rate limit since it's already gated by hub ownership).
 	// Only requests that passed validation above reach here, so quota is spent
 	// only on requests that would otherwise actually create and fund a wallet.
@@ -154,48 +171,18 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		return
 	}
 
-	// 4. Replay guard. Checked here rather than at the top because a request that
-	// fails validation never created anything, so there is nothing to be idempotent
-	// about — and an early check would record a key for a mint that never happened.
-	//
-	// Read-then-insert is not the guard; the unique index is. This read exists only to
-	// give a legible answer, and the insert below is what actually decides, so two
-	// concurrent duplicates cannot both get through.
-	if params.IdempotencyKey != "" {
-		var prior db.CashMintIdempotency
-		err := controller.db.Where("hub_app_id = ? AND idempotency_key = ?", app.ID, params.IdempotencyKey).
-			First(&prior).Error
-		if err == nil {
-			respondIdempotentReplay(publishResponse, nip47Request.Method, prior)
-			return
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
-				"could not check this request's idempotency key")
-			return
-		}
-	}
-
-	result, err := cashwallet.Commit(ctx, deps, resolved)
+	// The record is written in the same commit as the bill, under the deadline
+	// (NIP-CASH §The Record).
+	record, err := cashwallet.MintRecord(params.RequestID, app, meta.Deadline, resolved)
 	if err != nil {
-		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not record this call")
 		return
 	}
 
-	// The key itself was recorded inside Commit's transaction. Only the token is
-	// filled in here, because it is not known until after the mint — and it is a
-	// convenience for a later refusal's message, not part of the guard, so a failure
-	// to store it is logged rather than surfaced. Withholding a funded wallet's token
-	// to report a bookkeeping miss would strand real money.
-	if params.IdempotencyKey != "" && result.CashToken != "" {
-		if updErr := controller.db.Model(&db.CashMintIdempotency{}).
-			Where("hub_app_id = ? AND idempotency_key = ?", app.ID, params.IdempotencyKey).
-			Update("token", result.CashToken).Error; updErr != nil {
-			logger.Logger.Warn().Err(updErr).
-				Uint("hub_app_id", app.ID).
-				Uint("cash_wallet_id", result.WalletApp.ID).
-				Msg("Recorded the mint_cash idempotency key but could not attach its token; a replay will name the wallet without it")
-		}
+	result, err := cashwallet.Commit(ctx, deps, resolved, record)
+	if err != nil {
+		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), commitErrorMessage(err))
+		return
 	}
 
 	recipientResults := make([]nipcash.RecipientResult, len(result.Recipients))
@@ -203,8 +190,8 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		recipientResults[i] = nipcash.RecipientResult{
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
+			IAPubkey:      r.IAPubkey,
 			AmountMillis:  r.AmountMloki,
-			CashSecret:    r.CashSecret,
 		}
 	}
 
@@ -214,41 +201,59 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		Int("recipient_count", len(result.Recipients)).
 		Msg("Cash wallet created and funded")
 
-	var expiresAt int64
-	if result.ExpiresAt != nil {
-		expiresAt = result.ExpiresAt.Unix()
-	}
-
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
-		Result: nipcash.MintCashResult{
-			WalletPubkey: *result.WalletApp.WalletPubkey,
-			PairingURI:   result.PairingURI,
-			CashToken:    result.CashToken,
-			ExpiresAt:    expiresAt,
-			Recipients:   recipientResults,
-		},
+		Result:     mintCashReply(*result.WalletApp.WalletPubkey, result.CashToken, result.ExpiresAt, recipientResults),
 	}, nostr.Tags{})
 }
 
-// respondIdempotentReplay answers a mint_cash whose idempotency key has already been
-// served.
-//
-// Refused rather than answered with the original result, and that is the honest
-// choice rather than a shortcut: for a cash-mode mint the secret exists only in the
-// reply the caller missed — the Hub keeps a commitment, never the secret — so there is
-// no original result to replay. Storing secrets to make replay work would trade this
-// gap for a strictly worse one.
-//
-// What the caller gets instead is the wallet it already created, by pubkey and token,
-// so it can read the wallet's state with cash_status rather than guess. The error code
-// is BAD_REQUEST because the request genuinely cannot be served again; the message
-// carries the recovery path.
-func respondIdempotentReplay(publishResponse publishFunc, method string, prior db.CashMintIdempotency) {
-	msg := fmt.Sprintf("this idempotency_key already minted cash wallet %s — not minting again", prior.WalletPubkey)
-	if prior.Token != "" {
-		msg += fmt.Sprintf(" (token %s)", prior.Token)
+// MintCashReply is mint_cash's result (NIP-CASH §Minting Cash, Response):
+// wallet_pubkey, cash_token, expires_at (omitted for a bill that never expires)
+// and the recipients echoed as sent. nipcash.MintCashResult is the client's parsed
+// view and does not marshal cash_token, so the Hub writes this one.
+type MintCashReply struct {
+	WalletPubkey string                    `json:"wallet_pubkey"`
+	CashToken    string                    `json:"cash_token"`
+	ExpiresAt    *int64                    `json:"expires_at,omitempty"`
+	Recipients   []nipcash.RecipientResult `json:"recipients"`
+}
+
+func mintCashReply(walletPubkey, cashToken string, expiresAt *time.Time, recipients []nipcash.RecipientResult) MintCashReply {
+	out := MintCashReply{WalletPubkey: walletPubkey, CashToken: cashToken, Recipients: recipients}
+	if expiresAt != nil {
+		at := expiresAt.Unix()
+		out.ExpiresAt = &at
 	}
-	msg += ". A cash-mode secret from the original reply cannot be reissued; read the wallet's state with cash_status, or mint a new wallet with a different key"
-	respondError(publishResponse, method, constants.ERROR_BAD_REQUEST, msg)
+	return out
+}
+
+// commitErrorMessage is the reply text for a failed commit: fixed for the
+// outcomes NIP-CASH names, the error itself otherwise.
+func commitErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, cashrequest.ErrDeadlinePassed):
+		return "reached commit after its deadline; nothing was committed"
+	case errors.Is(err, apps.ErrSliceClaimed):
+		return "this slice was already claimed by another call; nothing was committed"
+	case errors.Is(err, cashwallet.ErrProofUsed):
+		return "a claim proof of this call was already used"
+	}
+	return err.Error()
+}
+
+// mintDeadlineProblem is why a mint's deadline is refused, or "" when it holds: it
+// must be present and well formed, not passed at now, and no more than H past the
+// request's arrival.
+func mintDeadlineProblem(meta models.CallMeta, now, horizon int64) string {
+	switch {
+	case meta.DeadlineMalformed:
+		return "the request's expiration tag is malformed"
+	case !meta.DeadlinePresent:
+		return "mint_cash needs an expiration tag (its deadline)"
+	case nipcash.CheckDeadline(meta.Deadline, meta.ArrivedAt, horizon) != nil:
+		return fmt.Sprintf("the request's expiration must lie within %d seconds of its arrival", horizon)
+	case !nipcash.CommitAllowed(meta.Deadline, now):
+		return "the request's expiration has passed"
+	}
+	return ""
 }

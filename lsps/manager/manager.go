@@ -20,7 +20,6 @@ import (
 	"github.com/flokiorg/lokihub/lsps/lsps5"
 	"github.com/flokiorg/lokihub/lsps/persist"
 	"github.com/flokiorg/lokihub/lsps/transport"
-	"github.com/flokiorg/lokihub/utils"
 )
 
 type LiquidityManager struct {
@@ -45,6 +44,9 @@ type LiquidityManager struct {
 
 	// cache for dynamic nostr pubkeys (LSP Pubkey -> Nostr Pubkey)
 	nostrPubkeys map[string]string
+
+	// liveChecker runs NIP-LSP's live check before each purchase.
+	liveChecker LiveChecker
 }
 
 type PendingOrder struct {
@@ -55,13 +57,17 @@ type PendingOrder struct {
 
 // SettingsLSP represents a configured LSP in the settings
 type SettingsLSP struct {
+	// NodeKey is the announcement's x-only key; Pubkey the node id LSPS uses.
+	NodeKey     string `json:"nodeKey"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Website     string `json:"website"`
 	Pubkey      string `json:"pubkey"`
 	Host        string `json:"host"`
-	Active      bool   `json:"active"`
-	IsCommunity bool   `json:"isCommunity"`
+	// Trusted is the user's choice (LP-12); Status the announcement's status.
+	Trusted     bool   `json:"trusted"`
+	Status      string `json:"status"`
+	Usable      bool   `json:"usable"`
 	NostrPubkey string `json:"nostrPubkey,omitempty"`
 }
 
@@ -413,13 +419,15 @@ func (m *LiquidityManager) getLSPsFromDB() ([]SettingsLSP, error) {
 		}
 
 		lspList = append(lspList, SettingsLSP{
+			NodeKey:     l.NodeKey,
 			Name:        l.Name,
 			Description: l.Description,
 			Website:     l.Website,
 			Pubkey:      l.Pubkey,
 			Host:        l.Host,
-			Active:      l.IsActive,
-			IsCommunity: l.IsCommunity,
+			Trusted:     l.Trusted,
+			Status:      l.Status,
+			Usable:      l.Usable,
 			NostrPubkey: nostrPub,
 		})
 	}
@@ -501,53 +509,12 @@ func (m *LiquidityManager) EnsureWebhookRegistered(ctx context.Context, lspPubke
 	return nil
 }
 
-// AddLSP adds a new LSP via the LSPManager
-func (m *LiquidityManager) AddLSP(name, uri string) error {
+// SetTrusted records the user's trust in an LSP (WP-26); the list changes only
+// through the trust API.
+func (m *LiquidityManager) SetTrusted(key string, trusted bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	pubkey, host, err := utils.ParseLSPURI(uri)
-	if err != nil {
-		return err
-	}
-
-	// Determine if it should be active (if it's the first one?)
-	// For now default to true as per old logic? Old logic: active = len(existing) == 0
-	// We can check existing count
-	all, err := m.cfg.LSPManager.ListLSPs()
-	if err != nil {
-		return err
-	}
-	active := len(all) == 0
-
-	_, err = m.cfg.LSPManager.AddLSP(name, pubkey, host, active, false)
-	return err
-}
-
-// RemoveLSP removes an LSP via LSPManager
-func (m *LiquidityManager) RemoveLSP(pubkey string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.cfg.LSPManager.DeleteCustomLSP(strings.ToLower(pubkey))
-}
-
-// SetActiveLSP enables an LSP
-func (m *LiquidityManager) SetActiveLSP(pubkey string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.cfg.LSPManager.ToggleLSP(strings.ToLower(pubkey), true)
-}
-
-// AddSelectedLSP marks an LSP as active
-func (m *LiquidityManager) AddSelectedLSP(pubkey string) error {
-	return m.SetActiveLSP(pubkey)
-}
-
-// RemoveSelectedLSP marks an LSP as inactive
-func (m *LiquidityManager) RemoveSelectedLSP(pubkey string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.cfg.LSPManager.ToggleLSP(strings.ToLower(pubkey), false)
+	return m.cfg.LSPManager.SetTrusted(key, trusted)
 }
 
 // ConnectLSP attempts to connect to a specific LSP
@@ -565,8 +532,14 @@ func (m *LiquidityManager) ConnectLSP(ctx context.Context, pubkey string) error 
 		}
 	}
 
-	if targetLSP == nil {
-		return fmt.Errorf("LSP %s not found in settings", pubkey)
+	if targetLSP == nil || !targetLSP.Trusted {
+		// No connection is made to an LSP the user has not trusted (NIP-LSP
+		// §Privacy Considerations).
+		return fmt.Errorf("LSP %s is not a trusted LSP", pubkey)
+	}
+	if !connectable(targetLSP.Usable, targetLSP.Status) {
+		// Never through an older announcement's address.
+		return fmt.Errorf("LSP %s has no usable open announcement", pubkey)
 	}
 
 	host := targetLSP.Host
@@ -600,11 +573,28 @@ func (m *LiquidityManager) GetSelectedLSPs() ([]SettingsLSP, error) {
 
 	var selected []SettingsLSP
 	for _, lsp := range all {
-		if lsp.Active {
+		if lsp.Trusted {
 			selected = append(selected, lsp)
 		}
 	}
 	return selected, nil
+}
+
+// GetSellingLSPs are the trusted LSPs offering something new now: a usable
+// announcement with status open and a resolved node id (NIP-LSP §Client
+// Behavior: nothing new through a paused one, a closed one is not shown).
+func (m *LiquidityManager) GetSellingLSPs() ([]SettingsLSP, error) {
+	selected, err := m.GetSelectedLSPs()
+	if err != nil {
+		return nil, err
+	}
+	var out []SettingsLSP
+	for _, l := range selected {
+		if l.Usable && l.Status == "open" && l.Pubkey != "" {
+			out = append(out, l)
+		}
+	}
+	return out, nil
 }
 
 // Event Dispatching
@@ -709,12 +699,33 @@ func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMlo
 		Uint64("inbound_mloki", inboundCapacityMloki).
 		Msg("Insufficient inbound liquidity, attempting JIT channel buy")
 
-	// 2. Get Active LSP
-	lsps, err := m.GetSelectedLSPs()
+	// 2. Get Active LSP: the first trusted LSP selling now whose stored live
+	// check did not find it unusable, and whose live check, run now, passes
+	// (NIP-LSP §Client Behavior: before each purchase).
+	lsps, err := m.GetSellingLSPs()
 	if err != nil || len(lsps) == 0 {
-		return nil, fmt.Errorf("no active LSP to buy liquidity from")
+		return nil, fmt.Errorf("no trusted LSP to buy liquidity from: choose one in Settings")
 	}
-	activeLSP := lsps[0] // Use first active
+	var activeLSP *SettingsLSP
+	var lastRefusal error
+	for i := range lsps {
+		if row, err := m.cfg.LSPManager.GetLSP(lsps[i].Pubkey); err != nil || !storedCheckUsable(row) {
+			continue
+		}
+		if err := m.CheckPurchase(ctx, lsps[i].Pubkey, true); err != nil {
+			lastRefusal = err
+			logger.Logger.Warn().Err(err).Str("lsp", lsps[i].Pubkey).Msg("Not buying JIT liquidity from this LSP")
+			continue
+		}
+		activeLSP = &lsps[i]
+		break
+	}
+	if activeLSP == nil {
+		if lastRefusal != nil {
+			return nil, lastRefusal
+		}
+		return nil, fmt.Errorf("%w: every trusted LSP's last live check found it unusable", ErrLSPNotUsable)
+	}
 
 	// 3. Helper to perform the Buy flow
 	performBuy := func() (*JitChannelHints, error) {
@@ -778,6 +789,9 @@ func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMlo
 
 // BuyLiquidity buys inbound liquidity from a specific LSP with robust error handling (retries on stale params).
 func (m *LiquidityManager) BuyLiquidity(ctx context.Context, lspPubkey string, amountMloki uint64, manualParams *lsps2.OpeningFeeParams) (*JitChannelHints, error) {
+	if err := m.CheckPurchase(ctx, lspPubkey, manualParams == nil); err != nil {
+		return nil, err
+	}
 	// Helper to perform the Buy flow
 	performBuy := func(params *lsps2.OpeningFeeParams) (*JitChannelHints, error) {
 		var selectedParams lsps2.OpeningFeeParams
@@ -946,6 +960,9 @@ func (m *LiquidityManager) GetLSPS1InfoList(ctx context.Context, pubkey string) 
 }
 
 func (m *LiquidityManager) CreateLSPS1Order(ctx context.Context, pubkey string, orderParams lsps1.OrderParams, refundAddr *string) (*lsps1.OrderCreatedEvent, error) {
+	if err := m.CheckPurchase(ctx, pubkey, false); err != nil {
+		return nil, err
+	}
 	reqID, err := m.lsps1Client.CreateOrder(ctx, pubkey, orderParams, refundAddr)
 	if err != nil {
 		return nil, err
@@ -1066,7 +1083,9 @@ func (m *LiquidityManager) handleChannelAcceptRequest(
 	requestPubkey := strings.ToLower(req.NodePubkey)
 	whitelisted := false
 	for _, lsp := range activeLSPs {
-		if lsp.Active && strings.ToLower(lsp.Pubkey) == requestPubkey {
+		// Zero-conf only while the trusted LSP's newest announcement is usable
+		// and not closed (NIP-LSP §Client Behavior).
+		if lsp.Trusted && connectable(lsp.Usable, lsp.Status) && strings.ToLower(lsp.Pubkey) == requestPubkey {
 			whitelisted = true
 			break
 		}

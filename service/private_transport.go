@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/constants"
 	"sync/atomic"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 // previous key while bills in flight drain, and that grace set is not built yet.
 // Wiring it to configuration before the grace set exists would advertise a
 // capability the hub does not have.
-const privateTransportKeyIndex = 0
+const privateTransportKeyIndex = constants.PRIVATE_TRANSPORT_KEY_INDEX
 
 // privateTransport holds what the receive path needs, resolved once at startup so
 // the hot path never re-derives a key or re-reads config.
@@ -40,9 +41,12 @@ type privateTransport struct {
 	// announcement and the key a client recovers from a bill's mint signature.
 	nodeXOnly string
 
-	// nonces refuses replayed envelopes. See privateNonceSet for why it is in
-	// memory rather than durable.
-	nonces *privateNonceSet
+	// nonces remembers served envelopes (E3), persisted so a replay inside
+	// not_after is dropped across a restart.
+	nonces servedNonces
+	// relayBudget rate-limits, per relay connection, the envelopes decrypted
+	// (before E1); nil serves everything.
+	relayBudget *relayEnvelopeBudget
 
 	droppedEvents atomic.Int64
 	// omittedItems counts items served envelopes chose not to answer — an unknown
@@ -52,11 +56,16 @@ type privateTransport struct {
 	// holds gets exactly this. A rising count against steady envelopes is the signal
 	// worth watching, not any single occurrence.
 	omittedItems atomic.Int64
-	// rejectedEnvelopes counts envelopes that passed the wire gate but failed to
-	// unwrap, decode, pass freshness or pass replay. Separate from droppedEvents
-	// because these are the expensive rejections — each already cost an ECDH — so
-	// the two numbers answer different operational questions.
+	// rejectedEnvelopes counts envelopes that passed the wire gate but were dropped
+	// at E1 to E3 or because their nonce could not be recorded. Separate from
+	// droppedEvents because these are the expensive rejections — each already cost
+	// an ECDH — so the two numbers answer different operational questions.
 	rejectedEnvelopes atomic.Int64
+	// refusedEnvelopes counts envelopes answered with an envelope-level error (E4
+	// to E6).
+	refusedEnvelopes atomic.Int64
+	// budgetDropped counts events dropped undecrypted by the per-relay budget.
+	budgetDropped atomic.Int64
 
 	// liveness and the probe settings keep the inbox subscription honest; see
 	// watchInboxLiveness. Zero values fall back to the inboxProbe* defaults.
@@ -211,48 +220,64 @@ func (svc *service) newPrivateTransport() (*privateTransport, error) {
 		inboxPrivKey: inboxPrivKey,
 		inboxXOnly:   inboxXOnly,
 		nodeXOnly:    nodeXOnly,
-		nonces:       newPrivateNonceSet(),
+		nonces:       dbServedNonces{db: svc.db},
+		relayBudget:  newRelayEnvelopeBudget(svc.cfg.GetEnv().PrivateInboxEventsPerMin),
 	}, nil
 }
 
-// unwrap opens one inbound event: decrypt, decode, check freshness, check replay.
-//
-// It returns the envelope and the conversation key, which the reply needs — the
-// response is encrypted under a key derived from this same conversation key plus
-// the envelope's reply_to, which is what saves an ECDH and a signature on the way
-// back out.
-//
-// The order is cost-driven. Decryption is unavoidable and is the expensive step
-// (~166 µs of ECDH, measured), so everything after it is arranged cheapest-first:
-// structural decode, then freshness, then the replay check last. Freshness before
-// replay specifically so a stale envelope cannot consume a slot in a bounded set.
-func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, now time.Time) (*transport.Envelope, [32]byte, error) {
-	var conversationKey [32]byte
+// envelopeRefusal is an envelope refused at E4 to E6: it gets an envelope-level
+// error reply, nothing runs, and its nonce stays unserved.
+type envelopeRefusal struct {
+	code   string
+	header *transport.Envelope
+	reason error
+}
 
+func (e *envelopeRefusal) Error() string {
+	return fmt.Sprintf("envelope refused %s: %v", e.code, e.reason)
+}
+
+// unwrap opens one inbound event and serves NIP-CASH §Serving an Envelope's E1
+// to E6 through nmilat's ClassifyEnvelope: a drop is an error, a refusal an
+// *envelopeRefusal (answered with its code), and a run marks the nonce served,
+// in its own transaction, before any item runs. A nonce that cannot be recorded
+// drops the envelope: fail closed.
+//
+// The conversation key comes back too: the reply is encrypted under a key
+// derived from it and the envelope's reply_to, which saves an ECDH on the way
+// back out. Proof-of-work nonce and expiration tags on the event are never read
+// (not_after alone decides freshness), so a re-mined copy of a served envelope
+// is the same envelope and is dropped at E3.
+func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, now time.Time) (*transport.Envelope, [32]byte, error) {
 	// The sender is a fresh ephemeral key, which is why nothing here is
 	// cacheable and why this cost is paid per event, junk included.
 	conversationKey, err := nip44.GenerateConversationKey(event.PubKey, pt.inboxPrivKey)
 	if err != nil {
 		return nil, conversationKey, fmt.Errorf("conversation key: %w", err)
 	}
+	plaintext, decryptErr := nip44.Decrypt(event.Content, conversationKey)
 
-	plaintext, err := nip44.Decrypt(event.Content, conversationKey)
-	if err != nil {
-		// Overwhelmingly the normal case for junk: the MAC fails. Not an error
-		// worth a log line per occurrence — that is what the counter is for.
-		return nil, conversationKey, fmt.Errorf("decrypt: %w", err)
+	verdict := transport.ClassifyEnvelope([]byte(plaintext), decryptErr, limits, now, pt.nonces.Seen)
+	switch verdict.Action {
+	case transport.ServeDrop:
+		return nil, conversationKey, fmt.Errorf("dropped: %w", verdict.Reason)
+	case transport.ServeRefuse:
+		// Past E4 the nonce counts as served, refused or not (§Serving an
+		// Envelope): an E5/E6 refusal, or a later BAD_REQUEST, marks it, so a
+		// replay of the refused envelope is dropped at E3, not answered again.
+		if refusalPastE4([]byte(plaintext), limits, now) &&
+			!pt.nonces.MarkServed(verdict.Envelope.Nonce, verdict.Envelope.NotAfter) {
+			return nil, conversationKey, fmt.Errorf("envelope nonce %s… already served or not recorded", verdict.Envelope.Nonce[:8])
+		}
+		return nil, conversationKey, &envelopeRefusal{code: verdict.Code, header: verdict.Envelope, reason: verdict.Reason}
+	default:
+		// ServeRun: served below.
 	}
-
-	envelope, err := transport.Decode([]byte(plaintext), limits)
-	if err != nil {
-		return nil, conversationKey, fmt.Errorf("decode: %w", err)
+	envelope := verdict.Envelope
+	if !pt.nonces.MarkServed(envelope.Nonce, envelope.NotAfter) {
+		return nil, conversationKey, fmt.Errorf("envelope nonce %s… already served or not recorded", envelope.Nonce[:8])
 	}
-	if err := envelope.CheckFreshness(now); err != nil {
-		return nil, conversationKey, err
-	}
-	if pt.nonces.seenOrRecord(envelope.Nonce, envelope.NotAfter) {
-		return nil, conversationKey, fmt.Errorf("envelope nonce %s… already seen", envelope.Nonce[:8])
-	}
+	markAnsweredRejections([]byte(plaintext), envelope)
 	return envelope, conversationKey, nil
 }
 
@@ -279,9 +304,10 @@ func (svc *service) startPrivateTransport(ctx context.Context, pool *nostr.Simpl
 		return err
 	}
 
-	// Reclaim expired nonces so the set tracks the live window rather than
-	// growing toward its cap, where it would start refusing real envelopes.
-	pt.nonces.startNonceSweeper(ctx.Done())
+	// Forget served nonces once their not_after has passed.
+	if store, ok := pt.nonces.(dbServedNonces); ok {
+		store.startPruner(ctx, group)
+	}
 
 	group.Go(func() error {
 		return svc.startPrivateTransportSubscription(ctx, pool, pt, group)
@@ -494,14 +520,37 @@ func (svc *service) watchPrivateSubscription(ctx context.Context, pool *nostr.Si
 				continue
 			}
 
+			var arrivedOn string
+			if event.Relay != nil {
+				arrivedOn = event.Relay.URL
+			}
+			// The MAY of §Serving an Envelope: a per-relay budget, applied before any
+			// decryption, so a flood costs the hub no ECDH.
+			if !pt.relayBudget.allow(arrivedOn, time.Now()) {
+				pt.budgetDropped.Add(1)
+				continue
+			}
+
 			envelope, conversationKey, err := pt.unwrap(event.Event, svc.cfg.PrivateEnvelopeLimits(), time.Now())
+			var refusal *envelopeRefusal
+			if errors.As(err, &refusal) {
+				pt.refusedEnvelopes.Add(1)
+				logger.Logger.Debug().Err(err).Str("id", event.Event.ID).Msg("Refused a private transport envelope")
+				group.Go(func() error {
+					if pubErr := svc.publishPrivateRefusal(ctx, pool, refusal, conversationKey, arrivedOn); pubErr != nil {
+						logger.Logger.Warn().Err(pubErr).Msg("Could not deliver an envelope-level refusal")
+					}
+					return nil
+				})
+				continue
+			}
 			if err != nil {
 				// Counted rather than logged per event: this path is one an
 				// attacker drives, and formatting a message for each is
 				// itself a denial of service. Debug for a working trail.
 				pt.rejectedEnvelopes.Add(1)
 				logger.Logger.Debug().Err(err).Str("id", event.Event.ID).
-					Msg("Rejected a private transport envelope")
+					Msg("Dropped a private transport envelope")
 				continue
 			}
 
@@ -518,10 +567,6 @@ func (svc *service) watchPrivateSubscription(ctx context.Context, pool *nostr.Si
 			// No loop-variable capture to worry about: envelope and conversationKey
 			// are declared inside this iteration's body, not by the range clause.
 			// The reply goes back to the relay this request arrived on.
-			var arrivedOn string
-			if event.Relay != nil {
-				arrivedOn = event.Relay.URL
-			}
 			group.Go(func() error {
 				svc.dispatchEnvelope(ctx, pool, pt, svc.lnClient, envelope, conversationKey, arrivedOn)
 				return nil
@@ -594,3 +639,5 @@ func (pt *privateTransport) logDroppedEventsPeriodically(ctx context.Context, gr
 		}
 	})
 }
+
+func (e *envelopeRefusal) Unwrap() error { return e.reason }

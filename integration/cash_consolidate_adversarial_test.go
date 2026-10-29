@@ -18,20 +18,20 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // decryptSplitWalletToken decrypts a nested-encrypted split/consolidate token
 // (delivered to the caller keyed to their own privkey) and returns the decoded
 // token — for inspecting provenance without connecting.
-func decryptSplitWalletToken(t *testing.T, walletPubkey, encToken, callerPriv string) lokicash.Token {
+func decryptSplitWalletToken(t *testing.T, walletPubkey, encToken, callerPriv string) nipcash.Token {
 	t.Helper()
 	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, walletPubkey, callerPriv)
 	require.NoError(t, err)
 	dec, err := c.Decrypt(encToken)
 	require.NoError(t, err)
-	tok, err := lokicash.Decode(dec)
+	tok, err := nipcash.Decode(dec)
 	require.NoError(t, err)
 	require.Equal(t, walletPubkey, tok.WalletPubkey)
 	return tok
@@ -50,7 +50,7 @@ func mintPubkeySource(t *testing.T, hubClient *nwcclient.Client, ownerPub string
 		Recipients: onePubkeyRecipient(ownerPub, amount),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	return created.WalletPubkey, created.PairingURI, created.CashToken
+	return created.WalletPubkey, created.CashToken, created.CashToken
 }
 
 // consolidateSourceFor builds a source param for a wallet the caller owns, bound
@@ -99,9 +99,9 @@ func TestConsolidate_Adversarial(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("CrossHub_Rejected", func(t *testing.T) {
-		wpA, connA, connAToken := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+		wpA, _, connAToken := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
 		wpB, _, _ := mintPubkeySource(t, clientB, callerPub, happyPathAmountMloki)
-		callConn := mustConnectBill(t, connA, connAToken, callerPriv)
+		callConn := mustConnectBill(t, connAToken, callerPriv)
 		var res CashConsolidateResult
 		err := callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 			Sources: []ConsolidateSourceParam{
@@ -110,13 +110,13 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			},
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 		require.ErrorContains(t, err, "same Cash Hub")
 	})
 
 	t.Run("UncustodiedSource_Rejected", func(t *testing.T) {
-		wpA, connA, connAToken := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
-		callConn := mustConnectBill(t, connA, connAToken, callerPriv)
+		wpA, _, connAToken := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+		callConn := mustConnectBill(t, connAToken, callerPriv)
 		bogus := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef00"
 		var res CashConsolidateResult
 		// No CashSecret here: cash-mode sources are rejected outright (BAD_REQUEST)
@@ -128,13 +128,13 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			},
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("UnauthorizedProof_Rejected", func(t *testing.T) {
-		wp1, conn1, conn1Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+		wp1, _, conn1Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
 		wp2, _, _ := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
-		callConn := mustConnectBill(t, conn1, conn1Token, callerPriv)
+		callConn := mustConnectBill(t, conn1Token, callerPriv)
 		strangerPriv := newTestPrivkey(t) // does NOT own wp1's slice
 		var res CashConsolidateResult
 		err := callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
@@ -144,13 +144,13 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			},
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("SourcesDrainedAndNotDoubleSpendable", func(t *testing.T) {
 		wp1, conn1, conn1Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
 		wp2, conn2, conn2Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki*2)
-		callConn := mustConnectBill(t, conn1, conn1Token, callerPriv)
+		callConn := mustConnectBill(t, conn1Token, callerPriv)
 		var res CashConsolidateResult
 		require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 			Sources: []ConsolidateSourceParam{
@@ -164,12 +164,12 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		// Both sources were consumed, so both bills are deleted and neither
 		// answers any more.
 		for _, c := range [][2]string{{conn1, conn1Token}, {conn2, conn2Token}} {
-			src := mustConnectBill(t, c[0], c[1], callerPriv)
+			src := mustConnectBill(t, c[1], callerPriv)
 			requireSpentBillTombstoned(t, src)
 		}
 
 		// Redeeming an already-consolidated source must fail (no double-spend).
-		src1 := mustConnectBill(t, conn1, conn1Token, callerPriv)
+		src1 := mustConnectBill(t, conn1Token, callerPriv)
 		inv := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "consolidate double-spend attempt")
 		proof := buildClaimProofEvent(t, callerPriv, wp1, inv.PaymentHash, nil, time.Now())
 		var cr ClaimFundsResult
@@ -194,24 +194,23 @@ func TestConsolidate_Adversarial(t *testing.T) {
 	})
 
 	t.Run("ConsolidatedTokenCarriesVerifiableProvenance", func(t *testing.T) {
-		wp1, conn1, conn1Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+		wp1, _, conn1Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
 		wp2, _, _ := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
-		callConn := mustConnectBill(t, conn1, conn1Token, callerPriv)
+		callConn := mustConnectBill(t, conn1Token, callerPriv)
 		var res CashConsolidateResult
 		require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 			Sources: []ConsolidateSourceParam{
 				consolidateSourceFor(t, wp1, callerPriv, callerPub, newPub, happyPathAmountMloki),
 				consolidateSourceFor(t, wp2, callerPriv, callerPub, newPub, happyPathAmountMloki),
 			},
-			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			MintSignature: true,
+			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		}, &res))
 
 		merged := decryptSplitWalletToken(t, res.NewWalletPubkey, res.NewWalletToken, callerPriv)
 		require.NotNil(t, merged.MintSignature, "an opted-in consolidated token must carry provenance")
-		require.NotNil(t, merged.AttestedAmount)
-		assert.EqualValues(t, happyPathAmountMloki*2, *merged.AttestedAmount, "provenance must attest the merged sum")
-		minter, ok := lokicash.VerifyMint(merged)
+		require.NotNil(t, merged.AttestedAmountMillis)
+		assert.EqualValues(t, happyPathAmountMloki*2, *merged.AttestedAmountMillis, "provenance must attest the merged sum")
+		minter, ok := nipcash.VerifyProvenance(merged)
 		require.True(t, ok, "the consolidated token's provenance must verify")
 		require.Len(t, minter, 66)
 	})
@@ -223,9 +222,9 @@ func TestConsolidate_Adversarial(t *testing.T) {
 	// only its commitment hash was ever sent, and the node has no way to
 	// mint/return the secret itself.
 	t.Run("CashTargetSecretNotInResponse", func(t *testing.T) {
-		wp1, conn1, conn1Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+		wp1, _, conn1Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
 		wp2, _, _ := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
-		callConn := mustConnectBill(t, conn1, conn1Token, callerPriv)
+		callConn := mustConnectBill(t, conn1Token, callerPriv)
 
 		cashSecret, cashHash := cashSecretAndHash(t)
 		var res CashConsolidateResult
@@ -244,20 +243,18 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		// The delivered token is a plain lokicash1... string (no ECDH target
 		// exists for a cash-mode commitment), so it must decode directly — no
 		// nested-encryption layer to strip first, unlike a pubkey target.
-		decoded, err := lokicash.Decode(res.NewWalletToken)
+		decoded, err := nipcash.Decode(res.NewWalletToken)
 		require.NoError(t, err, "cash-mode target delivery must be a plain, directly-decodable token")
 		assert.Equal(t, res.NewWalletPubkey, decoded.WalletPubkey)
 
 		// The secret actually redeems the merged total, over the cash-mode
 		// wallet's own connection (built from the decoded token, same as any
-		// other spun-off wallet — nwcclient.Connect needs a
-		// nostr+walletconnect:// URI, not the raw lokicash1... token itself;
-		// the secret travels as its own request field, never embedded in the
+		// other spun-off wallet; the secret travels as its own request field, never embedded in the
 		// connection string — same pattern createCashModeWallet's callers use).
 		// Bearer: a cash-mode bill's secret in params IS its authorization, so the item
 		// carries no slice proof (§Bearer Items). Its delivery is in the clear precisely
 		// because a cash-mode caller has no pubkey to encrypt to.
-		cashClient := mustConnectBill(t, nwcURIFromLokicash(decoded), res.NewWalletToken, "")
+		cashClient := mustConnectBill(t, res.NewWalletToken, "")
 		mInv := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki*2, "cash-mode target redeem")
 		var rr ClaimFundsResult
 		require.NoError(t, cashClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
@@ -276,9 +273,9 @@ func TestConsolidate_Adversarial(t *testing.T) {
 
 		consolidateOnce := func(t *testing.T) CashConsolidateResult {
 			t.Helper()
-			wp1, conn1, conn1Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+			wp1, _, conn1Token := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
 			wp2, _, _ := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
-			callConn := mustConnectBill(t, conn1, conn1Token, callerPriv)
+			callConn := mustConnectBill(t, conn1Token, callerPriv)
 			var res CashConsolidateResult
 			require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 				Sources: []ConsolidateSourceParam{
@@ -320,9 +317,9 @@ func TestAudit_CashConsolidateConnectionKey_RevokedIA_Rejected(t *testing.T) {
 	claimantPriv := newTestPrivkey(t)
 	claimantPub := mustPubkey(t, claimantPriv)
 
-	wp1, conn1, conn1Token := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
+	wp1, _, conn1Token := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
 	wp2, _, _ := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
-	callConn := mustConnectBill(t, conn1, conn1Token, claimantPriv)
+	callConn := mustConnectBill(t, conn1Token, claimantPriv)
 
 	proof1 := buildTransferProofEvent(t, callerPriv, wp1, "connection_key", connectionKey, iaPub, happyPathAmountMloki, nil, time.Now())
 	proof2 := buildTransferProofEvent(t, callerPriv, wp2, "connection_key", connectionKey, iaPub, happyPathAmountMloki, nil, time.Now())
@@ -337,7 +334,7 @@ func TestAudit_CashConsolidateConnectionKey_RevokedIA_Rejected(t *testing.T) {
 	}, &res))
 	require.NotEmpty(t, res.NewWalletToken)
 
-	decoded, err := lokicash.Decode(res.NewWalletToken)
+	decoded, err := nipcash.Decode(res.NewWalletToken)
 	require.NoError(t, err, "connection_key target delivery must be a plain, directly-decodable token")
 	assert.Equal(t, res.NewWalletPubkey, decoded.WalletPubkey)
 
@@ -354,14 +351,14 @@ func TestAudit_CashConsolidateConnectionKey_RevokedIA_Rejected(t *testing.T) {
 	redeemProof := buildClaimProofEvent(t, claimantPriv, res.NewWalletPubkey, mInv.PaymentHash,
 		connKeyTransferProofTags(connectionKey, attestation.ID), time.Now())
 
-	mergedClient := mustConnectBill(t, nwcURIFromLokicash(decoded), res.NewWalletToken, claimantPriv)
+	mergedClient := mustConnectBill(t, res.NewWalletToken, claimantPriv)
 	var rr ClaimFundsResult
 	err = mergedClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 		Invoice: mInv.Invoice, IdentityType: "connection_key", IdentityValue: connectionKey,
 		IdentityEvent: eventJSON(t, redeemProof), AttestationEvent: eventJSON(t, attestation),
 	}, &rr)
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
-	require.ErrorContains(t, err, "revoked")
+	require.ErrorContains(t, err, "no longer trusted")
 }
 
 // TestProvenance_TamperedTokenFailsVerification takes a REAL node-signed token
@@ -377,21 +374,20 @@ func TestProvenance_TamperedTokenFailsVerification(t *testing.T) {
 
 	var created MintCashResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
-		Recipients:    onePubkeyRecipient(recipientPub, happyPathAmountMloki),
-		Expiry:        happyPathExpirySecs,
-		MintSignature: true,
+		Recipients: onePubkeyRecipient(recipientPub, happyPathAmountMloki),
+		Expiry:     happyPathExpirySecs,
 	}, &created))
 
-	genuine, err := lokicash.Decode(created.CashToken)
+	genuine, err := nipcash.Decode(created.CashToken)
 	require.NoError(t, err)
-	honest, ok := lokicash.VerifyMint(genuine)
+	honest, ok := nipcash.VerifyProvenance(genuine)
 	require.True(t, ok)
 
 	// Tamper: inflate the attested amount, keep the real signature.
-	inflated := *genuine.AttestedAmount + 1
+	inflated := *genuine.AttestedAmountMillis + 1
 	tampered := genuine
-	tampered.AttestedAmount = &inflated
-	recovered, ok := lokicash.VerifyMint(tampered)
+	tampered.AttestedAmountMillis = &inflated
+	recovered, ok := nipcash.VerifyProvenance(tampered)
 	require.True(t, ok, "recovery still runs on a well-formed 65-byte signature")
 	assert.NotEqual(t, honest, recovered, "a restated denomination must not recover the true minter")
 }
@@ -413,8 +409,8 @@ func TestAudit_CashConsolidateConnectionKeySource_HappyPath(t *testing.T) {
 	callerPub := mustPubkey(t, callerPriv)
 	newPub := mustPubkey(t, newTestPrivkey(t))
 
-	wp1, conn1, conn1Token := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
-	callConn := mustConnectBill(t, conn1, conn1Token, callerPriv)
+	wp1, _, conn1Token := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
+	callConn := mustConnectBill(t, conn1Token, callerPriv)
 
 	connectionKey := newTestConnectionKey(t)
 	_, wp2, claimantPriv, claimantPub := createConnKeyCashWallet(t, hubClient, iaPub, connectionKey, happyPathAmountMloki)
@@ -459,8 +455,8 @@ func TestAudit_CashConsolidateConnectionKey_AttestationReplayAcrossBatches_Allow
 
 	consolidateOnce := func(t *testing.T, connWalletPubkey string) CashConsolidateResult {
 		t.Helper()
-		wpPubkey, connPubkey, connPubkeyToken := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
-		callConn := mustConnectBill(t, connPubkey, connPubkeyToken, callerPriv)
+		wpPubkey, _, connPubkeyToken := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
+		callConn := mustConnectBill(t, connPubkeyToken, callerPriv)
 		newPub := mustPubkey(t, newTestPrivkey(t))
 		proof1 := buildTransferProofEvent(t, callerPriv, wpPubkey, "pubkey", newPub, "", happyPathAmountMloki, nil, time.Now())
 		proof2 := buildTransferProofEvent(t, claimantPriv, connWalletPubkey, "pubkey", newPub, "", happyPathAmountMloki,

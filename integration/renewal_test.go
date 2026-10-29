@@ -16,6 +16,7 @@ package integration
 import (
 	"testing"
 
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
@@ -78,7 +79,7 @@ func TestCircleHub_CreateWallet_BudgetRenewal_OneNotchTighterThanFloor_Rejected(
 		floor := budgetRenewalsByRank[i]
 		tighter := budgetRenewalsByRank[i-1]
 		t.Run(floor, func(t *testing.T) {
-			createCircleWalletExpectingCode(t, cfg, floor, tighter, constants.ERROR_BAD_REQUEST)
+			createCircleWalletExpectingCode(t, cfg, floor, tighter, nipcw.ErrLimitExceeded)
 		})
 	}
 }
@@ -116,7 +117,7 @@ func TestCircleHub_CreateWallet_BudgetRenewalNever_ReportsNoRenewsAt(t *testing.
 
 	details, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), result)
 	require.NoError(t, err)
-	child := mustConnect(t, CircleWalletURI(details, pubkey))
+	child := mustConnectCircleWallet(t, CircleWalletConnection(details, pubkey))
 
 	var budget GetBudgetResult
 	require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget))

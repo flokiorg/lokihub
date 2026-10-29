@@ -142,7 +142,7 @@ func TestAllHubsCashClaimUnionSQL_IsDerivedNotStale(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(allHubs, "UNION ALL"),
 		"both branches must still be present")
 	assert.Contains(t, allHubs, "a.parent_kind = 'cash' AND a.kind = 'cash_wallet'")
-	assert.Contains(t, allHubs, "s.outcome <> 'void'")
+	assert.Contains(t, allHubs, "FROM cash_bill_slice_archives s")
 	assert.Equal(t, strings.Count(perHub, "?")-2, strings.Count(allHubs, "?"),
 		"exactly the two hub placeholders may be removed, no others")
 }

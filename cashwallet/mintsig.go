@@ -4,98 +4,61 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ohstr/nmilat/nipcash"
+
+	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/lokicash"
-	"github.com/tv42/zbase32"
+	"github.com/flokiorg/lokihub/nodesign"
 )
 
-// MintProvenance produces the raw recoverable signature a lokicash token carries as
-// its mint provenance (NIP-CASH §Mint Provenance): the node signs
-// lokicash.MintPayload(HRP, walletPubkey, amountMillis) with its Lightning identity
-// key, and we return the raw compact bytes (LND hands back a zbase32 string, which we
-// decode so the token stays compact).
-//
-// Provenance is MANDATORY, and this returns an error rather than degrading. An
-// unsigned bill carries nothing that identifies its minting hub, and that identity is
-// the only thing a client can verify a transport announcement against — so an
-// unsigned bill can never reach the private transport, which is the only transport
-// that serves bill methods. A bill nobody can spend is worse than a mint that refused.
-//
-// MUST be called BEFORE any funds move. That is the whole reason this is separate from
-// encodeCashToken: signing is fallible and touches the node, encoding is pure. Called
-// after funding, a failure would have to be swallowed — the money would already be
-// gone — which is exactly how provenance ended up optional in the first place.
-func MintProvenance(ctx context.Context, ln lnclient.LNClient, walletPubkey string, amountMillis uint64) ([]byte, error) {
-	payload := lokicash.MintPayload(lokicash.HRP, walletPubkey, amountMillis)
-	zsig, err := ln.SignMessage(ctx, payload)
-	if err != nil {
-		return nil, fmt.Errorf("node refused to sign mint provenance for %s: %w", walletPubkey, err)
+// hubGroupInput is the key a Cash Hub's fingerprint is derived from (NIP-CASH §The
+// Hub Group Fingerprint). It is the Hub's own connection pubkey, fixed once it mints:
+// after the connection is regenerated, the key it had before.
+func hubGroupInput(hub *db.App) string {
+	if hub.HubGroupPubkey != nil && *hub.HubGroupPubkey != "" {
+		return *hub.HubGroupPubkey
 	}
-	raw, err := zbase32.DecodeString(zsig)
-	if err != nil {
-		return nil, fmt.Errorf("could not decode the node's mint provenance signature for %s: %w", walletPubkey, err)
-	}
-	// A well-formed LND SignMessage result is a 65-byte compact recoverable signature;
-	// anything else cannot be a valid provenance signature.
-	if len(raw) != mintSigRawLen {
-		return nil, fmt.Errorf("mint provenance signature for %s is %d bytes, want %d", walletPubkey, len(raw), mintSigRawLen)
-	}
-	return raw, nil
+	return hub.AppPubkey
 }
 
-// mintSigRawLen is the byte length of a recoverable ECDSA compact signature,
-// mirrored from lokicash so this package can validate before handing bytes off.
-const mintSigRawLen = 65
-
-// encodeCashToken builds a lokicash token for a freshly-created wallet, attaching the
-// mint provenance already obtained by MintProvenance.
-//
-// It can fail (a relay URL or label too long for the format, no usable relay), so
-// every caller encodes BEFORE moving funds and fails the operation on an error:
-// NIP-CASH forbids returning an empty token, and a refusal must cost the caller
-// nothing.
-//
-// amountMillis is the wallet's total committed amount, the value mintSig attests.
-// hubPubkey is the issuing Hub app's own pubkey. It is hashed and truncated into
-// the token's hub-group fingerprint (lokicash.HubGroupFor), which is how a holder
-// tells which of their bills may be consolidated together — provenance identifies
-// the minting NODE, and one node runs several Hubs, so a holder grouping by minter
-// merges bills this Hub then refuses.
-//
-// An empty hubPubkey yields no fingerprint rather than a hash of "": a bill with no
-// fingerprint is ungrouped, which is correct and merely inconvenient, whereas a
-// fingerprint every Hub shares would group bills across Hubs and guarantee the
-// refusal this exists to avoid.
-func encodeCashToken(walletPubkey, secret string, relayURLs []string, identityRequired *bool, mintSig []byte, amountMillis uint64, hubPubkey string) (string, error) {
+// issueCashToken signs a new bill with the node identity, under cash-mint:v1, or
+// under cash-zap:v1 when zap is set (a bill created by a zap transfer), and
+// encodes it (NIP-CASH §Mint Provenance, §Wire Format), returning the signed token
+// and its encoding. It runs inside the call's commit transaction, before COMMIT: a
+// Hub never issues an unsigned bill, and a failure here rolls the whole call back.
+func issueCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, secret string, relayURLs []string, identityRequired *bool, amountMillis uint64, hub *db.App, zap *nipcash.ZapContext) (nipcash.Token, string, error) {
 	amt := amountMillis
-	var hubGroup []byte
-	if hubPubkey != "" {
-		hubGroup = lokicash.HubGroupFor(hubPubkey)
+	tok := nipcash.Token{
+		HRP:                  constants.CashTokenHRP,
+		WalletPubkey:         walletPubkey,
+		Secret:               secret,
+		RelayURLs:            relayURLs,
+		IdentityRequired:     identityRequired,
+		AttestedAmountMillis: &amt,
 	}
-	tok := lokicash.Token{
-		HRP:              lokicash.HRP,
-		WalletPubkey:     walletPubkey,
-		Secret:           secret,
-		RelayURLs:        relayURLs,
-		IdentityRequired: identityRequired,
-		MintSignature:    mintSig,
-		AttestedAmount:   &amt,
-		HubGroup:         hubGroup,
+	// An empty input stamps no fingerprint, never a hash of "": that would group
+	// bills across Hubs.
+	if input := hubGroupInput(hub); input != "" {
+		tok.HubGroup = nipcash.HubGroupFor(input)
 	}
-	return lokicash.Encode(tok)
-}
-
-// storeCashToken persists a freshly issued bill's token verbatim, so the archive
-// keeps the exact string the bill was issued with once it is destroyed
-// (db.App.CashToken). Re-deriving it later is not equivalent: the token embeds the
-// relay hints in effect right now, and config can change. Best-effort: a bill
-// that is otherwise fully minted and funded must not fail over its own audit copy.
-func storeCashToken(deps Deps, walletAppID uint, token string) {
-	if err := deps.DB.Model(&db.App{}).Where("id = ?", walletAppID).
-		Update("cash_token", token).Error; err != nil {
-		logger.Logger.Warn().Err(err).Uint("cash_wallet_id", walletAppID).
-			Msg("Failed to store Cash bill token for the audit archive")
+	xonly, err := nodesign.XOnly(ctx, ln)
+	if err != nil {
+		return nipcash.Token{}, "", err
 	}
+	scheme := nipcash.SchemeMintV1
+	if zap != nil {
+		scheme = nipcash.SchemeZapV1
+	}
+	signed, err := nipcash.SignToken(tok, scheme, zap, xonly, nodesign.Signer(ctx, ln))
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("wallet_pubkey", walletPubkey).Msg("Could not sign a bill's mint provenance")
+		return nipcash.Token{}, "", fmt.Errorf("provenance unavailable; nothing was committed: %w", err)
+	}
+	encoded, err := nipcash.Encode(signed)
+	if err != nil {
+		return nipcash.Token{}, "", err
+	}
+	return signed, encoded, nil
 }

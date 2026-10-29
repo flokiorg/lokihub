@@ -39,7 +39,7 @@ func TestNmilatEquivalence_Attestation_StructuralChecks(t *testing.T) {
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	validExpiration := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
 
 	baseTags := func() nostr.Tags {
@@ -65,20 +65,20 @@ func TestNmilatEquivalence_Attestation_StructuralChecks(t *testing.T) {
 		{
 			name:           "missing platform tag rejected",
 			tags:           append(baseTags(), nostr.Tag{"evidence", `{"version":1}`}),
-			lokihubWantErr: "#platform tag is required",
-			nipICWantErr:   "#platform tag is required",
+			lokihubWantErr: `"platform" tag is required`,
+			nipICWantErr:   `"platform" tag is required`,
 		},
 		{
 			name:           "empty platform tag rejected",
 			tags:           append(baseTags(), nostr.Tag{"platform", ""}, nostr.Tag{"evidence", `{"version":1}`}),
-			lokihubWantErr: "#platform tag is required",
-			nipICWantErr:   "#platform tag is required",
+			lokihubWantErr: `"platform" tag is required`,
+			nipICWantErr:   `"platform" tag is required`,
 		},
 		{
 			name:           "missing evidence tag rejected",
 			tags:           append(baseTags(), nostr.Tag{"platform", "discord"}),
-			lokihubWantErr: "#evidence tag is required",
-			nipICWantErr:   "#evidence tag is required",
+			lokihubWantErr: `"evidence" tag is required`,
+			nipICWantErr:   `"evidence" tag is required`,
 		},
 		{
 			name:           "malformed evidence tag rejected",
@@ -94,7 +94,7 @@ func TestNmilatEquivalence_Attestation_StructuralChecks(t *testing.T) {
 		},
 		{
 			name:           "platform and evidence present, accepted",
-			tags:           append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", `{"version":1,"platform":"discord"}`}),
+			tags:           append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", tests.TestAttestationEvidence(connectionKey)}),
 			lokihubWantErr: "",
 			nipICWantErr:   "",
 		},
@@ -141,7 +141,7 @@ func TestVerifyClaimAttestationEvent_IDIntegrityHardening(t *testing.T) {
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 
 	ev := &nostr.Event{
 		Kind:      nostrKindIAAttestation,
@@ -150,7 +150,7 @@ func TestVerifyClaimAttestationEvent_IDIntegrityHardening(t *testing.T) {
 			{"d", connectionKey},
 			{"p", claimantPubkey},
 			{"platform", "discord"},
-			{"evidence", `{"version":1,"platform":"discord"}`},
+			{"evidence", tests.TestAttestationEvidence(connectionKey)},
 			{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
 		},
 	}

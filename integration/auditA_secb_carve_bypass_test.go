@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // TestAuditA_SecB_CarveLocksOutThePreviousHolder is the adversarial counterpart to the
@@ -43,7 +43,7 @@ func TestAuditA_SecB_CarveLocksOutThePreviousHolder(t *testing.T) {
 	}, &created))
 
 	// Alice converts to cash mode. In place, correctly: the bill has not changed hands.
-	aliceConn := mustConnectBill(t, created.PairingURI, created.CashToken, alicePriv)
+	aliceConn := mustConnectBill(t, created.CashToken, alicePriv)
 	aliceSecret, aliceSecretHash := cashSecretAndHash(t)
 	toCashProof := buildTransferProofEvent(t, alicePriv, created.WalletPubkey, "cash", aliceSecretHash, "", happyPathAmountMloki, nil, time.Now())
 	var toCash CashTransferResult
@@ -57,7 +57,7 @@ func TestAuditA_SecB_CarveLocksOutThePreviousHolder(t *testing.T) {
 
 	// Bob receives the string and re-keys at once. The bill has changed hands, so the Hub
 	// carves rather than reassigning.
-	bobConn := mustConnectBill(t, created.PairingURI, created.CashToken, newTestPrivkey(t))
+	bobConn := mustConnectBill(t, created.CashToken, newTestPrivkey(t))
 	bobConn.Bearer()
 	bobSecret, bobSecretHash := cashSecretAndHash(t)
 	var rekey CashTransferResult
@@ -80,7 +80,7 @@ func TestAuditA_SecB_CarveLocksOutThePreviousHolder(t *testing.T) {
 		// and an item carrying both a proof and a cash secret is refused outright by
 		// §Bearer Items. That refusal would look like a pass while testing nothing — the
 		// request would never reach the question of whether the bill still exists.
-		old := mustConnectBill(t, created.PairingURI, created.CashToken, newTestPrivkey(t))
+		old := mustConnectBill(t, created.CashToken, newTestPrivkey(t))
 		old.Bearer()
 		var claim ClaimFundsResult
 		err := old.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
@@ -94,7 +94,7 @@ func TestAuditA_SecB_CarveLocksOutThePreviousHolder(t *testing.T) {
 
 	t.Run("AliceCannotReKeyItBackToHerself", func(t *testing.T) {
 		_, herNewHash := cashSecretAndHash(t)
-		old := mustConnectBill(t, created.PairingURI, created.CashToken, newTestPrivkey(t))
+		old := mustConnectBill(t, created.CashToken, newTestPrivkey(t))
 		old.Bearer()
 		var stolen CashTransferResult
 		err := old.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
@@ -127,21 +127,21 @@ func TestAuditA_SecB_CarveLocksOutThePreviousHolder(t *testing.T) {
 		for _, r := range status.Recipients {
 			require.NotEqual(t, bobSecretHash, r.IdentityValue)
 		}
-		body := strings.ToLower(status.Error)
+		body := strings.ToLower(status.Status)
 		require.NotContains(t, body, strings.ToLower(rekey.NewWalletPubkey),
 			"the old bill disclosed the carved wallet's pubkey to a previous holder")
-		t.Logf("the old bill answers only: error=%q", status.Error)
+		t.Logf("the old bill answers only: error=%q", status.Status)
 	})
 
 	// ---- The positive leg: the value survived, and only Bob can move it. ----
 
 	t.Run("BobRedeemsTheFullAmount", func(t *testing.T) {
-		carved, err := lokicash.Decode(rekey.NewWalletToken)
+		carved, err := nipcash.Decode(rekey.NewWalletToken)
 		require.NoError(t, err, "the carved token must be usable by its recipient")
 		require.Equal(t, rekey.NewWalletPubkey, carved.WalletPubkey)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "auditA bob redeems carved")
-		carvedConn := mustConnectBill(t, nwcURIFromLokicash(carved), rekey.NewWalletToken, newTestPrivkey(t))
+		carvedConn := mustConnectBill(t, rekey.NewWalletToken, newTestPrivkey(t))
 		carvedConn.Bearer()
 		var claim ClaimFundsResult
 		require.NoError(t, carvedConn.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{

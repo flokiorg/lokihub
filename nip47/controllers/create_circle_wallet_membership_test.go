@@ -132,7 +132,7 @@ func mustPubkeyForTest(t *testing.T, privkey string) string {
 // loop, so the single-use replay guard never fires and only the behavior
 // actually under test (e.g. the one-active-wallet-per-identity cap) governs
 // the outcome.
-func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey, disambiguator string, maxAmountMloki uint64, expirationSecs int) string {
+func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey, disambiguator string, maxAmountMloki uint64, expirationSecs uint64) string {
 	t.Helper()
 	requesterPubkey, _ := nostr.GetPublicKey(requesterPrivkey)
 	identityEvent := &nostr.Event{
@@ -141,6 +141,7 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey
 		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", testConnectionPubkey(t, requesterPubkey)}, {"disambiguator", disambiguator}},
 	}
 	require.NoError(t, identityEvent.Sign(requesterPrivkey))
+	joinProofSigners.Store(identityEvent.ID, requesterPrivkey)
 
 	params := nipcw.CreateCircleWalletRequest{
 		Pubkey:           requesterPubkey,
@@ -149,10 +150,7 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey
 		Expiry:           expirationSecs,
 		IdentityEvent:    mustMarshal(t, identityEvent),
 	}
-	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
-	b, err := json.Marshal(content)
-	require.NoError(t, err)
-	return string(b)
+	return joinRequestJSON(t, params)
 }
 
 // Concurrent double-submit race for the same identity: with generous balance
@@ -194,7 +192,7 @@ func TestHandleCreateCircleWalletEvent_Membership_ConcurrentRace_ExactlyOneWinne
 		go func() {
 			defer wg.Done()
 			<-ready
-			controller.HandleCreateCircleWalletEvent(context.TODO(), requests[i], eventIDs[i], provider,
+			controller.testJoin(t, context.TODO(), requests[i], eventIDs[i], provider,
 				func(r *models.Response, _ nostr.Tags) { responses <- r })
 		}()
 	}

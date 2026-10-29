@@ -1,7 +1,7 @@
 package controllers
 
-// The make_invoice scope also grants make_hold_invoice, so a hold invoice is a
-// second way for a circle wallet to receive. It must respect the same cap.
+// The make_invoice scope also grants make_hold_invoice; a Circle Wallet is
+// refused it.
 
 import (
 	"context"
@@ -36,39 +36,23 @@ func handleHoldInvoice(t *testing.T, svc *tests.TestService, appID uint, amountM
 	return resp
 }
 
-func TestMakeHoldInvoice_CircleCap_AboveCapRefused(t *testing.T) {
+// A Circle Wallet cannot issue a hold invoice: make_hold_invoice is outside what
+// its connection allows (NIP-CW §What a Circle Wallet Connection Allows), and
+// its only held payments are the ones its Hub settles.
+func TestMakeHoldInvoice_CircleWallet_Restricted(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
-	child := circleCapChild(t, svc, "hold-cap")
+	child := circleCapChild(t, svc, "hold")
 
-	resp := handleHoldInvoice(t, svc, child.ID, 1_000_000) // 10x the 100_000 mloki cap
-	require.NotNil(t, resp.Error, "a hold invoice above the cap must be refused")
-	require.Equal(t, constants.ERROR_QUOTA_EXCEEDED, resp.Error.Code)
-}
-
-func TestMakeHoldInvoice_CircleCap_WithinCapIssued(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-	child := circleCapChild(t, svc, "hold-ok")
-
-	resp := handleHoldInvoice(t, svc, child.ID, 100_000)
-	require.Nil(t, resp.Error, "a hold invoice that fits the cap exactly is issued")
-}
-
-// An unpaid hold invoice is still payable, so it counts toward the cap like an
-// ordinary invoice does.
-func TestMakeHoldInvoice_CircleCap_UnpaidInvoiceCountsTowardCap(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-	child := circleCapChild(t, svc, "hold-seq")
-
-	require.Nil(t, handleHoldInvoice(t, svc, child.ID, 60_000).Error)
-	resp := handleHoldInvoice(t, svc, child.ID, 60_000)
-	require.NotNil(t, resp.Error)
-	require.Equal(t, constants.ERROR_QUOTA_EXCEEDED, resp.Error.Code)
+	for _, amount := range []uint64{1_000, 100_000, 1_000_000} {
+		resp := handleHoldInvoice(t, svc, child.ID, amount)
+		require.NotNil(t, resp.Error)
+		require.Equal(t, constants.ERROR_RESTRICTED, resp.Error.Code)
+	}
+	var rows int64
+	require.NoError(t, svc.DB.Model(&db.Transaction{}).Where("app_id = ?", child.ID).Count(&rows).Error)
+	require.Zero(t, rows, "no invoice was issued")
 }
 
 // A wallet with no circle parent keeps issuing hold invoices of any size.

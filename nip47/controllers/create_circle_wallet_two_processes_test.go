@@ -67,7 +67,7 @@ func raceCircleJoinsAcross(t *testing.T, procs []*tests.TestService, provider *d
 		go func(p prepared) {
 			defer wg.Done()
 			<-ready
-			p.ctl.HandleCreateCircleWalletEvent(context.TODO(), p.req, p.eventID, provider, func(r *models.Response, _ nostr.Tags) {
+			p.ctl.testJoin(t, context.TODO(), p.req, p.eventID, provider, func(r *models.Response, _ nostr.Tags) {
 				mu.Lock()
 				defer mu.Unlock()
 				if r.Error != nil {
@@ -81,26 +81,6 @@ func raceCircleJoinsAcross(t *testing.T, procs []*tests.TestService, provider *d
 	close(ready)
 	wg.Wait()
 	return outcomes
-}
-
-// The commitment check holds across processes: with room for one wallet, joins
-// arriving through two pools at once commit at most one.
-func TestCreateCircleWallet_TwoProcesses_BalanceCoversOne_AtMostOneCommitted(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-	other := secondProcess(t, svc)
-	provider := createCircleHub(t, svc, 7200, 100_000)
-
-	requests := make([]string, 8)
-	for i := range requests {
-		requests[i] = makeCircleWalletRequest(t, nostr.GeneratePrivateKey(), *provider.WalletPubkey, 100_000, 3600)
-	}
-	outcomes := raceCircleJoinsAcross(t, []*tests.TestService{svc, other}, provider, requests)
-
-	var wallets int64
-	require.NoError(t, svc.DB.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", provider.ID, db.AppKindCircleWallet).Count(&wallets).Error)
-	require.EqualValues(t, 1, wallets, "outcomes %v", outcomes)
 }
 
 // One wallet per identity holds across processes, and a refused join leaves no

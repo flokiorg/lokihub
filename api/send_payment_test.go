@@ -53,6 +53,27 @@ func (s *stubTransactionsService) SendKeysend(_ uint64, _ string, _ []lnclient.T
 	panic("SendKeysend: unexpected call in test")
 }
 
+func (s *stubTransactionsService) MakeCircleInvoice(_ context.Context, _ *db.App, _ uint64, _, _ string, _ uint64, _ map[string]interface{}, _ lnclient.LNClient, _ *uint) (*transactions.Transaction, error) {
+	panic("MakeCircleInvoice: unexpected call in test")
+}
+
+func (s *stubTransactionsService) ResolveCircleHold(_ context.Context, _ string, _ int64, _ lnclient.LNClient) error {
+	panic("ResolveCircleHold: unexpected call in test")
+}
+
+func (s *stubTransactionsService) ResolveAcceptedCircleHolds(_ context.Context, _ lnclient.LNClient) {
+}
+
+func (s *stubTransactionsService) SetLNClientProvider(_ func() lnclient.LNClient) {}
+
+func (s *stubTransactionsService) SetOrderIntake(_ func(context.Context, *lnclient.Transaction) bool,
+	_ func(context.Context, string, uint64) (string, bool, error)) {
+}
+
+func (s *stubTransactionsService) CancelOpenCircleInvoices(_ context.Context, _ uint, _ lnclient.LNClient) error {
+	panic("CancelOpenCircleInvoices: unexpected call in test")
+}
+
 func (s *stubTransactionsService) MakeHoldInvoice(_ context.Context, _ uint64, _, _ string, _ uint64, _ string, _ map[string]interface{}, _ lnclient.LNClient, _ *uint, _ *uint) (*transactions.Transaction, error) {
 	panic("MakeHoldInvoice: unexpected call in test")
 }

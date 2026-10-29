@@ -64,14 +64,16 @@ func NewDBWithConfig(cfg *Config) (*gorm.DB, error) {
 		sqliteURI := cfg.URI
 
 		// apply pragma if we're not running the tests
-		if !strings.Contains(sqliteURI, "?mode=memory") {
+		fileDB := !strings.Contains(sqliteURI, "?mode=memory")
+		if fileDB {
 			// modernc.org/sqlite only understands _txlock and _pragma=KEY(VALUE) — mattn-style
 			// shorthand params (_journal_mode, _busy_timeout, etc.) are silently ignored.
 			// _txlock=immediate: start all transactions IMMEDIATE to avoid SQLITE_BUSY on concurrent writes
 			// _pragma=busy_timeout(5000): wait up to 5s before returning SQLITE_BUSY
 			// _pragma=journal_mode(WAL): readers do not block writers and vice-versa
 			// _pragma=foreign_keys(1): enforce FK constraints
-			// _pragma=auto_vacuum(1): reclaim disk space on DELETE
+			// auto_vacuum (reclaim disk space on DELETE) is set once, not per
+			// connection: see openSqliteFile.
 			// _pragma=synchronous(NORMAL): less frequent sync, safe with WAL
 			// _pragma=cache_size(-20000): 20 MB memory cache
 			// _pragma=temp_store(MEMORY): keep temp tables in memory (required for modernc.org/sqlite)
@@ -79,7 +81,6 @@ func NewDBWithConfig(cfg *Config) (*gorm.DB, error) {
 				"&_pragma=busy_timeout(5000)" +
 				"&_pragma=journal_mode(WAL)" +
 				"&_pragma=foreign_keys(1)" +
-				"&_pragma=auto_vacuum(1)" +
 				"&_pragma=synchronous(NORMAL)" +
 				"&_pragma=cache_size(-20000)" +
 				"&_pragma=temp_store(MEMORY)"
@@ -93,6 +94,13 @@ func NewDBWithConfig(cfg *Config) (*gorm.DB, error) {
 		sqliteConfig := sqlite.Config{
 			DriverName: driverName,
 			DSN:        sqliteURI,
+		}
+		if fileDB {
+			pool, err := openSqliteFile(driverName, sqliteURI)
+			if err != nil {
+				return nil, err
+			}
+			sqliteConfig.Conn = pool
 		}
 
 		var err error

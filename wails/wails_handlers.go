@@ -19,6 +19,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/flokiorg/lokihub/api"
+	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/http"
 	"github.com/flokiorg/lokihub/logger"
@@ -68,6 +69,10 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 	)
 
 	appMatch := appRegex.FindStringSubmatch(route)
+
+	if resp, ok := app.routeListings(ctx, route, method, body); ok {
+		return resp
+	}
 
 	switch {
 	case len(appMatch) > 1:
@@ -216,6 +221,130 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		if err := app.api.DeleteCircleWalletChild(uint(hubId), uint(childId)); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	}
+
+	circleAcceptingRegex := regexp.MustCompile(
+		`^/api/apps/([0-9]+)/circle/accepting$`,
+	)
+	if m := circleAcceptingRegex.FindStringSubmatch(route); len(m) == 2 && method == "POST" {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		var reqBody struct {
+			Accepting *bool `json:"accepting"`
+		}
+		if err := json.Unmarshal([]byte(body), &reqBody); err != nil || reqBody.Accepting == nil {
+			return WailsRequestRouterResponse{Body: nil, Error: "accepting (true or false) is required"}
+		}
+		if err := app.api.SetCircleAccepting(dbApp, *reqBody.Accepting); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	}
+
+	circleMemberRequestRegex := regexp.MustCompile(
+		`^/api/circle-hubs/([0-9]+)/member-requests$`,
+	)
+	if m := circleMemberRequestRegex.FindStringSubmatch(route); len(m) == 2 && method == "POST" {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		var reqBody struct {
+			Event json.RawMessage `json:"event"`
+		}
+		if err := json.Unmarshal([]byte(body), &reqBody); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		result, err := app.api.SubmitCircleMemberRequest(dbApp, reqBody.Event)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: result, Error: ""}
+	}
+
+	cashHubDeleteCheckRegex := regexp.MustCompile(
+		`^/api/cash-hubs/([0-9]+)/delete-check$`,
+	)
+	if m := cashHubDeleteCheckRegex.FindStringSubmatch(route); len(m) == 2 && method == "GET" {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		if dbApp.Kind != db.AppKindCashHub {
+			return WailsRequestRouterResponse{Body: nil, Error: "app is not a cash_hub"}
+		}
+		check, err := app.appsSvc.CashHubDeleteCheck(dbApp.ID)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: check, Error: ""}
+	}
+
+	orderConnectionsRegex := regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/order-connections$`)
+	if m := orderConnectionsRegex.FindStringSubmatch(route); len(m) == 2 && (method == "GET" || method == "POST") {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		if method == "GET" {
+			conns, err := app.api.ListOrderConnections(dbApp)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: conns, Error: ""}
+		}
+		var reqBody struct {
+			Label string `json:"label"`
+		}
+		if err := json.Unmarshal([]byte(body), &reqBody); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		conn, err := app.api.CreateOrderConnection(dbApp, reqBody.Label)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: conn, Error: ""}
+	}
+
+	orderConnectionRetireRegex := regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/order-connections/([0-9]+)/retire$`)
+	if m := orderConnectionRetireRegex.FindStringSubmatch(route); len(m) == 3 && method == "POST" {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		connID, err := strconv.ParseUint(m[2], 10, 64)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: "invalid order connection id"}
+		}
+		if err := app.api.RetireOrderConnection(dbApp, uint(connID)); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	}
+
+	orderTermsRegex := regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/order-terms$`)
+	if m := orderTermsRegex.FindStringSubmatch(route); len(m) == 2 && (method == "GET" || method == "PUT") {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		if method == "GET" {
+			terms, err := app.api.GetOrderTerms(dbApp)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: terms, Error: ""}
+		}
+		var reqBody cashorder.Settings
+		if err := json.Unmarshal([]byte(body), &reqBody); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		if err := app.api.PutOrderTerms(dbApp, reqBody); err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
@@ -551,32 +680,26 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: encoded, Error: ""}
 	}
 
-	lspsResourceRegex := regexp.MustCompile(
-		`/api/lsps/([^/]+)`,
-	)
-	lspsResourceMatch := lspsResourceRegex.FindStringSubmatch(route)
-
-	switch {
-	case len(lspsResourceMatch) > 1:
-		pubkey := lspsResourceMatch[1]
-		switch method {
-		case "PUT":
-			req := &api.UpdateLSPRequest{}
-			err := json.Unmarshal([]byte(body), req)
+	// The LSP catalogue's trust and live-check routes (WP-26), as over HTTP.
+	lspsResourceRegex := regexp.MustCompile(`^/api/lsps/([0-9a-fA-F]{64,66})/(trust|check)$`)
+	if m := lspsResourceRegex.FindStringSubmatch(route); m != nil {
+		switch {
+		case m[2] == "trust" && method == "PUT":
+			req := &api.TrustLSPRequest{}
+			if err := json.Unmarshal([]byte(body), req); err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			lsp, err := app.api.HandleTrustLSP(ctx, m[1], req.Trusted)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
-			err = app.api.HandleUpdateLSP(ctx, pubkey, req)
+			return WailsRequestRouterResponse{Body: lsp, Error: ""}
+		case m[2] == "check" && method == "POST":
+			lsp, err := app.api.HandleLSPLiveCheck(ctx, m[1])
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-		case "DELETE":
-			err := app.api.HandleDeleteLSP(ctx, pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
+			return WailsRequestRouterResponse{Body: lsp, Error: ""}
 		}
 	}
 
@@ -1092,115 +1215,6 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: l, Error: ""}
 		}
 
-	// LSPS Settings Routes (Legacy - kept for backward compatibility if any)
-	case "/api/lsps/all":
-		switch method {
-		case "GET":
-			lsps, err := app.api.ListLSPs()
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: lsps, Error: ""}
-
-		case "POST":
-			// Struct for adding LSP
-			type AddLSPRequest struct {
-				Name string `json:"name"`
-				URI  string `json:"uri"`
-			}
-			req := &AddLSPRequest{}
-			err := json.Unmarshal([]byte(body), req)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			err = app.api.AddLSP(req.Name, req.URI)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-
-		case "DELETE":
-			// Struct for removing LSP, or use query param?
-			// Using query param for now as per other DELETE routes
-			pubkey := ""
-			paramRegex := regexp.MustCompile(`[?&](pubkey)=([^&]+)`)
-			paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
-			for _, match := range paramMatches {
-				if match[1] == "pubkey" {
-					pubkey = match[2]
-				}
-			}
-			if pubkey == "" {
-				return WailsRequestRouterResponse{Body: nil, Error: "pubkey is required"}
-			}
-			err := app.api.RemoveLSP(pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-
-		case "PATCH":
-			// Set Active LSP
-			type SetActiveRequest struct {
-				Pubkey string `json:"pubkey"`
-			}
-			req := &SetActiveRequest{}
-			err := json.Unmarshal([]byte(body), req)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			err = app.api.AddSelectedLSP(req.Pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-
-		}
-
-	case "/api/lsps/selected":
-		switch method {
-		case "GET":
-			// Return list of selected LSP pubkeys
-			selected, err := app.api.GetSelectedLSPs()
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: selected, Error: ""}
-
-		case "POST":
-			// Add LSP to selected list
-			type SelectLSPRequest struct {
-				Pubkey string `json:"pubkey"`
-			}
-			req := &SelectLSPRequest{}
-			err := json.Unmarshal([]byte(body), req)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			err = app.api.AddSelectedLSP(req.Pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-
-		case "DELETE":
-			pubkey := ""
-			paramRegex := regexp.MustCompile(`[?&](pubkey)=([^&]+)`)
-			paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
-			for _, match := range paramMatches {
-				if match[1] == "pubkey" {
-					pubkey = match[2]
-				}
-			}
-			if pubkey == "" {
-				return WailsRequestRouterResponse{Body: nil, Error: "pubkey is required"}
-			}
-			err := app.api.RemoveSelectedLSP(pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-		}
 	case "/api/lsps0/protocols":
 		lspPubkey := ""
 		paramRegex := regexp.MustCompile(`[?&](lspPubkey|lsp)=([^&]+)`)

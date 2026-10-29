@@ -1,3 +1,9 @@
+import {
+  defaultLSP,
+  readLastUsedLSP,
+  rememberLSP,
+} from "src/components/lsps/catalogue";
+import { TrustedLSPItems } from "src/components/lsps/TrustedLSPItems";
 import { InfoIcon, Zap } from "lucide-react";
 import React, { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -440,6 +446,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
   const { data: info } = useInfo();
   const { t } = useTranslation("channels");
   const { t: tc } = useTranslation("common");
+  const { t: tsetup } = useTranslation("setup");
 
   if (props.order.paymentMethod !== "onchain") {
     throw new Error("unexpected payment method");
@@ -455,10 +462,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
     if (pubkey && info?.lsps?.find((l) => l.pubkey === pubkey)) {
       return pubkey;
     }
-    if (info?.lsps && info.lsps.length > 0) {
-      return info.lsps[0].pubkey;
-    }
-    return "custom";
+    return defaultLSP(info?.lsps ?? [], readLastUsedLSP()) || "custom";
   });
 
   // Effect to sync selection changes to parent order state
@@ -527,6 +531,9 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                 value={selection}
                 onValueChange={(val) => {
                   setSelection(val);
+                  if (val !== "custom") {
+                    rememberLSP(val);
+                  }
                   if (val === "custom") {
                     setPubkey("");
                     setHost("");
@@ -538,7 +545,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                   <SelectValue
                     placeholder={
                       !hasLSPs
-                        ? t("increaseCapacity.noLsps", "No LSPs Configured")
+                        ? tsetup("services.lsp.noTrusted")
                         : t(
                             "increaseCapacity.selectProvider",
                             "Select a Provider"
@@ -547,11 +554,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {info?.lsps?.map((lsp) => (
-                    <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
-                      {lsp.name || lsp.pubkey.substring(0, 16) + "..."}
-                    </SelectItem>
-                  ))}
+                  <TrustedLSPItems lsps={info?.lsps ?? []} />
                   {hasLSPs && <div className="h-px bg-muted my-1" />}
                   <SelectItem value="custom">
                     {t("increaseCapacity.customPeer")}

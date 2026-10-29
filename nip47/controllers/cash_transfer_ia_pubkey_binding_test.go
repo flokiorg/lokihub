@@ -79,7 +79,7 @@ func TestHandleCashTransferEvent_ProofBoundToNewIdentityIAPubkey_SwappedIAReject
 	})
 
 	require.NotNil(t, response.Error, "a proof signed for ia_pubkey=IA1 must not authorize a transfer targeting IA2")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code, "a claim proof bound to another new_identity is UNAUTHORIZED")
 
 	// The slice must be untouched, and no claim must exist under the swapped IA.
 	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, currentPubkey)

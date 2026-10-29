@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/tests"
@@ -55,7 +54,7 @@ func TestConsolidate_OverTheCeiling_RefusedBeforeAnySourceIsClaimed(t *testing.T
 	caller := guardCashWallet(t, svc, hub)
 	ownerPriv := nostr.GeneratePrivateKey()
 	ownerPub, _ := nostr.GetPublicKey(ownerPriv)
-	_, secretHash, err := cashwallet.GenerateCashSecret()
+	_, secretHash, err := tests.GenerateCashSecret()
 	require.NoError(t, err)
 
 	const amount1, amount2 = uint64(60_000), uint64(50_000) // 110,000 merged
@@ -74,48 +73,39 @@ func TestConsolidate_OverTheCeiling_RefusedBeforeAnySourceIsClaimed(t *testing.T
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: secretHash},
 	})
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, resp.Error.Code, "a sum over the ceiling is QUOTA_EXCEEDED (NIP-CASH §Consolidating Tokens, step 5)")
 
 	for _, source := range []*db.App{s1, s2} {
 		assert.Nil(t, cashWalletClaimByIdentity(t, svc, source.ID, db.CashIdentityPubkey, ownerPub).ClaimedAt)
 	}
 	var used int64
-	require.NoError(t, svc.DB.Model(&db.CashTransferProof{}).Count(&used).Error)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Count(&used).Error)
 	assert.Zero(t, used)
 }
 
 // NIP-CASH §Security Considerations for Cash-Mode Slices: a throttled call MUST
 // get a distinct rate-limit error (CASH-security-considerations-for-cash-12).
 // Redeem's is pinned by TestHandleCashRedeemEvent_RateLimited; these are
-// transfer and consolidate, which share its limiter.
+// transfer and consolidate, which share its limiter, keyed by the verified signer.
 func TestCashTransferAndConsolidate_ThrottledCallsAreRateLimited(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
-	wallet := guardCashWallet(t, svc, hub)
-	controller := NewTestNip47Controller(svc)
-	limit := svc.Cfg.GetEnv().CashWalletClaimRateLimitPerHour
+	f := newConsolidateFixture(t)
+	controller := NewTestNip47Controller(f.svc)
+	limit := f.svc.Cfg.GetEnv().CashClaimCallsPerHour
 	require.Positive(t, limit)
 	for i := 0; i < limit; i++ {
-		controller.cashClaimLimiter.Allow(wallet.AppPubkey, limit)
+		controller.cashClaimLimiter.Allow("claim:"+f.ownerPub, limit)
 	}
 
-	transfer := handleCashTransferFor(t, svc, controller, wallet, cashTransferParams{
-		IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), IdentityEvent: "{}",
-		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32()},
+	proof := buildTransferProofEvent(t, f.ownerPriv, *f.s1.WalletPubkey, db.CashIdentityPubkey, f.newPub, "", 3000, nil, time.Now())
+	transfer := handleCashTransferFor(t, f.svc, controller, f.s1, cashTransferParams{
+		IdentityType: db.CashIdentityPubkey, IdentityValue: f.ownerPub, IdentityEvent: mustMarshal(t, proof),
+		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: f.newPub},
+		RequestID:   testRequestID(),
 	})
 	require.NotNil(t, transfer.Error)
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, transfer.Error.Code)
 
-	consolidate := handleCashConsolidateFor(t, svc, controller, wallet, cashConsolidateParams{
-		Sources: []consolidateSourceParam{
-			{WalletPubkey: tests.RandomHex32(), IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), IdentityEvent: "{}"},
-			{WalletPubkey: tests.RandomHex32(), IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), IdentityEvent: "{}"},
-		},
-		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32()},
-	})
+	consolidate := handleCashConsolidateFor(t, f.svc, controller, f.s1, f.params(t))
 	require.NotNil(t, consolidate.Error)
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, consolidate.Error.Code)
 }

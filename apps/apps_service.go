@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"slices"
 	"strings"
 	"time"
@@ -79,16 +80,18 @@ type AppsService interface {
 	CreateCircleHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
 		expiresAt *time.Time, scopes []string, metadata map[string]interface{},
 		identityRef CircleIdentityRef, config db.CircleHubConfig) (*db.App, string, error)
+	// CashHubDeleteCheck reports what keeps a Cash Hub from being deleted.
+	CashHubDeleteCheck(hubID uint) (CashHubDeleteCheck, error)
 	// GetCircleHubConfig returns the CircleHubConfig (with CircleIdentity preloaded)
 	// for a circle_hub app.
 	GetCircleHubConfig(appID uint) (*db.CircleHubConfig, error)
-	// UpdateCircleHubConfig updates a circle_hub's MaxExpSecs, FeesPpm,
-	// PerWalletMaxMloki, and/or MinBudgetRenewal. A nil pointer leaves that
-	// field unchanged.
-	UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesPpm *int, perWalletMaxMloki *int, minBudgetRenewal *string) error
+	// UpdateCircleHubConfig applies a settings patch to a circle_hub's
+	// CircleHubConfig, checking the result as a whole. A nil field leaves that
+	// setting unchanged.
+	UpdateCircleHubConfig(appID uint, patch CircleHubConfigPatch) error
 	// ValidateCircleHubConfigUpdate runs UpdateCircleHubConfig's checks without
 	// saving, so a caller can refuse a request before changing anything else.
-	ValidateCircleHubConfigUpdate(maxExpSecs *int, feesPpm *int, perWalletMaxMloki *int, minBudgetRenewal *string) error
+	ValidateCircleHubConfigUpdate(appID uint, patch CircleHubConfigPatch) error
 	// CreateCircleIdentity creates a standalone, reusable CircleIdentity.
 	// followSetD is the set's `d` identifier, required for follow_set only.
 	CreateCircleIdentity(name, policy, providerPubkey, followSetD string) (*db.CircleIdentity, error)
@@ -175,10 +178,6 @@ type AppsService interface {
 	// (never existed, wrong identity, already claimed, or raced against a
 	// concurrent split/transfer — all look identical to the caller by design).
 	ClaimCashSlice(walletAppID uint, identityType, identityValue string) (amountMloki int64, err error)
-	// UnclaimCashSlice reverts ClaimCashSlice, guarded so it can only
-	// undo the exact claim it's asked to. Used to roll back a slice claim when
-	// the invoice-amount check or the payment itself subsequently fails.
-	UnclaimCashSlice(walletAppID uint, identityType, identityValue string) error
 	// ReassignCashSliceIdentity atomically reassigns one unclaimed slice's
 	// registered identity from (currentIdentityType, currentIdentityValue) to
 	// (newIdentityType, newIdentityValue, newIAPubkey), guarded by
@@ -190,24 +189,27 @@ type AppsService interface {
 	// (ClaimCashSlice) and re-issues its value as new bills (cashwallet.SplitInTwo).
 	ReassignCashSliceIdentity(walletAppID uint, currentIdentityType, currentIdentityValue,
 		newIdentityType, newIdentityValue, newIAPubkey string) (amountMloki int64, err error)
-	// SetCashSliceSplitTarget records which new wallet a
-	// just-claimed slice's value was spun off into. Purely informational
-	// (see db.CashWalletClaim.SpunOffToWalletAppID) — call only after the
-	// new wallet has been created and funded.
-	SetCashSliceSplitTarget(walletAppID uint, identityType, identityValue string, newWalletAppID uint) error
 	// SetCashSliceRedeemPayment records the payout facts for a slice just
-	// redeemed over Lightning — the redeem-side mirror of
-	// SetCashSliceSplitTarget, and equally informational. Call only after
+	// redeemed over Lightning. Purely informational. Call only after
 	// SendPaymentSync has returned a settled transaction.
 	SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error
-	// SetCashSliceRedeemPaymentHash records, on a claimed slice, the hash of the
-	// payment about to redeem it, so ReleaseCashSliceForFailedPayment can find
-	// the slice again if that payment's outcome is only learned later.
-	SetCashSliceRedeemPaymentHash(walletAppID uint, identityType, identityValue, paymentHash string) error
 	// ReleaseCashSliceForFailedPayment reopens a slice whose redeem payment has
 	// definitely failed. A no-op unless walletAppID has a claimed slice whose
 	// payment carries paymentHash and recorded no preimage.
 	ReleaseCashSliceForFailedPayment(walletAppID uint, paymentHash string) (released bool, err error)
+	// ClaimSliceForRedeem claims a slice for a cash_redeem: in-flight bound,
+	// first-wins claim, payment hash and consumed claim proof in one transaction.
+	ClaimSliceForRedeem(c RedeemClaim, now time.Time) error
+	// ReleaseRedeemClaim reopens a slice whose redeem payment did not happen or
+	// definitely failed, forgetting its consumed proof in the same transaction.
+	ReleaseRedeemClaim(walletAppID uint, paymentHash string, cooldownUntil *time.Time) (released bool, err error)
+	// ResolveOrphanRedeemClaims settles or releases claimed slices whose redeem
+	// payout has no preimage and no pending ledger row, asking lookup when the
+	// ledger cannot tell. Returns the bills a settlement was recorded on.
+	ResolveOrphanRedeemClaims(claimedBefore time.Time, lookup PayoutLookup) ([]uint, error)
+	// LateFailureCooldown is when a slice whose payout failed after its redeem
+	// answered may be redeemed again; nil when the cool-down is off.
+	LateFailureCooldown(now time.Time) *time.Time
 	// DeleteCashBill archives a cash bill's history and hard-deletes it in one
 	// transaction, then publishes nwc_app_deleted. This is the ONLY way to
 	// delete a cash_wallet — DeleteApp refuses that kind — so no delete path
@@ -217,7 +219,8 @@ type AppsService interface {
 	DeleteCashBill(app *db.App, outcome string) error
 	// SetCashWalletSplitSource records, on the NEW wallet's own App row, which
 	// source cash_wallet it was split from — purely informational (see
-	// db.App.SplitFromWalletAppID), the reverse of SetCashSliceSplitTarget.
+	// db.App.SplitFromWalletAppID), the reverse of the source slice's
+	// spun_off_to_wallet_app_id.
 	// Call only after the new wallet has been created and funded.
 	SetCashWalletSplitSource(newWalletAppID, sourceWalletAppID uint) error
 	// DeleteCashClaim removes an unclaimed slice from a cash_wallet, calling
@@ -230,21 +233,6 @@ type AppsService interface {
 	// facts on its slice, found by payment hash; a slice already recorded is
 	// left alone.
 	RecordCashSliceRedeemSettlement(walletAppID uint, payment CashSliceRedeemPayment) error
-
-	// RecordCashStrandedFund durably logs one compensating-saga reversal that
-	// itself failed (cashwallet.Consolidate/SplitInTwo), so an operator sweep
-	// is driven by a query instead of grepping logs — see db.CashStrandedFund's
-	// own doc comment for the field semantics. Best-effort from the caller's
-	// perspective: a failure to record must never change saga control flow,
-	// only be logged alongside it.
-	RecordCashStrandedFund(operation string, sourceWalletAppID, retainedWalletAppID uint, amountMloki uint64) error
-	// ListCashStrandedFunds returns every CashStrandedFund record, newest
-	// first; onlyUnresolved filters to ResolvedAt IS NULL.
-	ListCashStrandedFunds(onlyUnresolved bool) ([]db.CashStrandedFund, error)
-	// ResolveCashStrandedFund sets ResolvedAt on one record once an operator
-	// has manually swept its funds back. Idempotent: a no-op (not an error) if
-	// already resolved.
-	ResolveCashStrandedFund(id uint) error
 }
 
 // CashSliceRedeemPayment carries the payout facts SetCashSliceRedeemPayment
@@ -550,6 +538,10 @@ func (svc *appsService) DeleteApp(app *db.App) error {
 	switch app.Kind {
 	case db.AppKindCircleHub, db.AppKindCashHub:
 		err = svc.deleteHubAppTx(app)
+	case db.AppKindCashOrder:
+		// Its orders are still served and minted after it is retired, so an
+		// Order connection goes only with its Hub (NIP-CO §What It Allows).
+		return fmt.Errorf("%w: an order connection cannot be deleted; retire it instead", constants.ErrInvalidParams)
 	case db.AppKindCashWallet:
 		// A cash bill is hard-deleted the instant it is spent, which is what
 		// makes it indistinguishable from a pubkey this hub never served. That
@@ -604,7 +596,7 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 
 		var childCount int64
 		if err := tx.Model(&db.App{}).
-			Where("parent_app_id = ? AND parent_kind = ?", app.ID, parentKind).
+			Where("parent_app_id = ? AND parent_kind = ? AND kind <> ?", app.ID, parentKind, db.AppKindCashOrder).
 			Count(&childCount).Error; err != nil {
 			return err
 		}
@@ -616,7 +608,28 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 			// the caller choose how to proceed instead.
 			return fmt.Errorf("%w: %s still has %d %s", constants.ErrInvalidParams, kindLabel, childCount, hint)
 		}
+		// A Cash Hub also stays while a request record naming it is retained
+		// (Q23, XQ-22(1)): a lookup may still need it.
+		if app.Kind == db.AppKindCashHub {
+			check, err := CashHubDeleteCheckTx(tx, app.ID, hubclock.Now())
+			if err != nil {
+				return err
+			}
+			if check.Blocked() {
+				return fmt.Errorf("%w: %s", constants.ErrInvalidParams, check.Message())
+			}
+		}
 
+		// An Order connection lives as long as its Hub and goes with it (NIP-CO
+		// §The Order Connection).
+		if app.Kind == db.AppKindCashHub {
+			if err := DeleteHubOrdersTx(tx, app.ID); err != nil {
+				return err
+			}
+			if err := tx.Where("parent_app_id = ? AND kind = ?", app.ID, db.AppKindCashOrder).Delete(&db.App{}).Error; err != nil {
+				return err
+			}
+		}
 		return tx.Delete(app).Error
 	})
 }

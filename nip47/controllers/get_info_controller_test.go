@@ -420,7 +420,14 @@ func TestHandleGetInfoEvent_CircleAdmin_CircleWalletBlock(t *testing.T) {
 	assert.Nil(t, publishedResponse.Error)
 	nodeInfo := publishedResponse.Result.(*getInfoResponse)
 	require.NotNil(t, nodeInfo.CircleWallet, "circle_admin app must have circle_wallet block in get_info response")
-	assert.Equal(t, int64(150_000), nodeInfo.CircleWallet.AvailableMillis) // 200k - 50k commitment
+	// 200k - 50k commitment, capped at the 100k per-wallet ceiling (the MAY cap).
+	assert.Equal(t, int64(100_000), nodeInfo.CircleWallet.AvailableMillis)
+	assert.True(t, nodeInfo.CircleWallet.Accepting)
+	assert.Len(t, nodeInfo.CircleWallet.Identity, 64, "the node identity, x-only")
+	require.NotNil(t, nodeInfo.Network)
+	require.NotNil(t, nodeInfo.Chain)
+	assert.Equal(t, "flokicoin", *nodeInfo.Chain)
+	assert.Equal(t, int64(10_000), nodeInfo.CircleWallet.FeeReserve.Ppm)
 	assert.Equal(t, 7200, nodeInfo.CircleWallet.MaxExpSecs)
 	assert.Equal(t, 500, nodeInfo.CircleWallet.FeesPpm)
 	assert.Equal(t, db.CirclePolicyAllowlist, nodeInfo.CircleWallet.CirclePolicy)
@@ -457,30 +464,14 @@ func TestHandleGetInfoEvent_CircleAdmin_ZeroAvailableMillis(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Pre-fund the circle admin with only 50_000 mloki.
-	svc.DB.Create(&db.Transaction{
-		AppId:       &circleAdmin.ID,
-		State:       constants.TRANSACTION_STATE_SETTLED,
-		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 50_000,
-		PaymentHash: "circlefund2",
-	})
-
-	// Create a child with 80_000 mloki commitment — exceeds balance.
-	future := time.Now().Add(time.Hour)
-	_, _, err = svc.AppsService.CreateApp(
-		"child-over",
-		"",
-		80, // 80 loki = 80_000 mloki
-		constants.BUDGET_RENEWAL_NEVER,
-		&future,
-		[]string{constants.PAY_INVOICE_SCOPE},
-		db.AppKindCircleWallet,
-		&circleAdmin.ID,
-		db.ParentKindCircle,
-		nil,
-	)
+	// The circle's holdings (a member holding 80_000 mloki) are above its
+	// 50_000 mloki holdings ceiling: available_millis is 0, never negative.
+	require.NoError(t, svc.DB.Model(&db.CircleHubConfig{}).Where("app_id = ?", circleAdmin.ID).
+		Update("holdings_ceiling_mloki", 50_000).Error)
+	child, _, err := svc.AppsService.CreateApp("child-over", "", 80, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.PAY_INVOICE_SCOPE}, db.AppKindCircleWallet, &circleAdmin.ID, db.ParentKindCircle, nil)
 	require.NoError(t, err)
+	tests.FundApp(svc, child.ID, 80_000, tests.RandomHex32())
 
 	nip47Request := &models.Request{}
 	err = json.Unmarshal([]byte(nip47GetInfoJson), nip47Request)
@@ -497,7 +488,7 @@ func TestHandleGetInfoEvent_CircleAdmin_ZeroAvailableMillis(t *testing.T) {
 	assert.Nil(t, publishedResponse.Error)
 	nodeInfo := publishedResponse.Result.(*getInfoResponse)
 	require.NotNil(t, nodeInfo.CircleWallet)
-	// commitment (80k) > balance (50k) → available_millis must be clamped to 0, not negative.
+	// holdings (80k) > ceiling (50k) → available_millis must be clamped to 0, not negative.
 	assert.Equal(t, int64(0), nodeInfo.CircleWallet.AvailableMillis)
 }
 

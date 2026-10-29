@@ -61,6 +61,7 @@ func testBudgetQuotaExceeded(t *testing.T, cfg *Config, policy string) {
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
 		MaxAmount:     maxAmountMloki,
+		MaxReceive:    100_000, // receives every payment it spends
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),
@@ -68,8 +69,8 @@ func testBudgetQuotaExceeded(t *testing.T, cfg *Config, policy string) {
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := CircleWalletURI(circleDetails, pubkey)
-	child := mustConnect(t, pairingURI)
+	memberConn := CircleWalletConnection(circleDetails, pubkey)
+	child := mustConnectCircleWallet(t, memberConn)
 
 	spendOnce := func(description string) {
 		fundCircleChild(t, cfg, child, paymentAmountMloki, description+" (fund)")
@@ -141,9 +142,9 @@ func TestCircleWallet_Budget_RenewsAt_MatchesConfiguredPeriod(t *testing.T) {
 
 			circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 			require.NoError(t, err)
-			pairingURI := CircleWalletURI(circleDetails, pubkey)
+			memberConn := CircleWalletConnection(circleDetails, pubkey)
 			require.Equal(t, renewal, circleDetails.BudgetRenewal)
-			child := mustConnect(t, pairingURI)
+			child := mustConnectCircleWallet(t, memberConn)
 
 			var budget GetBudgetResult
 			require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget))

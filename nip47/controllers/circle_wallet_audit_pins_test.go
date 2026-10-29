@@ -7,10 +7,12 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"github.com/flokiorg/lokihub/apps"
 	"testing"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -31,7 +33,7 @@ func joinedWallet(t *testing.T, svc *tests.TestService, hub *db.App, requesterKe
 	return &wallet
 }
 
-func joinWithExpiry(t *testing.T, svc *tests.TestService, hub *db.App, requesterKey string, maxAmountMloki uint64, expirySecs int) *models.Response {
+func joinWithExpiry(t *testing.T, svc *tests.TestService, hub *db.App, requesterKey string, maxAmountMloki uint64, expirySecs uint64) *models.Response {
 	t.Helper()
 	r := &models.Request{}
 	require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequest(t, requesterKey, *hub.WalletPubkey, maxAmountMloki, expirySecs)), r))
@@ -39,7 +41,7 @@ func joinWithExpiry(t *testing.T, svc *tests.TestService, hub *db.App, requester
 	require.NoError(t, svc.DB.Create(ev).Error)
 	var resp *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(context.TODO(), r, ev.ID, hub, func(rr *models.Response, _ nostr.Tags) { resp = rr })
+		testJoin(t, context.TODO(), r, ev.ID, hub, func(rr *models.Response, _ nostr.Tags) { resp = rr })
 	require.NotNil(t, resp)
 	return resp
 }
@@ -58,7 +60,7 @@ func TestCircleWallet_CannotCreateCircleWallets(t *testing.T) {
 	// is not a hub.
 	resp := joinWithExpiry(t, svc, wallet, nostr.GeneratePrivateKey(), 1_000, 3600)
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_NOT_SUPPORTED, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_NOT_IMPLEMENTED, resp.Error.Code)
 	var grandchildren int64
 	svc.DB.Model(&db.App{}).Where("parent_app_id = ?", wallet.ID).Count(&grandchildren)
 	assert.Zero(t, grandchildren)
@@ -74,7 +76,7 @@ func TestCircleHub_LoweringPerWalletCap_AppliesToNewMembersOnly(t *testing.T) {
 	require.Nil(t, joinWithExpiry(t, svc, hub, early, 400_000, 3600).Error)
 
 	lowered := 100_000
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, nil, nil, &lowered, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, apps.CircleHubConfigPatch{PerWalletMaxMloki: &lowered}))
 
 	var perm db.AppPermission
 	require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", joinedWallet(t, svc, hub, early).ID, constants.MAKE_INVOICE_SCOPE).First(&perm).Error)
@@ -82,7 +84,7 @@ func TestCircleHub_LoweringPerWalletCap_AppliesToNewMembersOnly(t *testing.T) {
 
 	over := joinWithExpiry(t, svc, hub, nostr.GeneratePrivateKey(), 200_000, 3600)
 	require.NotNil(t, over.Error)
-	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, over.Error.Code, "a new member is held to the lowered cap")
+	assert.Equal(t, nipcw.ErrLimitExceeded, over.Error.Code, "a new member is held to the lowered cap")
 	assert.Nil(t, joinWithExpiry(t, svc, hub, nostr.GeneratePrivateKey(), 100_000, 3600).Error)
 }
 
@@ -97,8 +99,9 @@ func TestCircleHub_LoweringMaxExpiry_AppliesToNewMembersOnly(t *testing.T) {
 	before := joinedWallet(t, svc, hub, early).ExpiresAt
 	require.NotNil(t, before)
 
+	// The default lifetime may not stay above the ceiling, so it is lowered too.
 	lowered := 3600
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, &lowered, nil, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, apps.CircleHubConfigPatch{MaxExpSecs: &lowered, DefaultExpSecs: &lowered}))
 
 	after := joinedWallet(t, svc, hub, early).ExpiresAt
 	require.NotNil(t, after)
@@ -107,7 +110,7 @@ func TestCircleHub_LoweringMaxExpiry_AppliesToNewMembersOnly(t *testing.T) {
 
 	tooLong := joinWithExpiry(t, svc, hub, nostr.GeneratePrivateKey(), 100_000, 7000)
 	require.NotNil(t, tooLong.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, tooLong.Error.Code, "a new member is held to the lowered max expiry")
+	assert.Equal(t, nipcw.ErrLimitExceeded, tooLong.Error.Code, "a new member is held to the lowered max expiry")
 }
 
 // NIP-CW §Fees for the zero case: a member who joined a fee-free hub stays
@@ -126,7 +129,7 @@ func TestCircleWallet_JoinedFeeFree_StaysFeeFreeWhenHubStartsCharging(t *testing
 	assert.Equal(t, 0, *wallet.CircleFeesPpm)
 
 	raised := 50_000
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, nil, &raised, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, apps.CircleHubConfigPatch{FeesPpm: &raised}))
 	tests.FundApp(svc, wallet.ID, 200_000, tests.RandomHex32())
 
 	r := &models.Request{}

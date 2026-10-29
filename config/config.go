@@ -11,9 +11,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/adrg/xdg"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -105,13 +107,6 @@ func (cfg *config) init(env *AppConfig) error {
 		}
 		macHex := hex.EncodeToString(macBytes)
 		err = cfg.SetUpdate("LNDMacaroonHex", macHex, "")
-		if err != nil {
-			return err
-		}
-	}
-
-	if cfg.Env.LSP != "" {
-		err := cfg.SetUpdate("LSP", cfg.Env.LSP, "")
 		if err != nil {
 			return err
 		}
@@ -770,6 +765,7 @@ const (
 	privateEnvelopePadBucketBytesKey  = "PrivateEnvelopePadBucketBytes"
 	privateEnvelopeMaxVerifyBudgetKey = "PrivateEnvelopeMaxVerifyBudget"
 	privateEnvelopeMaxConsolidateKey  = "PrivateEnvelopeMaxConsolidateSources"
+	cashMaxRequestAgeKey              = "CashMaxRequestAgeSecs"
 )
 
 // PrivateEnvelopeLimits reports the size policy applied to one private-transport
@@ -786,6 +782,9 @@ const (
 // These are node-level, not per-Cash-Hub: the gate runs before any item has been
 // attributed to a Hub, and one envelope can carry items for bills from several
 // Hubs, so there is no per-Hub policy to consult where the limit is enforced.
+// MaxCashRequestAgeSecs is the largest horizon H this Hub accepts (one day).
+const MaxCashRequestAgeSecs = 86400
+
 func (cfg *config) PrivateEnvelopeLimits() transport.Limits {
 	defaults := transport.DefaultLimits()
 	env := cfg.Env
@@ -808,6 +807,19 @@ func (cfg *config) PrivateEnvelopeLimits() transport.Limits {
 		PadBucketBytes:        cfg.privateEnvelopeInt(privateEnvelopePadBucketBytesKey, env.PrivateEnvelopePadBucketBytes, defaults.PadBucketBytes),
 		MaxVerifyBudget:       cfg.privateEnvelopeInt(privateEnvelopeMaxVerifyBudgetKey, env.PrivateEnvelopeMaxVerifyBudget, defaults.MaxVerifyBudget),
 		MaxConsolidateSources: cfg.privateEnvelopeInt(privateEnvelopeMaxConsolidateKey, env.PrivateEnvelopeMaxConsolidateSources, defaultSources),
+		MaxRequestAgeSeconds:  int64(cfg.privateEnvelopeInt(cashMaxRequestAgeKey, env.CashMaxRequestAgeSecs, int(defaults.MaxRequestAgeSeconds))),
+	}
+	// H never decreases (NIP-CASH §Deadlines): the largest H ever used is stored.
+	if stored, err := cashrequest.HorizonTx(cfg.db); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to read the stored horizon")
+	} else if stored > limits.MaxRequestAgeSeconds {
+		limits.MaxRequestAgeSeconds = stored
+	}
+	// H SHOULD NOT exceed one day (NIP-CASH §Deadlines); ValidateAnnounced holds the floor of 60.
+	if limits.MaxRequestAgeSeconds > MaxCashRequestAgeSecs {
+		logger.Logger.Error().Int64("max_request_age", limits.MaxRequestAgeSeconds).
+			Msg("The configured max request age is over one day; falling back to defaults")
+		return defaults
 	}
 
 	// ValidateAnnounced, not just Validate: this policy is what the hub announces,
@@ -853,6 +865,18 @@ func (cfg *config) privateEnvelopeInt(key string, envValue, defaultValue int) in
 // SetTrustedNwcRelay, because the limits are read per request rather than baked
 // into the subscription shape.
 func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
+	// H only ever increases (NIP-CASH §Deadlines): a caller that does not name it
+	// keeps the current one, and a lower value is refused.
+	current := cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds
+	if limits.MaxRequestAgeSeconds == 0 {
+		limits.MaxRequestAgeSeconds = current
+	}
+	if limits.MaxRequestAgeSeconds < current {
+		return fmt.Errorf("refusing to lower max_request_age from %d to %d: H can only increase", current, limits.MaxRequestAgeSeconds)
+	}
+	if limits.MaxRequestAgeSeconds > MaxCashRequestAgeSecs {
+		return fmt.Errorf("refusing max_request_age %d: at most %d", limits.MaxRequestAgeSeconds, MaxCashRequestAgeSecs)
+	}
 	if err := limits.ValidateAnnounced(); err != nil {
 		return fmt.Errorf("refusing to store an invalid private envelope policy: %w", err)
 	}
@@ -863,11 +887,15 @@ func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
 		privateEnvelopePadBucketBytesKey:  limits.PadBucketBytes,
 		privateEnvelopeMaxVerifyBudgetKey: limits.MaxVerifyBudget,
 		privateEnvelopeMaxConsolidateKey:  limits.MaxConsolidateSources,
+		cashMaxRequestAgeKey:              int(limits.MaxRequestAgeSeconds),
 	} {
 		if err := cfg.SetUpdate(key, strconv.Itoa(value), ""); err != nil {
 			logger.Logger.Error().Err(err).Str("key", key).Msg("Failed to update private envelope limit")
 			return err
 		}
+	}
+	if _, err := cashrequest.RaiseHorizon(cfg.db, limits.MaxRequestAgeSeconds, time.Now()); err != nil {
+		return fmt.Errorf("failed to store the horizon: %w", err)
 	}
 	return nil
 }
@@ -941,27 +969,6 @@ func (cfg *config) GetDefaultWorkDir() string {
 		return cfg.Env.Workdir
 	}
 	return filepath.Join(xdg.DataHome, "lokihub")
-}
-
-func (cfg *config) GetLSP() string {
-	url, err := cfg.Get("LSP", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch LSP")
-	}
-	if url != "" {
-		return url
-	}
-	return cfg.Env.LSP
-}
-
-func (cfg *config) SetLSP(value string) error {
-	// LSP can be empty
-	err := cfg.SetUpdate("LSP", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update LSP")
-		return err
-	}
-	return nil
 }
 
 func (cfg *config) GetCachedServicesJSON() string {

@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -9,8 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -37,6 +41,23 @@ func guardSource(t *testing.T, svc *tests.TestService, hub *db.App, callerPub st
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: callerPub, AmountMloki: int64(amount), MinTransferMloki: minTransfer, RedeemFeePpm: redeemFee}, //nolint:gosec
 	}))
 	return w
+}
+
+// guardSourcesFor builds two funded sources of one owner under hub whose proofs
+// authorize consolidating them into (newType, newValue, newIA), so a request
+// reaches the checks after authorization.
+func guardSourcesFor(t *testing.T, svc *tests.TestService, hub *db.App, newType, newValue, newIA string) []consolidateSourceParam {
+	t.Helper()
+	ownerPriv := nostr.GeneratePrivateKey()
+	ownerPub, _ := nostr.GetPublicKey(ownerPriv)
+	s1 := guardSource(t, svc, hub, ownerPub, 3000, 0, 0)
+	s2 := guardSource(t, svc, hub, ownerPub, 2000, 0, 0)
+	param := func(w *db.App, amount uint64) consolidateSourceParam {
+		proof := buildTransferProofEvent(t, ownerPriv, *w.WalletPubkey, newType, newValue, newIA, amount, nil, time.Now())
+		return consolidateSourceParam{WalletPubkey: *w.WalletPubkey, IdentityType: db.CashIdentityPubkey,
+			IdentityValue: ownerPub, IdentityEvent: mustMarshal(t, proof)}
+	}
+	return []consolidateSourceParam{param(s1, 3000), param(s2, 2000)}
 }
 
 // guardParam builds one source param with a proof bound to (sourceWallet, newPub, proofAmount).
@@ -101,7 +122,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
 				return built{caller: caller, params: cashConsolidateParams{
-					Sources:     []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+					Sources:     guardSourcesFor(t, svc, hub, "carrier-pigeon", "deadbeef", ""),
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: "carrier-pigeon", IdentityValue: "deadbeef"},
 				}}
 			},
@@ -114,7 +135,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
 				return built{caller: caller, params: cashConsolidateParams{
-					Sources:     []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+					Sources:     guardSourcesFor(t, svc, hub, db.CashIdentityPubkey, "", ""),
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey},
 				}}
 			},
@@ -127,7 +148,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
 				return built{caller: caller, params: cashConsolidateParams{
-					Sources:     []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+					Sources:     guardSourcesFor(t, svc, hub, db.CashIdentityCash, "", ""),
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash},
 				}}
 			},
@@ -140,10 +161,11 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
 				iaPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+				commitment := tests.RandomHex32()
 				return built{caller: caller, params: cashConsolidateParams{
-					Sources: []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+					Sources: guardSourcesFor(t, svc, hub, db.CashIdentityCash, commitment, iaPub),
 					NewIdentity: cashTransferNewIdentityParam{
-						IdentityType: db.CashIdentityCash, IdentityValue: tests.RandomHex32(), IAPubkey: iaPub,
+						IdentityType: db.CashIdentityCash, IdentityValue: commitment, IAPubkey: iaPub,
 					},
 				}}
 			},
@@ -156,14 +178,15 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
 				untrustedIA, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+				ck := tests.RandomHex32()
 				return built{caller: caller, params: cashConsolidateParams{
-					Sources: []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+					Sources: guardSourcesFor(t, svc, hub, db.CashIdentityConnectionKey, ck, untrustedIA),
 					NewIdentity: cashTransferNewIdentityParam{
-						IdentityType: db.CashIdentityConnectionKey, IdentityValue: tests.RandomHex32(), IAPubkey: untrustedIA,
+						IdentityType: db.CashIdentityConnectionKey, IdentityValue: ck, IAPubkey: untrustedIA,
 					},
 				}}
 			},
-			wantCode: constants.ERROR_BAD_REQUEST,
+			wantCode: constants.ERROR_RESTRICTED,
 			wantMsg:  "not a trusted Identity Authority",
 		},
 		{
@@ -180,8 +203,8 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_BAD_REQUEST,
-			wantMsg:  "attestation_event is required",
+			wantCode: constants.ERROR_UNAUTHORIZED,
+			wantMsg:  "sources not authorized",
 		},
 		{
 			name: "source not custodied by this node",
@@ -191,14 +214,14 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				newPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 				return built{caller: caller, params: cashConsolidateParams{
 					Sources: []consolidateSourceParam{
-						{WalletPubkey: "deadbeef"},
+						{WalletPubkey: *caller.WalletPubkey},
 						{WalletPubkey: "cafebabe"},
 					},
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_NOT_FOUND,
-			wantMsg:  "custodies",
+			wantCode: constants.ERROR_UNAUTHORIZED,
+			wantMsg:  "sources not authorized",
 		},
 		{
 			name: "a hub (non-cash_wallet) app referenced as a source is not custodied",
@@ -213,14 +236,14 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				}
 				return built{caller: caller, params: cashConsolidateParams{
 					Sources: []consolidateSourceParam{
-						{WalletPubkey: hubPubkey},
 						{WalletPubkey: *caller.WalletPubkey},
+						{WalletPubkey: hubPubkey},
 					},
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_NOT_FOUND,
-			wantMsg:  "custodies",
+			wantCode: constants.ERROR_UNAUTHORIZED,
+			wantMsg:  "sources not authorized",
 		},
 		{
 			name: "unauthorized proof (signed by a stranger)",
@@ -241,8 +264,8 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_BAD_REQUEST,
-			wantMsg:  "source 0",
+			wantCode: constants.ERROR_UNAUTHORIZED,
+			wantMsg:  "sources not authorized",
 		},
 		{
 			name: "proof bound to the wrong amount",
@@ -262,8 +285,8 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_BAD_REQUEST,
-			wantMsg:  "source 0",
+			wantCode: constants.ERROR_UNAUTHORIZED,
+			wantMsg:  "sources not authorized",
 		},
 		{
 			name: "duplicate source wallet",
@@ -302,7 +325,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_BAD_REQUEST,
+			wantCode: constants.ERROR_RESTRICTED,
 			wantMsg:  "same Cash Hub",
 		},
 		{
@@ -323,7 +346,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_BAD_REQUEST,
+			wantCode: constants.ERROR_RESTRICTED,
 			wantMsg:  "disagree",
 		},
 		{
@@ -344,7 +367,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_BAD_REQUEST,
+			wantCode: constants.ERROR_RESTRICTED,
 			wantMsg:  "disagree",
 		},
 		{
@@ -365,7 +388,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_BAD_REQUEST,
+			wantCode: constants.ERROR_QUOTA_EXCEEDED,
 			wantMsg:  "ceiling",
 		},
 		{
@@ -458,30 +481,32 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_NOT_FOUND,
-			wantMsg:  "no unclaimed slice",
+			wantCode: constants.ERROR_RESTRICTED,
+			wantMsg:  "already claimed",
 		},
 		{
 			// Mirrors mint_cash's maxRecipientsPerWallet cap: without an upper
 			// bound, one rate-limited request could bundle an unbounded number of
 			// independent cash-secret guesses or custody/proof-verification
-			// work. Every source here is deliberately bogus (never resolves) —
-			// this guard must fire before any per-source lookup, on count alone.
+			// work. Every source but the first (the item's target) is bogus and
+			// never resolves: this guard fires before any per-source lookup, on
+			// count alone, as QUOTA_EXCEEDED (NIP-CASH §Consolidating Tokens, step 1).
 			name: "more than maxConsolidateSources sources rejected",
 			build: func(t *testing.T, svc *tests.TestService) built {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
 				newPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-				sources := make([]consolidateSourceParam, maxConsolidateSources+1)
-				for i := range sources {
-					sources[i] = consolidateSourceParam{WalletPubkey: fmt.Sprintf("bogus-%d", i), CashSecret: "00"}
+				sources := make([]consolidateSourceParam, maxConsolidateSourcesCap+1)
+				sources[0] = consolidateSourceParam{WalletPubkey: *caller.WalletPubkey}
+				for i := 1; i < len(sources); i++ {
+					sources[i] = consolidateSourceParam{WalletPubkey: fmt.Sprintf("bogus-%d", i)}
 				}
 				return built{caller: caller, params: cashConsolidateParams{
 					Sources:     sources,
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
-			wantCode: constants.ERROR_BAD_REQUEST,
+			wantCode: constants.ERROR_QUOTA_EXCEEDED,
 			wantMsg:  "at most",
 		},
 	}
@@ -501,14 +526,11 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 	}
 }
 
-// TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers is a
-// regression test: a rejected consolidate could
-// permanently burn a caller's still-valid proofs, or (a botched fix) un-burn a
-// proof another request legitimately consumed. When source 2's proof is already
-// consumed (by a prior request) and the consolidate is therefore rejected: the
-// proof THIS request consumed for source 1 must be RELEASED (usable on retry),
-// while the pre-existing guard for source 2 must be PRESERVED (no replay
-// reopened), and every source must be left unclaimed.
+// TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers: when source 2's
+// proof was already used by an earlier call, the consolidate is refused
+// UNAUTHORIZED (NIP-CASH: a proof already used). Source 1's proof is left unused,
+// so the caller can retry with it; the earlier call's mark stays (no replay
+// reopened); every source is left unclaimed.
 func TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -526,24 +548,32 @@ func TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers(t *testing.T)
 	proof1 := buildTransferProofEvent(t, ownerPriv, *s1.WalletPubkey, db.CashIdentityPubkey, newPub, "", 3000, nil, time.Now())
 	proof2 := buildTransferProofEvent(t, ownerPriv, *s2.WalletPubkey, db.CashIdentityPubkey, newPub, "", 2000, nil, time.Now())
 
+	sources := asConsolidateProofs(t, []consolidateSourceParam{
+		{WalletPubkey: *s1.WalletPubkey, IdentityType: db.CashIdentityPubkey, IdentityValue: ownerPub, IdentityEvent: mustMarshal(t, proof1)},
+		{WalletPubkey: *s2.WalletPubkey, IdentityType: db.CashIdentityPubkey, IdentityValue: ownerPub, IdentityEvent: mustMarshal(t, proof2)},
+	})
+	// The consolidate proofs the call carries (re-signing them is deterministic,
+	// so the helper below sends these same ids).
+	var ev1, ev2 nostr.Event
+	require.NoError(t, json.Unmarshal([]byte(sources[0].IdentityEvent), &ev1))
+	require.NoError(t, json.Unmarshal([]byte(sources[1].IdentityEvent), &ev2))
+	proof1, proof2 = &ev1, &ev2
+
 	// Simulate proof2 already consumed by an earlier, legitimate request.
-	require.NoError(t, svc.DB.Create(&db.CashTransferProof{AppID: caller.ID, EventID: proof2.ID}).Error)
+	require.NoError(t, svc.DB.Create(&db.CashConsumedProof{EventID: proof2.ID, ProofCreatedAt: int64(proof2.CreatedAt), ConsumedAt: time.Now().Unix(), Method: "cash_consolidate"}).Error)
 
 	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), caller, cashConsolidateParams{
-		Sources: []consolidateSourceParam{
-			{WalletPubkey: *s1.WalletPubkey, IdentityType: db.CashIdentityPubkey, IdentityValue: ownerPub, IdentityEvent: mustMarshal(t, proof1)},
-			{WalletPubkey: *s2.WalletPubkey, IdentityType: db.CashIdentityPubkey, IdentityValue: ownerPub, IdentityEvent: mustMarshal(t, proof2)},
-		},
+		Sources:     sources,
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 	})
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
-	assert.Contains(t, resp.Error.Message, "already used")
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code)
+	assert.Equal(t, "sources not authorized", resp.Error.Message, "a used proof is the uniform refusal")
 
 	var count1, count2 int64
-	require.NoError(t, svc.DB.Model(&db.CashTransferProof{}).Where("event_id = ?", proof1.ID).Count(&count1).Error)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Where("event_id = ?", proof1.ID).Count(&count1).Error)
 	assert.EqualValues(t, 0, count1, "a rejected consolidate must release the proof it consumed, so the caller can retry")
-	require.NoError(t, svc.DB.Model(&db.CashTransferProof{}).Where("event_id = ?", proof2.ID).Count(&count2).Error)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Where("event_id = ?", proof2.ID).Count(&count2).Error)
 	assert.EqualValues(t, 1, count2, "must NOT un-burn a proof another request legitimately consumed (no replay reopened)")
 
 	// Both sources must be left unclaimed and unchanged.
@@ -554,24 +584,11 @@ func TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers(t *testing.T)
 	}
 }
 
-// TestConsolidate_StrandedSource_ClaimLeftInPlace is the controller-level
-// regression test: Consolidate's own
-// F-1 fix (cashwallet/consolidate.go) correctly stops it from deleting the
-// merged wallet when a compensating reverse-transfer fails, but the CALLER was
-// still restoring every claimed source's slice to its full original amount
-// unconditionally — even a source whose reversal failed and whose real balance
-// is now short by exactly what never came back. Restoring that claim would let
-// it be redeemed against a balance that can no longer cover it (or, on a
-// multi-recipient source wallet, cannibalize the other recipients' backing).
-//
-// Reaches the failure with a REAL "already paid" collision (reusing
-// tests.MockInvoice's payment_hash across the forward funding, the second
-// source's forward funding, and the reversal), the same technique
-// cashwallet/consolidate_rollback_test.go uses — not a fault-injection seam.
-// s1 is listed first, so it is the one Consolidate actually funds and then
-// fails to reverse; s2's own forward funding fails before anything leaves it,
-// so it was never at risk and must be unclaimed as before.
-func TestConsolidate_StrandedSource_ClaimLeftInPlace(t *testing.T) {
+// TestConsolidate_FundingFailure_LeavesEverySourceClaimable: the consolidate is
+// one commit, so a failure funding the merged bill from the second source, after
+// both sources were claimed and the first one moved inside it, leaves both
+// sources unclaimed and funded, no merged bill and no used proof.
+func TestConsolidate_FundingFailure_LeavesEverySourceClaimable(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -588,14 +605,14 @@ func TestConsolidate_StrandedSource_ClaimLeftInPlace(t *testing.T) {
 	s2 := guardSource(t, svc, hub, ownerPub, moved, 0, 0)
 	tests.FundApp(svc, s2.ID, 200_000, "s2-fund")
 
-	mockLN := svc.LNClient.(*tests.MockLn)
-	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
-		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p1", Amount: int64(moved)}, // 1: fund merged from s1 — succeeds, settles MockInvoice's hash
-		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p2", Amount: int64(moved)}, // 2: fund merged from s2 — same hash: fails, starts rollback
-		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p3", Amount: int64(moved)}, // 3: reversal reuses the same settled hash too: fails
-	}
-
-	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), caller, cashConsolidateParams{
+	controller := NewTestNip47Controller(svc)
+	controller.cashHooks = &cashwallet.TestHooks{Before: func(stage string) error {
+		if stage == cashwallet.StageAfterTransfer+"(1)" {
+			return errors.New("injected: second funding failed")
+		}
+		return nil
+	}}
+	resp := handleCashConsolidateFor(t, svc, controller, caller, cashConsolidateParams{
 		Sources: []consolidateSourceParam{
 			guardParam(t, s1, ownerPriv, ownerPub, newPub, moved),
 			guardParam(t, s2, ownerPriv, ownerPub, newPub, moved),
@@ -603,16 +620,20 @@ func TestConsolidate_StrandedSource_ClaimLeftInPlace(t *testing.T) {
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 	})
 	require.NotNil(t, resp.Error)
+	assert.Equal(t, constants.ERROR_INTERNAL, resp.Error.Code)
 
-	claim1 := cashWalletClaimByIdentity(t, svc, s1.ID, db.CashIdentityPubkey, ownerPub)
-	require.NotNil(t, claim1)
-	assert.NotNil(t, claim1.ClaimedAt,
-		"s1's reversal failed — its funds are stranded in the retained merged wallet, so its claim must NOT be restored to the full original amount")
-
-	claim2 := cashWalletClaimByIdentity(t, svc, s2.ID, db.CashIdentityPubkey, ownerPub)
-	require.NotNil(t, claim2)
-	assert.Nil(t, claim2.ClaimedAt,
-		"s2 never funded the merged wallet (nothing left it), so it must be unclaimed and available to retry as before")
+	for _, s := range []*db.App{s1, s2} {
+		claim := cashWalletClaimByIdentity(t, svc, s.ID, db.CashIdentityPubkey, ownerPub)
+		require.NotNil(t, claim)
+		assert.Nil(t, claim.ClaimedAt, "a consolidate that did not commit leaves every source claimable")
+		assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, s.ID), "and every source funded")
+	}
+	var merged, used int64
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("parent_app_id = ? AND kind = ? AND id NOT IN ?",
+		hub.ID, db.AppKindCashWallet, []uint{caller.ID, s1.ID, s2.ID}).Count(&merged).Error)
+	assert.Zero(t, merged)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Count(&used).Error)
+	assert.Zero(t, used)
 }
 
 // TestConsolidate_HappyPath_RecordsSourceLineage is the regression for a

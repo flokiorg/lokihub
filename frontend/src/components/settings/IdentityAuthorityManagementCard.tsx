@@ -53,7 +53,7 @@ interface IdentityAuthorityManagementCardProps {
   className?: string;
 }
 
-// Mirrors LSPManagementCard: operates purely on local state handed down by
+// Operates purely on local state handed down by
 // the parent screen. Additions/removals only mutate that local list — the
 // actual API calls happen once, in Services.tsx's "Save Services" flow via
 // saveIdentityAuthorityChanges, instead of firing a request per row edit.
@@ -252,7 +252,7 @@ export function IdentityAuthorityManagementCard({
           )}
 
           {/* Add New Identity Authority — same inline expanding-card pattern as
-            LSPManagementCard's "Add Custom LSP", no modal. */}
+            an inline add form, no modal. */}
           <div
             className={cn(
               "relative flex flex-col p-4 rounded-xl border transition-all duration-200",
