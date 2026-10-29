@@ -362,6 +362,10 @@ var ErrPaymentPending = errors.New("payment outcome unknown, it may still be in 
 // default invoice expiry in seconds (1 day)
 const DEFAULT_INVOICE_EXPIRY = 86400
 
+// ErrInvoiceNotFound: the node has no invoice for the payment hash, so there is
+// nothing left to cancel.
+var ErrInvoiceNotFound = errors.New("the node has no such invoice")
+
 type holdInvoiceCanceledError struct {
 }
 

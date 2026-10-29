@@ -468,6 +468,20 @@ audits of both.
 
 ### Fixed
 
+- Issues a circle wallet's hold invoice outside the database transaction:
+  the invoice's row is reserved under the Hub's lock (it counts against every
+  cap at once) and completed once the node answers, so a slow node no longer
+  stalls every write. An invoice whose wallet stopped receiving meanwhile is
+  cancelled at the node before it is handed out.
+- Cancels at the node, after the delete commits, every hold invoice a circle
+  wallet delete fails, and releases at once a payment the node holds for an
+  invoice already failed. An invoice issued between the delete's cancel and
+  its commit stayed payable, its HTLC held to its CLTV.
+- Lets the circle lifecycle job delete a closing wallet even when the node
+  refuses to cancel its open invoices, and asks the node only about wallets
+  with an open invoice; an invoice the node does not know is taken as
+  cancelled. One persistent node error blocked the wallet's deletion and
+  logged an error every minute.
 - Bounds a Cash Hub's `cash_redeem` payouts in flight to any one paying node
   (`CASH_REDEEM_INFLIGHT_PER_PAYEE`, default 8; same-node payouts are not
   counted). One holder of many slices paying its own hold invoices could take

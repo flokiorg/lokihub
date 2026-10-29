@@ -70,6 +70,10 @@ func (s *stubTransactionsService) SetOrderIntake(_ func(context.Context, *lnclie
 	_ func(context.Context, string, uint64) (string, bool, error)) {
 }
 
+func (s *stubTransactionsService) CancelHoldInvoicesAtNode(_ context.Context, _ []string, _ lnclient.LNClient) {
+	panic("CancelHoldInvoicesAtNode: unexpected call in test")
+}
+
 func (s *stubTransactionsService) CancelOpenCircleInvoices(_ context.Context, _ uint, _ lnclient.LNClient) error {
 	panic("CancelOpenCircleInvoices: unexpected call in test")
 }
