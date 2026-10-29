@@ -276,6 +276,80 @@ func TestU26_LiveCheck(t *testing.T) {
 	assert.False(t, res.Usable)
 }
 
+// failingLSPS lists every protocol but answers LSPS1 or LSPS2 get_info with
+// an error, or with something that is not a get_info result.
+type failingLSPS struct {
+	*fakeLSPS
+	lsps1, lsps2 json.RawMessage
+	err1, err2   error
+}
+
+func (f failingLSPS) LSPS1Info(ctx context.Context, id string) (json.RawMessage, error) {
+	if f.err1 != nil || f.lsps1 != nil {
+		return f.lsps1, f.err1
+	}
+	return f.fakeLSPS.LSPS1Info(ctx, id)
+}
+
+func (f failingLSPS) LSPS2Menu(ctx context.Context, id string) (json.RawMessage, error) {
+	if f.err2 != nil || f.lsps2 != nil {
+		return f.lsps2, f.err2
+	}
+	return f.fakeLSPS.LSPS2Menu(ctx, id)
+}
+
+// NIP-LSP §Client Behavior, Live check: the client asks get_info for the
+// service it is about to use and the live answers decide, so an announced
+// protocol's get_info that fails or cannot be read fails the check; with both
+// answers read the same terms pass.
+func TestLiveCheckFailsWithoutAGetInfoAnswer(t *testing.T) {
+	cases := map[string]struct {
+		live failingLSPS
+		want string
+	}{
+		"LSPS2 error":      {live: failingLSPS{err2: errors.New("internal error")}, want: "LSPS2 get_info"},
+		"LSPS2 unreadable": {live: failingLSPS{lsps2: json.RawMessage(`{"menu":[]}`)}, want: "LSPS2 get_info"},
+		"LSPS2 bad row":    {live: failingLSPS{lsps2: json.RawMessage(`{"opening_fee_params_menu":[{"min_fee_mloki":"1"}]}`)}, want: "LSPS2 get_info"},
+		"LSPS1 error":      {live: failingLSPS{err1: errors.New("internal error")}, want: "LSPS1 get_info"},
+		"LSPS1 unreadable": {live: failingLSPS{lsps1: json.RawMessage(`[1]`)}, want: "LSPS1 get_info"},
+		"both answered":    {},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			f.fetch.evs = []*nip01.Event{f.v.event("K-LSP-1")}
+			require.NoError(t, f.s.Discover(context.Background()))
+			f.live.reachable = niplsp.NodeIDs(kLSPKey)[0]
+			f.live.protocols = []int{1, 2, 5}
+			f.live.lsps1 = klsp1LSPS1
+			f.live.lsps2 = klsp1LSPS2()
+			c.live.fakeLSPS = f.live
+			f.s.d.Live = c.live
+
+			res, err := f.s.LiveCheck(context.Background(), kLSPKey)
+			require.NoError(t, err)
+			if c.want == "" {
+				assert.True(t, res.Usable, res.Error)
+				assert.False(t, res.Worse, "%+v", res.Changed)
+				return
+			}
+			assert.False(t, res.Usable)
+			assert.Contains(t, res.Error, c.want)
+			assert.Contains(t, f.row(t, kLSPKey).LastCheckResult, `"usable":false`, "stored for the purchase gate")
+		})
+	}
+}
+
+// klsp1LSPS1 and klsp1LSPS2 are K-LSP-1's announced terms in lokihub's dialect.
+var klsp1LSPS1 = lsps1.Options{MinFundingConfirmsWithinBlocks: 6, MaxChannelExpiryBlocks: 12960,
+	MaxInitialClientBalanceLoki: 1000000, MaxInitialLspBalanceLoki: 10000000,
+	MinChannelBalanceLoki: 100000, MaxChannelBalanceLoki: 10000000}
+
+func klsp1LSPS2() []lsps2.OpeningFeeParams {
+	return []lsps2.OpeningFeeParams{{MinFeeMloki: 2000000, Proportional: 4000, MinLifetime: 4320,
+		MaxClientToSelfDelay: 2016, MinPaymentSizeMloki: 10000000, MaxPaymentSizeMloki: 4000000000, Promise: "x"}}
+}
+
 // U-26.7: not in the graph, both node ids are tried; the one reached is kept.
 func TestU26_7_BothNodeIDs(t *testing.T) {
 	f := newFixture(t)
