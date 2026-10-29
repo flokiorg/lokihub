@@ -243,10 +243,6 @@ const (
 	CIRCLE_DEFAULT_ROTATION_DELAY_SECS = 432_000
 )
 
-// PRIVATE_TRANSPORT_KEY_INDEX is the rotation index of the private-transport
-// inbox key currently in use.
-const PRIVATE_TRANSPORT_KEY_INDEX = 0
-
 // CIRCLE_MEMBERSHIP_STALENESS_SECS bounds how old the membership a Circle
 // Wallet Hub acts on may be: the follow sets are refreshed every 300 seconds.
 const CIRCLE_MEMBERSHIP_STALENESS_SECS = 600

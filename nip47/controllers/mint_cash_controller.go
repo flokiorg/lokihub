@@ -37,6 +37,8 @@ func mapCashWalletErrorCode(err error) string {
 		return constants.ERROR_RESTRICTED
 	case errors.Is(err, cashwallet.ErrProofUsed):
 		return constants.ERROR_UNAUTHORIZED
+	case errors.Is(err, cashwallet.ErrLiveBillCap):
+		return constants.ERROR_QUOTA_EXCEEDED
 	case errors.Is(err, cashwallet.ErrRestricted):
 		return constants.ERROR_RESTRICTED
 	case errors.Is(err, transactions.NewInsufficientBalanceError()):
@@ -167,9 +169,16 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 	// Only requests that passed validation above reach here, so quota is spent
 	// only on requests that would otherwise actually create and fund a wallet.
 	if !controller.cashRateLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for mint_cash")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for mint_cash"+usedRequestIDNote)
 		return
 	}
+	// The allowance is spent only by a mint that commits.
+	committed := false
+	defer func() {
+		if r, ok := controller.cashRateLimiter.(refunder); ok && !committed {
+			r.Refund(app.AppPubkey)
+		}
+	}()
 
 	// The record is written in the same commit as the bill, under the deadline
 	// (NIP-CASH §The Record).
@@ -184,6 +193,7 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), commitErrorMessage(err))
 		return
 	}
+	committed = true
 
 	recipientResults := make([]nipcash.RecipientResult, len(result.Recipients))
 	for i, r := range result.Recipients {
@@ -237,6 +247,8 @@ func commitErrorMessage(err error) string {
 		return "this slice was already claimed by another call; nothing was committed"
 	case errors.Is(err, cashwallet.ErrProofUsed):
 		return "a claim proof of this call was already used"
+	case errors.Is(err, cashwallet.ErrLiveBillCap):
+		return "this Cash Hub holds its maximum of live bills; nothing was committed"
 	}
 	return err.Error()
 }

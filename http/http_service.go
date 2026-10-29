@@ -147,8 +147,14 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	// URL, so there's no arbitrary-fetch/SSRF surface here to gate.
 	e.GET("/api/appstore/logos/:appId", httpSvc.getAppStoreLogoHandler)
 
-	// allow one unlock request per second
-	unlockRateLimiter := middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(1))
+	// allow one unlock request per second, per client address as the TCP
+	// connection gives it: echo's default identifier trusts X-Forwarded-For and
+	// X-Real-IP, so any caller could name a fresh address on each attempt
+	// (GHSA-246p-cpwv-v3jq). Behind a proxy every client then shares one budget.
+	unlockRateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Store:               middleware.NewRateLimiterMemoryStore(1),
+		IdentifierExtractor: unlockLimiterIdentifier,
+	})
 	e.POST("/api/start", httpSvc.startHandler, unlockRateLimiter)
 	e.POST("/api/unlock", httpSvc.unlockHandler, unlockRateLimiter)
 	e.POST("/api/backup", httpSvc.createBackupHandler, unlockRateLimiter)
@@ -310,6 +316,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/autoswap", httpSvc.disableAutoSwapOutHandler)
 	fullAccessApiGroup.POST("/node/alias", httpSvc.setNodeAliasHandler)
 	fullAccessApiGroup.POST("/node/profile", httpSvc.publishNodeProfileHandler)
+	fullAccessApiGroup.POST("/private-transport/rotate-inbox", httpSvc.rotateInboxHandler)
 	fullAccessApiGroup.POST("/node/note", httpSvc.publishNodeNoteHandler)
 	fullAccessApiGroup.POST("/lsps2/buy", httpSvc.buyLSPS2LiquidityHandler)
 
@@ -500,6 +507,12 @@ func (httpSvc *HttpService) unlockHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, &authTokenResponse{
 		Token: token,
 	})
+}
+
+// unlockLimiterIdentifier is the unlock rate limiter's key: the connection's
+// own peer address, never a forwarded header.
+func unlockLimiterIdentifier(c echo.Context) (string, error) {
+	return echo.ExtractIPDirect()(c.Request()), nil
 }
 
 func (httpSvc *HttpService) requireFullAccess(next echo.HandlerFunc) echo.HandlerFunc {
@@ -879,6 +892,10 @@ func (httpSvc *HttpService) mempoolApiHandler(c echo.Context) error {
 	}
 
 	response, err := httpSvc.api.RequestMempoolApi(c.Request().Context(), endpoint)
+	if errors.Is(err, api.ErrNoExplorer) {
+		// Nothing to show, and nothing was sent anywhere.
+		return c.JSON(http.StatusOK, nil)
+	}
 	if err != nil {
 		httpSvc.logger.Error().Err(err).Str("endpoint", endpoint).Msg("Failed to request mempool API")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -1652,6 +1669,16 @@ func (httpSvc *HttpService) setNodeAliasHandler(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) rotateInboxHandler(c echo.Context) error {
+	resp, err := httpSvc.api.RotatePrivateTransportInbox()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: fmt.Sprintf("Failed to rotate the inbox key: %s", err.Error()),
+		})
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 func (httpSvc *HttpService) publishNodeProfileHandler(c echo.Context) error {

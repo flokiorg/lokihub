@@ -21,6 +21,9 @@ const (
 	// read of that request_id (NIP-CASH §Lost Replies: "unknown" means never),
 	// keyed by a hash of the request_id.
 	LockNsRequest int32 = 0x5251
+	// LockNsLiveBills serialises a Cash Hub's capped spin-offs and merges
+	// against its live-bill cap, keyed by the Hub's id.
+	LockNsLiveBills int32 = 0x4c42
 )
 
 // LockApp takes the transaction-scoped lock of one app (a Hub or a wallet) on

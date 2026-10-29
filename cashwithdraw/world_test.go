@@ -107,6 +107,7 @@ func (p *fakePayer) WalletTx(context.Context, string) (lnclient.WalletTx, error)
 	return lnclient.WalletTx{}, errUnused
 }
 func (p *fakePayer) ConfirmedBalance(context.Context) (int64, error) { return 0, errUnused }
+func (p *fakePayer) SpendableBalance(context.Context) (int64, error) { return 0, errUnused }
 func (p *fakePayer) BestBlock(context.Context) (lnclient.BlockEpoch, error) {
 	return lnclient.BlockEpoch{}, errUnused
 }

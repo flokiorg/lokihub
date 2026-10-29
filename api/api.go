@@ -38,6 +38,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/getinfocache"
 	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/listing"
@@ -1596,6 +1597,9 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 	if currentAddress != "" {
 		// check if address has any transactions
 		response, err := api.RequestMempoolApi(ctx, "/address/"+currentAddress+"/txs")
+		if errors.Is(err, ErrNoExplorer) {
+			return currentAddress, nil
+		}
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to get current address transactions")
 			return currentAddress, nil
@@ -1672,9 +1676,18 @@ func (api *api) GetBalances(ctx context.Context) (*BalancesResponse, error) {
 	return balances, nil
 }
 
+// ErrNoExplorer: no explorer is configured, so nothing is asked of one.
+var ErrNoExplorer = errors.New("no Flokicoin Explorer is configured")
+
 // TODO: remove dependency on this endpoint
 func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interface{}, error) {
-	url := api.cfg.GetMempoolApi() + "/api" + endpoint
+	// Only the explorer the operator configured is ever asked: with none, no
+	// address or txid leaves the node, whatever network it is on.
+	base := api.cfg.GetMempoolApi()
+	if base == "" {
+		return nil, ErrNoExplorer
+	}
+	url := base + "/api" + endpoint
 
 	client := http.Client{
 		Timeout: time.Second * 10,
@@ -2009,6 +2022,18 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	return nil
+}
+
+func (api *api) RotatePrivateTransportInbox() (*RotateInboxResponse, error) {
+	inbox, err := api.svc.RotatePrivateTransportInbox()
+	if inbox == "" {
+		return nil, err
+	}
+	resp := &RotateInboxResponse{InboxPubkey: inbox}
+	if err != nil {
+		resp.AnnounceError = err.Error()
+	}
+	return resp, nil
 }
 
 func (api *api) PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error {
@@ -3161,6 +3186,7 @@ func (api *api) SetCircleAccepting(app *db.App, accepting bool) error {
 	if err := api.db.Model(&db.CircleHubConfig{}).Where("app_id = ?", app.ID).Update("accepting_joins", accepting).Error; err != nil {
 		return err
 	}
+	api.invalidateCircleConnInfo(app.ID)
 	if accepting {
 		return nil
 	}
@@ -3332,8 +3358,21 @@ func (api *api) teardownCircleHub(app *db.App) (*DeleteCircleHubResult, error) {
 	}
 	// Closing set accepting false: the circle's listing is closed in order
 	// (WP-16 item 9, WP-25 item 8).
+	api.invalidateCircleConnInfo(app.ID)
 	api.closeListings(func(l *listing.Service) error { return l.CloseCircle(context.Background(), app.ID) })
 	return result, nil
+}
+
+// invalidateCircleConnInfo drops the cached get_info of every listed connection
+// of a circle hub, after a committed change of its accepting, so none answers
+// the old value.
+func (api *api) invalidateCircleConnInfo(hubID uint) {
+	var ids []uint
+	if err := api.db.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", hubID, db.AppKindCircleHubConn).Pluck("id", &ids).Error; err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", hubID).Msg("Failed to list a circle's listed connections; their get_info may stay cached for its TTL")
+		return
+	}
+	getinfocache.Listed.Invalidate(ids...)
 }
 
 // closeListings runs a listing retirement after the commit that ended an offer;
