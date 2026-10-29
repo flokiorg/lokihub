@@ -582,11 +582,7 @@ func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashW
 func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int, lineage bool) (code, message string, refund func()) {
 	refund = func() {}
 	env := controller.cfg.GetEnv()
-	limit := env.CashMaxLiveBillsPerHub
-	// A regtest test hook may override either limit (testknobs; inert otherwise).
-	if v, ok := testknobs.LiveWalletCap(); ok {
-		limit = v
-	}
+	limit := controller.liveBillLimit()
 	if limit > 0 && app.ParentAppID != nil && newBills > 0 {
 		var live int64
 		if err := controller.db.Model(&db.App{}).
@@ -615,6 +611,21 @@ func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int
 		}
 	}
 	return "", "", refund
+}
+
+// liveBillLimit is the live-bill cap per Cash Hub; 0 is none. A regtest test
+// hook may override it (testknobs; inert otherwise).
+func (controller *nip47Controller) liveBillLimit() int {
+	if v, ok := testknobs.LiveWalletCap(); ok {
+		return v
+	}
+	return controller.cfg.GetEnv().CashMaxLiveBillsPerHub
+}
+
+// liveBillCap is the cap a commit adding adds bills re-checks under the Hub's
+// lock: the early count above only spares a doomed call its signatures.
+func (controller *nip47Controller) liveBillCap(adds int) *cashwallet.LiveBillCap {
+	return &cashwallet.LiveBillCap{Limit: controller.liveBillLimit(), Adds: adds}
 }
 
 // handleCashTransferSplit spins a slice off into one or two new dedicated bills
@@ -649,8 +660,10 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	}
 
 	meta := cashTransferResponse{AmountMillis: amount, IdentityType: newType, IdentityValue: newValue}
+	addedBills := 1
 	if remainder > 0 {
 		meta.RemainingAmountMillis = &remainder
+		addedBills = 2
 	}
 	rec, err := record(meta)
 	if err != nil {
@@ -680,6 +693,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		Proofs:                 proofs,
 		Record:                 rec,
 		Zap:                    zap,
+		LiveBillCap:            controller.liveBillCap(addedBills),
 	})
 	if err != nil {
 		controller.respondCommitError(publishResponse, method, app, err, "failed to split off slice")
@@ -805,7 +819,8 @@ func (controller *nip47Controller) cashDeps() cashwallet.Deps {
 // logged and answered with fallback, never echoing an internal error.
 func (controller *nip47Controller) respondCommitError(publishResponse publishFunc, method string, app *db.App, err error, fallback string) {
 	code := mapCashWalletErrorCode(err)
-	if errors.Is(err, cashrequest.ErrDeadlinePassed) || errors.Is(err, apps.ErrSliceClaimed) || errors.Is(err, cashwallet.ErrProofUsed) {
+	if errors.Is(err, cashrequest.ErrDeadlinePassed) || errors.Is(err, apps.ErrSliceClaimed) || errors.Is(err, cashwallet.ErrProofUsed) ||
+		errors.Is(err, cashwallet.ErrLiveBillCap) {
 		respondError(publishResponse, method, code, commitErrorMessage(err))
 		return
 	}

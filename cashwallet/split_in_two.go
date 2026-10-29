@@ -52,6 +52,9 @@ type SplitInTwoParams struct {
 	// Record, when set, is the call's record, written last under its deadline.
 	Record *db.CashRequestRecord
 
+	// LiveBillCap, when set, bounds the Hub's live bills inside the commit.
+	LiveBillCap *LiveBillCap
+
 	// Zap, when set, makes this a zap transfer (NIP-CZ): the carved bill is
 	// signed under the zap scheme for its pubkey, the remainder under the ordinary
 	// one.
@@ -118,14 +121,15 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (*Split
 			target: params.Zap.Target, expiresAt: expires}
 	}
 	plan := commitPlan{
-		op:        "split",
-		hub:       params.HubApp,
-		lockApps:  []uint{source},
-		bills:     []newBill{carved},
-		sources:   []apps.SliceRef{params.Source},
-		transfers: []internalTransfer{{fromAppID: source, toBill: 0, amount: params.CarvedAmountMloki}},
-		proofs:    params.Proofs,
-		record:    params.Record,
+		op:          "split",
+		hub:         params.HubApp,
+		lockApps:    []uint{source},
+		bills:       []newBill{carved},
+		sources:     []apps.SliceRef{params.Source},
+		transfers:   []internalTransfer{{fromAppID: source, toBill: 0, amount: params.CarvedAmountMloki}},
+		proofs:      params.Proofs,
+		record:      params.Record,
+		liveBillCap: params.LiveBillCap,
 	}
 	if params.RemainderAmountMloki > 0 {
 		plan.bills = append(plan.bills, bill(db.CashRecordBillRemainder, params.RemainderIdentityType,
