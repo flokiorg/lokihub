@@ -468,6 +468,11 @@ audits of both.
 
 ### Fixed
 
+- Ends a cash bill on an owner delete or the expiry sweep in one transaction:
+  its unclaimed slices are taken first-wins, a `cash_redeem` in flight defers
+  the delete, and the balance moves to the Cash Hub with the archive. A redeem
+  claiming a slice during the old reclaim payment could lose its payout to
+  the Hub.
 - Removes a recipient's slice, sweeps its amount back to the Cash Hub and
   archives it in one transaction. A crash between the sweep and the removal
   could leave the slice claimed, impossible to remove again and archived as
