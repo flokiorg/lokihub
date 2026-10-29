@@ -630,28 +630,59 @@ func (e *Engine) logHeldOpen(err error, orders []db.CashOrder, now int64) {
 		Msg("cash_order_scan_failed_total: on-chain orders past pay_by stay open until the chain can be scanned")
 }
 
+// ErrWindowNotEnded: an order is past its pay_by and still open because its
+// window could not be ended (the chain or the node could not be read). It has
+// no answer yet: a read of it must be retried, never answered open, since a
+// client reads an open order past pay_by as ended unpaid (NIP-CO §Client
+// Behavior).
+var ErrWindowNotEnded = errors.New("the order's payment window could not be ended yet")
+
 // EndWindowIfDue is RunPayBy for one order, for a read of it: an order past
 // its pay_by is read in the state NIP-CO gives it then (a Lightning order
 // unpaid at pay_by is expired), not in the one the last job run left. An
-// on-chain order is left open when the chain cannot be scanned.
-func (e *Engine) EndWindowIfDue(ctx context.Context, orderID uint) {
+// on-chain order is left open when the chain cannot be scanned, and a
+// Lightning one when its invoice cannot be cancelled or read; either way the
+// read gets ErrWindowNotEnded.
+func (e *Engine) EndWindowIfDue(ctx context.Context, orderID uint) error {
 	var o db.CashOrder
 	now := e.now().Unix()
 	if err := e.DB.Where("id = ? AND pay_by < ? AND state IN ?", orderID, now,
-		[]string{db.CashOrderOpen, db.CashOrderPaid, db.CashOrderMinted}).Limit(1).Find(&o).Error; err != nil || o.ID == 0 {
-		return
+		[]string{db.CashOrderOpen, db.CashOrderPaid, db.CashOrderMinted}).Limit(1).Find(&o).Error; err != nil {
+		return err
+	}
+	if o.ID == 0 {
+		return nil
 	}
 	if o.Payment == nipCO.PaymentOnchain {
 		e.notePayByHeight(ctx, []db.CashOrder{o})
 		if err := e.ScanChain(ctx); err != nil {
 			e.logHeldOpen(err, []db.CashOrder{o}, now)
-			return
+			return e.windowEnded(o.ID, now)
 		}
 		if err := e.DB.First(&o, o.ID).Error; err != nil {
-			return
+			return err
 		}
 	}
 	e.endWindow(ctx, e.LN(), o)
+	return e.windowEnded(o.ID, now)
+}
+
+// windowEnded is ErrWindowNotEnded for an order still open past its pay_by.
+func (e *Engine) windowEnded(orderID uint, now int64) error {
+	var o db.CashOrder
+	if err := e.DB.Select("id", "state", "pay_by").First(&o, orderID).Error; err != nil {
+		return err
+	}
+	if WindowNotEnded(&o, now) {
+		return ErrWindowNotEnded
+	}
+	return nil
+}
+
+// WindowNotEnded reports an order still open past its pay_by: its window was
+// not ended, so its state is not known yet.
+func WindowNotEnded(o *db.CashOrder, now int64) bool {
+	return o.State == db.CashOrderOpen && now > o.PayBy
 }
 
 // endWindow ends o's payment window, its pay_by passed.
