@@ -103,6 +103,10 @@ type AppsService interface {
 	// references the identity; otherwise deletes it (cascading its allowlist).
 	DeleteCircleIdentity(id uint) error
 	DeleteApp(app *db.App) error
+	// DeleteCashHub is DeleteApp for a Cash Hub; confirmWatchEnd is the owner's
+	// confirmation that the delete ends the watch on paid on-chain order
+	// addresses, required while any is watched (ErrWatchEndUnconfirmed).
+	DeleteCashHub(app *db.App, confirmWatchEnd bool) error
 	GetAppByPubkey(pubkey string) *db.App
 	GetAppById(id uint) *db.App
 	SetAppMetadata(appId uint, metadata map[string]interface{}) error
@@ -534,10 +538,21 @@ func (svc *appsService) verifyParentHubTx(tx *gorm.DB, parentAppID uint, parentK
 }
 
 func (svc *appsService) DeleteApp(app *db.App) error {
+	return svc.deleteApp(app, false)
+}
+
+func (svc *appsService) DeleteCashHub(app *db.App, confirmWatchEnd bool) error {
+	if app.Kind != db.AppKindCashHub {
+		return fmt.Errorf("%w: app is not a cash_hub", constants.ErrInvalidParams)
+	}
+	return svc.deleteApp(app, confirmWatchEnd)
+}
+
+func (svc *appsService) deleteApp(app *db.App, confirmWatchEnd bool) error {
 	var err error
 	switch app.Kind {
 	case db.AppKindCircleHub, db.AppKindCashHub:
-		err = svc.deleteHubAppTx(app)
+		err = svc.deleteHubAppTx(app, confirmWatchEnd)
 	case db.AppKindCashOrder:
 		// Its orders are still served and minted after it is retired, so an
 		// Order connection goes only with its Hub (NIP-CO §What It Allows).
@@ -577,7 +592,7 @@ func (svc *appsService) DeleteApp(app *db.App) error {
 // sqlite no explicit lock is needed: wrapping the count and the delete in one
 // transaction is sufficient on its own, since sqlite transactions serialize
 // by default (only one writer active at a time).
-func (svc *appsService) deleteHubAppTx(app *db.App) error {
+func (svc *appsService) deleteHubAppTx(app *db.App, confirmWatchEnd bool) error {
 	parentKind, kindLabel, hint := db.ParentKindCircle, "circle_hub", "member wallet(s); use the circle delete endpoint instead"
 	if app.Kind == db.AppKindCashHub {
 		// Same orphan hazard as circle_hub, but for cash_hub: a cash_wallet
@@ -617,6 +632,10 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 			}
 			if check.Blocked() {
 				return fmt.Errorf("%w: %s", constants.ErrInvalidParams, check.Message())
+			}
+			if check.ConfirmationRequired && !confirmWatchEnd {
+				return fmt.Errorf("%w (%d address(es)); a later payment to one becomes no bill, so confirm the delete first",
+					ErrWatchEndUnconfirmed, check.WatchedAddresses)
 			}
 		}
 

@@ -21,6 +21,7 @@ type API interface {
 	UpdateApp(app *db.App, updateAppRequest *UpdateAppRequest) error
 	Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, amountMloki uint64) error
 	DeleteApp(app *db.App) error
+	DeleteAppWithOptions(app *db.App, opts DeleteAppOptions) error
 	ReplaceCircleAllowlist(app *db.App, pubkeys []string) error
 	RemoveCircleAllowedPubkey(app *db.App, pubkey string) error
 	// RefreshCircleFollowSet re-fetches a follow_set circle's set from relays.
@@ -1572,4 +1573,11 @@ type GetForwardsResponse struct {
 	OutboundAmountForwardedMloki uint64 `json:"outboundAmountForwardedMloki"`
 	TotalFeeEarnedMloki          uint64 `json:"totalFeeEarnedMloki"`
 	NumForwards                  uint64 `json:"numForwards"`
+}
+
+// DeleteAppOptions carries the owner's confirmations for a delete.
+type DeleteAppOptions struct {
+	// ConfirmWatchEnd confirms that deleting a Cash Hub ends the watch on its
+	// paid on-chain order addresses (delete-check confirmation_required).
+	ConfirmWatchEnd bool `json:"confirmWatchEnd"`
 }

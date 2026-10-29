@@ -104,3 +104,27 @@ func TestDeleteCashClaim_OrderedSliceRefused(t *testing.T) {
 
 	require.NoError(t, theAPI.DeleteCashClaim(hub.ID, bill.ID, plain.ID), "the slice beside it is removed")
 }
+
+// NIP-CASH §Hub teardown (CASH-445): the generic delete of a Cash Hub that still
+// watches a paid on-chain order address needs the owner's confirmation.
+func TestDeleteApp_CashHubWatchEndNeedsConfirmation(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub := tests.CreateCashHub(t, svc, 10_000, 3600)
+	old := time.Now().Add(-60 * 24 * time.Hour).Unix()
+	addr := "fc1q" + tests.RandomHex32()[:38]
+	require.NoError(t, svc.DB.Create(&db.CashOrder{
+		RequestID: tests.RandomHex32(), HubAppID: hub.ID, OrderConnAppID: 1, OrderConnPubkey: tests.RandomHex32(),
+		BuyerPubkey: tests.RandomHex32(), RecipientType: db.CashIdentityPubkey, RecipientValue: tests.RandomHex32(),
+		AmountMillis: 21_000, Payment: "onchain", Notify: tests.RandomHex32(), ArrivalRelay: "wss://r", TermsJSON: "{}",
+		PayMillis: 21_000, PayBy: old, Deadline: old, Address: &addr, State: db.CashOrderClosed, CreatedAt: old, StateAt: old,
+	}).Error)
+
+	theAPI := newTestAPIWithService(t, svc)
+	require.ErrorIs(t, theAPI.DeleteApp(hub), constants.ErrInvalidParams)
+	require.NoError(t, theAPI.DeleteAppWithOptions(hub, DeleteAppOptions{ConfirmWatchEnd: true}))
+	var n int64
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", hub.ID).Count(&n).Error)
+	assert.Zero(t, n)
+}

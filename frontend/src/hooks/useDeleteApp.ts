@@ -21,38 +21,43 @@ export function useDeleteApp(
   const [isDeleting, setDeleting] = React.useState(false);
   const { mutate } = useSWRConfig();
 
-  const deleteApp = React.useCallback(async () => {
-    setDeleting(true);
-    try {
-      // Delete the app/sub-wallet
-      await request(`/api/apps/${app.id}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+  // options carries the owner's confirmations (a Cash Hub's confirmWatchEnd).
+  const deleteApp = React.useCallback(
+    async (options?: { confirmWatchEnd?: boolean }) => {
+      setDeleting(true);
+      try {
+        // Delete the app/sub-wallet
+        await request(`/api/apps/${app.id}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          ...(options && { body: JSON.stringify(options) }),
+        });
 
-      // Invalidate all /api/apps cache entries to force refetch
-      await mutate(
-        (key) => typeof key === "string" && key.startsWith("/api/apps"),
-        undefined,
-        { revalidate: true }
-      );
+        // Invalidate all /api/apps cache entries to force refetch
+        await mutate(
+          (key) => typeof key === "string" && key.startsWith("/api/apps"),
+          undefined,
+          { revalidate: true }
+        );
 
-      toast(messages?.success ?? t("connections.deleteSuccess"));
+        toast(messages?.success ?? t("connections.deleteSuccess"));
 
-      if (onSuccess) {
-        onSuccess();
+        if (onSuccess) {
+          onSuccess();
+        }
+      } catch (error) {
+        await handleRequestError(
+          messages?.error ?? t("connections.deleteError"),
+          error
+        );
+      } finally {
+        setDeleting(false);
       }
-    } catch (error) {
-      await handleRequestError(
-        messages?.error ?? t("connections.deleteError"),
-        error
-      );
-    } finally {
-      setDeleting(false);
-    }
-  }, [onSuccess, app, mutate, messages, t]);
+    },
+    [onSuccess, app, mutate, messages, t]
+  );
 
   return React.useMemo(
     () => ({ deleteApp, isDeleting }),

@@ -71,6 +71,8 @@ export function DisconnectCashHub({
   );
 
   const isLoading = outstandingCount === null;
+  // Deleting ends the watch on paid on-chain order addresses: the owner confirms that.
+  const confirmWatchEnd = !!deleteCheck?.confirmation_required;
   const hasOutstanding =
     (outstandingCount ?? 0) > 0 || recordBlockers.length > 0;
 
@@ -118,7 +120,27 @@ export function DisconnectCashHub({
                 )}
               </div>
             ) : (
-              <>{t("disconnectCashHub.safeToDelete")}</>
+              <div className="space-y-2">
+                <p>{t("disconnectCashHub.safeToDelete")}</p>
+                {confirmWatchEnd && (
+                  <p>
+                    {t("disconnectCashHub.watchEnds", {
+                      count: deleteCheck?.watched_addresses,
+                    })}
+                  </p>
+                )}
+                {!!deleteCheck?.listed_offers &&
+                  deleteCheck.listings_delete_due_at && (
+                    <p className="text-sm text-muted-foreground">
+                      {t("disconnectCashHub.listedOffers", {
+                        count: deleteCheck.listed_offers,
+                        at: new Date(
+                          deleteCheck.listings_delete_due_at * 1000
+                        ).toLocaleString(),
+                      })}
+                    </p>
+                  )}
+              </div>
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -129,8 +151,15 @@ export function DisconnectCashHub({
               : tc("actions.cancel")}
           </AlertDialogCancel>
           {!isLoading && !hasOutstanding && (
-            <AlertDialogAction onClick={deleteApp} disabled={isDeleting}>
-              {tc("actions.confirm")}
+            <AlertDialogAction
+              onClick={() =>
+                deleteApp(confirmWatchEnd ? { confirmWatchEnd } : undefined)
+              }
+              disabled={isDeleting || !deleteCheck}
+            >
+              {confirmWatchEnd
+                ? t("disconnectCashHub.confirmWatchEnd")
+                : tc("actions.confirm")}
             </AlertDialogAction>
           )}
         </AlertDialogFooter>
