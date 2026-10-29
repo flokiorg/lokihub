@@ -1120,6 +1120,10 @@ export interface CashWalletClaim {
   // Proof of payment for a redeemed slice, carried into the archive because
   // the transaction row it came from is deleted with the bill.
   payment_hash?: string;
+  // A slice minted for an order, or re-minted by a cancelled on-chain
+  // withdrawal: the owner can neither remove it nor delete its bill.
+  ordered?: boolean;
+  reminted?: boolean;
 }
 
 // How a cash slice ended. "unclaimed" is the only live-only value; the rest

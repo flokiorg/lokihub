@@ -41,6 +41,11 @@ func (a *withdrawStubAPI) ListCashHubPayouts(id uint) ([]cashwithdraw.PayoutRow,
 	return nil, nil
 }
 
+func (a *withdrawStubAPI) GetCashHubPayout(id, pid uint) (*cashwithdraw.PayoutDetail, error) {
+	a.calls = append(a.calls, fmt.Sprintf("payout %d %d", id, pid))
+	return &cashwithdraw.PayoutDetail{}, nil
+}
+
 func (a *withdrawStubAPI) CashWithdrawStatus() (*cashwithdraw.EngineStatus, error) {
 	a.calls = append(a.calls, "status")
 	return &cashwithdraw.EngineStatus{}, nil
@@ -58,15 +63,18 @@ func TestWailsRouter_Withdraw(t *testing.T) {
 		{"/api/cash-hubs/7/withdraw-terms", "GET", ""},
 		{"/api/cash-hubs/7/withdraw-terms", "PUT", `{"enabled":true,"fee_base_millis":500000,"fee_ppm":2000}`},
 		{"/api/cash-hubs/7/payouts", "GET", ""},
+		{"/api/cash-hubs/7/payouts/3", "GET", ""},
 	} {
 		res := app.WailsRequestRouter(r.route, r.method, r.body)
 		assert.Empty(t, res.Error, r.route)
 	}
-	assert.Equal(t, []string{"get node", "put node true", "status", "get terms 7", "put terms 7 true 500000 2000", "payouts 7"}, stub.calls)
+	assert.Equal(t, []string{"get node", "put node true", "status", "get terms 7", "put terms 7 true 500000 2000", "payouts 7", "payout 7 3"}, stub.calls)
 
 	res := app.WailsRequestRouter("/api/cash-hubs/0/withdraw-terms", "GET", "")
 	assert.Equal(t, "invalid id", res.Error)
+	res = app.WailsRequestRouter("/api/cash-hubs/7/payouts/0", "GET", "")
+	assert.Equal(t, "invalid id", res.Error)
 	res = app.WailsRequestRouter("/api/cash-withdraw/node", "PUT", `{`)
 	assert.NotEmpty(t, res.Error)
-	assert.Len(t, stub.calls, 6, "nothing called for a refused request")
+	assert.Len(t, stub.calls, 7, "nothing called for a refused request")
 }

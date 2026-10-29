@@ -15,6 +15,7 @@ var errInvalidHubID = errors.New("invalid id")
 var (
 	withdrawTermsRouteRegex   = regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/withdraw-terms$`)
 	withdrawPayoutsRouteRegex = regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/payouts$`)
+	withdrawPayoutRouteRegex  = regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/payouts/([0-9]+)$`)
 )
 
 // routeWithdraw mirrors the HTTP on-chain withdrawal routes (WP-23); ok is
@@ -66,6 +67,14 @@ func (app *WailsApp) routeWithdraw(route, method, body string) (WailsRequestRout
 			return respond(nil, errInvalidHubID)
 		}
 		return respond(w.ListCashHubPayouts(uint(id)))
+	}
+	if m := withdrawPayoutRouteRegex.FindStringSubmatch(route); m != nil && method == "GET" {
+		id, err := strconv.ParseUint(m[1], 10, 64)
+		pid, perr := strconv.ParseUint(m[2], 10, 64)
+		if err != nil || perr != nil || id == 0 || pid == 0 {
+			return respond(nil, errInvalidHubID)
+		}
+		return respond(w.GetCashHubPayout(uint(id), uint(pid)))
 	}
 	return WailsRequestRouterResponse{}, false
 }

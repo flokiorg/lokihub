@@ -580,5 +580,9 @@
     "othersBar_few": "+{{count}} آخرين",
     "othersBar_many": "+{{count}} آخر",
     "othersBar_other": "+{{count}} آخر"
+  },
+  "cashLock": {
+    "ordered": "مطلوبة: لا تنتهي، لا يمكن إزالتها",
+    "reminted": "أعيد سكّها: لا يمكن إزالتها"
   }
 }

@@ -55,6 +55,21 @@ func (httpSvc *HttpService) registerWithdrawRoutes(g *echo.Group) {
 		}
 		return c.JSON(http.StatusOK, rows)
 	})
+	g.GET("/cash-hubs/:id/payouts/:payout", func(c echo.Context) error {
+		id, err := hubID(c)
+		if err != nil {
+			return err
+		}
+		pid, perr := strconv.ParseUint(c.Param("payout"), 10, 64)
+		if perr != nil || pid == 0 {
+			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid payout id"})
+		}
+		d, err := w.GetCashHubPayout(id, uint(pid))
+		if err != nil {
+			return withdrawError(c, err)
+		}
+		return c.JSON(http.StatusOK, d)
+	})
 	g.GET("/cash-withdraw/status", func(c echo.Context) error {
 		st, err := w.CashWithdrawStatus()
 		if err != nil {
@@ -96,7 +111,7 @@ func withdrawError(c echo.Context, err error) error {
 	switch {
 	case errors.Is(err, constants.ErrInvalidParams):
 		status = http.StatusBadRequest
-	case errors.Is(err, cashwithdraw.ErrNotCashHub):
+	case errors.Is(err, cashwithdraw.ErrNotCashHub), errors.Is(err, cashwithdraw.ErrPayoutNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, api.ErrWithdrawUnavailable):
 		status = http.StatusServiceUnavailable

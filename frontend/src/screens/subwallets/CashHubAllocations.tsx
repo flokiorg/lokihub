@@ -36,6 +36,8 @@ import {
 } from "src/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "src/components/ui/avatar";
 import { Badge } from "src/components/ui/badge";
+import { groupLock, ownerLock } from "src/components/cash/locks";
+import { OwnerLockBadge } from "src/components/cash/OwnerLockBadge";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
 import { CustomPagination } from "src/components/CustomPagination";
@@ -478,7 +480,11 @@ export const CashHubAllocations = React.forwardRef<
   // only 404. The six-status facets made this reachable a whole tab at a time.
   const removableIds = React.useMemo(
     () =>
-      new Set(claims.filter((c) => !c.claimed && !c.archived).map((c) => c.id)),
+      new Set(
+        claims
+          .filter((c) => !c.claimed && !c.archived && !ownerLock(c))
+          .map((c) => c.id)
+      ),
     [claims]
   );
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
@@ -1650,6 +1656,9 @@ export const CashHubAllocations = React.forwardRef<
                               +{group.claims.length - maxVisiblePills}
                             </Badge>
                           )}
+                          {groupLock(group.claims) && (
+                            <OwnerLockBadge lock={groupLock(group.claims)!} />
+                          )}
                         </div>
                       </div>
 
@@ -1786,7 +1795,9 @@ export const CashHubAllocations = React.forwardRef<
                           // expression and kept a live delete pointed at a
                           // wallet row that no longer exists.
                           disabled={
-                            group.archived || (!isMulti && !canRemoveSingle)
+                            group.archived ||
+                            !!groupLock(group.claims) ||
+                            (!isMulti && !canRemoveSingle)
                           }
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1884,6 +1895,9 @@ export const CashHubAllocations = React.forwardRef<
                                   loki
                                 </span>
                                 <CashStatusBadge status={c.status} />
+                                {ownerLock(c) && (
+                                  <OwnerLockBadge lock={ownerLock(c)!} />
+                                )}
 
                                 <Button
                                   variant="ghost"
