@@ -74,7 +74,7 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 	if config.RotationDelaySecs == 0 {
 		config.RotationDelaySecs = constants.CIRCLE_DEFAULT_ROTATION_DELAY_SECS
 	}
-	if err := validateCircleHubConfig(&config); err != nil {
+	if err := validateCircleHubConfig(&config, svc.maxDust()); err != nil {
 		return nil, "", err
 	}
 
@@ -204,7 +204,7 @@ func (svc *appsService) patchedCircleHubConfig(appID uint, patch CircleHubConfig
 		return nil, fmt.Errorf("circle hub config not found for app %d: %w", appID, err)
 	}
 	patch.apply(&cfg)
-	if err := validateCircleHubConfig(&cfg); err != nil {
+	if err := validateCircleHubConfig(&cfg, svc.maxDust()); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
@@ -253,7 +253,7 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, patch CircleHubConfigP
 // the lifetime ceiling and default each 0..MAX_EXPIRY_SECS with 0 meaning none
 // or never, the default not above a non-zero ceiling nor 0 under one; both
 // per-wallet ceilings; the fee rate; the renewal floor.
-func validateCircleHubConfig(cfg *db.CircleHubConfig) error {
+func validateCircleHubConfig(cfg *db.CircleHubConfig, maxDust int64) error {
 	if cfg.MaxExpSecs < 0 || cfg.MaxExpSecs > constants.MAX_EXPIRY_SECS {
 		return fmt.Errorf("%w: max_exp_secs must be between 0 (no ceiling) and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
 	}
@@ -300,13 +300,23 @@ func validateCircleHubConfig(cfg *db.CircleHubConfig) error {
 	if cfg.GraceSecs <= 0 || cfg.GraceSecs > constants.MAX_EXPIRY_SECS {
 		return fmt.Errorf("%w: grace_secs must be between 1 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
 	}
-	if cfg.DustThresholdMloki < 0 {
-		return fmt.Errorf("%w: dust_threshold_mloki must not be negative", constants.ErrInvalidParams)
+	if cfg.DustThresholdMloki < 0 || cfg.DustThresholdMloki > maxDust {
+		return fmt.Errorf("%w: dust_threshold_mloki must be between 0 and %d (CIRCLE_MAX_DUST_MLOKI)", constants.ErrInvalidParams, maxDust)
 	}
 	if cfg.RotationDelaySecs <= 0 || cfg.RotationDelaySecs > constants.MAX_EXPIRY_SECS {
 		return fmt.Errorf("%w: rotation_delay_secs must be between 1 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
 	}
 	return validateBudgetRenewal(cfg.MinBudgetRenewal)
+}
+
+// maxDust is the configured bound on a Hub's dust threshold.
+func (svc *appsService) maxDust() int64 {
+	if svc.cfg != nil {
+		if env := svc.cfg.GetEnv(); env != nil && env.CircleMaxDustMloki > 0 {
+			return env.CircleMaxDustMloki
+		}
+	}
+	return constants.CIRCLE_MAX_DUST_MLOKI
 }
 
 // satMul is a × b, saturating at the int64 maximum.
