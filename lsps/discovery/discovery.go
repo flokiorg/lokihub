@@ -257,8 +257,9 @@ func (s *Service) Ingest(ctx context.Context, evs []*nip01.Event) error {
 			return err
 		}
 	}
-	// An announcement that expired since is no longer usable.
-	if err := s.d.DB.Model(&persist.LSP{}).Where("usable = ? AND expires_at > 0 AND expires_at <= ?", true, now).
+	// An announcement that expired since is no longer usable; it is still
+	// usable at its expiration second (NIP-40, step 4).
+	if err := s.d.DB.Model(&persist.LSP{}).Where("usable = ? AND expires_at > 0 AND expires_at < ?", true, now).
 		Updates(map[string]any{"usable": false, "invalid_reason": "the announcement expired"}).Error; err != nil {
 		return err
 	}

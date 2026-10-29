@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Keeps an LSP's announcement usable through its expiration second, as NIP-40
+  asks, and refuses LSPS messages to an LSP whose announcement expired since
+  the catalogue's last refresh. The sweep dropped it a second early, and
+  purchases went ahead until the next refresh.
 - Buys JIT liquidity only at terms compared with the LSP's announcement: an
   automatic purchase fetches the fee menu at buy time (and again on a stale
   retry) and refuses it when worse for the buyer, a manual one compares the
