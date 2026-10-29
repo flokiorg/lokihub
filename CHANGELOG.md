@@ -468,6 +468,11 @@ audits of both.
 
 ### Fixed
 
+- Reads the node's wallet for on-chain order payments from a stored floor 100
+  blocks below the tip (and the mempool) instead of its whole history every
+  30 s, and stops checking a minted payment deeper than that, counting its
+  confirmations from its height. A mint's confirmation check reads from the
+  payment's own block.
 - Issues a circle wallet's hold invoice outside the database transaction:
   the invoice's row is reserved under the Hub's lock (it counts against every
   cap at once) and completed once the node answers, so a slow node no longer
