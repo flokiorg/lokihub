@@ -140,7 +140,8 @@ type committedBill struct {
 //	IMMEDIATE transaction already holds the one write lock)
 //	create each new bill's app and derive its key from the app id
 //	sign each bill's token (the node signs inside the open transaction, so the
-//	  bill exists for no one until it commits)
+//	  bill exists for no one until it commits; all signatures share one
+//	  SignBudget deadline, which bounds the lock time)
 //	write the bills' slices, claim the sources or reassign in place
 //	move the value as ledger rows, consume every claim proof
 //	store each token, write the record, re-check the deadline last
@@ -181,6 +182,11 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 			return err
 		}
 
+		phase, err := newSignPhase(ctx, deps.LNClient, len(plan.bills))
+		if err != nil {
+			return fmt.Errorf("refusing to issue a bill without a signed token: %w", err)
+		}
+		defer phase.done()
 		tokens := make([]string, len(plan.bills))
 		signed := make([]nipcash.Token, len(plan.bills))
 		zaps := make([]*nipcash.ZapContext, len(plan.bills))
@@ -194,7 +200,7 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 					return err
 				}
 			}
-			tok, encoded, err := issueCashToken(ctx, deps.LNClient, *billApps[i].WalletPubkey, secrets[i], deps.RelayURLs, &identityRequired, b.amount, plan.hub, zaps[i])
+			tok, encoded, err := phase.issue(*billApps[i].WalletPubkey, secrets[i], deps.RelayURLs, &identityRequired, b.amount, plan.hub, zaps[i])
 			if err != nil {
 				return fmt.Errorf("refusing to issue a bill without a signed token: %w", err)
 			}
