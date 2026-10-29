@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Drops a private envelope that carries a case variant of `nonce`,
+  `reply_to`, `not_after` or `items`, and bounds a served envelope's
+  `not_after` by `max_request_age` itself. Such an envelope could pass the
+  replay and freshness checks on one value and run with another.
 - Answers `cash_lookup` with `unknown` only after any commit of that
   `request_id` still in flight has finished, under the same lock the commit
   checks its deadline in. A call whose commit landed just after its deadline
