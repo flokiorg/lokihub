@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -341,4 +342,77 @@ func TestDiscoverReadsTrustedByAuthor(t *testing.T) {
 		}
 	}
 	require.True(t, byAuthor)
+}
+
+// announcementBy is K-LSP-1 re-signed by the key priv at createdAt.
+func (f *fixture) announcementBy(t *testing.T, priv string, createdAt uint64) *nip01.Event {
+	t.Helper()
+	ev := f.v.event("K-LSP-1").Copy()
+	ev.CreatedAt = createdAt
+	require.NoError(t, ev.Sign(priv))
+	return ev
+}
+
+func (f *fixture) seenMark(t *testing.T, key string) *persist.LSPSeenMark {
+	t.Helper()
+	var m persist.LSPSeenMark
+	err := f.s.d.DB.Where("node_key = ?", key).Limit(1).Find(&m).Error
+	require.NoError(t, err)
+	if m.NodeKey == "" {
+		return nil
+	}
+	return &m
+}
+
+// R2-S3 (NIP-LSP §Client Behavior, newest seen): a node pruned from the
+// catalogue keeps its newest-seen mark, so a relay re-feeding an older version
+// of it gets nothing in; a newer version is taken as usual.
+func TestPrune_KeepsAPrunedNodesNewestSeenMark(t *testing.T) {
+	f := newFixture(t)
+	base := f.v.event("K-LSP-1").CreatedAt
+	victimPriv := fmt.Sprintf("%064x", 7)
+	older, newer := f.announcementBy(t, victimPriv, base), f.announcementBy(t, victimPriv, base+10)
+	victim := older.PubKey
+	f.fetch.evs = []*nip01.Event{older, newer}
+	require.NoError(t, f.s.Discover(context.Background()))
+	require.True(t, f.row(t, victim).Usable)
+
+	var spam []*nip01.Event
+	for i := 0; i < MaxAnnouncements; i++ {
+		spam = append(spam, f.announcementBy(t, fmt.Sprintf("%064x", 1000+i), base+20))
+	}
+	f.fetch.evs = spam
+	require.NoError(t, f.s.Discover(context.Background()))
+	gone, err := f.m.GetLSP(victim)
+	require.True(t, err != nil || gone == nil, "the least recently announced node is pruned")
+	mark := f.seenMark(t, victim)
+	require.NotNil(t, mark, "its newest-seen mark stays")
+	assert.EqualValues(t, base+10, mark.CreatedAt)
+
+	// The spam is gone again, leaving room in the catalogue.
+	require.NoError(t, f.s.d.DB.Where("node_key <> ?", victim).Delete(&persist.LSP{}).Error)
+	f.fetch.evs = []*nip01.Event{older}
+	require.NoError(t, f.s.Discover(context.Background()))
+	replayed, err := f.m.GetLSP(victim)
+	assert.True(t, err != nil || replayed == nil, "an older version is not taken as new")
+
+	f.fetch.evs = []*nip01.Event{f.announcementBy(t, victimPriv, base+30)}
+	require.NoError(t, f.s.Discover(context.Background()))
+	back := f.row(t, victim)
+	require.NotNil(t, back)
+	assert.True(t, back.Usable, "a version newer than the mark is taken")
+	assert.EqualValues(t, base+30, back.NewestSeenCreatedAt)
+}
+
+// A mark goes once every version it covers has expired: an announcement
+// expires at most niplsp.MaxExpirySecs after its created_at.
+func TestPrune_DropsAMarkOnceItsVersionsHaveExpired(t *testing.T) {
+	f := newFixture(t)
+	key := strings.Repeat("cd", 32)
+	require.NoError(t, f.s.d.DB.Create(&persist.LSPSeenMark{NodeKey: key, CreatedAt: f.now - niplsp.MaxExpirySecs, EventID: "e"}).Error)
+	require.NoError(t, f.s.prune())
+	assert.NotNil(t, f.seenMark(t, key), "kept while a version it covers may be unexpired")
+	f.now++
+	require.NoError(t, f.s.prune())
+	assert.Nil(t, f.seenMark(t, key))
 }
