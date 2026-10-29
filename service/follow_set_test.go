@@ -103,12 +103,12 @@ func newFollowSetPublisher(t *testing.T, relay *storingRelay) (*service, string)
 	ln := newAnnouncingLN(t, base)
 
 	cache := NewNostrSocialCache(ts.Cfg)
-	cache.inboxKey = func() (string, error) { return ts.Keys.GetPrivateTransportKey(privateTransportKeyIndex) }
-	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ln, socialCache: cache}
+	cache.inboxKey = func() (string, error) { return ts.Keys.GetPrivateTransportKey(0) }
+	svc := &service{cfg: ts.Cfg, db: ts.DB, keys: ts.Keys, lnClient: ln, socialCache: cache}
 
 	node, err := svc.NodeNostrIdentity()
 	require.NoError(t, err)
-	inboxSK, err := ts.Keys.GetPrivateTransportKey(privateTransportKeyIndex)
+	inboxSK, err := ts.Keys.GetPrivateTransportKey(0)
 	require.NoError(t, err)
 	inboxPub, err := nostr.GetPublicKey(inboxSK)
 	require.NoError(t, err)
@@ -178,7 +178,7 @@ func TestPublishFollowSet_SignedByNodeWithPublicAndHiddenMembers(t *testing.T) {
 	}
 	payloads := hiddenPayloads(ev)
 	require.Len(t, payloads, 1)
-	inboxSK, err := svc.keys.GetPrivateTransportKey(privateTransportKeyIndex)
+	inboxSK, err := svc.keys.GetPrivateTransportKey(0)
 	require.NoError(t, err)
 	key, err := nip44.GenerateConversationKey(node, inboxSK)
 	require.NoError(t, err)

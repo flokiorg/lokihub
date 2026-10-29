@@ -325,6 +325,12 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		// It starts Active, with the Hub's dust threshold fixed for its life.
 		maxReceive := int64(params.MaxReceive)                  //nolint:gosec // bounded by the Hub's ceiling above
 		maxAmount := int64(resolvedMaxAmount(params.MaxAmount)) //nolint:gosec // at most the request, a JSON integer up to 2^63-1
+		// The wallet notes the inbox key it was issued under, which NIP-CW's
+		// hidden-member reading keeps trying after a rotation.
+		inboxIndex, err := db.CurrentInboxIndex(tx)
+		if err != nil {
+			return fmt.Errorf("failed to read the inbox key index: %w", err)
+		}
 		if err := tx.Model(&db.App{}).Where("id = ?", createdApp.ID).Updates(map[string]interface{}{
 			"circle_fees_ppm":             providerConfig.FeesPpm,
 			"circle_max_receive_mloki":    maxReceive,
@@ -333,7 +339,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			"circle_state":                circlelife.StateActive,
 			"circle_state_at":             createdApp.CreatedAt.Unix(),
 			"circle_dust_threshold_mloki": providerConfig.DustThresholdMloki,
-			"circle_inbox_key_index":      constants.PRIVATE_TRANSPORT_KEY_INDEX,
+			"circle_inbox_key_index":      inboxIndex,
 			"circle_rotation_delay_secs":  rotationDelay(providerConfig),
 		}).Error; err != nil {
 			return fmt.Errorf("failed to record the member's terms: %w", err)

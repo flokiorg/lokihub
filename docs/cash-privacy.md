@@ -15,6 +15,11 @@ cannot tell which bill, which method or whose slice. It can tell that this addre
 A holder who needs that pair hidden should reach the relays over a network layer that hides their address,
 such as Tor or a proxy. That reduces what a relay learns to "somebody is using this Hub".
 
+The operator can rotate the inbox (`POST /api/private-transport/rotate-inbox`): the Hub moves to its next
+inbox key and announces it. The old key keeps opening requests for `max_request_age` after the rotation, so
+a request built before the new announcement still runs, and is then dropped. A circle wallet notes the inbox
+key it was issued under, and the Hub keeps reading hidden members under it while that wallet lives.
+
 ## Consolidating tells the Hub the bills share an owner
 
 `cash_consolidate` merges several slices into one new bill. To do that, the Hub must see one caller prove
