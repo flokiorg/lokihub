@@ -39,6 +39,9 @@ func (s LNSigner) Network(ctx context.Context) (string, error) {
 
 // Sign hashes and signs ev with the node key, then verifies it.
 func (s LNSigner) Sign(ctx context.Context, ev *nip01.Event) error {
+	if err := nodesign.Guard.Allow(ctx); err != nil {
+		return err
+	}
 	signer, ok := s.LN().(lnclient.TransportSigner)
 	if !ok {
 		return errors.New("this LN backend cannot sign a node event (needs BIP340 over the node key)")

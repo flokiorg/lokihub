@@ -468,6 +468,12 @@ audits of both.
 
 ### Fixed
 
+- Reports only NIP-47's four networks: testnet4 is `testnet`, simnet
+  `regtest`, and a node on a network with no NIP-47 name signs no cash.
+- Refuses cash serving when the node identity already signed cash on another
+  network, recorded in `cash_identity_networks` the first time cash serving
+  starts. The private transport stays down and the node signs no bill,
+  connection string, listing or withdraw quote.
 - Drops a private envelope that carries a case variant of `nonce`,
   `reply_to`, `not_after` or `items`, and bounds a served envelope's
   `not_after` by `max_request_age` itself. Such an envelope could pass the
