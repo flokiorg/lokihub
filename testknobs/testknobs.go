@@ -53,7 +53,12 @@ var (
 	dropReply        atomic.Bool
 	dropBeforeCommit atomic.Bool
 	routeOverBound   atomic.Bool
+	commitCrashAt    atomic.Value // string; the cash-ledger commit stage to crash at, "" = off [rec4-local, NEVER-PUSH]
 )
+
+// CommitCrashAt reports the cash-ledger commit stage at which a commit must abort
+// as a crash would; "" = off. [rec4-local, NEVER-PUSH]
+func CommitCrashAt() string { s, _ := commitCrashAt.Load().(string); return s }
 
 // StallCommit reports whether commits are held (FaultStallCommit).
 func StallCommit() bool { return stallCommit.isOn() }

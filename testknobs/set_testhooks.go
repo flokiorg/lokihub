@@ -14,6 +14,9 @@ type Faults struct {
 	HoldPayments     *bool `json:"hold_payments,omitempty"`
 	HoldSelfPayments *bool `json:"hold_self_payments,omitempty"`
 	FailChainScan    *bool `json:"fail_chain_scan,omitempty"`
+	// CommitCrashAt aborts a cash-ledger commit at this stage (cashwallet Stage*,
+	// e.g. "BeforeCommit"); "" turns it off. [rec4-local, NEVER-PUSH]
+	CommitCrashAt *string `json:"commit_crash_at,omitempty"`
 }
 
 // SetFaults applies f after clearing every fault when reset is set, and
@@ -30,6 +33,10 @@ func SetFaults(f Faults, reset bool) map[string]bool {
 		dropReply.Store(false)
 		dropBeforeCommit.Store(false)
 		routeOverBound.Store(false)
+		commitCrashAt.Store("") // [rec4-local, NEVER-PUSH]
+	}
+	if f.CommitCrashAt != nil { // [rec4-local, NEVER-PUSH]
+		commitCrashAt.Store(*f.CommitCrashAt)
 	}
 	if f.StallCommit != nil {
 		stallCommit.set(*f.StallCommit)
