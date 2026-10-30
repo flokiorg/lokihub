@@ -21,6 +21,7 @@ import (
 	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/testknobs"
 )
 
 // Stages of the commit at which TestHooks.Before runs. A source claim, transfer
@@ -37,6 +38,20 @@ const (
 	StageAfterRecord      = "AfterRecord"
 	StageBeforeCommit     = "BeforeCommit"
 )
+
+// CommitStages are the commit stages a crash hook may name (testknobs
+// CommitCrashAt). The per-item stages AfterSourceClaim, AfterTransfer and
+// AfterProof carry a zero-based index, e.g. "AfterTransfer(0)". [rec4-local, NEVER-PUSH]
+var CommitStages = []string{
+	StageAfterLock, StageAfterCreateApp, StageAfterSign, StageAfterClaims,
+	StageAfterSourceClaim, StageAfterReassign, StageAfterTransfer, StageAfterProof,
+	StageAfterRecord, StageBeforeCommit,
+}
+
+// ErrCommitCrashed abandons an open commit at a stage as a crash would (regtest
+// test hooks only). gorm rolls back every write; only the pre-commit request_id
+// mark survives (NIP-CASH §Atomicity, §request_id). [rec4-local, NEVER-PUSH]
+var ErrCommitCrashed = errors.New("cash commit crashed by a test hook")
 
 // TestHooks is the commit's fault-injection seam. Before runs at every stage; an
 // error it returns rolls the commit back, and a panic abandons the transaction
@@ -69,6 +84,12 @@ type ClaimProof struct {
 }
 
 func (d Deps) before(stage string) error {
+	// The global knob fires on the nil-Hooks production controller too, so a
+	// regtest crash hook can abandon a real commit (NIP-CASH §Atomicity). Inert
+	// unless a testhooks build set it. [rec4-local, NEVER-PUSH]
+	if at := testknobs.CommitCrashAt(); at != "" && at == stage {
+		return ErrCommitCrashed
+	}
 	if d.Hooks == nil || d.Hooks.Before == nil {
 		return nil
 	}
