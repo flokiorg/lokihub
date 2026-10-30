@@ -8,6 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/testknobs"
@@ -48,6 +49,31 @@ func (httpSvc *HttpService) registerE2ETestHooks(g *echo.Group) {
 			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
 		}
 		return c.JSON(http.StatusOK, testknobs.SetLimits(req.Limits, req.Reset))
+	})
+
+	// POST /api/test/cash/commit-crash {commit_crash_at, reset}: arms a crash of
+	// the cash-ledger commit at that stage (cashwallet.CommitStages), as a crash
+	// would — gorm rolls back every write, only the pre-commit request_id mark
+	// survives (R-RACE-2, NIP-CASH §Atomicity, §request_id). "" or reset turns it
+	// off. Answers the stage now armed and the nameable stages. [rec4-local, NEVER-PUSH]
+	g.POST("/cash/commit-crash", func(c echo.Context) error {
+		var req struct {
+			CommitCrashAt *string `json:"commit_crash_at"`
+			Reset         bool    `json:"reset"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+		}
+		if req.Reset {
+			empty := ""
+			req.CommitCrashAt = &empty
+		}
+		testknobs.SetFaults(testknobs.Faults{CommitCrashAt: req.CommitCrashAt}, false)
+		logger.Logger.Warn().Str("commit_crash_at", testknobs.CommitCrashAt()).Msg("Cash commit crash hook set")
+		return c.JSON(http.StatusOK, map[string]any{
+			"commit_crash_at": testknobs.CommitCrashAt(),
+			"stages":          cashwallet.CommitStages,
+		})
 	})
 
 	// POST /api/test/cash/drop-archive {wallet_pubkey}: forgets a destroyed
