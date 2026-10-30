@@ -16,6 +16,11 @@ jobs:
     name: macOS
     uses: ./.github/workflows/macos.yaml
     secrets: inherit
+    # Best-effort: a macOS failure (or a runner-capacity cancellation) must not
+    # by itself sink the run signal. The release selects by per-version artifact
+    # presence and requires only Linux+Windows, so a missing macOS degrades the
+    # release gracefully rather than blocking it.
+    continue-on-error: true
 
   windows:
     name: Windows
