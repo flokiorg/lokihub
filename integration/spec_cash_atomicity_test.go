@@ -42,6 +42,25 @@ func cashTransferWithRequestID(t *testing.T, p CashTransferParams, rid string) j
 	return out
 }
 
+// unclaimedMlokiForIdentity sums the unclaimed slices the hub records for a
+// recipient IDENTITY (identity_value), across whatever wallet carries them. A
+// split carves its destination under a FRESH wallet pubkey, which a crashed call
+// never returns — so the destination's presence or absence is told by identity,
+// not by a wallet pubkey (that is unclaimedMlokiForWallet's job, for the source).
+func unclaimedMlokiForIdentity(t *testing.T, admin *adminClient, hubAppID uint, identityValue string) int64 {
+	t.Helper()
+	claims, err := admin.listCashWalletClaims(hubAppID)
+	require.NoError(t, err, "listing this hub's cash wallet claims")
+	var total int64
+	for _, c := range claims {
+		if c.IdentityValue != identityValue || c.Archived || c.Claimed {
+			continue
+		}
+		total += c.AmountMloki
+	}
+	return total
+}
+
 // TestSpecCash_RRACE2_CommitCrashIsAllOrNothing arms a crash just before COMMIT
 // and attempts a partial-split cash_transfer. The call marks its request_id
 // (pre-commit), opens the commit, writes every row — and the hook abandons it.
@@ -82,7 +101,14 @@ func TestSpecCash_RRACE2_CommitCrashIsAllOrNothing(t *testing.T) {
 	hooks.setCommitCrashAt(t, cashwallet.StageBeforeCommit)
 	var crashResult CashTransferResult
 	crashErr := privateCall(t, created.CashToken, constants.NIP47MethodCashTransfer, rawCall, currentPriv, &crashResult)
-	require.Error(t, crashErr, "a commit crashed at BeforeCommit must fail the call")
+	// A crash at BeforeCommit surfaces as ERROR_INTERNAL (mapCashWalletErrorCode's
+	// default; the sentinel's message is sanitized to a generic fallback on the
+	// wire, so the CODE — not the text — is what pins it). Asserting the code, not
+	// just "some error", rules out every pre-commit validation refusal (BAD_REQUEST,
+	// UNAUTHORIZED, RESTRICTED, RATE_LIMITED, REQUEST_REUSED): an internal failure
+	// at the commit stage means the call passed authorization and opened the commit,
+	// which the surviving request_id mark (ii, below) independently confirms.
+	requireNWCErrorCode(t, crashErr, constants.ERROR_INTERNAL)
 	require.Empty(t, crashResult.NewWalletToken, "a crashed commit carves no new wallet")
 	require.Empty(t, crashResult.RemainderWalletToken, "a crashed commit mints no remainder wallet")
 
@@ -93,6 +119,14 @@ func TestSpecCash_RRACE2_CommitCrashIsAllOrNothing(t *testing.T) {
 	// so its full value is still unclaimed on the Hub's own records.
 	require.EqualValues(t, fullAmount, unclaimedMlokiForWallet(t, admin, hubAppID, created.WalletPubkey),
 		"a crashed commit must leave the source slice's full value untouched")
+
+	// (i-b) And NOTHING was carved for the DESTINATION: a committed split creates
+	// an unclaimed slice for newPub (the control below asserts exactly that), so
+	// its absence here proves the destination side rolled back too — not just the
+	// source. Checked by identity, since the crashed call returned no carved wallet
+	// pubkey to look up.
+	require.Zero(t, unclaimedMlokiForIdentity(t, admin, hubAppID, newPub),
+		"a crashed commit must carve no destination slice for the new identity")
 
 	// (ii) But the request_id mark, taken before the commit, SURVIVES the
 	// rollback: a replay of the same id is REQUEST_REUSED, not a fresh attempt.
@@ -126,7 +160,7 @@ func TestSpecCash_RRACE2_CommitCrashIsAllOrNothing(t *testing.T) {
 // (private dispatch resolves the target, I2, before the request_id gate, I6).
 func TestSpecCash_RRACE2_CommittedThenReplayReused(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralCashHub(t, cfg, "rrace2-committed-control", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "rrace2-committed-control", nil)
 	// Gate on the same hook endpoint so the control runs or skips with the crash test.
 	_ = requireStackHooks(t, cfg, "POST /cash/commit-crash")
 	hubClient := mustConnect(t, hub.Connection)
@@ -173,6 +207,13 @@ func TestSpecCash_RRACE2_CommittedThenReplayReused(t *testing.T) {
 	require.NoError(t, err)
 	_, err = nipcash.Decode(carvedPlain)
 	require.NoError(t, err, "the carved wallet's token must decode")
+
+	// And the destination slice really exists on the Hub's OWN records — the
+	// committed mirror of the crashed path's absent carve (0 there, splitAmount
+	// here). A decodable token the response carried is not proof the hub committed
+	// the slice; this server-truth differential is.
+	require.EqualValues(t, splitAmount, unclaimedMlokiForIdentity(t, admin, hubAppID, newPub),
+		"a committed split must leave the new identity's carved slice unclaimed on the hub")
 
 	// The request_id is consumed on the committed path too: a replay of the same
 	// id is REQUEST_REUSED (the source bill is still live via its other recipient).
