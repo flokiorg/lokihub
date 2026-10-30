@@ -27,10 +27,10 @@ func TestCashOrder_LookupPastPayByWhileChainUnreadable(t *testing.T) {
 
 	paidJ, unpaidJ := newMemJournal(), newMemJournal()
 	paid, err := oc.Place(ctxT(t), nipCO.CashOrderParams{Recipient: nipcash.Pubkey(mustPubkey(t, newTestPrivkey(t))),
-		AmountMillis: 21_000, Payment: nipCO.PaymentOnchain}, paidJ, testDevice)
+		AmountMillis: 999_000, Payment: nipCO.PaymentOnchain}, paidJ, testDevice)
 	require.NoError(t, err)
 	_, err = oc.Place(ctxT(t), nipCO.CashOrderParams{Recipient: nipcash.Pubkey(mustPubkey(t, newTestPrivkey(t))),
-		AmountMillis: 21_000, Payment: nipCO.PaymentOnchain}, unpaidJ, testDevice)
+		AmountMillis: 999_000, Payment: nipCO.PaymentOnchain}, unpaidJ, testDevice)
 	require.NoError(t, err)
 
 	// Paid in time, in the mempool; then the wallet cannot be read, and pay_by passes.

@@ -394,6 +394,20 @@ func (s *Service) fundsChecks(tx *gorm.DB, snap FundsSnapshot, q *nipcash.Withdr
 	return atBound, canSetAside, nil
 }
 
+// sliceStillClaimable reports whether claim's slice is still live and unclaimed
+// under the exact identity and version this call authorized — the same guard
+// apps.ClaimCashSliceTx takes. It distinguishes a lost race (a concurrent
+// cash_redeem / split / withdraw already claimed, transferred or removed the
+// slice) from a genuine funding shortfall when a set-aside finds no coins.
+func sliceStillClaimable(tx *gorm.DB, claim *db.CashWalletClaim) (bool, error) {
+	var n int64
+	err := tx.Model(&db.CashWalletClaim{}).
+		Where("id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL AND transfer_count = ?",
+			claim.ID, claim.IdentityType, claim.IdentityValue, claim.TransferCount).
+		Count(&n).Error
+	return n == 1, err
+}
+
 type commitInput struct {
 	bill           *db.App
 	hubID          uint
@@ -446,6 +460,17 @@ func (s *Service) commitWithdraw(ctx context.Context, in commitInput) (*db.CashW
 		}
 		var bill db.App
 		if err := tx.First(&bill, in.bill.ID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// A concurrent call took the bill's last slice and destroyed it
+				// (W7 AutoDeleteDrained) before this one could commit: this call
+				// lost the race. NIP-CASH §Redeeming On-chain Processing
+				// Algorithm step 4 and the error table make a lost race
+				// RESTRICTED (a slice already claimed), never INTERNAL, which the
+				// table marks retryable and would invite a retry on a slice that
+				// is gone for good. cash_redeem maps its own lost race the same
+				// way (apps.ErrSliceClaimed -> RESTRICTED).
+				return refuse(nipcash.ErrCodeRestricted, "this cash wallet was drained and destroyed by another call")
+			}
 			return err
 		}
 		in.bill = &bill
@@ -463,6 +488,22 @@ func (s *Service) commitWithdraw(ctx context.Context, in commitInput) (*db.CashW
 			return &nipcash.WithdrawError{Code: nipcash.ErrCodeRateLimited, Row: 3, Reason: "unconfirmed payouts at their bound"}
 		}
 		if !canSetAside {
+			// A concurrent cash_redeem that won this slice spends its backing
+			// coins over Lightning before this withdraw commits, so this losing
+			// call's set-aside finds nothing. That is a lost race, not a funding
+			// shortfall: NIP-CASH §Redeeming On-chain Processing Algorithm step 4
+			// and the error table make a slice already claimed/redeemed/removed by
+			// another call RESTRICTED ("a slice already claimed"), never a retryable
+			// INSUFFICIENT_BALANCE that would invite a retry on a slice that is gone
+			// for good — mirroring cash_redeem/consolidate first-wins. A genuine
+			// shortfall on a still-claimable slice stays INSUFFICIENT_BALANCE.
+			live, err := sliceStillClaimable(tx, in.claim)
+			if err != nil {
+				return err
+			}
+			if !live {
+				return refuse(nipcash.ErrCodeRestricted, "this slice was already claimed by another call")
+			}
 			return &nipcash.WithdrawError{Code: nipcash.ErrCodeInsufficientBalance, Row: 4, Reason: "no coins to set aside"}
 		}
 		if err := s.before(StageAfterRecheck); err != nil {
