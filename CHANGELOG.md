@@ -490,6 +490,8 @@ audits of both.
 
 ### Fixed
 
+- Answers a losing concurrent `cash_withdraw` of a slice with `RESTRICTED` instead of a
+  generic `INTERNAL` or `INSUFFICIENT_BALANCE`, matching the redeem path (NIP-CASH). (#161)
 - Ignores an LSP announcement dated more than 15 minutes ahead (NIP-LSP step
   4): it is not seen, undoes such a newest-seen mark kept earlier, and ranks a
   future-dated row last when the catalogue is pruned. One far-future event
