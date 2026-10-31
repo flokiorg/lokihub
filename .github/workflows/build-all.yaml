@@ -16,11 +16,12 @@ jobs:
     name: macOS
     uses: ./.github/workflows/macos.yaml
     secrets: inherit
-    # Best-effort: a macOS failure (or a runner-capacity cancellation) must not
-    # by itself sink the run signal. The release selects by per-version artifact
-    # presence and requires only Linux+Windows, so a missing macOS degrades the
-    # release gracefully rather than blocking it.
-    continue-on-error: true
+    # Best-effort: a macOS failure or runner-capacity cancellation still leaves
+    # the Linux+Windows artifacts intact, and release.yaml selects a build-all
+    # run by per-version artifact presence (requiring only Linux+Windows) with
+    # status=completed regardless of conclusion -- so a missing macOS degrades
+    # the release gracefully. (`continue-on-error` is not a valid key on a
+    # `uses:` reusable-workflow job, and is unnecessary given that selection.)
 
   windows:
     name: Windows
