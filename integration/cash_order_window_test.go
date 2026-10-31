@@ -9,6 +9,7 @@ import (
 	"github.com/ohstr/nmilat/nipCO"
 	coclient "github.com/ohstr/nmilat/nipCO/client"
 	"github.com/ohstr/nmilat/nipcash"
+	cashclient "github.com/ohstr/nmilat/nipcash/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,7 +27,8 @@ func TestCashOrder_LookupPastPayByWhileChainUnreadable(t *testing.T) {
 	oc, _, _ := openOrderShop(t, "order-window")
 
 	paidJ, unpaidJ := newMemJournal(), newMemJournal()
-	paid, err := oc.Place(ctxT(t), nipCO.CashOrderParams{Recipient: nipcash.Pubkey(mustPubkey(t, newTestPrivkey(t))),
+	recipientPriv := newTestPrivkey(t)
+	paid, err := oc.Place(ctxT(t), nipCO.CashOrderParams{Recipient: nipcash.Pubkey(mustPubkey(t, recipientPriv)),
 		AmountMillis: 999_000, Payment: nipCO.PaymentOnchain}, paidJ, testDevice)
 	require.NoError(t, err)
 	_, err = oc.Place(ctxT(t), nipCO.CashOrderParams{Recipient: nipcash.Pubkey(mustPubkey(t, newTestPrivkey(t))),
@@ -67,4 +69,16 @@ func TestCashOrder_LookupPastPayByWhileChainUnreadable(t *testing.T) {
 	require.NotNil(t, expired)
 	assert.Equal(t, nipCO.OrderExpired, expired.State)
 	assert.True(t, coclient.EndedUnpaid(expired, false, expired.PayBy+1))
+
+	// An ordered bill is not the owner's to delete: its recipient redeems it so
+	// the ephemeral Hub can be torn down.
+	wallet, err := cashclient.Connect(ctxT(t), got.Bills[0].Token.Token)
+	require.NoError(t, err)
+	t.Cleanup(wallet.Close)
+	payee := mustConnect(t, createEphemeralSimpleWallet(t, cfg).Connection)
+	var invoice MakeInvoiceResult
+	require.NoError(t, payee.Call(ctxT(t), "make_invoice", MakeInvoiceParams{Amount: got.Bills[0].AmountMillis,
+		Description: "integration ordered bill redeem"}, &invoice))
+	_, err = wallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{Invoice: invoice.Invoice, Credential: nipcash.BySigning(recipientPriv)})
+	require.NoError(t, err)
 }
