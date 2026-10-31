@@ -1594,6 +1594,11 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 		return "", err
 	}
 
+	// No explorer serves a regtest chain, so the address is kept as is.
+	if currentAddress != "" && api.cfg.GetNetwork() == config.NetworkRegtest {
+		return currentAddress, nil
+	}
+
 	if currentAddress != "" {
 		// check if address has any transactions
 		response, err := api.RequestMempoolApi(ctx, "/address/"+currentAddress+"/txs")
@@ -2195,8 +2200,7 @@ func (api *api) discoverFlndConfig(ctx context.Context) (string, string, string,
 	address = FlndEndpoint
 
 	flndDir := chainutil.AppDataDir("flnd", false)
-	// flnd data dir structure: [DataDir]/data/chain/flokicoin/main/admin.macaroon
-	macaroonPath := filepath.Join(flndDir, "data", "chain", "flokicoin", "main", "admin.macaroon")
+	macaroonPath := flndMacaroonPath(flndDir, api.cfg.GetNetwork())
 	certPath := filepath.Join(flndDir, "tls.cert")
 
 	macaroonBytes, err := os.ReadFile(macaroonPath) //nolint:gosec // path is built from a fixed OS app-data dir + hardcoded subpath, not external input
@@ -3960,4 +3964,14 @@ func (api *api) lnClient() lnclient.LNClient {
 		return nil
 	}
 	return api.svc.GetLNClient()
+}
+
+// flndMacaroonPath is flnd's admin macaroon under its data dir for a NETWORK value:
+// [DataDir]/data/chain/flokicoin/<main|regtest>/admin.macaroon.
+func flndMacaroonPath(flndDir, network string) string {
+	netDir := "main"
+	if network == config.NetworkRegtest {
+		netDir = "regtest"
+	}
+	return filepath.Join(flndDir, "data", "chain", "flokicoin", netDir, "admin.macaroon")
 }

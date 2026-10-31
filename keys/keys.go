@@ -120,11 +120,7 @@ func (keys *keys) Init(cfg config.Config, encryptionKey string) error {
 	}
 	keys.swapMnemonic = swapMnemonic
 
-	netParams := &chaincfg.MainNetParams
-	network := cfg.GetNetwork()
-	if network == "testnet" {
-		netParams = &chaincfg.TestNet3Params
-	}
+	netParams := swapNetParams(cfg.GetNetwork())
 
 	swapKey, err := hdkeychain.NewMaster(bip39.NewSeed(swapMnemonic, ""), netParams)
 	if err != nil {
@@ -267,4 +263,16 @@ func (keys *keys) GenerateSwapMnemonic(key *bip32.Key) (string, error) {
 		return "", err
 	}
 	return mnemonic, nil
+}
+
+// swapNetParams picks the chain params of the swap HD key for a NETWORK value.
+func swapNetParams(network string) *chaincfg.Params {
+	switch network {
+	case "testnet":
+		return &chaincfg.TestNet3Params
+	case "regtest":
+		return &chaincfg.RegressionNetParams
+	default:
+		return &chaincfg.MainNetParams
+	}
 }

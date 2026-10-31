@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/flokiorg/go-flokicoin/chaincfg"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/tests/db"
@@ -139,4 +140,11 @@ func TestGenerateSwapMnemonic(t *testing.T) {
 	// this matches https://iancoleman.io/bip39/ -> check "Show BIP85" and set BIP85 Index to 128260
 	expectedSwapMnemonic := "truth cargo pluck prefer mosquito symptom review kitchen exile fit corn vault"
 	assert.Equal(t, expectedSwapMnemonic, swapMnemonic)
+}
+
+func TestSwapNetParams(t *testing.T) {
+	require.Same(t, &chaincfg.MainNetParams, swapNetParams("flokicoin"))
+	require.Same(t, &chaincfg.MainNetParams, swapNetParams(""))
+	require.Same(t, &chaincfg.TestNet3Params, swapNetParams("testnet"))
+	require.Same(t, &chaincfg.RegressionNetParams, swapNetParams("regtest"))
 }
