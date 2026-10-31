@@ -91,6 +91,12 @@ jobs:
       - name: Test (testhooks build)
         run: go test -tags testhooks -count=1 ./http/ ./service/ ./testknobs/
 
+      # The regtest test hooks are compiled only with this tag (http/testhooks.go).
+      - name: Vet and test (testhooks build)
+        run: |
+          go vet -tags testhooks ./http/... ./integration/regtest/...
+          go test -race -count=1 -tags testhooks ./http/... ./integration/regtest/...
+
       # The connection-drop resubscription test skips under -race: a server-side
       # drop trips go-nostr's own data race on Relay.Connection (still in the
       # latest release). Without this step CI never runs it at all. -v so the log

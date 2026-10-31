@@ -1,0 +1,17 @@
+# The dev relay's config. `just dev setup` copies it to data/regtest/relay/relay.yaml
+# and fills in a fresh relay key, so no key is tracked.
+port: 5500
+nip11:
+  name: lokihub-dev-relay
+  privkey: __RELAY_PRIVKEY__
+  contact: dev@lokihub.local
+  limitation:
+    # The backend keeps one long-lived REQ per app connection, plus the
+    # integration suite's churn; the default 355 is hit at once.
+    max_subscriptions: 5000
+# Raised from the defaults (1024/2048) for the integration suite's bursts of
+# short-lived NWC connections.
+outgoingBufferSize: 4096
+maxConcurrentStoreTasks: 8192
+store: /data/db/notes.db
+logdir: /data/logs
