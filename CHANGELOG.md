@@ -9,6 +9,8 @@ audits of both.
 
 ### Added
 
+- Warns at start when flnd accepts keysends without `keysend-hold-time`: such a
+  node settles a keysend a circle wallet refuses instead of failing it (NIP-CW). (#170)
 - Asks again in the desktop app too when an LSP purchase is refused for
   terms worse than announced: the refusal carries the same body as the HTTP
   409 (message, announced and live terms), so the terms-changed dialog opens
@@ -490,6 +492,9 @@ audits of both.
 
 ### Fixed
 
+- Judges order retention's deadline + H floor on the wall clock, as commit and lookup
+  do, so a regtest Hub clock moved ahead no longer drops an order its lookup reports
+  `pending`. (#170)
 - Includes `regtest` in the frontend `Network` type, so regtest is a first-class UI
   value alongside the backend's existing `NETWORK=regtest` support. (#166)
 - Answers a losing concurrent `cash_withdraw` of a slice with `RESTRICTED` instead of a
