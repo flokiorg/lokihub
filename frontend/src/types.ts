@@ -384,7 +384,7 @@ export type HealthResponse = {
   message?: string;
 };
 
-export type Network = "flokicoin" | "testnet" | "signet";
+export type Network = "flokicoin" | "testnet" | "signet" | "regtest";
 
 export type AppMetadata = {
   app_store_app_id?: string;
