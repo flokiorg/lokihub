@@ -480,7 +480,17 @@ func (s *Service) commitWithdraw(ctx context.Context, in commitInput) (*db.CashW
 		if in.claim.IdentityType == db.CashIdentityConnectionKey && !iaTrustedTx(tx, in.claim.IAPubkey) {
 			return refuse(nipcash.ErrCodeRestricted, "the Identity Authority for this claim is no longer trusted")
 		}
-		atBound, canSetAside, err := s.fundsChecks(tx, in.pf.funds, in.quote)
+		// Step 3's unconfirmed-payout bound is computed from the confirmed
+		// balance read again under the lock, like the tip above: a block that
+		// confirmed or dropped funds since the prefetch must not leave the bound
+		// computed from a stale (higher) balance.
+		funds := in.pf.funds
+		if s.Funds != nil {
+			if funds, err = s.Funds.Snapshot(ctx); err != nil {
+				return err
+			}
+		}
+		atBound, canSetAside, err := s.fundsChecks(tx, funds, in.quote)
 		if err != nil {
 			return err
 		}

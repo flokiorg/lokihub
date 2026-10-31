@@ -492,6 +492,10 @@ audits of both.
 
 ### Fixed
 
+- Recomputes the step-3 unconfirmed-payout bound from the confirmed balance read under
+  the commit lock, like the chain tip, so a block that confirmed or dropped funds between
+  the quote and the commit cannot admit a payout against a stale higher balance (NIP-CASH
+  §Redeeming On-chain). (#170)
 - Judges order retention's deadline + H floor on the wall clock, as commit and lookup
   do, so a regtest Hub clock moved ahead no longer drops an order its lookup reports
   `pending`. (#170)

@@ -597,4 +597,15 @@ func TestU_4_11_CommitRereadsUnderLock(t *testing.T) {
 		require.NoError(t, w.svc.DB.Model(&db.App{}).Where("id = ?", bill.ID).Update("expires_at", past).Error)
 		refused(t, w, &stale, hs, q, constants.ERROR_RESTRICTED, "")
 	})
+	t.Run("confirmed balance dropped at the lock trips the unconfirmed bound", func(t *testing.T) {
+		w := newWorld(t)
+		bill, hs := w.mintPubkey(t, 21_000_000, 1_000_000)
+		q := w.mustQuote(t, bill, hs[0], address(t, 0, 20))
+		// A block dropped the confirmed balance between the prefetch and the
+		// commit lock: step 3's bound must be recomputed from the balance read
+		// under the lock, so the payout is refused RATE_LIMITED, not admitted
+		// against the stale higher balance.
+		atLock(w, func() { w.funds.setConfirmed(0) })
+		refused(t, w, bill, hs, q, constants.ERROR_RATE_LIMITED, "")
+	})
 }
