@@ -490,6 +490,8 @@ audits of both.
 
 ### Fixed
 
+- Includes `regtest` in the frontend `Network` type, so regtest is a first-class UI
+  value alongside the backend's existing `NETWORK=regtest` support. (#166)
 - Answers a losing concurrent `cash_withdraw` of a slice with `RESTRICTED` instead of a
   generic `INTERNAL` or `INSUFFICIENT_BALANCE`, matching the redeem path (NIP-CASH). (#161)
 - Ignores an LSP announcement dated more than 15 minutes ahead (NIP-LSP step
