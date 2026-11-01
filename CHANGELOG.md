@@ -499,7 +499,7 @@ audits of both.
   now gets not-found. (#178)
 - Gates the desktop (Wails) IPC router behind the unlock session like the HTTP API, so a
   readonly unlock or a locked app can no longer move funds or export the swap seed; every
-  fund-moving desktop operation now requires a full-access unlock.
+  fund-moving desktop operation now requires a full-access unlock. (#180)
 - Recomputes the step-3 unconfirmed-payout bound from the confirmed balance read under
   the commit lock, like the chain tip, so a block that confirmed or dropped funds between
   the quote and the commit cannot admit a payout against a stale higher balance (NIP-CASH
