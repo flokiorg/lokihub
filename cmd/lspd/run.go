@@ -35,6 +35,7 @@ import (
 	"github.com/flokiorg/lokihub/lspd/platform/config"
 	"github.com/flokiorg/lokihub/lspd/platform/logging"
 	"github.com/flokiorg/lokihub/lspd/services"
+	"github.com/flokiorg/lokihub/lspd/transport/auth"
 	transdashboard "github.com/flokiorg/lokihub/lspd/transport/dashboard"
 	translsps "github.com/flokiorg/lokihub/lspd/transport/lsps"
 	"github.com/urfave/cli"
@@ -254,6 +255,17 @@ func runLspd(cliCtx *cli.Context) error {
 	// dashboard auth event cannot be replayed across a restart or a second
 	// replica (FLSPD-0016).
 	dashSvc.SetReplayStore(postgres.NewNip98ReplayStore(pool))
+	// Pin the dashboard's public origin and the proxies whose forwarded
+	// headers may be trusted when binding the NIP-98 'u' tag (A4-FL-3).
+	// DASHBOARD_TRUSTED_PROXIES is a comma-separated list of CIDRs/IPs; unset
+	// means no proxy is trusted and forwarded headers are ignored (secure by
+	// default). A deployment fronted by a proxy (e.g. the Hub, Traefik) must
+	// set it, and may pin DASHBOARD_PUBLIC_HOST / DASHBOARD_PUBLIC_SCHEME.
+	trustedProxies, err := auth.ParseTrustedProxies(strings.Split(os.Getenv("DASHBOARD_TRUSTED_PROXIES"), ","))
+	if err != nil {
+		log.Fatal().Err(err).Msg("Invalid DASHBOARD_TRUSTED_PROXIES")
+	}
+	dashSvc.SetProxyTrust(os.Getenv("DASHBOARD_PUBLIC_HOST"), os.Getenv("DASHBOARD_PUBLIC_SCHEME"), trustedProxies)
 
 	// Start dashboard HTTP server
 	go func() {
