@@ -212,26 +212,26 @@ func nostrLsps5Uri(pubkey string, relays ...string) string {
 }
 
 func TestNostrTransport_Type(t *testing.T) {
-	transport := NewNostrTransport(nostr.GeneratePrivateKey())
+	transport := NewNostrTransport(nostr.GeneratePrivateKey(), true)
 	assert.Equal(t, TransportTypeNostr, transport.Type())
 }
 
 func TestNostrTransport_Send_MissingPrivKey(t *testing.T) {
-	transport := NewNostrTransport("")
+	transport := NewNostrTransport("", true)
 	err := transport.Send(context.Background(), nostrLsps5Uri(nostr.GeneratePrivateKey()), "lsps5.payment_incoming", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not configured")
 }
 
 func TestNostrTransport_Send_InvalidUri(t *testing.T) {
-	transport := NewNostrTransport(nostr.GeneratePrivateKey())
+	transport := NewNostrTransport(nostr.GeneratePrivateKey(), true)
 	err := transport.Send(context.Background(), "https://not-a-nostr-uri.example", "lsps5.payment_incoming", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid nostr URI")
 }
 
 func TestNostrTransport_Send_NoRelaysInUri(t *testing.T) {
-	transport := NewNostrTransport(nostr.GeneratePrivateKey())
+	transport := NewNostrTransport(nostr.GeneratePrivateKey(), true)
 	recipientPriv := nostr.GeneratePrivateKey()
 	recipientPub, err := nostr.GetPublicKey(recipientPriv)
 	require.NoError(t, err)
@@ -242,7 +242,7 @@ func TestNostrTransport_Send_NoRelaysInUri(t *testing.T) {
 }
 
 func TestNostrTransport_Send_EventCreationFailure(t *testing.T) {
-	transport := NewNostrTransport(nostr.GeneratePrivateKey())
+	transport := NewNostrTransport(nostr.GeneratePrivateKey(), true)
 	// 64 chars but not valid hex, so ComputeSharedSecret's hex.DecodeString
 	// fails inside CreateNotificationEvent, before any network I/O.
 	invalidPubkey := strings.Repeat("z", 64)
@@ -254,7 +254,7 @@ func TestNostrTransport_Send_EventCreationFailure(t *testing.T) {
 
 func TestNostrTransport_Send_SucceedsWhenRelayAcks(t *testing.T) {
 	relay := newAckingRelayServer(t, true, "")
-	transport := NewNostrTransport(nostr.GeneratePrivateKey())
+	transport := NewNostrTransport(nostr.GeneratePrivateKey(), true)
 	recipientPriv := nostr.GeneratePrivateKey()
 	recipientPub, err := nostr.GetPublicKey(recipientPriv)
 	require.NoError(t, err)
@@ -266,12 +266,42 @@ func TestNostrTransport_Send_SucceedsWhenRelayAcks(t *testing.T) {
 func TestNostrTransport_Send_FailsWhenAllRelaysNack(t *testing.T) {
 	relayA := newAckingRelayServer(t, false, "blocked: rate-limited")
 	relayB := newAckingRelayServer(t, false, "blocked: rate-limited")
-	transport := NewNostrTransport(nostr.GeneratePrivateKey())
+	transport := NewNostrTransport(nostr.GeneratePrivateKey(), true)
 	recipientPriv := nostr.GeneratePrivateKey()
 	recipientPub, err := nostr.GetPublicKey(recipientPriv)
 	require.NoError(t, err)
 
 	err = transport.Send(context.Background(), nostrLsps5Uri(recipientPub, relayA.url(), relayB.url()), "lsps5.payment_incoming", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to publish to any relay")
+}
+
+// TestNostrTransport_Send_RefusesPrivateRelay is the dial-time half of the
+// SSRF fix (FLSPD-0011 / R-LSP-6): a peer-supplied relay that resolves to an
+// internal address must be refused before the transport dials it, so no
+// outbound websocket is opened into the LSP's trust zone.
+func TestNostrTransport_Send_RefusesPrivateRelay(t *testing.T) {
+	transport := NewNostrTransport(nostr.GeneratePrivateKey(), false) // production: loopback/private refused
+	recipientPub, err := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	require.NoError(t, err)
+
+	err = transport.Send(context.Background(), nostrLsps5Uri(recipientPub, "ws://10.0.0.5:6379"), "lsps5.payment_incoming", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to publish to any relay")
+}
+
+// TestNostrTransport_Send_RefusesLoopbackRelayWithoutDevFlag proves the guard
+// honors the dev flag: the same acking loopback relay that succeeds with
+// allowLoopback=true (TestNostrTransport_Send_SucceedsWhenRelayAcks) is
+// refused in production mode, so delivery fails even though the relay would
+// have acked.
+func TestNostrTransport_Send_RefusesLoopbackRelayWithoutDevFlag(t *testing.T) {
+	relay := newAckingRelayServer(t, true, "")
+	transport := NewNostrTransport(nostr.GeneratePrivateKey(), false)
+	recipientPub, err := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	require.NoError(t, err)
+
+	err = transport.Send(context.Background(), nostrLsps5Uri(recipientPub, relay.url()), "lsps5.payment_incoming", map[string]string{"payment_hash": "abc"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to publish to any relay")
 }

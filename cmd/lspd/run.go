@@ -202,7 +202,7 @@ func runLspd(cliCtx *cli.Context) error {
 			log.Fatal().Err(err).Msg("Invalid LSP_NOSTR_PRIVATE_KEY")
 		}
 
-		nostrTransport := notifications.NewNostrTransport(lspNostrPrivKey)
+		nostrTransport := notifications.NewNostrTransport(lspNostrPrivKey, allowLoopbackWebhooks)
 		notificationService.AddTransport(nostrTransport)
 		log.Info().Msg("Nostr notification transport enabled")
 	}
