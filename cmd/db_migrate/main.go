@@ -60,6 +60,9 @@ var expectedTables = []string{
 	// Offer listings (WP-25).
 	"offer_listings",
 	"listing_node_states",
+	// Token revocation denylist (#176). Carried across a migration so a jti
+	// revoked before its expiry stays revoked on the destination.
+	"revoked_tokens",
 }
 
 func main() {
@@ -285,6 +288,7 @@ func migrateDB(from, to *gorm.DB) error {
 		{"cash_order_payments", migrateTable[db.CashOrderPayment]},
 		{"offer_listings", migrateTable[db.OfferListing]},
 		{"listing_node_states", migrateTable[db.ListingNodeState]},
+		{"revoked_tokens", migrateTable[db.RevokedToken]},
 	} {
 		logger.Logger.Info().Msg("migrating " + step.name + "...")
 		if err := step.run(from, tx); err != nil {

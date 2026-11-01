@@ -492,6 +492,14 @@ audits of both.
 
 ### Fixed
 
+- Makes logout actually end a session and bounds token lifetime: logout now
+  revokes the token server-side through a jti denylist (so a single leaked
+  token can be killed without rotating the unlock password), and a token's
+  lifetime is capped at one year with a shorter default. (#176)
+- Stops a read-only token from escalating to full access through the app log:
+  `GET /api/log/*` now requires full access, bearer tokens are no longer written
+  to the request log, and the `?token=` query fallback is limited to the avatar
+  and event-stream routes that cannot send an Authorization header. (#176)
 - Scopes `cancel_hold_invoice` and `settle_hold_invoice` to the app that owns the
   hold invoice, so a `make_invoice`-scoped connection can no longer cancel or settle
   another app's accepted hold invoice by its public payment hash (NWC sandbox
