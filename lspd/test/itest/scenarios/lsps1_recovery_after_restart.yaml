@@ -1,0 +1,73 @@
+# F-1 regression scenario: settle an LSPS1 invoice, then kill flspd
+# (SIGKILL, simulating a crash) as close as possible to the window between
+# "payment settled" and "channel-open fully recorded". processSettledInvoice
+# commits the order's PAID state to the DB and then hands off to
+# openChannelForOrder *asynchronously* (settlement_service.go) -- and the
+# payer's own view of payment settlement (this scenario's pay_invoice step)
+# is driven directly by flnd, independent of flspd's own async subscription
+# processing, so killing flspd immediately after pay_invoice returns
+# reliably lands at or before that handoff completes, without needing
+# artificial delays or hooks into flspd itself.
+#
+# On restart, flspd's startup recovery sweep (recoverStuckOrders /
+# recoverSettledCreatedOrders) must bring the order to COMPLETED with
+# *exactly one new* channel -- not zero (order stuck) and not two (the F-1
+# bug: a duplicate channel-open racing the original in-flight one).
+# "new" matters because this devnet's chain/peer state is long-lived
+# across test runs (test/devnet/README.md): channels between lsp and
+# client from earlier, unrelated runs may already exist, so the check is
+# a before/after delta (count_channels + channel_count_delta), not an
+# absolute count.
+name: lsps1_recovery_after_restart
+description: >
+  Settle an LSPS1 order, kill flspd immediately after settlement, restart
+  it, and assert the startup recovery sweep brings the order to COMPLETED
+  with exactly one channel opened, not a duplicate.
+steps:
+  - auto_accept_channels:
+      as: client
+  - connect_peer:
+      from: client
+      to: lsp
+  - connect_peer:
+      from: payer
+      to: lsp
+  - open_channel:
+      from: payer
+      to: lsp
+      capacity_loki: 50000000
+      min_confs: 1
+  - mine_blocks:
+      count: 6
+  - count_channels:
+      as: lsp
+      peer: client
+      save_as: channels_before
+  - lsps1_create_order:
+      as: client
+      lsp: lsp
+      token: itest-token
+      lsp_balance_loki: 100000
+      client_balance_loki: 0
+      save_as: order1
+  - pay_invoice:
+      as: payer
+      invoice: order1
+      outgoing_channel_to: lsp
+      timeout_seconds: 60
+  - kill_lsp: {}
+  - restart_lsp: {}
+  - wait_for_lsps1_order_state:
+      as: client
+      lsp: lsp
+      order: order1
+      state: COMPLETED
+      timeout_seconds: 60
+assertions:
+  - channel_exists:
+      between: [lsp, client]
+  - channel_count_delta:
+      as: lsp
+      peer: client
+      since: channels_before
+      delta: 1
