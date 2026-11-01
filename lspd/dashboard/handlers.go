@@ -619,15 +619,58 @@ func (s *Handlers) handleListJitChannels(req *lsps.JsonRpcRequest) *lsps.JsonRpc
 	return lsps.NewJsonRpcResponse(req.Id, enrichedChannels)
 }
 
-// configSecretFields are the JSON keys of config.NodeConfig fields that
-// must never leave the server: the LSP's private key, client auth tokens,
-// and the LND connection block (which carries the macaroon and TLS cert).
-// See C-1 — the dashboard used to return the full NodeConfig, secrets
-// included, to any authenticated browser client.
-var configSecretFields = []string{"flspdPrivateKey", "tokens", "flnd"}
+// configSafeFields is the serialize ALLOWLIST for get_config: the JSON keys
+// of config.NodeConfig that are safe to return to the dashboard UI. Using an
+// allowlist is failsafe where the former denylist ({flspdPrivateKey, tokens,
+// flnd}) was fail-open — a newly added secret-bearing field serialized into
+// the response unless someone remembered to denylist it. With an allowlist,
+// any field not listed here (including a future secret) is dropped by default
+// (C-1 / FLSPD-0017 / R-LSP-CFGLEAK). The deliberately excluded secrets are
+// flspdPrivateKey, tokens, and the flnd block (LND macaroon + TLS cert).
+var configSafeFields = map[string]struct{}{
+	"name":                                 {},
+	"nodePubkey":                           {},
+	"host":                                 {},
+	"publicChannelAmount":                  {},
+	"targetConf":                           {},
+	"referenceFeeratePerVByte":             {},
+	"minConfs":                             {},
+	"minHtlcMloki":                         {},
+	"baseFeeMloki":                         {},
+	"feeRate":                              {},
+	"timeLockDelta":                        {},
+	"channelFeePermyriad":                  {},
+	"channelMinimumFeeMloki":               {},
+	"additionalChannelCapacity":            {},
+	"minChannelCapacityLoki":               {},
+	"maxInactiveDuration":                  {},
+	"notificationTimeout":                  {},
+	"minPaymentSizeMloki":                  {},
+	"jitMaxPaymentSizeMloki":               {},
+	"jitEnabled":                           {},
+	"jitMaxClientToSelfDelay":              {},
+	"jitValidUntilSeconds":                 {},
+	"jitMinChannelBalanceLoki":             {},
+	"lsps1MinRequiredChannelConfirmations": {},
+	"lsps1MinFundingConfirmsWithinBlocks":  {},
+	"lsps1SupportsZeroChannelReserve":      {},
+	"lsps1MaxChannelExpiryBlocks":          {},
+	"lsps1OrderExpirySeconds":              {},
+	"lsps1MinInitialClientBalanceLoki":     {},
+	"lsps1MaxInitialClientBalanceLoki":     {},
+	"lsps1MinInitialLspBalanceLoki":        {},
+	"lsps1MaxInitialLspBalanceLoki":        {},
+	"lsps1MinChannelBalanceLoki":           {},
+	"lsps1MaxChannelBalanceLoki":           {},
+	"profile":                              {},
+	"opening_fee":                          {},
+	"routing_fee":                          {},
+	"channel_size":                         {},
+	"announce":                             {},
+}
 
-// stripConfigSecrets returns cfg re-marshaled with configSecretFields
-// removed, safe to send to the dashboard UI.
+// stripConfigSecrets returns cfg re-marshaled down to the configSafeFields
+// allowlist, safe to send to the dashboard UI (C-1 / FLSPD-0017).
 func stripConfigSecrets(cfg *config.NodeConfig) (map[string]interface{}, error) {
 	raw, err := json.Marshal(cfg)
 	if err != nil {
@@ -637,10 +680,21 @@ func stripConfigSecrets(cfg *config.NodeConfig) (map[string]interface{}, error) 
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return nil, err
 	}
-	for _, field := range configSecretFields {
-		delete(m, field)
+	return filterToAllowlist(m), nil
+}
+
+// filterToAllowlist drops every key of m not in configSafeFields. Factored
+// out so a test can prove the failsafe property directly: a key the config
+// struct does not yet carry (a future secret field) is dropped rather than
+// serialized.
+func filterToAllowlist(m map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		if _, ok := configSafeFields[k]; ok {
+			out[k] = v
+		}
 	}
-	return m, nil
+	return out
 }
 
 func (s *Handlers) handleGetConfig(req *lsps.JsonRpcRequest) *lsps.JsonRpcResponse {
