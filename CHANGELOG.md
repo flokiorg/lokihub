@@ -492,6 +492,11 @@ audits of both.
 
 ### Fixed
 
+- Scopes `cancel_hold_invoice` and `settle_hold_invoice` to the app that owns the
+  hold invoice, so a `make_invoice`-scoped connection can no longer cancel or settle
+  another app's accepted hold invoice by its public payment hash (NWC sandbox
+  isolation, as `lookup_invoice` and `list_transactions` already enforce). A non-owner
+  now gets not-found. (#178)
 - Recomputes the step-3 unconfirmed-payout bound from the confirmed balance read under
   the commit lock, like the chain tip, so a block that confirmed or dropped funds between
   the quote and the commit cannot admit a payout against a stale higher balance (NIP-CASH
