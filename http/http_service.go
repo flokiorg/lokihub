@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -102,6 +103,19 @@ func (httpSvc *HttpService) Shutdown() {
 	})
 }
 
+// tokenQueryParamPattern matches a `token` query parameter and its value in a
+// request URI (either `?token=…` or `&token=…`), capturing the `?`/`&` and the
+// `token=` prefix so only the value is replaced.
+var tokenQueryParamPattern = regexp.MustCompile(`([?&]token=)[^&]*`)
+
+// redactTokenQueryParam replaces the value of any `token` query parameter with
+// a fixed marker, so a bearer token passed via the query-token fallback (the
+// avatar <img> and SSE EventSource routes) never reaches the request logger or
+// the on-disk access log (nwc.log).
+func redactTokenQueryParam(uri string) string {
+	return tokenQueryParamPattern.ReplaceAllString(uri, "${1}[REDACTED]")
+}
+
 func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	e.HideBanner = true
 
@@ -129,7 +143,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 		LogRequestID: true,
 		LogValuesFunc: func(c echo.Context, values middleware.RequestLoggerValues) error {
 			logger.HttpLogger.Info().
-				Str("uri", values.URI).
+				Str("uri", redactTokenQueryParam(values.URI)).
 				Int("status", values.Status).
 				Str("remote_ip", values.RemoteIP).
 				Str("user_agent", values.UserAgent).
@@ -184,8 +198,11 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	frontend.RegisterHandlers(e)
 
 	// restricted routes
-	// Configure middleware with the custom claims type
-	jwtConfig := echojwt.Config{
+	// Configure middleware with the custom claims type. The base config is
+	// shared; only the token lookup differs between the header-only variant
+	// (almost every route) and the query-token variant (the two routes below
+	// that cannot send an Authorization header).
+	baseJWTConfig := echojwt.Config{
 		NewClaimsFunc: func(c echo.Context) jwt.Claims {
 			return new(jwtCustomClaims)
 		},
@@ -197,20 +214,33 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 			}
 			return []byte(secret), nil
 		},
-		TokenLookup: "header:Authorization:Bearer ,query:token",
 	}
-	// Read-only API group - accessible to both full and readonly tokens
-	readOnlyApiGroup := e.Group("/api")
-	readOnlyApiGroup.Use(echojwt.WithConfig(jwtConfig))
+	// Header-only auth: no query-token fallback. A bearer token in the query
+	// string lands in the request logger and the on-disk access log (nwc.log),
+	// so it is only accepted on the avatar-proxy and SSE groups below, which
+	// genuinely cannot set a request header.
+	headerOnlyJWTConfig := baseJWTConfig
+	headerOnlyJWTConfig.TokenLookup = "header:Authorization:Bearer "
+	// Query-token fallback, bound ONLY to the avatar-proxy <img> and the SSE
+	// EventSource routes.
+	queryTokenJWTConfig := baseJWTConfig
+	queryTokenJWTConfig.TokenLookup = "header:Authorization:Bearer ,query:token"
 
-	// Avatar proxy — see avatar_proxy.go. Requires login: unlike the app
-	// store logos route, this one fetches an arbitrary caller-supplied URL
-	// server-side, so leaving it unauthenticated would let anyone who can
-	// reach this port use the backend as an open SSRF-probe against its own
-	// local network, no login required. <img> tags can't set an
-	// Authorization header, so the frontend passes the token via the
-	// query-param fallback (TokenLookup above) instead.
-	readOnlyApiGroup.GET("/circle/avatar-proxy", httpSvc.avatarProxyHandler)
+	// Read-only API group - accessible to both full and readonly tokens.
+	// Header-only: the only read-only route needing a query token is the
+	// avatar proxy, which gets its own group below.
+	readOnlyApiGroup := e.Group("/api")
+	readOnlyApiGroup.Use(echojwt.WithConfig(headerOnlyJWTConfig))
+
+	// Avatar proxy — read-only access, but served to an <img> that cannot set
+	// an Authorization header, so this one route keeps the query-token
+	// fallback (queryTokenJWTConfig). See avatar_proxy.go: it fetches an
+	// arbitrary caller-supplied URL server-side, so leaving it unauthenticated
+	// would let anyone who can reach this port use the backend as an open
+	// SSRF-probe against its own local network, no login required.
+	avatarProxyGroup := e.Group("/api")
+	avatarProxyGroup.Use(echojwt.WithConfig(queryTokenJWTConfig))
+	avatarProxyGroup.GET("/circle/avatar-proxy", httpSvc.avatarProxyHandler)
 
 	readOnlyApiGroup.GET("/apps", httpSvc.appsListHandler)
 	readOnlyApiGroup.GET("/apps/:pubkey", httpSvc.appsShowByPubkeyHandler)
@@ -229,7 +259,6 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	readOnlyApiGroup.GET("/transactions/:paymentHash", httpSvc.lookupTransactionHandler)
 	readOnlyApiGroup.GET("/balances", httpSvc.balancesHandler)
 	readOnlyApiGroup.GET("/mempool", httpSvc.mempoolApiHandler)
-	readOnlyApiGroup.GET("/log/:type", httpSvc.getLogOutputHandler)
 	readOnlyApiGroup.GET("/health", httpSvc.healthHandler)
 	readOnlyApiGroup.GET("/commands", httpSvc.getCustomNodeCommandsHandler)
 	readOnlyApiGroup.GET("/swaps", httpSvc.listSwapsHandler)
@@ -244,8 +273,13 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 
 	// Full access API group - requires a token with full permissions
 	fullAccessApiGroup := e.Group("/api")
-	fullAccessApiGroup.Use(echojwt.WithConfig(jwtConfig))
+	fullAccessApiGroup.Use(echojwt.WithConfig(headerOnlyJWTConfig))
 	fullAccessApiGroup.Use(httpSvc.requireFullAccess)
+
+	// The app log is the on-disk nwc.log tail: it can hold node internals and
+	// (historically) bearer tokens from query strings, so it is full-access
+	// only — a read-only token must not be able to read it.
+	fullAccessApiGroup.GET("/log/:type", httpSvc.getLogOutputHandler)
 
 	fullAccessApiGroup.POST("/api/event", httpSvc.eventHandler)
 	httpSvc.registerWithdrawRoutes(fullAccessApiGroup)
@@ -349,8 +383,14 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	// This must be accessible without auth as external LSPs will call it
 	e.POST("/api/lsps5/webhook-callback", httpSvc.lsps5WebhookCallbackHandler)
 
-	// SSE endpoint for LSPS events - requires auth to subscribe
-	fullAccessApiGroup.GET("/lsps5/events", httpSvc.lsps5EventsSSEHandler)
+	// SSE endpoint for LSPS events — full access, but consumed by an
+	// EventSource that cannot set an Authorization header, so it keeps the
+	// query-token fallback (queryTokenJWTConfig) that the rest of the
+	// full-access API does not.
+	fullAccessSSEGroup := e.Group("/api")
+	fullAccessSSEGroup.Use(echojwt.WithConfig(queryTokenJWTConfig))
+	fullAccessSSEGroup.Use(httpSvc.requireFullAccess)
+	fullAccessSSEGroup.GET("/lsps5/events", httpSvc.lsps5EventsSSEHandler)
 
 	httpSvc.lokiHttpSvc.RegisterSharedRoutes(readOnlyApiGroup, fullAccessApiGroup, e)
 }
