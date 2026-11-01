@@ -158,7 +158,7 @@ type API interface {
 	// Rejects the update if orderID's persisted LSPPubkey doesn't match
 	// lspPubkey — the caller (an LSPS5 webhook notification) only proves it
 	// controls lspPubkey, not that it's the LSP that actually owns this order.
-	UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, state string) error
+	UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, state, fundingOutpoint string) error
 	LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, error)
 
 	// LSP catalogue (NIP-LSP announcements, WP-26)
@@ -1497,6 +1497,10 @@ type LSPS2BuyResponse struct {
 	InterceptSCID   uint64 `json:"interceptScid,string"`
 	CLTVExpiryDelta uint16 `json:"cltvExpiryDelta"`
 	LSPNodeID       string `json:"lspNodeID"`
+	// ClientTrustsLSP surfaces the buy response's client_trusts_lsp flag so the
+	// UI can tell the user whether this JIT buy requires trusting the LSP with
+	// the incoming amount (no zero-conf) — LOKIHUB-0028.
+	ClientTrustsLSP bool `json:"clientTrustsLSP"`
 }
 
 // LSPS5

@@ -40,6 +40,12 @@ type InvoiceParametersReadyEvent struct {
 	CLTVExpiryDelta    uint16
 	PaymentSizeMloki   *uint64
 	LSPNodeID          string
+	// ClientTrustsLSP is the buy response's client_trusts_lsp flag: when true,
+	// this JIT buy is NOT zero-conf — the LSP opens the channel only after it
+	// receives the client's incoming HTLC, so the incoming amount is at risk
+	// if the LSP never opens/forwards. Carried through so the Hub/user can see
+	// the per-buy trust posture (LSPS2/BLIP-52 §lsps2.buy response).
+	ClientTrustsLSP bool
 }
 
 func (e *InvoiceParametersReadyEvent) EventType() string {
