@@ -565,6 +565,17 @@ type PrivateServedNonce struct {
 	NotAfter int64  `gorm:"not null;index"`
 }
 
+// RevokedToken is the jti of a session JWT invalidated before its own expiry —
+// by logout or an explicit single-token revocation. A stateless HS256 token
+// cannot otherwise be killed short of rotating the signing secret (which logs
+// out every session), so the jti is kept here until the token's ExpiresAt
+// passes, after which signature/expiry checks reject it regardless.
+type RevokedToken struct {
+	JTI       string `gorm:"primaryKey;size:64"`
+	ExpiresAt int64  `gorm:"not null;index"`
+	RevokedAt int64  `gorm:"not null"`
+}
+
 // CashConsumedProof marks a claim proof (kind 23198) as used, so a captured proof
 // cannot authorize a second redeem, transfer or consolidate (NIP-CASH §Claim
 // Proofs). Kept until well after the proof could pass the freshness check

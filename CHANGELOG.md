@@ -492,6 +492,10 @@ audits of both.
 
 ### Fixed
 
+- Makes logout actually end a session and bounds token lifetime: logout now
+  revokes the token server-side through a jti denylist (so a single leaked
+  token can be killed without rotating the unlock password), and a token's
+  lifetime is capped at one year with a shorter default.
 - Stops a read-only token from escalating to full access through the app log:
   `GET /api/log/*` now requires full access, bearer tokens are no longer written
   to the request log, and the `?token=` query fallback is limited to the avatar
