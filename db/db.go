@@ -108,11 +108,38 @@ func NewDBWithConfig(cfg *Config) (*gorm.DB, error) {
 		if err != nil {
 			return nil, err
 		}
+		if fileDB {
+			secureSqliteFile(cfg.URI)
+		}
 	}
 
 	logger.Logger.Debug().Str("db_backend", ret.Dialector.Name()).Msg("loaded database")
 
 	return ret, nil
+}
+
+// secureSqliteFile restricts the sqlite database file and its WAL/SHM/journal
+// sidecars to owner-only (0600). The DB holds key material — the encrypted
+// mnemonic, and on the env path the flnd admin macaroon — so it must not land at
+// the umask default (commonly 0644, group/other-readable). sqlite creates the
+// -wal/-shm sidecars with the database file's own permissions, so restricting
+// the main file keeps sidecars created later restricted too; any that already
+// exist are fixed here as well. Best effort: a chmod failure is logged, not
+// fatal, since the database is otherwise usable.
+func secureSqliteFile(uri string) {
+	path := uri
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path = path[:i]
+	}
+	path = strings.TrimPrefix(path, "file:")
+	if path == "" {
+		return
+	}
+	for _, p := range []string{path, path + "-wal", path + "-shm", path + "-journal"} {
+		if err := os.Chmod(p, 0600); err != nil && !os.IsNotExist(err) {
+			logger.Logger.Warn().Err(err).Str("path", p).Msg("Failed to restrict sqlite file permissions")
+		}
+	}
 }
 
 func newSqliteDB(sqliteConfig sqlite.Config, gormConfig *gorm.Config) (*gorm.DB, error) {
