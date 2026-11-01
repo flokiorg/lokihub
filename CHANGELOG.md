@@ -492,6 +492,10 @@ audits of both.
 
 ### Fixed
 
+- Stops a read-only token from escalating to full access through the app log:
+  `GET /api/log/*` now requires full access, bearer tokens are no longer written
+  to the request log, and the `?token=` query fallback is limited to the avatar
+  and event-stream routes that cannot send an Authorization header.
 - Scopes `cancel_hold_invoice` and `settle_hold_invoice` to the app that owns the
   hold invoice, so a `make_invoice`-scoped connection can no longer cancel or settle
   another app's accepted hold invoice by its public payment hash (NWC sandbox
