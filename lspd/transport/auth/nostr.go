@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -57,6 +58,35 @@ func checkAndRecordReplay(eventID string, nowUnix int64) error {
 	return nil
 }
 
+// ReplayStore remembers NIP-98 auth event ids so a captured event cannot be
+// replayed within its freshness window. The in-memory default (memReplayStore)
+// is per-process, so it cannot stop a replay against a freshly restarted
+// process (empty map) or a second replica (its own map); a durable, shared
+// implementation -- e.g. a DB, mirroring the NIP-CASH served-nonce store --
+// closes that gap, which matters once the Hub fronts lspd or it scales out
+// (FLSPD-0016 / R-LSP-NIP98REPLAY).
+//
+// It must be fail-closed: a backend that cannot answer has to reject (return
+// an error), never admit.
+type ReplayStore interface {
+	// CheckAndRecord records eventID as used at nowUnix and returns an error
+	// if it was already used (a replay) or could not be recorded.
+	CheckAndRecord(ctx context.Context, eventID string, nowUnix int64) error
+}
+
+// memReplayStore is the per-process in-memory fallback used when
+// Options.ReplayStore is nil (tests, or a single-process deployment). It
+// wraps the package-global seenEvents cache.
+type memReplayStore struct{}
+
+func (memReplayStore) CheckAndRecord(_ context.Context, eventID string, nowUnix int64) error {
+	return checkAndRecordReplay(eventID, nowUnix)
+}
+
+// defaultReplayStore backs replay protection when Options.ReplayStore is nil.
+// Production wires a durable, shared store (see postgres.Nip98ReplayStore).
+var defaultReplayStore ReplayStore = memReplayStore{}
+
 // DefaultMaxBodyBytes caps the body read for the payload hash when Options
 // sets no cap; dashboard JSON-RPC requests are a few KiB.
 const DefaultMaxBodyBytes int64 = 1 << 20
@@ -80,6 +110,11 @@ type Options struct {
 	// Only browser WebSocket upgrades need it, since they cannot set headers;
 	// elsewhere it would put tokens in proxy logs.
 	AllowQueryToken bool
+	// ReplayStore records used event ids for replay protection. When nil, the
+	// per-process in-memory default is used; production should set a durable,
+	// shared store so a captured event cannot be replayed across a restart or
+	// a second replica (FLSPD-0016).
+	ReplayStore ReplayStore
 }
 
 // NostrAuth represents the authenticated session
@@ -218,8 +253,14 @@ func VerifyNostrAuth(r *http.Request, opts Options) (*NostrAuth, error) {
 
 	// 7. Verify this exact event hasn't been used before (replay
 	// protection). GetID() recomputes the ID from the signed content, so it
-	// can't be spoofed by the client.
-	if err := checkAndRecordReplay(event.GetID(), now); err != nil {
+	// can't be spoofed by the client. The store is consulted only once every
+	// other check passed, so a token sent with a wrong URL or body is not
+	// recorded (and so cannot be burnt for the real request).
+	store := opts.ReplayStore
+	if store == nil {
+		store = defaultReplayStore
+	}
+	if err := store.CheckAndRecord(r.Context(), event.GetID(), now); err != nil {
 		return nil, err
 	}
 
