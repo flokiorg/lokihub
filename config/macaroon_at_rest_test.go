@@ -19,12 +19,15 @@ func newMacaroonTestConfig(t *testing.T, appCfg *AppConfig) *config {
 	t.Helper()
 	logger.Init(strconv.Itoa(4))
 
-	gdb, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, migrations.Migrate(gdb))
 	if appCfg.Workdir == "" {
 		appCfg.Workdir = t.TempDir()
 	}
+	// A private on-disk DB per test: the package's other tests share one named
+	// in-memory cache, and writing unlock/macaroon rows into it would leak
+	// across tests.
+	gdb, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "config-test.db")), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, migrations.Migrate(gdb))
 	cfg, err := NewConfig(appCfg, gdb)
 	require.NoError(t, err)
 	return cfg

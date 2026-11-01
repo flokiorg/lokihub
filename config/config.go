@@ -36,6 +36,9 @@ type config struct {
 	// leaving every token already signed with the loser's secret silently
 	// invalid.
 	jwtSecretMutex sync.Mutex
+	// autoUnlockKeyMu serialises first-time creation of the host-local
+	// auto-unlock key file (config/autounlock.go).
+	autoUnlockKeyMu sync.Mutex
 }
 
 const (
@@ -524,13 +527,48 @@ func (cfg *config) SetAutoUnlockPassword(unlockPassword string) error {
 		return errors.New("incorrect password")
 	}
 
-	err := cfg.SetUpdate("AutoUnlockPassword", unlockPassword, "")
-	if err != nil {
+	if err := cfg.storeAutoUnlockPassword(unlockPassword); err != nil {
 		logger.Logger.Error().Err(err).Msg("failed to update auto unlock password")
 		return err
 	}
 
 	return nil
+}
+
+// storeAutoUnlockPassword encrypts the auto-unlock password at rest under the
+// host-local key (config/autounlock.go) before persisting it. An empty value
+// (auto-unlock disabled) is stored as-is so presence checks still see "".
+func (cfg *config) storeAutoUnlockPassword(unlockPassword string) error {
+	stored, err := cfg.encryptAutoUnlock(unlockPassword)
+	if err != nil {
+		return err
+	}
+	return cfg.SetUpdate("AutoUnlockPassword", stored, "")
+}
+
+// GetAutoUnlockPassword returns the plaintext auto-unlock password, decrypting
+// the at-rest value. A legacy cleartext value (stored before encryption was
+// added) is returned as-is and migrated to an encrypted value in place.
+func (cfg *config) GetAutoUnlockPassword() (string, error) {
+	stored, err := cfg.Get("AutoUnlockPassword", "")
+	if err != nil {
+		return "", err
+	}
+	if stored == "" {
+		return "", nil
+	}
+	if !isEncryptedAutoUnlock(stored) {
+		// Legacy cleartext: migrate to encrypted at rest, but still return the
+		// plaintext so auto-unlock keeps working even if the migration write
+		// fails.
+		if migErr := cfg.storeAutoUnlockPassword(stored); migErr != nil {
+			logger.Logger.Error().Err(migErr).Msg("Failed to migrate auto-unlock password to encrypted storage")
+		} else {
+			logger.Logger.Info().Msg("Migrated the auto-unlock password to encrypted storage")
+		}
+		return stored, nil
+	}
+	return cfg.decryptAutoUnlock(stored)
 }
 
 func (cfg *config) CheckUnlockPassword(encryptionKey string) bool {
