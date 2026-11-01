@@ -1,0 +1,181 @@
+# FLSPD Nodes Configuration -- production/wumbo-scale template.
+# This file contains the configuration for the LSP nodes.
+# It is a YAML list of node configurations.
+#
+# This variant targets a public deploy/docker-compose.prod.yml deployment:
+# a real, internet-reachable host and wumbo-scale channel/payment limits.
+# For the local dev stack (`just docker up`) see nodes.dev.sample.yaml
+# instead -- the two differ in host, channel_size ceiling, and
+# jitMaxPaymentSizeMloki; everything else (fee model, secret handling) is
+# identical.
+
+- # --- Identity & Connection ---
+  # Name of the LSP. If empty, the node's alias will be taken instead.
+  # The name is returned in the ChannelInformation api endpoint as a friendly name.
+  name: "FLSP"
+
+  # The public key of the lightning node. If empty, the node's pubkey will be taken instead.
+  # The pubkey is returned in the ChannelInformation api endpoint so clients can connect to the node.
+  nodePubkey: "REPLACE_WITH_PUBKEY"
+
+  # Hex encoded private key of the LSP. This is used to decrypt traffic from clients.
+  # Note this is not the private key of the node itself, but a separate key for the LSP service.
+  # Generate one with `flspd genkey`. Provide it either inline (a plain hex
+  # string — don't commit a real one to version control), or by reference so
+  # nothing secret ever needs to land in this file:
+  #   flspdPrivateKey: {from_env: FLSPD_PRIVATE_KEY}
+  #   flspdPrivateKey: {from_file: /run/secrets/flspd_private_key}
+  flspdPrivateKey: {from_env: FLSPD_PRIVATE_KEY}
+
+  # Tokens used to authenticate to flspd. These tokens must be unique for each
+  # configured node, so it's obvious which node an RPC call is meant for.
+  tokens:
+    - "REPLACE_WITH_TOKEN"
+
+  # The network location of the lightning node, reachable by LN clients,
+  # e.g. `lsp.example.com:9735` or a public IP.
+  host: "REPLACE_WITH_PUBLIC_HOST:5521"
+
+  # Configuration for connecting to the LND node.
+  flnd:
+    # Address to the grpc api. "flnd" resolves via the compose network
+    # (see deploy/docker-compose.prod.yml) -- not the same thing as `host`
+    # above, which is what LN clients dial.
+    address: "flnd:10005"
+
+    # Disable TLS verification (useful for testing/internal networks).
+    # docker-compose.prod.yml publishes flnd's grpc port (10005) on the
+    # host, so leave this false unless that port is firewalled off from
+    # the public internet -- an admin macaroon over an unencrypted,
+    # internet-reachable channel is a real credential-theft risk.
+    disableTls: false
+
+    # TLS certificate for the grpc api. Provide it inline (hex-encoded PEM —
+    # don't commit a real one), or by reference: from_file can point
+    # directly at flnd's own tls.cert (raw bytes are hex-encoded
+    # automatically), or from_env if you'd rather inject it as hex.
+    #   cert: {from_file: /root/.flnd/tls.cert}
+    #   cert: {from_env: FLND_CERT_HEX}
+    cert: {from_file: /root/.flnd/tls.cert}
+
+    # Macaroon to use. Same options as cert above — from_file can point
+    # directly at flnd's own *.macaroon file.
+    #   macaroon: {from_file: /root/.flnd/data/chain/flokicoin/mainnet/admin.macaroon}
+    #   macaroon: {from_env: FLND_MACAROON_HEX}
+    macaroon: {from_file: /root/.flnd/data/chain/flokicoin/mainnet/admin.macaroon}
+
+  # --- General Opening Policy ---
+  # Public channel amount is a reserved amount for public channels.
+  publicChannelAmount: 0
+
+  # Risk-tolerance preset (conservative|balanced|aggressive), expanding to
+  # a confirmation/CLTV-delta/expiry-duration bundle (minConfs, targetConf,
+  # timeLockDelta, maxInactiveDuration, lsps1OrderExpirySeconds,
+  # jitValidUntilSeconds). Every one of those remains individually
+  # overridable — set it directly below the profile line to override just
+  # that one field, e.g. `timeLockDelta: 800`. `aggressive` trades safety
+  # margin for UX (0-conf JIT) and may suit a production LSP competing on
+  # speed; `balanced` is the safer default shown here.
+  profile: balanced
+
+  # The maximum time to hold a htlc after sending a notification when the peer is offline.
+  notificationTimeout: "1m"
+
+  # Unified channel-opening fee: rate_percent (e.g. 0.4 = 0.4%) plus a
+  # floor in loki. Replaces the old channelFeePermyriad/channelMinimumFeeMloki
+  # pair — same math, human units.
+  opening_fee:
+    rate_percent: 0.4
+    min_loki: 1
+
+  # Unified channel-size bounds: min/max apply to both LSPS1's and JIT's
+  # channel-balance range (as well as the general network floor); padding
+  # is the headroom added on top of the incoming payment for a JIT open.
+  # Replaces minChannelCapacityLoki, additionalChannelCapacity,
+  # jitMinChannelBalanceLoki, and lsps1{Min,Max}ChannelBalanceLoki.
+  # max_loki here is wumbo scale (1,000,000 FLC) -- size to your own
+  # liquidity, this is a ceiling, not a target.
+  channel_size:
+    min_loki: 20_000
+    max_loki: 100_000_000_000_000
+    padding_loki: 100_000
+
+  # Advertised routing fee (ppm + a flat per-forward fee in loki). Not
+  # enforced by flspd — the channel's actual routing fee is configured on
+  # flnd itself — this only controls what's reported to clients. Replaces
+  # feeRate/baseFeeMloki.
+  routing_fee:
+    ppm: 1
+    base_loki: 1
+
+  # Smallest HTLC amount in milliloki routed over channels.
+  minHtlcMloki: 600
+
+  # --- JIT (LSPS2) Business Rules ---
+  # If true, enables JIT channels to override MinConfs to 0 (implicit zero conf).
+  jitEnabled: true
+
+  # Minimum payment size in milliloki allowed for JIT channels.
+  minPaymentSizeMloki: 1_000
+
+  # Maximum payment size in milliloki allowed for JIT channels. Wumbo
+  # scale (1,000,000 FLC) to match channel_size.max_loki above.
+  jitMaxPaymentSizeMloki: 100_000_000_000_000_000
+
+  # Maximum client CLTV delay for JIT channels (optional, default 10000).
+  jitMaxClientToSelfDelay: 10_000
+
+  # --- Manual Orders (LSPS1) Business Rules ---
+  # Minimum required channel confirmations for LSPS1 orders.
+  lsps1MinRequiredChannelConfirmations: 0
+
+  # Minimum funding confirms within blocks for LSPS1 orders.
+  lsps1MinFundingConfirmsWithinBlocks: 1
+
+  # Supports zero channel reserve for LSPS1 orders.
+  lsps1SupportsZeroChannelReserve: true
+
+  # Maximum channel expiry in blocks.
+  lsps1MaxChannelExpiryBlocks: 201_600
+
+  # lsps1{Min,Max}InitialClientBalanceLoki and
+  # lsps1{Min,Max}InitialLspBalanceLoki (how a channel's capacity is split
+  # at open, distinct from channel_size's overall capacity bounds above)
+  # aren't part of channel_size — their max derives from channel_size's
+  # max_loki automatically, and their min defaults to 0. Override
+  # individually if a deployment needs something else, e.g. requiring the
+  # LSP side to start with at least 1 loki:
+  # lsps1MinInitialLspBalanceLoki: 1
+
+  # --- NIP-LSP announcement (kind 10735) ---
+  # Publishes this node's LSPS offer on Nostr, signed by the node key. Off
+  # by default. Needs NOSTR_ANNOUNCE_RELAYS and a flnd macaroon that may call
+  # signrpc SignMessage. admin.macaroon may, but its signer:generate also
+  # allows SignOutputRaw, ComputeInputScript and MuSig2, so flspd's "sign
+  # only kind 10735" rule is then a check in flspd, not a limit flnd
+  # enforces. Prefer a macaroon baked with the permissions flspd already
+  # uses plus the single method, without signer:generate or macaroon:*:
+  #   flncli bakemacaroon --save_to=flspd.macaroon \
+  #     info:read onchain:read onchain:write offchain:read offchain:write \
+  #     address:read address:write message:read message:write \
+  #     peers:read peers:write invoices:read invoices:write \
+  #     uri:/signrpc.Signer/SignMessage
+  # Every LSPS value announced
+  # (protocols, LSPS1 options, the LSPS2 fee menu, LSPS5 max_webhooks) comes
+  # from the live LSPS answers, never from here.
+  # announce:
+  #   enabled: true
+  #   title: "My LSP"                     # at most 40 characters, one line
+  #   content: "Inbound and JIT channels." # at most 280 characters
+  #   website: https://lsp.example.com    # https only
+  #   image: https://lsp.example.com/logo.png
+  #   operator:
+  #     pubkey: <64-hex or npub>
+  #     relay: wss://relay.example.com    # required with pubkey
+  #   languages: [en]
+  #   # Announced exactly as listed, in this order; at least one. host:port
+  #   # with an IPv4, a bracketed IPv6 or a v3 onion host. host above is not
+  #   # added. An onion-only list keeps the node's location private.
+  #   addrs:
+  #     - <56 base32 characters>.onion:9735
+  #     - 203.0.113.7:9735
