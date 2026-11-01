@@ -2,12 +2,14 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -57,6 +59,35 @@ func checkAndRecordReplay(eventID string, nowUnix int64) error {
 	return nil
 }
 
+// ReplayStore remembers NIP-98 auth event ids so a captured event cannot be
+// replayed within its freshness window. The in-memory default (memReplayStore)
+// is per-process, so it cannot stop a replay against a freshly restarted
+// process (empty map) or a second replica (its own map); a durable, shared
+// implementation -- e.g. a DB, mirroring the NIP-CASH served-nonce store --
+// closes that gap, which matters once the Hub fronts lspd or it scales out
+// (FLSPD-0016 / R-LSP-NIP98REPLAY).
+//
+// It must be fail-closed: a backend that cannot answer has to reject (return
+// an error), never admit.
+type ReplayStore interface {
+	// CheckAndRecord records eventID as used at nowUnix and returns an error
+	// if it was already used (a replay) or could not be recorded.
+	CheckAndRecord(ctx context.Context, eventID string, nowUnix int64) error
+}
+
+// memReplayStore is the per-process in-memory fallback used when
+// Options.ReplayStore is nil (tests, or a single-process deployment). It
+// wraps the package-global seenEvents cache.
+type memReplayStore struct{}
+
+func (memReplayStore) CheckAndRecord(_ context.Context, eventID string, nowUnix int64) error {
+	return checkAndRecordReplay(eventID, nowUnix)
+}
+
+// defaultReplayStore backs replay protection when Options.ReplayStore is nil.
+// Production wires a durable, shared store (see postgres.Nip98ReplayStore).
+var defaultReplayStore ReplayStore = memReplayStore{}
+
 // DefaultMaxBodyBytes caps the body read for the payload hash when Options
 // sets no cap; dashboard JSON-RPC requests are a few KiB.
 const DefaultMaxBodyBytes int64 = 1 << 20
@@ -80,6 +111,73 @@ type Options struct {
 	// Only browser WebSocket upgrades need it, since they cannot set headers;
 	// elsewhere it would put tokens in proxy logs.
 	AllowQueryToken bool
+	// ReplayStore records used event ids for replay protection. When nil, the
+	// per-process in-memory default is used; production should set a durable,
+	// shared store so a captured event cannot be replayed across a restart or
+	// a second replica (FLSPD-0016).
+	ReplayStore ReplayStore
+	// ExpectedHost, when set, is the authoritative public host used to build
+	// the URL the NIP-98 'u' tag is matched against; any forwarded Host header
+	// is ignored. ExpectedScheme pins the scheme ("http"/"https") the same
+	// way. Pinning makes the 'u'-tag binding independent of attacker-settable
+	// headers (A4-FL-3).
+	ExpectedHost   string
+	ExpectedScheme string
+	// TrustedProxies are the networks whose X-Forwarded-*/X-Original-* headers
+	// are honored. A request whose immediate peer (RemoteAddr) is not in this
+	// set has those headers ignored, so a client talking to lspd directly
+	// cannot forge the host/scheme/prefix the 'u' tag is checked against
+	// (A4-FL-3). Empty: no proxy is trusted.
+	TrustedProxies []*net.IPNet
+}
+
+// ParseTrustedProxies turns CIDRs or bare IPs into the networks for
+// Options.TrustedProxies. A bare IP becomes a /32 (IPv4) or /128 (IPv6).
+// Blank entries are skipped.
+func ParseTrustedProxies(entries []string) ([]*net.IPNet, error) {
+	var nets []*net.IPNet
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		if _, n, err := net.ParseCIDR(e); err == nil {
+			nets = append(nets, n)
+			continue
+		}
+		ip := net.ParseIP(e)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid trusted proxy %q: not a CIDR or IP", e)
+		}
+		bits := 32
+		if ip.To4() == nil {
+			bits = 128
+		}
+		nets = append(nets, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
+	}
+	return nets, nil
+}
+
+// remoteIsTrustedProxy reports whether r's immediate peer (RemoteAddr) is in
+// the trusted-proxy set; only then are forwarded headers honored.
+func remoteIsTrustedProxy(r *http.Request, trusted []*net.IPNet) bool {
+	if len(trusted) == 0 {
+		return false
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr // may already be a bare IP
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, n := range trusted {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // NostrAuth represents the authenticated session
@@ -141,7 +239,7 @@ func VerifyNostrAuth(r *http.Request, opts Options) (*NostrAuth, error) {
 
 	// 4. Verify URL and Method
 	var urlOk, methodOk bool
-	fullUrl := getFullUrl(r)
+	fullUrl := getFullUrl(r, opts)
 
 	for _, tag := range event.Tags {
 		if len(tag) < 2 {
@@ -218,8 +316,14 @@ func VerifyNostrAuth(r *http.Request, opts Options) (*NostrAuth, error) {
 
 	// 7. Verify this exact event hasn't been used before (replay
 	// protection). GetID() recomputes the ID from the signed content, so it
-	// can't be spoofed by the client.
-	if err := checkAndRecordReplay(event.GetID(), now); err != nil {
+	// can't be spoofed by the client. The store is consulted only once every
+	// other check passed, so a token sent with a wrong URL or body is not
+	// recorded (and so cannot be burnt for the real request).
+	store := opts.ReplayStore
+	if store == nil {
+		store = defaultReplayStore
+	}
+	if err := store.CheckAndRecord(r.Context(), event.GetID(), now); err != nil {
 		return nil, err
 	}
 
@@ -245,39 +349,58 @@ func queryToken(r *http.Request) string {
 	return vals.Get("auth")
 }
 
-func getFullUrl(r *http.Request) string {
+// getFullUrl derives the public request URL that the NIP-98 'u' tag is
+// matched against. Forwarded headers (X-Forwarded-*, X-Original-*) are
+// attacker-settable unless a trusted proxy put them there, so they are
+// honored only when the request's immediate peer is in opts.TrustedProxies;
+// a pinned opts.ExpectedHost/ExpectedScheme always wins. A client talking to
+// lspd directly therefore cannot forge the host/scheme/prefix the 'u' tag is
+// checked against (A4-FL-3).
+func getFullUrl(r *http.Request, opts Options) string {
+	trusted := remoteIsTrustedProxy(r, opts.TrustedProxies)
+
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
-
-	// Respect common proxy/load balancer forwarded headers
-	if xForwardedProto := r.Header.Get("X-Forwarded-Proto"); xForwardedProto != "" {
-		scheme = xForwardedProto
-	} else if xForwardedSsl := r.Header.Get("X-Forwarded-Ssl"); xForwardedSsl == "on" {
-		scheme = "https"
-	} else if r.Header.Get("Front-End-Https") == "on" || r.Header.Get("X-Forwarded-Protocol") == "https" {
-		scheme = "https"
+	if trusted {
+		// Respect common proxy/load balancer forwarded headers.
+		if xForwardedProto := r.Header.Get("X-Forwarded-Proto"); xForwardedProto != "" {
+			scheme = xForwardedProto
+		} else if xForwardedSsl := r.Header.Get("X-Forwarded-Ssl"); xForwardedSsl == "on" {
+			scheme = "https"
+		} else if r.Header.Get("Front-End-Https") == "on" || r.Header.Get("X-Forwarded-Protocol") == "https" {
+			scheme = "https"
+		}
+		// Prefer our custom X-Original-Proto if set by the Cloudflare Worker.
+		if xOrigProto := r.Header.Get("X-Original-Proto"); xOrigProto != "" {
+			scheme = xOrigProto
+		}
 	}
-
-	// Prefer our custom X-Original-Proto if set by the Cloudflare Worker
-	if xOrigProto := r.Header.Get("X-Original-Proto"); xOrigProto != "" {
-		scheme = xOrigProto
+	if opts.ExpectedScheme != "" {
+		scheme = opts.ExpectedScheme
 	}
 
 	host := r.Host
-	if xForwardedHost := r.Header.Get("X-Forwarded-Host"); xForwardedHost != "" {
-		host = xForwardedHost
+	if trusted {
+		if xForwardedHost := r.Header.Get("X-Forwarded-Host"); xForwardedHost != "" {
+			host = xForwardedHost
+		}
+		// Prefer our custom X-Original-Host if set by the Cloudflare Worker.
+		if xOrigHost := r.Header.Get("X-Original-Host"); xOrigHost != "" {
+			host = xOrigHost
+		}
 	}
-	// Prefer our custom X-Original-Host if set by the Cloudflare Worker
-	if xOrigHost := r.Header.Get("X-Original-Host"); xOrigHost != "" {
-		host = xOrigHost
+	if opts.ExpectedHost != "" {
+		host = opts.ExpectedHost
 	}
 
 	path := r.URL.Path
-	// Traefik appends X-Forwarded-Prefix when using stripprefix (e.g. /dashboard)
-	if xForwardedPrefix := r.Header.Get("X-Forwarded-Prefix"); xForwardedPrefix != "" {
-		path = xForwardedPrefix + path
+	if trusted {
+		// Traefik appends X-Forwarded-Prefix when using stripprefix (e.g. /dashboard).
+		if xForwardedPrefix := r.Header.Get("X-Forwarded-Prefix"); xForwardedPrefix != "" {
+			path = xForwardedPrefix + path
+		}
 	}
 
 	// Normalize WS/WSS to HTTP/HTTPS for signature comparison

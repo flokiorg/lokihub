@@ -9,6 +9,7 @@ package dashboard
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -58,6 +59,14 @@ type Server struct {
 	handlers     Router
 	hub          *Hub
 	nodesService ports.NodesService
+	replayStore  auth.ReplayStore // nil -> auth's per-process in-memory default
+
+	// Proxy trust for the NIP-98 'u'-tag binding (A4-FL-3): forwarded headers
+	// are honored only from trustedProxies, and expectedHost/expectedScheme
+	// pin the public origin when set.
+	expectedHost   string
+	expectedScheme string
+	trustedProxies []*net.IPNet
 }
 
 func NewServer(adminPubKey string, handlers Router, nodesService ports.NodesService) *Server {
@@ -69,6 +78,25 @@ func NewServer(adminPubKey string, handlers Router, nodesService ports.NodesServ
 	}
 	go s.hub.Run()
 	return s
+}
+
+// SetReplayStore backs NIP-98 replay protection with a durable, shared store
+// so a captured auth event cannot be replayed across a process restart or a
+// second replica (FLSPD-0016). Call it during startup, before serving. When
+// unset, auth falls back to its per-process in-memory cache.
+func (s *Server) SetReplayStore(store auth.ReplayStore) {
+	s.replayStore = store
+}
+
+// SetProxyTrust pins the public origin of the dashboard and the set of
+// proxies whose forwarded headers may be honored when deriving the NIP-98
+// 'u'-tag URL (A4-FL-3). expectedHost/expectedScheme may be empty to leave
+// that part unpinned; trustedProxies may be nil to trust no proxy (forwarded
+// headers ignored). Call during startup, before serving.
+func (s *Server) SetProxyTrust(expectedHost, expectedScheme string, trustedProxies []*net.IPNet) {
+	s.expectedHost = expectedHost
+	s.expectedScheme = expectedScheme
+	s.trustedProxies = trustedProxies
 }
 
 // Hub maintains the set of active clients and broadcasts messages to the clients.
@@ -277,6 +305,10 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, allowQueryTok
 		PubKey:          s.adminPubKey,
 		MaxBodyBytes:    MaxRequestBodyBytes,
 		AllowQueryToken: allowQueryToken,
+		ReplayStore:     s.replayStore,
+		ExpectedHost:    s.expectedHost,
+		ExpectedScheme:  s.expectedScheme,
+		TrustedProxies:  s.trustedProxies,
 	})
 	switch {
 	case err == nil:

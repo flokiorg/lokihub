@@ -53,14 +53,50 @@ func ValidateWebhookUrl(rawUrl string, allowLoopbackHTTP bool) error {
 }
 
 // IsPrivateIP reports whether ip is an address a webhook must never reach:
-// loopback, unspecified, link-local, or a private (RFC 1918 / ULA) range.
+// loopback, unspecified, link-local, a private (RFC 1918 / ULA) range, or one
+// of the special-use ranges in specialUseRanges (CGNAT, NAT64, etc.).
 func IsPrivateIP(ip net.IP) bool {
 	return isPrivateIP(ip)
 }
 
+// specialUseRanges are non-public IPv4/IPv6 ranges a webhook or relay must
+// never reach, beyond the loopback/link-local/RFC1918/ULA checks in
+// isPrivateIP. Several are routable-internal on cloud/k8s fabrics -- CGNAT
+// 100.64.0.0/10 is the common pod/service range on EKS/GKE -- so an SSRF gate
+// that omits them lets a client-supplied host resolve into the LSP's own
+// network (FLSPD-0012 / R-LSP-7). Go's net.IP.IsPrivate() shares the CGNAT
+// gap, so these are checked explicitly.
+var specialUseRanges = func() []*net.IPNet {
+	cidrs := []string{
+		"0.0.0.0/8",     // "this host on this network" (RFC 1122 §3.2.1.3)
+		"100.64.0.0/10", // CGNAT / shared address space (RFC 6598)
+		"192.0.0.0/24",  // IETF protocol assignments (RFC 6890)
+		"198.18.0.0/15", // benchmarking (RFC 2544)
+		"64:ff9b::/96",  // IPv6 NAT64 well-known prefix (RFC 6052)
+	}
+	nets := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		_, n, err := net.ParseCIDR(c)
+		if err != nil {
+			panic("common: invalid special-use CIDR " + c + ": " + err.Error())
+		}
+		nets = append(nets, n)
+	}
+	return nets
+}()
+
 func isPrivateIP(ip net.IP) bool {
 	if ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
 		return true
+	}
+
+	// Special-use ranges (CGNAT, 0/8, NAT64, ...) that are not public but are
+	// missed by the IsPrivate-style checks. net.IPNet.Contains normalizes
+	// IPv4/IPv6, so this covers both families.
+	for _, n := range specialUseRanges {
+		if n.Contains(ip) {
+			return true
+		}
 	}
 
 	// IPv4 Private Ranges

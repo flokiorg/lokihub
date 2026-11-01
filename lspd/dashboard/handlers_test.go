@@ -828,6 +828,27 @@ func TestHandleUpdateConfig_AnnounceChecks(t *testing.T) {
 	assert.Equal(t, addrs, node.NodeConfig.Load().Announce.Addrs)
 }
 
+// TestStripConfigSecrets_AllowlistDropsUnknownField is the FLSPD-0017 /
+// R-LSP-CFGLEAK regression: get_config serializes only a known-safe
+// allowlist, so a config key the allowlist doesn't know about -- e.g. a
+// secret added by a later change -- is dropped by default instead of leaking,
+// which the former hand-maintained denylist would have let through.
+func TestStripConfigSecrets_AllowlistDropsUnknownField(t *testing.T) {
+	in := map[string]interface{}{
+		"name":              "n1",              // allowlisted safe field
+		"host":              "example:9735",    // allowlisted safe field
+		"futureSecretToken": "should-not-leak", // not in the allowlist
+		"flspdPrivateKey":   "deadbeef",        // deliberately excluded secret
+	}
+
+	out := filterToAllowlist(in)
+
+	assert.Contains(t, out, "name", "allowlisted field must survive")
+	assert.Contains(t, out, "host", "allowlisted field must survive")
+	assert.NotContains(t, out, "futureSecretToken", "a field outside the allowlist must not be serialized")
+	assert.NotContains(t, out, "flspdPrivateKey", "excluded secret must not be serialized")
+}
+
 func TestHandleGetConfig_AnnounceRelays(t *testing.T) {
 	mockNodes := new(MockNodesService)
 	mockNodes.On("GetNodes").Return([]*core.Node{announceTestNode()})

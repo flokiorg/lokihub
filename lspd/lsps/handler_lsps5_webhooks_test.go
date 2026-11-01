@@ -3,6 +3,7 @@ package lsps
 import (
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/flokiorg/lokihub/lspd/core"
@@ -10,6 +11,20 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+// nostrWebhookURI builds a nostr+lsps5:// webhook with the given relay URLs,
+// using a syntactically valid (64-char) recipient pubkey.
+func nostrWebhookURI(relays ...string) string {
+	uri := "nostr+lsps5://" + strings.Repeat("a", 64)
+	for i, r := range relays {
+		sep := "&"
+		if i == 0 {
+			sep = "?"
+		}
+		uri += sep + "relay=" + r
+	}
+	return uri
+}
 
 func newLsps5TestServer(cfg Config, mockOS *MockOpeningService, mockNotif *MockNotificationService) *Handlers {
 	return NewHandlers(cfg, new(MockLndClient), new(MockNodesService), mockOS, new(MockLiquidityManager), mockNotif, nil)
@@ -100,6 +115,49 @@ func TestHandleLsps5SetWebhook_NostrInvalidUri(t *testing.T) {
 	resp := server.handleLsps5SetWebhook(req, testPeerBytes)
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, Lsps5ErrorUrlParseError, resp.Error.Code)
+}
+
+// TestHandleLsps5SetWebhook_NostrPrivateRelayRejected is the registration
+// half of the nostr SSRF fix (FLSPD-0011 / R-LSP-6): the nostr branch used to
+// validate only the URI syntax, so a peer could register a webhook whose
+// relay= pointed at an internal host and make the LSP dial it. The relay
+// address policy must now reject such a relay, before any store write or
+// outbound delivery.
+func TestHandleLsps5SetWebhook_NostrPrivateRelayRejected(t *testing.T) {
+	mockOS := new(MockOpeningService)
+	mockNotif := new(MockNotificationService)
+	server := newLsps5TestServer(Config{EnableLsps5Nostr: true, Lsps5MaxWebhooks: 10}, mockOS, mockNotif)
+	// cloud-metadata (link-local) + RFC1918 relays
+	uri := nostrWebhookURI("ws://169.254.169.254:80/", "ws://10.0.0.5:6379/")
+
+	resp := server.handleLsps5SetWebhook(setWebhookReq(t, "app", uri, "nostr"), testPeerBytes)
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, Lsps5ErrorUrlParseError, resp.Error.Code)
+	mockOS.AssertNotCalled(t, "GetLsps5Webhooks", mock.Anything)
+	mockOS.AssertNotCalled(t, "RegisterLsps5Webhook", mock.Anything)
+	mockNotif.AssertNotCalled(t, "NotifyWebhookRegistered", mock.Anything, mock.Anything)
+}
+
+// TestHandleLsps5SetWebhook_NostrLoopbackRelay_RequiresDevFlag mirrors the
+// push branch's loopback rule for the nostr transport: a loopback relay is
+// refused by default and admitted only with the dev flag.
+func TestHandleLsps5SetWebhook_NostrLoopbackRelay_RequiresDevFlag(t *testing.T) {
+	uri := nostrWebhookURI("ws://127.0.0.1:7000/")
+
+	server := newLsps5TestServer(Config{EnableLsps5Nostr: true, Lsps5MaxWebhooks: 10}, new(MockOpeningService), new(MockNotificationService))
+	resp := server.handleLsps5SetWebhook(setWebhookReq(t, "app", uri, "nostr"), testPeerBytes)
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, Lsps5ErrorUrlParseError, resp.Error.Code)
+
+	mockOS := new(MockOpeningService)
+	mockOS.On("GetLsps5Webhooks", testPeerId).Return([]*core.Lsps5Webhook{}, nil)
+	mockOS.On("RegisterLsps5Webhook", mock.Anything).Return(nil)
+	mockNotif := new(MockNotificationService)
+	mockNotif.On("NotifyWebhookRegistered", testPeerId, mock.Anything).Return(true).Maybe()
+	dev := newLsps5TestServer(Config{EnableLsps5Nostr: true, Lsps5MaxWebhooks: 10, Lsps5AllowLoopbackWebhooks: true}, mockOS, mockNotif)
+	resp = dev.handleLsps5SetWebhook(setWebhookReq(t, "app", uri, "nostr"), testPeerBytes)
+	require.Nil(t, resp.Error)
+	mockOS.AssertCalled(t, "RegisterLsps5Webhook", mock.Anything)
 }
 
 func TestHandleLsps5SetWebhook_UnsupportedTransport(t *testing.T) {
