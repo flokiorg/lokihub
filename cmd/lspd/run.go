@@ -250,6 +250,10 @@ func runLspd(cliCtx *cli.Context) error {
 	})
 	dashHandlers.SetAnnouncePublisher(announceSvc)
 	dashSvc := transdashboard.NewServer(dashboardAdminPubkey, dashHandlers, nodesService)
+	// Back NIP-98 replay protection with a durable, shared store so a captured
+	// dashboard auth event cannot be replayed across a restart or a second
+	// replica (FLSPD-0016).
+	dashSvc.SetReplayStore(postgres.NewNip98ReplayStore(pool))
 
 	// Start dashboard HTTP server
 	go func() {

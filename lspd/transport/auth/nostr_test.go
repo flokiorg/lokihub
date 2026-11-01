@@ -2,12 +2,16 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +19,30 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// sharedReplayStore is a durable/shared ReplayStore stand-in for tests: its
+// backing map is injected, so a "restarted" process or a second replica (a new
+// sharedReplayStore over the same map) still sees previously recorded events,
+// unlike the per-process in-memory default. When err is set, CheckAndRecord
+// fails, modeling an unavailable backend (to exercise fail-closed behavior).
+type sharedReplayStore struct {
+	mu   *sync.Mutex
+	seen map[string]int64
+	err  error
+}
+
+func (s sharedReplayStore) CheckAndRecord(_ context.Context, eventID string, nowUnix int64) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.seen[eventID]; ok {
+		return fmt.Errorf("event already used (replay)")
+	}
+	s.seen[eventID] = nowUnix
+	return nil
+}
 
 // resetReplayCache isolates tests from each other's replay-cache state,
 // since seenEvents is a package-level singleton.
@@ -284,6 +312,57 @@ func TestVerifyNostrAuth_ReplayedEventRejectedOnSecondUse(t *testing.T) {
 	_, err = VerifyNostrAuth(r2, Options{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "replay")
+}
+
+// TestVerifyNostrAuth_ReplayRejectedAcrossStoreRestartAndReplica is the
+// FLSPD-0016 / R-LSP-NIP98REPLAY regression: a captured in-window auth event
+// must be rejected even by a freshly constructed store over the same durable
+// backing -- a restarted process or a second replica -- which the per-process
+// in-memory cache (empty on boot, private per instance) could not do.
+func TestVerifyNostrAuth_ReplayRejectedAcrossStoreRestartAndReplica(t *testing.T) {
+	sk, pk := newTestKeypair(t)
+	header := buildAuthHeader(t, sk, authEventOpts{
+		method:    http.MethodGet,
+		url:       "http://example.com/dashboard",
+		createdAt: time.Now().Unix(),
+	})
+
+	backing := make(map[string]int64)
+	mu := &sync.Mutex{}
+
+	// Instance 1 accepts the event and records it in the shared/durable store.
+	r1 := httptest.NewRequest(http.MethodGet, "http://example.com/dashboard", nil)
+	r1.Header.Set("Authorization", header)
+	session, err := VerifyNostrAuth(r1, Options{ReplayStore: sharedReplayStore{mu: mu, seen: backing}})
+	require.NoError(t, err)
+	assert.Equal(t, pk, session.PubKey)
+
+	// A brand-new store instance over the same durable backing must still
+	// reject the replay.
+	r2 := httptest.NewRequest(http.MethodGet, "http://example.com/dashboard", nil)
+	r2.Header.Set("Authorization", header)
+	_, err = VerifyNostrAuth(r2, Options{ReplayStore: sharedReplayStore{mu: mu, seen: backing}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "replay")
+}
+
+// TestVerifyNostrAuth_ReplayStoreErrorFailsClosed: an otherwise-valid event is
+// rejected when the replay store cannot answer, so a store outage can never
+// turn into an open replay window (fail-closed).
+func TestVerifyNostrAuth_ReplayStoreErrorFailsClosed(t *testing.T) {
+	sk, _ := newTestKeypair(t)
+	header := buildAuthHeader(t, sk, authEventOpts{
+		method:    http.MethodGet,
+		url:       "http://example.com/dashboard",
+		createdAt: time.Now().Unix(),
+	})
+
+	r := httptest.NewRequest(http.MethodGet, "http://example.com/dashboard", nil)
+	r.Header.Set("Authorization", header)
+	store := sharedReplayStore{mu: &sync.Mutex{}, seen: map[string]int64{}, err: errors.New("replay store unavailable")}
+	_, err := VerifyNostrAuth(r, Options{ReplayStore: store})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unavailable")
 }
 
 func TestVerifyNostrAuth_QueryParamFallback(t *testing.T) {
