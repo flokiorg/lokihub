@@ -52,3 +52,7 @@ docs/nips/archive/
 # internal working notes — release continuation, audit scratch; never published
 docs/private/
 
+
+# lspd source package collides with the build/ output-dir ignore (keep it tracked)
+!lspd/platform/build/
+!lspd/platform/build/build.go
