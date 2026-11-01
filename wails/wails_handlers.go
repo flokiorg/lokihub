@@ -69,6 +69,15 @@ func (app *WailsApp) getAppOrErrorResponse(idStr string) (*db.App, *WailsRequest
 func (app *WailsApp) WailsRequestRouter(route string, method string, body string) WailsRequestRouterResponse {
 	ctx := app.ctx
 
+	// Desktop authorization gate. The HTTP API gates fund-moving routes with
+	// echojwt + requireFullAccess; the desktop IPC router gets no per-call
+	// token, so full-access routes are refused here unless the in-process
+	// session is full-access. Public and readonly routes are left ungated. See
+	// wails_authz.go.
+	if app.routeRequiresFullAccess(route, method) && !app.hasFullAccess() {
+		return WailsRequestRouterResponse{Body: nil, Error: errFullAccessRequired}
+	}
+
 	// Anchored so it only matches the bare "/api/apps/:id" resource and not
 	// nested child routes like "/api/apps/:id/circle/allowlist" or
 	// "/api/apps/:id/cash-wallets" — those are matched by their own more
@@ -1055,6 +1064,9 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
+		// Stopping the node is the desktop lock: drop the session so a locked
+		// app refuses fund-moving ops even if any state lingers in memory.
+		app.session.markLocked()
 		res := WailsRequestRouterResponse{Body: nil, Error: ""}
 		return res
 	// App Store Routes
@@ -1621,7 +1633,12 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		go func() {
 			if err := app.api.Start(startRequest); err != nil {
 				logger.Logger.Error().Err(err).Msg("Failed to start")
+				return
 			}
+			// A successful start proves the unlock password (it decrypts the
+			// keys), so establish a full-access session as the HTTP start
+			// handler does when it issues a "full" token.
+			app.session.markUnlocked("full")
 		}()
 
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
@@ -2130,6 +2147,10 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
+
+		// Persist the tier the password just established so full-access routes
+		// are refused to a readonly desktop session, mirroring the HTTP token.
+		app.session.markUnlocked(unlockRequest.Permission)
 
 		app.api.SendEvent("nwc_unlocked", nil)
 
