@@ -31,6 +31,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/flokiorg/lokihub/lspservice"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -63,6 +64,10 @@ type HttpService struct {
 	shutdownOnce sync.Once
 	shutdownCh   chan struct{}
 
+	// lspClient is the Hub's client to an attached lspd daemon (plan §3), or
+	// nil when no LSP service endpoint is configured (feature off).
+	lspClient *lspservice.Client
+
 	// svc is read only by the test hooks (testhooks builds).
 	svc service.Service
 }
@@ -78,6 +83,7 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		appStoreSvc:    svc.GetAppStoreSvc(),
 		logger:         logger.Logger.With().Str("component", "http").Logger(),
 		shutdownCh:     make(chan struct{}),
+		lspClient:      newLspClient(svc.GetConfig().GetEnv()),
 		svc:            svc,
 	}
 }
@@ -90,6 +96,9 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 func (httpSvc *HttpService) Shutdown() {
 	httpSvc.shutdownOnce.Do(func() {
 		close(httpSvc.shutdownCh)
+		if httpSvc.lspClient != nil {
+			httpSvc.lspClient.Close()
+		}
 	})
 }
 
@@ -242,6 +251,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	httpSvc.registerWithdrawRoutes(fullAccessApiGroup)
 	httpSvc.registerWithdrawTestHooks(fullAccessApiGroup)
 	httpSvc.registerListingRoutes(fullAccessApiGroup)
+	httpSvc.registerLspRoutes(fullAccessApiGroup)
 	fullAccessApiGroup.PATCH("/unlock-password", httpSvc.changeUnlockPasswordHandler)
 	fullAccessApiGroup.PATCH("/auto-unlock", httpSvc.autoUnlockHandler)
 	fullAccessApiGroup.PATCH("/settings", httpSvc.updateSettingsHandler)
@@ -378,6 +388,13 @@ func (httpSvc *HttpService) infoHandler(c echo.Context) error {
 		responseBody.RedactForUnauthenticated()
 	}
 	responseBody.Unlocked = unlocked
+
+	// Surface the attached-lspd status (plan §3.4) to authenticated callers
+	// only, and only when an LSP service is configured; otherwise the block is
+	// omitted so the frontend treats the feature as off (no backoffice nav).
+	if unlocked && httpSvc.lspClient != nil {
+		responseBody.LSPService = lspStatusToInfo(httpSvc.lspClient.Status(c.Request().Context()))
+	}
 
 	return c.JSON(http.StatusOK, responseBody)
 }
