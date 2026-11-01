@@ -174,6 +174,14 @@ func (err *notFoundError) Error() string {
 	return "The transaction requested was not found"
 }
 
+// IsNotFoundError reports whether err is (or wraps) the not-found sentinel
+// returned by LookupTransaction. NewNotFoundError allocates a fresh value each
+// call, so callers must type-check rather than compare with == (LOKIHUB-0025).
+func IsNotFoundError(err error) bool {
+	var nfe *notFoundError
+	return errors.As(err, &nfe)
+}
+
 type insufficientBalanceError struct {
 }
 

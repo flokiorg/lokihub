@@ -654,12 +654,64 @@ func (svc *swapsService) GetSwapInInfo() (*SwapInfo, error) {
 	}, nil
 }
 
+// shouldPayHoldInvoice decides whether a swap.created delivery should initiate
+// the reverse-swap hold-invoice payment. It returns true only when NO
+// transaction yet exists for the swap's payment hash. A re-delivery (a
+// transaction already exists) or an unexpected lookup error is a no-op, so a
+// duplicate swap.created never re-pays — and therefore never drives the swap to
+// FAILED via a "payment already pending/paid" error (LOKIHUB-0025).
+//
+// The previous guard compared the lookup error against a freshly allocated
+// transactions.NewNotFoundError() with ==, which is always false (distinct
+// pointers), so it never fired and the intent was inverted too.
+func (svc *swapsService) shouldPayHoldInvoice(swap *db.Swap) bool {
+	_, lookupErr := svc.transactionsService.LookupTransaction(svc.ctx, swap.PaymentHash, nil, svc.lnClient, nil)
+	switch {
+	case lookupErr == nil:
+		svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Swap invoice payment already initiated; ignoring duplicate swap.created")
+		return false
+	case transactions.IsNotFoundError(lookupErr):
+		return true
+	default:
+		svc.logger.Warn().Err(lookupErr).Str("swap_id", swap.SwapId).Msg("Could not look up existing swap payment; skipping this swap.created delivery")
+		return false
+	}
+}
+
+// isTerminalSwapState reports whether a swap state is final and must never be
+// changed to a different state (LOKIHUB-0025).
+func isTerminalSwapState(state string) bool {
+	switch state {
+	case constants.SWAP_STATE_SUCCESS, constants.SWAP_STATE_FAILED, constants.SWAP_STATE_REFUNDED:
+		return true
+	default:
+		return false
+	}
+}
+
 func (svc *swapsService) markSwapState(dbSwap *db.Swap, state string) {
-	if svc.db.Limit(1).Find(dbSwap, &db.Swap{
-		SwapId: dbSwap.SwapId,
-		State:  state,
-	}).RowsAffected > 0 {
+	// Read the swap's authoritative current state by its unique SwapId.
+	var current db.Swap
+	if svc.db.Limit(1).Find(&current, &db.Swap{SwapId: dbSwap.SwapId}).RowsAffected == 0 {
+		svc.logger.Error().Str("swap_id", dbSwap.SwapId).Msg("cannot mark swap state: swap not found")
+		return
+	}
+
+	if current.State == state {
 		svc.logger.Debug().Str("swap_id", dbSwap.SwapId).Str("state", state).Msg("swap already marked")
+		return
+	}
+
+	// A terminal state is final: once a swap has SUCCEEDED, FAILED or been
+	// REFUNDED, a later (often re-delivered / out-of-order) update must never
+	// regress it — in particular a duplicate swap.created must not overwrite a
+	// completed SUCCESS with FAILED (LOKIHUB-0025).
+	if isTerminalSwapState(current.State) {
+		svc.logger.Warn().
+			Str("swap_id", dbSwap.SwapId).
+			Str("current", current.State).
+			Str("requested", state).
+			Msg("refusing to change a swap already in a terminal state")
 		return
 	}
 
@@ -668,7 +720,9 @@ func (svc *swapsService) markSwapState(dbSwap *db.Swap, state string) {
 	}).Error
 	if dbErr != nil {
 		svc.logger.Error().Err(dbErr).Str("swap_id", dbSwap.SwapId).Msg("Failed to update swap state")
+		return
 	}
+	dbSwap.State = state
 }
 
 func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) error {
@@ -1252,16 +1306,17 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 			case lightz.SwapCreated:
 				svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Paying the swap invoice")
 				go func() {
-					_, err := svc.transactionsService.LookupTransaction(svc.ctx, swap.PaymentHash, nil, svc.lnClient, nil)
-					if err == transactions.NewNotFoundError() {
-						svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Already initiated swap invoice payment")
+					// swap.created is re-delivered on a websocket reconnect
+					// (active swaps are re-subscribed) or whenever Boltz re-sends
+					// the status, so paying the hold invoice must be idempotent.
+					if !svc.shouldPayHoldInvoice(swap) {
 						return
 					}
 					metadata := map[string]interface{}{
 						"swap_id": swap.SwapId,
 					}
 					svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Initiating swap invoice payment")
-					_, err = svc.transactionsService.SendPaymentSync(swap.Invoice, nil, metadata, svc.lnClient, nil, nil)
+					_, err := svc.transactionsService.SendPaymentSync(swap.Invoice, nil, metadata, svc.lnClient, nil, nil)
 					if err != nil {
 						svc.logger.Error().Err(err).
 							Str("swap_id", swap.SwapId).
