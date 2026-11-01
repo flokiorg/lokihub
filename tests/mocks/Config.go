@@ -317,6 +317,59 @@ func (_c *MockConfig_GetEnv_Call) RunAndReturn(run func() *config.AppConfig) *Mo
 	return _c
 }
 
+// GetAutoUnlockPassword provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetAutoUnlockPassword() (string, error) {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAutoUnlockPassword")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func() (string, error)); ok {
+		return returnFunc()
+	}
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func() error); ok {
+		r1 = returnFunc()
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockConfig_GetAutoUnlockPassword_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAutoUnlockPassword'
+type MockConfig_GetAutoUnlockPassword_Call struct {
+	*mock.Call
+}
+
+// GetAutoUnlockPassword is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) GetAutoUnlockPassword() *MockConfig_GetAutoUnlockPassword_Call {
+	return &MockConfig_GetAutoUnlockPassword_Call{Call: _e.mock.On("GetAutoUnlockPassword")}
+}
+
+func (_c *MockConfig_GetAutoUnlockPassword_Call) Run(run func()) *MockConfig_GetAutoUnlockPassword_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfig_GetAutoUnlockPassword_Call) Return(s string, err error) *MockConfig_GetAutoUnlockPassword_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockConfig_GetAutoUnlockPassword_Call) RunAndReturn(run func() (string, error)) *MockConfig_GetAutoUnlockPassword_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetJWTSecret provides a mock function for the type MockConfig
 func (_mock *MockConfig) GetJWTSecret() (string, error) {
 	ret := _mock.Called()

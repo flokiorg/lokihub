@@ -116,9 +116,10 @@ func NewService(ctx context.Context) (*service, error) {
 		appConfig.Workdir = filepath.Join(xdg.DataHome, "/lokihub")
 		logger.Logger.Info().Interface("workdir", appConfig.Workdir).Msg("No workdir specified, using default")
 	}
-	// make sure workdir exists; it holds the wallet DB and config secrets,
-	// so keep it inaccessible to other local users.
-	if err := os.MkdirAll(appConfig.Workdir, 0750); err != nil {
+	// make sure workdir exists; it holds the wallet DB and config secrets
+	// (the encrypted mnemonic, the flnd admin macaroon, the auto-unlock host
+	// key), so keep it owner-only rather than group-readable.
+	if err := os.MkdirAll(appConfig.Workdir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create workdir: %w", err)
 	}
 
@@ -170,16 +171,18 @@ func NewService(ctx context.Context) (*service, error) {
 			Msg("CASH_MAX_REQUEST_AGE_SECS is below the stored horizon, which can only increase; keeping the stored one")
 	}
 
-	// write auto unlock password from env to user config
+	// write auto unlock password from env to user config (encrypted at rest).
+	// Non-fatal: a wrong env password should not crash the whole service, and
+	// auto-unlock simply will not fire.
 	if appConfig.AutoUnlockPassword != "" {
-		err = cfg.SetUpdate("AutoUnlockPassword", appConfig.AutoUnlockPassword, "")
-		if err != nil {
-			return nil, err
+		if err := cfg.SetAutoUnlockPassword(appConfig.AutoUnlockPassword); err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to persist auto-unlock password from environment")
 		}
 	}
-	autoUnlockPassword, err := cfg.Get("AutoUnlockPassword", "")
+	autoUnlockPassword, err := cfg.GetAutoUnlockPassword()
 	if err != nil {
-		return nil, err
+		logger.Logger.Error().Err(err).Msg("Failed to read auto-unlock password; node will require manual start")
+		autoUnlockPassword = ""
 	}
 
 	eventPublisher := events.NewEventPublisher()

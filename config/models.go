@@ -194,6 +194,9 @@ type Config interface {
 	CheckUnlockPassword(password string) bool
 	ChangeUnlockPassword(currentUnlockPassword string, newUnlockPassword string) error
 	SetAutoUnlockPassword(unlockPassword string) error
+	// GetAutoUnlockPassword returns the plaintext auto-unlock password,
+	// decrypting the at-rest value. Empty when auto-unlock is disabled.
+	GetAutoUnlockPassword() (string, error)
 	SaveUnlockPasswordCheck(encryptionKey string) error
 	SetupCompleted() bool
 	GetCurrency() string

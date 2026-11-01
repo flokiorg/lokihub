@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/flokiorg/flnd/lnrpc"
@@ -78,12 +79,19 @@ func NewFLNDclient(flndOptions FLNDoptions) (result *FLNDWrapper, err error) {
 			return nil, errors.New("failed to append certificate")
 		}
 		creds = credentials.NewClientTLSFromCert(cp, "")
-		// if a path to a cert file is provided
+		// no cert pinned
 	} else {
+		// The admin macaroon is attached to every RPC below and grants full
+		// control of the node's funds, so it must only travel over a verified
+		// TLS channel. With no pinned cert there is nothing to verify the server
+		// against, so InsecureSkipVerify is confined to a loopback address (local
+		// dev); for any non-loopback address we refuse rather than send the
+		// macaroon over an unauthenticated channel a MITM can terminate.
+		if !isLoopbackAddress(flndOptions.Address) {
+			return nil, fmt.Errorf("refusing to connect to non-loopback FLND address %q without a pinned TLS certificate: set FLND_CERT_FILE (or configure the cert during setup) so the admin macaroon is only sent over a verified channel", flndOptions.Address)
+		}
 		creds = credentials.NewTLS(&tls.Config{
-			InsecureSkipVerify: true, //nolint:gosec // no cert configured; connection
-			// security then relies on network trust (e.g. localhost/private network).
-			// TODO: consider erroring instead when the FLND address is non-loopback.
+			InsecureSkipVerify: true, //nolint:gosec // loopback only; a non-loopback address without a pinned cert is refused above
 		})
 	}
 	const (
@@ -134,6 +142,27 @@ func NewFLNDclient(flndOptions FLNDoptions) (result *FLNDWrapper, err error) {
 		signerClient:    signrpc.NewSignerClient(conn),
 		conn:            conn,
 	}, nil
+}
+
+// isLoopbackAddress reports whether addr (host or host:port) targets the local
+// host. Used to gate InsecureSkipVerify: only a loopback flnd may be dialed
+// without a pinned cert, since the admin macaroon must not leave the host over
+// an unverified channel. A bare hostname like "flnd" (the documented compose
+// target) is not loopback.
+func isLoopbackAddress(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// No port, or an unexpected shape: treat the whole string as the host.
+		host = addr
+	}
+	host = strings.TrimSpace(host)
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 // keyFamilyNodeKey is flnd's keychain.KeyFamilyNodeKey — the family holding the
