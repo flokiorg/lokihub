@@ -22,6 +22,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/utils"
+	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -33,13 +34,47 @@ import (
 // marker, which a random salt byte would collide with 1/256 of the time).
 var backupMagic = []byte("LKHB")
 
-// backupFormatCTR marks a backup encrypted with AES-CTR (see encryptingWriter).
-// AES-OFB (used by the unversioned legacy format) is deprecated: it's an
-// unauthenticated stream cipher, allowing bit-flipping attacks against the
-// ciphertext. Since backups are a persisted, user-facing format, old backups
-// must remain restorable, so decryptingReader still supports reading OFB
-// when no magic/version prefix is present.
-const backupFormatCTR = 0x02
+// Backup format versions (the byte after backupMagic).
+//
+//   - backupFormatCTR: AES-CTR keyed by PBKDF2-HMAC-SHA256 at 4096 iterations
+//     with an 8-byte salt. Superseded — 4096 iterations is GPU-brute-forceable,
+//     far weaker than the argon2 used for config at rest, yet this archive is
+//     the most exposed artifact (it leaves the device and bundles the live
+//     admin.macaroon). New backups no longer use it; it is read for restore.
+//   - backupFormatArgon2idCTR: AES-CTR keyed by argon2id with a 16-byte salt —
+//     the current format. argon2id is memory-hard, matching the KDF family used
+//     for config at rest, so the strengthened KDF now covers the whole archive
+//     including the admin.macaroon it contains.
+//
+// AES-OFB (the unversioned legacy format, no magic prefix) is also read for
+// restore; it is an unauthenticated stream cipher and never written anymore.
+const (
+	backupFormatCTR         = 0x02
+	backupFormatArgon2idCTR = 0x03
+)
+
+// Backup KDF parameters. argon2id costs are in the same range as config at rest
+// (config/aesgcm.go) and comfortably above the OWASP minimum; the 16-byte salt
+// replaces the superseded format's 8-byte salt.
+const (
+	backupArgon2idTime    = 3
+	backupArgon2idMemory  = 64 * 1024 // KiB (64 MiB)
+	backupArgon2idThreads = 4
+	backupSaltLenCurrent  = 16
+	backupSaltLenLegacy   = 8
+)
+
+// deriveBackupKeyArgon2id derives the 32-byte AES key for the current backup
+// format.
+func deriveBackupKeyArgon2id(password string, salt []byte) []byte {
+	return argon2.IDKey([]byte(password), salt, backupArgon2idTime, backupArgon2idMemory, backupArgon2idThreads, 32)
+}
+
+// deriveBackupKeyPBKDF2 derives the key for the superseded/legacy formats, read
+// only for restore.
+func deriveBackupKeyPBKDF2(password string, salt []byte) []byte {
+	return pbkdf2.Key([]byte(password), salt, 4096, 32, sha256.New)
+}
 
 // maxBackupEntrySize caps how much a single zip entry may decompress to when
 // restoring a backup, guarding against a decompression bomb filling the
@@ -309,12 +344,12 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 }
 
 func encryptingWriter(w io.Writer, password string) (io.Writer, error) {
-	salt := make([]byte, 8)
+	salt := make([]byte, backupSaltLenCurrent)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, fmt.Errorf("failed to generate salt: %w", err)
 	}
 
-	encKey := pbkdf2.Key([]byte(password), salt, 4096, 32, sha256.New)
+	encKey := deriveBackupKeyArgon2id(password, salt)
 	block, err := aes.NewCipher(encKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
@@ -329,7 +364,7 @@ func encryptingWriter(w io.Writer, password string) (io.Writer, error) {
 		return nil, fmt.Errorf("failed to write format magic: %w", err)
 	}
 
-	if _, err = w.Write([]byte{backupFormatCTR}); err != nil {
+	if _, err = w.Write([]byte{backupFormatArgon2idCTR}); err != nil {
 		return nil, fmt.Errorf("failed to write format version: %w", err)
 	}
 
@@ -359,11 +394,17 @@ func decryptingReader(r io.Reader, password string) (io.Reader, error) {
 		return nil, fmt.Errorf("failed to read backup header: %w", err)
 	}
 
-	var streamCipher func(block cipher.Block, iv []byte) cipher.Stream
+	var (
+		streamCipher func(block cipher.Block, iv []byte) cipher.Stream
+		deriveKey    func(password string, salt []byte) []byte
+		saltLen      int
+	)
 	if n == len(header) && bytes.Equal(header[:len(backupMagic)], backupMagic) {
 		switch header[len(backupMagic)] {
+		case backupFormatArgon2idCTR:
+			streamCipher, deriveKey, saltLen = cipher.NewCTR, deriveBackupKeyArgon2id, backupSaltLenCurrent
 		case backupFormatCTR:
-			streamCipher = cipher.NewCTR
+			streamCipher, deriveKey, saltLen = cipher.NewCTR, deriveBackupKeyPBKDF2, backupSaltLenLegacy
 		default:
 			return nil, fmt.Errorf("unsupported backup format version: %d", header[len(backupMagic)])
 		}
@@ -372,10 +413,10 @@ func decryptingReader(r io.Reader, password string) (io.Reader, error) {
 		// OFB-encrypted backup, whose first bytes are the random salt itself.
 		// Splice the bytes already consumed from r back onto the front.
 		r = io.MultiReader(bytes.NewReader(header[:n]), r)
-		streamCipher = cipher.NewOFB //nolint:staticcheck // required to decrypt pre-versioning backups; new backups use backupFormatCTR
+		streamCipher, deriveKey, saltLen = cipher.NewOFB, deriveBackupKeyPBKDF2, backupSaltLenLegacy //nolint:staticcheck // required to decrypt pre-versioning backups; new backups use backupFormatArgon2idCTR
 	}
 
-	salt := make([]byte, 8)
+	salt := make([]byte, saltLen)
 	if _, err := io.ReadFull(r, salt); err != nil {
 		return nil, fmt.Errorf("failed to read salt: %w", err)
 	}
@@ -385,7 +426,7 @@ func decryptingReader(r io.Reader, password string) (io.Reader, error) {
 		return nil, fmt.Errorf("failed to read IV: %w", err)
 	}
 
-	encKey := pbkdf2.Key([]byte(password), salt, 4096, 32, sha256.New)
+	encKey := deriveKey(password, salt)
 	block, err := aes.NewCipher(encKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create AES cipher: %w", err)

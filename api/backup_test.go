@@ -97,6 +97,69 @@ func TestBackupDecrypt_LegacyOFBFormat(t *testing.T) {
 	assert.Equal(t, plaintext, decrypted)
 }
 
+// TestBackupEncrypt_UsesArgon2idFormat pins LOKIHUB-0032: new backups use the
+// strengthened format — the argon2id version marker and a >=16-byte salt (plus
+// the 16-byte IV) in the header.
+func TestBackupEncrypt_UsesArgon2idFormat(t *testing.T) {
+	var buf bytes.Buffer
+	cw, err := encryptingWriter(&buf, "test-password")
+	require.NoError(t, err)
+	_, err = cw.Write([]byte("payload"))
+	require.NoError(t, err)
+
+	b := buf.Bytes()
+	require.GreaterOrEqual(t, len(b), len(backupMagic)+1+backupSaltLenCurrent+aes.BlockSize)
+	require.Equal(t, backupMagic, b[:len(backupMagic)])
+	require.Equal(t, byte(backupFormatArgon2idCTR), b[len(backupMagic)], "new backups must use the argon2id format")
+	require.GreaterOrEqual(t, backupSaltLenCurrent, 16, "salt must be at least 16 bytes")
+}
+
+// legacyEncryptCTRv2 reproduces the superseded PBKDF2-4096 AES-CTR format
+// (magic + version 0x02 + 8-byte salt), to verify it still restores.
+func legacyEncryptCTRv2(t *testing.T, w io.Writer, password string, plaintext []byte) {
+	t.Helper()
+
+	salt := make([]byte, 8)
+	_, err := rand.Read(salt)
+	require.NoError(t, err)
+
+	encKey := pbkdf2.Key([]byte(password), salt, 4096, 32, sha256.New)
+	block, err := aes.NewCipher(encKey)
+	require.NoError(t, err)
+
+	iv := make([]byte, aes.BlockSize)
+	_, err = rand.Read(iv)
+	require.NoError(t, err)
+
+	_, err = w.Write(backupMagic)
+	require.NoError(t, err)
+	_, err = w.Write([]byte{backupFormatCTR})
+	require.NoError(t, err)
+	_, err = w.Write(salt)
+	require.NoError(t, err)
+	_, err = w.Write(iv)
+	require.NoError(t, err)
+
+	cw := &cipher.StreamWriter{S: cipher.NewCTR(block, iv), W: w}
+	_, err = cw.Write(plaintext)
+	require.NoError(t, err)
+}
+
+func TestBackupDecrypt_LegacyPBKDF2CTRv2(t *testing.T) {
+	password := "test-password"
+	plaintext := []byte("a backup written by the superseded PBKDF2-4096 format")
+
+	var buf bytes.Buffer
+	legacyEncryptCTRv2(t, &buf, password, plaintext)
+
+	cr, err := decryptingReader(&buf, password)
+	require.NoError(t, err)
+	decrypted, err := io.ReadAll(cr)
+	require.NoError(t, err)
+
+	assert.Equal(t, plaintext, decrypted)
+}
+
 func TestBackupDecrypt_UnsupportedFormatVersion(t *testing.T) {
 	var buf bytes.Buffer
 	_, err := buf.Write(backupMagic)
