@@ -99,19 +99,78 @@ func (cfg *config) init(env *AppConfig) error {
 		}
 	}
 
-	if cfg.Env.FLNDMacaroonFile != "" {
+	// The flnd admin macaroon (a bearer credential for all node funds) is NOT
+	// persisted here. init() runs on every boot before any unlock key is
+	// available, so persisting it would store it in cleartext (Encrypted:false)
+	// and re-overwrite the encrypted copy every start. It is instead written
+	// encrypted at rest at unlock time, sourced from FLND_MACAROON_FILE on the
+	// env path — see ensureMacaroonEncrypted.
+
+	return nil
+}
+
+// ensureMacaroonEncrypted keeps the flnd admin macaroon — a bearer credential
+// for all node funds — encrypted at rest under the unlock key. It runs on every
+// unlock (the first point an encryption key is available) and covers:
+//
+//   - the env/docker path (FLND_MACAROON_FILE set): the file is authoritative,
+//     so the macaroon is (re)written encrypted whenever the stored row is
+//     missing, still cleartext, or no longer matches the file. config.init no
+//     longer persists it in cleartext on boot.
+//   - a one-time migration of an existing cleartext row (written by older
+//     versions, or by the env path before this change) to an encrypted one,
+//     even without the env file.
+func (cfg *config) ensureMacaroonEncrypted(encryptionKey string) error {
+	if encryptionKey == "" {
+		return nil
+	}
+
+	var row db.UserConfig
+	if err := cfg.db.Where(&db.UserConfig{Key: "LNDMacaroonHex"}).Limit(1).Find(&row).Error; err != nil {
+		return fmt.Errorf("failed to read stored macaroon: %w", err)
+	}
+
+	// Determine the authoritative plaintext macaroon hex.
+	var macHex string
+	switch {
+	case cfg.Env.FLNDMacaroonFile != "":
 		macBytes, err := os.ReadFile(cfg.Env.FLNDMacaroonFile)
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to read FLND macaroon file")
-			return err
+			if row.Key != "" {
+				// A transient file problem should not strand a hub that already
+				// has its macaroon stored; keep what is there.
+				logger.Logger.Warn().Err(err).Msg("Failed to read FLND macaroon file; keeping the stored macaroon")
+				return nil
+			}
+			return fmt.Errorf("failed to read FLND macaroon file: %w", err)
 		}
-		macHex := hex.EncodeToString(macBytes)
-		err = cfg.SetUpdate("LNDMacaroonHex", macHex, "")
-		if err != nil {
-			return err
+		macHex = hex.EncodeToString(macBytes)
+	case row.Key != "" && !row.Encrypted:
+		// Legacy cleartext row with no env file: a non-encrypted row's value is
+		// the plaintext hex, so migrate it in place.
+		macHex = row.Value
+	default:
+		// Nothing configured yet, or already encrypted with no env override.
+		return nil
+	}
+
+	if macHex == "" {
+		return nil
+	}
+
+	// Skip the write if the stored row is already encrypted and decrypts to the
+	// same value — avoids rewriting it (with a fresh salt/nonce) on every boot
+	// of the env path.
+	if row.Key != "" && row.Encrypted {
+		if current, err := cfg.get("LNDMacaroonHex", encryptionKey, cfg.db); err == nil && current == macHex {
+			return nil
 		}
 	}
 
+	if err := cfg.SetUpdate("LNDMacaroonHex", macHex, encryptionKey); err != nil {
+		return fmt.Errorf("failed to store encrypted macaroon: %w", err)
+	}
+	logger.Logger.Info().Msg("Stored the flnd admin macaroon encrypted at rest")
 	return nil
 }
 
@@ -184,6 +243,10 @@ func (cfg *config) loadJWTSecret(encryptionKey string) error {
 func (cfg *config) Unlock(encryptionKey string) error {
 	if !cfg.CheckUnlockPassword(encryptionKey) {
 		return errors.New("incorrect password")
+	}
+
+	if err := cfg.ensureMacaroonEncrypted(encryptionKey); err != nil {
+		return err
 	}
 
 	if err := cfg.loadJWTSecret(encryptionKey); err != nil {
