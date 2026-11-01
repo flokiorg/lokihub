@@ -132,10 +132,42 @@ func NewFLNDService(ctx context.Context, eventPublisher events.EventPublisher, f
 	go flndService.subscribeOpenHoldInvoices(flndCtx)
 	go flndService.subscribeTransactions(flndCtx)
 	go flndService.trackForwardedPayments(flndCtx)
+	go flndService.checkKeysendHoldTime(flndCtx)
 
 	logger.Logger.Info().Str("alias", nodeInfo.Alias).Msg("Connected to FLND")
 
 	return flndService, nil
+}
+
+// checkKeysendHoldTime warns when the node accepts keysends but settles them
+// itself (no keysend-hold-time): lokihub then cannot fail a keysend a circle
+// wallet's checks refuse, as NIP-CW §Own Funds and Caps requires, and the
+// node keeps it. It never stops the Hub, and a node whose config cannot be
+// read is only logged.
+func (svc *FLNDService) checkKeysendHoldTime(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	info, err := svc.client.GetDebugInfo(ctx, &lnrpc.GetDebugInfoRequest{})
+	if err != nil {
+		svc.logger.Warn().Err(err).Msg("Could not read the node's config to check keysend-hold-time")
+		return
+	}
+	if !keysendsSelfSettled(info.GetConfig()) {
+		return
+	}
+	svc.logger.Warn().Msg("FLND accepts keysends without keysend-hold-time: it settles every keysend itself, " +
+		"so a keysend a circle wallet refuses (suspended, closing, over its receive room) is kept by the node " +
+		"instead of failed. Set keysend-hold-time (e.g. 30s) on any node hosting circle wallets")
+}
+
+// keysendsSelfSettled reports whether flnd's flattened config (GetDebugInfo)
+// accepts keysends with no keysend-hold-time.
+func keysendsSelfSettled(config map[string]string) bool {
+	if accept, _ := strconv.ParseBool(config["accept-keysend"]); !accept {
+		return false
+	}
+	hold, err := time.ParseDuration(config["keysend-hold-time"])
+	return err != nil || hold <= 0
 }
 
 func (svc *FLNDService) trackForwardedPayments(ctx context.Context) {

@@ -44,6 +44,9 @@ type Engine struct {
 	// Horizon is the H in force (NIP-CASH §Deadlines).
 	Horizon func() int64
 	Now     func() time.Time
+	// Wall maps an instant of Now back to the wall clock, the clock a
+	// client's deadline is judged on (hubclock.Wall when nil).
+	Wall func(time.Time) time.Time
 
 	mu       sync.Mutex
 	notices  NoticePublisher
@@ -65,6 +68,13 @@ func (e *Engine) now() time.Time {
 		return e.Now()
 	}
 	return hubclock.Now()
+}
+
+func (e *Engine) wall(t time.Time) time.Time {
+	if e.Wall != nil {
+		return e.Wall(t)
+	}
+	return hubclock.Wall(t)
 }
 
 func (e *Engine) horizon() int64 {
