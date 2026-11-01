@@ -7,6 +7,7 @@ import {
   LucideIcon,
   MegaphoneIcon,
   Plug2Icon,
+  ServerIcon,
   Settings,
   SquareStack,
   WalletIcon,
@@ -101,6 +102,19 @@ export function AppSidebar() {
         url: "/apps",
         icon: Plug2Icon,
       },
+      // The LSP backoffice is shown only once the Hub is actually attached to an
+      // lspd daemon (info.lspService.attached), the same conditional-nav pattern
+      // as the Node entry's `hasChannelManagement` gate below. Operators who
+      // never attach an LSP never see it.
+      ...(info?.lspService?.attached
+        ? [
+            {
+              title: t("nav.lsp"),
+              url: "/lsp",
+              icon: ServerIcon,
+            },
+          ]
+        : []),
     ],
     navSecondary: [
       ...(hasChannelManagement
