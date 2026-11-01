@@ -1120,6 +1120,27 @@ type InfoResponse struct {
 	EnableMessageboardNwc bool      `json:"enableMessageboardNwc"`
 	WorkDir               string    `json:"workDir"`
 	EnablePolling         bool      `json:"enablePolling"`
+	// LSPService is the attached-lspd status (plan §3.4), populated only for an
+	// authenticated caller and only when an LSP service endpoint is configured;
+	// omitted (nil) otherwise so the frontend can gate its backoffice nav on it.
+	LSPService *LSPServiceInfo `json:"lspService,omitempty"`
+}
+
+// LSPServiceInfo surfaces whether the Hub is attached to an lspd daemon
+// (plan §3.4), modeled on PrivateTransportInfo. Configured is endpoint-present;
+// Reachable is lspd's /info answered; Attached is reachable AND the admin key
+// was accepted. Error explains a non-attached state ("unreachable", "key
+// mismatch (403)", a signer error). All degrade gracefully — never an error.
+type LSPServiceInfo struct {
+	Configured bool       `json:"configured"`
+	Reachable  bool       `json:"reachable"`
+	Attached   bool       `json:"attached"`
+	Endpoint   string     `json:"endpoint,omitempty"`
+	Pubkey     string     `json:"pubkey,omitempty"`
+	Version    string     `json:"version,omitempty"`
+	Alias      string     `json:"alias,omitempty"`
+	Error      string     `json:"error,omitempty"`
+	CheckedAt  *time.Time `json:"checkedAt,omitempty"`
 }
 
 // RedactForUnauthenticated strips fields that let an unauthenticated caller
@@ -1153,6 +1174,7 @@ func (r *InfoResponse) RedactForUnauthenticated() {
 	r.EnableSwap = false
 	r.EnableMessageboardNwc = false
 	r.EnablePolling = false
+	r.LSPService = nil
 }
 
 // PrivateEnvelopeInfo is the private-transport batch envelope policy, as read

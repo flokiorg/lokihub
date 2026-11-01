@@ -52,6 +52,13 @@ import { SetupServices } from "src/screens/setup/SetupServices";
 import { FLNDForm } from "src/screens/setup/node/FLNDForm";
 import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
 import { Listings } from "src/screens/listings/Listings";
+import { LspAnalytics } from "src/screens/lsp/LspAnalytics";
+import { LspClients } from "src/screens/lsp/LspClients";
+import { LspConfig } from "src/screens/lsp/LspConfig";
+import { LspOrderDetail } from "src/screens/lsp/LspOrderDetail";
+import { LspOrders } from "src/screens/lsp/LspOrders";
+import { LspOverview } from "src/screens/lsp/LspOverview";
+import { LspWebhooks } from "src/screens/lsp/LspWebhooks";
 import { CashHubDashboard } from "src/screens/subwallets/CashHubDashboard";
 import { CashHubList } from "src/screens/subwallets/CashHubList";
 import { NewCircleHub } from "src/screens/subwallets/NewCircleHub";
@@ -353,6 +360,26 @@ const routes: RouteObject[] = [
             element: <DefaultRedirect />,
             handle: { crumb: () => "Listings" },
             children: [{ index: true, element: <Listings /> }],
+          },
+          {
+            path: "lsp",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "LSP" },
+            children: [
+              { index: true, element: <LspOverview /> },
+              {
+                path: "orders",
+                handle: { crumb: () => "Orders" },
+                children: [
+                  { index: true, element: <LspOrders /> },
+                  { path: ":orderId", element: <LspOrderDetail /> },
+                ],
+              },
+              { path: "peers", element: <LspClients /> },
+              { path: "webhooks", element: <LspWebhooks /> },
+              { path: "analytics", element: <LspAnalytics /> },
+              { path: "config", element: <LspConfig /> },
+            ],
           },
           {
             path: "internal-apps",
