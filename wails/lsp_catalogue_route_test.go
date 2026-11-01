@@ -43,6 +43,7 @@ func TestWailsRouter_LSPCatalogue(t *testing.T) {
 	const key = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 	stub := &lspCatalogueAPI{}
 	app := &WailsApp{api: stub, ctx: context.Background()}
+	app.session.markUnlocked("full") // LSP catalogue routes are full-access
 	for _, r := range []struct{ route, method, body string }{
 		{"/api/lsps", "GET", ""},
 		{"/api/lsps", "POST", `{"pubkey":"` + key + `"}`},
