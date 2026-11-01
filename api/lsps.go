@@ -259,6 +259,7 @@ func (api *api) LSPS2Buy(ctx context.Context, req *LSPS2BuyRequest) (*LSPS2BuyRe
 		InterceptSCID:   scid,
 		CLTVExpiryDelta: hints.CLTVExpiryDelta,
 		LSPNodeID:       hints.LSPNodeID,
+		ClientTrustsLSP: hints.ClientTrustsLSP,
 	}, nil
 }
 
@@ -419,7 +420,7 @@ func (api *api) ListLSPs() ([]manager.SettingsLSP, error) {
 // the specific LSP that owns orderID. Both are checked here so a notification
 // self-signed by any keypair can't forge a state transition for an order it
 // doesn't own.
-func (api *api) UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, state string) error {
+func (api *api) UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, state, fundingOutpoint string) error {
 	// Ownership is checked before touching the LiquidityManager at all: it's a
 	// pure authorization decision against api.lspManager (always available,
 	// doesn't depend on whether the manager has started), and rejecting a
@@ -434,7 +435,7 @@ func (api *api) UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, s
 	if api.svc.GetLiquidityManager() == nil {
 		return fmt.Errorf("LiquidityManager not started")
 	}
-	api.svc.GetLiquidityManager().HandleOrderStateUpdate(orderID, state, lspPubkey)
+	api.svc.GetLiquidityManager().HandleOrderStateUpdate(ctx, orderID, state, lspPubkey, fundingOutpoint)
 	return nil
 }
 
