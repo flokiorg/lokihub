@@ -2,12 +2,16 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +19,30 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// sharedReplayStore is a durable/shared ReplayStore stand-in for tests: its
+// backing map is injected, so a "restarted" process or a second replica (a new
+// sharedReplayStore over the same map) still sees previously recorded events,
+// unlike the per-process in-memory default. When err is set, CheckAndRecord
+// fails, modeling an unavailable backend (to exercise fail-closed behavior).
+type sharedReplayStore struct {
+	mu   *sync.Mutex
+	seen map[string]int64
+	err  error
+}
+
+func (s sharedReplayStore) CheckAndRecord(_ context.Context, eventID string, nowUnix int64) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.seen[eventID]; ok {
+		return fmt.Errorf("event already used (replay)")
+	}
+	s.seen[eventID] = nowUnix
+	return nil
+}
 
 // resetReplayCache isolates tests from each other's replay-cache state,
 // since seenEvents is a package-level singleton.
@@ -284,6 +312,132 @@ func TestVerifyNostrAuth_ReplayedEventRejectedOnSecondUse(t *testing.T) {
 	_, err = VerifyNostrAuth(r2, Options{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "replay")
+}
+
+// TestVerifyNostrAuth_ReplayRejectedAcrossStoreRestartAndReplica is the
+// FLSPD-0016 / R-LSP-NIP98REPLAY regression: a captured in-window auth event
+// must be rejected even by a freshly constructed store over the same durable
+// backing -- a restarted process or a second replica -- which the per-process
+// in-memory cache (empty on boot, private per instance) could not do.
+func TestVerifyNostrAuth_ReplayRejectedAcrossStoreRestartAndReplica(t *testing.T) {
+	sk, pk := newTestKeypair(t)
+	header := buildAuthHeader(t, sk, authEventOpts{
+		method:    http.MethodGet,
+		url:       "http://example.com/dashboard",
+		createdAt: time.Now().Unix(),
+	})
+
+	backing := make(map[string]int64)
+	mu := &sync.Mutex{}
+
+	// Instance 1 accepts the event and records it in the shared/durable store.
+	r1 := httptest.NewRequest(http.MethodGet, "http://example.com/dashboard", nil)
+	r1.Header.Set("Authorization", header)
+	session, err := VerifyNostrAuth(r1, Options{ReplayStore: sharedReplayStore{mu: mu, seen: backing}})
+	require.NoError(t, err)
+	assert.Equal(t, pk, session.PubKey)
+
+	// A brand-new store instance over the same durable backing must still
+	// reject the replay.
+	r2 := httptest.NewRequest(http.MethodGet, "http://example.com/dashboard", nil)
+	r2.Header.Set("Authorization", header)
+	_, err = VerifyNostrAuth(r2, Options{ReplayStore: sharedReplayStore{mu: mu, seen: backing}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "replay")
+}
+
+// TestVerifyNostrAuth_ReplayStoreErrorFailsClosed: an otherwise-valid event is
+// rejected when the replay store cannot answer, so a store outage can never
+// turn into an open replay window (fail-closed).
+func TestVerifyNostrAuth_ReplayStoreErrorFailsClosed(t *testing.T) {
+	sk, _ := newTestKeypair(t)
+	header := buildAuthHeader(t, sk, authEventOpts{
+		method:    http.MethodGet,
+		url:       "http://example.com/dashboard",
+		createdAt: time.Now().Unix(),
+	})
+
+	r := httptest.NewRequest(http.MethodGet, "http://example.com/dashboard", nil)
+	r.Header.Set("Authorization", header)
+	store := sharedReplayStore{mu: &sync.Mutex{}, seen: map[string]int64{}, err: errors.New("replay store unavailable")}
+	_, err := VerifyNostrAuth(r, Options{ReplayStore: store})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unavailable")
+}
+
+// TestVerifyNostrAuth_ForwardedHostHonoredOnlyFromTrustedProxy is the A4-FL-3
+// regression: getFullUrl trusted X-Forwarded-* unconditionally, so once a
+// proxy fronts lspd a client talking to it directly could forge the host the
+// NIP-98 'u' tag is matched against. Forwarded headers must be honored only
+// when the immediate peer is a configured trusted proxy.
+func TestVerifyNostrAuth_ForwardedHostHonoredOnlyFromTrustedProxy(t *testing.T) {
+	sk, _ := newTestKeypair(t)
+	// The client signs the PUBLIC URL it reaches lspd through.
+	const signedURL = "https://dashboard.example/dashboard"
+
+	trusted, err := ParseTrustedProxies([]string{"10.1.2.0/24"})
+	require.NoError(t, err)
+
+	newReq := func(remoteAddr string) *http.Request {
+		resetReplayCache(t)
+		// lspd itself sees an internal Host; a fronting proxy advertises the
+		// public one via X-Forwarded-*.
+		r := httptest.NewRequest(http.MethodGet, "http://lspd-internal:8080/dashboard", nil)
+		r.RemoteAddr = remoteAddr
+		r.Header.Set("X-Forwarded-Host", "dashboard.example")
+		r.Header.Set("X-Forwarded-Proto", "https")
+		r.Header.Set("Authorization", buildAuthHeader(t, sk, authEventOpts{
+			method:    http.MethodGet,
+			url:       signedURL,
+			createdAt: time.Now().Unix(),
+		}))
+		return r
+	}
+
+	// From a trusted proxy: the forwarded host is honored, so the derived URL
+	// matches the signed 'u' tag.
+	_, err = VerifyNostrAuth(newReq("10.1.2.3:4567"), Options{TrustedProxies: trusted})
+	require.NoError(t, err)
+
+	// From an untrusted peer: forwarded headers are ignored, the URL falls
+	// back to the internal Host, and the 'u' tag no longer matches.
+	_, err = VerifyNostrAuth(newReq("203.0.113.7:4567"), Options{TrustedProxies: trusted})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "'u' tag mismatch")
+}
+
+// TestVerifyNostrAuth_ExpectedHostPinOverridesForwardedHeaders: a pinned
+// public host wins even over a trusted proxy's forwarded host, so a
+// mis-set/forged forwarded header cannot move the 'u'-tag binding.
+func TestVerifyNostrAuth_ExpectedHostPinOverridesForwardedHeaders(t *testing.T) {
+	resetReplayCache(t)
+	sk, _ := newTestKeypair(t)
+	const signedURL = "https://pinned.example/dashboard"
+
+	trusted, err := ParseTrustedProxies([]string{"10.0.0.0/8"})
+	require.NoError(t, err)
+
+	r := httptest.NewRequest(http.MethodGet, "http://internal/dashboard", nil)
+	r.RemoteAddr = "10.9.9.9:111" // trusted peer
+	r.Header.Set("X-Forwarded-Host", "attacker.example")
+	r.Header.Set("Authorization", buildAuthHeader(t, sk, authEventOpts{
+		method:    http.MethodGet,
+		url:       signedURL,
+		createdAt: time.Now().Unix(),
+	}))
+
+	_, err = VerifyNostrAuth(r, Options{ExpectedHost: "pinned.example", ExpectedScheme: "https", TrustedProxies: trusted})
+	require.NoError(t, err)
+}
+
+// TestParseTrustedProxies covers CIDRs, bare IPs, blanks, and a bad entry.
+func TestParseTrustedProxies(t *testing.T) {
+	nets, err := ParseTrustedProxies([]string{"10.0.0.0/8", "192.168.1.5", "", "  ", "2001:db8::1"})
+	require.NoError(t, err)
+	require.Len(t, nets, 3)
+
+	_, err = ParseTrustedProxies([]string{"not-an-ip"})
+	require.Error(t, err)
 }
 
 func TestVerifyNostrAuth_QueryParamFallback(t *testing.T) {

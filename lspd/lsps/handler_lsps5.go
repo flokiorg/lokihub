@@ -126,7 +126,8 @@ func (s *Handlers) handleLsps5SetWebhook(req *JsonRpcRequest, peer []byte) *Json
 			return NewJsonRpcErrorResponse(req.Id, Lsps5ErrorUnsupportedProtocol, "nostr_transport_disabled", nil)
 		}
 		// Use library validation for URI
-		if _, _, err := lsps5.ParseLsp5Uri(params.Webhook); err != nil {
+		_, relays, err := lsps5.ParseLsp5Uri(params.Webhook)
+		if err != nil {
 			log.Debug().
 				Err(err).
 				Str("component", string(logging.LogComponentLSPS5)).
@@ -134,6 +135,26 @@ func (s *Handlers) handleLsps5SetWebhook(req *JsonRpcRequest, peer []byte) *Json
 				Str("uri", params.Webhook).
 				Msg("LSPS5: set_webhook invalid nostr URI")
 			return NewJsonRpcErrorResponse(req.Id, Lsps5ErrorUrlParseError, fmt.Sprintf("invalid_nostr_uri: %v", err), nil)
+		}
+		// SSRF: the nostr transport dials these client-supplied relays, so
+		// apply the same address policy as the push branch. ParseLsp5Uri
+		// alone does no host/IP validation, which let a peer point the LSP's
+		// outbound websocket at an internal relay (FLSPD-0011 / R-LSP-6).
+		for _, relay := range relays {
+			if err := common.ValidateRelayUrl(relay, s.config.Lsps5AllowLoopbackWebhooks); err != nil {
+				log.Warn().
+					Err(err).
+					Str("component", string(logging.LogComponentLSPS5)).
+					Str("action", string(logging.LogActionReject)).
+					Str("relay", relay).
+					Msg("LSPS5: set_webhook rejected - relay address not allowed")
+
+				errorCode := Lsps5ErrorUrlParseError
+				if strings.Contains(err.Error(), "unsupported_protocol") {
+					errorCode = Lsps5ErrorUnsupportedProtocol
+				}
+				return NewJsonRpcErrorResponse(req.Id, errorCode, fmt.Sprintf("invalid_webhook_url: %v", err), nil)
+			}
 		}
 	} else {
 		log.Warn().

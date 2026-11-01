@@ -77,6 +77,23 @@ func TestIsPrivateIP(t *testing.T) {
 		{"::1", true},          // IPv6 loopback
 		{"fd00::1", true},      // IPv6 unique local
 		{"2001:db8::1", false}, // IPv6 public documentation range
+
+		// FLSPD-0012 / R-LSP-7: special-use ranges that an SSRF gate using
+		// only the RFC1918/ULA checks would let through -- routable-internal
+		// on cloud/k8s fabrics.
+		{"100.64.0.1", true},       // CGNAT 100.64.0.0/10 (EKS/GKE pod/service range)
+		{"100.100.100.100", true},  // mid CGNAT
+		{"100.127.255.255", true},  // top of CGNAT
+		{"100.63.255.255", false},  // just below CGNAT
+		{"100.128.0.1", false},     // just above CGNAT
+		{"0.0.0.1", true},          // 0.0.0.0/8 "this network"
+		{"192.0.0.1", true},        // IETF protocol assignments 192.0.0.0/24
+		{"192.0.1.1", false},       // just outside 192.0.0.0/24
+		{"198.18.0.1", true},       // benchmarking 198.18.0.0/15
+		{"198.19.255.255", true},   // top of benchmarking range
+		{"198.20.0.1", false},      // just outside benchmarking range
+		{"64:ff9b::808:808", true}, // NAT64 well-known prefix (embeds 8.8.8.8)
+		{"64:ff9c::1", false},      // just outside NAT64 well-known prefix
 	}
 
 	for _, tt := range tests {
