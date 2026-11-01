@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+option go_package = "github.com/flokiorg/lokihub/lspd/api/proto/notifications";
+
+package notifications;
+
+service Notifications {
+    rpc SubscribeNotifications(EncryptedNotificationRequest)
+        returns (SubscribeNotificationsReply) {}
+
+    rpc UnsubscribeNotifications(EncryptedNotificationRequest)
+        returns (UnsubscribeNotificationsReply) {}
+}  
+
+message EncryptedNotificationRequest {
+    bytes blob = 1;
+}
+
+message SubscribeNotificationsRequest {
+    string url = 1;
+    string signature = 2;
+    string transport = 3; // "push" or "nostr"
+}
+
+message SubscribeNotificationsReply {}
+
+message UnsubscribeNotificationsRequest {
+    string url = 1;
+    string signature = 2;
+}
+
+message UnsubscribeNotificationsReply {}
