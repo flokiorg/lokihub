@@ -73,8 +73,11 @@ type SettingsLSP struct {
 
 // JITJitChannelHints represents hints gathered from a JIT channel request
 type JitChannelHints struct {
-	SCID            string
-	LSPNodeID       string
+	SCID      string
+	LSPNodeID string
+	// ClientTrustsLSP mirrors the buy response's client_trusts_lsp flag so the
+	// per-buy trust posture reaches the API/UI (LOKIHUB-0028).
+	ClientTrustsLSP bool
 	CLTVExpiryDelta uint16
 	FeeMloki        uint64
 }
@@ -158,7 +161,11 @@ func (m *LiquidityManager) pollOrders(ctx context.Context) {
 					Msg("Polled order status")
 
 				m.eventQueue.Enqueue(statusEvent)
-				m.HandleOrderStateUpdate(order.OrderID, statusEvent.OrderState, order.LSPPubkey)
+				fundingOutpoint := ""
+				if statusEvent.Channel != nil {
+					fundingOutpoint = statusEvent.Channel.FundingOutpoint
+				}
+				m.HandleOrderStateUpdate(ctx, order.OrderID, statusEvent.OrderState, order.LSPPubkey, fundingOutpoint)
 			}
 		}
 	}
@@ -227,11 +234,160 @@ func orderStatePriority(state string) int {
 	}
 }
 
+// isKnownLSPS1OrderState is the whitelist of order_state values the Hub acts on.
+// An LSP-reported state outside this set is ignored rather than stored
+// (LOKIHUB-0026): an unknown string would otherwise be mapped by
+// orderStatePriority to 0 (= CREATED) and churn the poller, and an unknown
+// string treated as terminal could permanently lock the order.
+func isKnownLSPS1OrderState(state string) bool {
+	switch state {
+	case "CREATED", "PAID", "COMPLETED", "FAILED", "EXPIRED", "CANCELLED", "CLOSED":
+		return true
+	default:
+		return false
+	}
+}
+
+// resolveLSPNodeID maps an LSP identifier to its 66-hex Lightning node id. A
+// node id is returned unchanged; an x-only key (e.g. the LSP's Nostr
+// notification pubkey, which the Nostr order-state path carries) is resolved
+// against the catalogue to the owning LSP's node id. An unresolvable value is
+// returned unchanged so the ownership guard in UpdateOrderStateIfPriority still
+// rejects it — this maps the identity, it never weakens the guard
+// (LOKIHUB-0026).
+func (m *LiquidityManager) resolveLSPNodeID(pubkey string) string {
+	if pubkey == "" {
+		return pubkey
+	}
+	lsps, err := m.GetLSPs()
+	if err != nil {
+		return pubkey
+	}
+	for _, lsp := range lsps {
+		if strings.EqualFold(lsp.Pubkey, pubkey) {
+			return lsp.Pubkey
+		}
+	}
+	for _, lsp := range lsps {
+		if lsp.NostrPubkey != "" && strings.EqualFold(lsp.NostrPubkey, pubkey) {
+			return lsp.Pubkey
+		}
+	}
+	return pubkey
+}
+
+// verifyOrderChannel reports whether the node actually holds the channel an LSP
+// claims to have opened for orderID — a channel to the order's LSP whose
+// capacity is at least the quoted lsp_balance and, when the LSP reported a
+// funding outpoint, that exact channel. This is the "show facts it knows
+// itself" check (NIP-LSP §Security Considerations) that stops a
+// malicious/compromised LSP from driving an order to COMPLETED after taking the
+// fee without opening — or under-opening — the channel (LOKIHUB-0026). When the
+// node can't be consulted, it returns false: an unverifiable COMPLETED is not
+// trusted.
+func (m *LiquidityManager) verifyOrderChannel(ctx context.Context, orderID, lspPubkey, fundingOutpoint string) bool {
+	if m.cfg.LNClient == nil {
+		return false
+	}
+	order, err := m.cfg.LSPManager.GetOrder(orderID)
+	if err != nil {
+		logger.Logger.Warn().Err(err).Str("order_id", orderID).Msg("Cannot reconcile COMPLETED order: order not found")
+		return false
+	}
+	channels, err := m.cfg.LNClient.ListChannels(ctx)
+	if err != nil {
+		logger.Logger.Warn().Err(err).Str("order_id", orderID).Msg("Cannot reconcile COMPLETED order: ListChannels failed")
+		return false
+	}
+	wantOutpoint := strings.ToLower(strings.TrimSpace(fundingOutpoint))
+	for _, ch := range channels {
+		if !strings.EqualFold(ch.RemotePubkey, lspPubkey) {
+			continue
+		}
+		if wantOutpoint != "" {
+			got := strings.ToLower(fmt.Sprintf("%s:%d", ch.FundingTxId, ch.FundingTxVout))
+			if got != wantOutpoint {
+				continue
+			}
+		}
+		// Channel balances are in mloki; the quoted lsp_balance is in loki.
+		capacityMloki := ch.LocalBalance + ch.RemoteBalance
+		if capacityMloki >= 0 && uint64(capacityMloki) >= order.LSPBalance*1000 {
+			return true
+		}
+		logger.Logger.Warn().
+			Str("order_id", orderID).
+			Int64("channel_capacity_mloki", capacityMloki).
+			Uint64("quoted_lsp_balance_loki", order.LSPBalance).
+			Msg("Channel for order found but its capacity is below the quoted lsp_balance")
+	}
+	return false
+}
+
+// minPendingQuoteForLSP returns the smallest quoted lsp_balance (loki) across
+// the Hub's still-pending LSPS1 orders with the given LSP, and whether any such
+// order exists. Used by the channel acceptor to refuse zero-conf for a channel
+// smaller than the smallest inbound liquidity that LSP still owes us.
+func (m *LiquidityManager) minPendingQuoteForLSP(lspPubkey string) (uint64, bool) {
+	if m.cfg.LSPManager == nil {
+		return 0, false
+	}
+	orders, err := m.cfg.LSPManager.ListPendingOrders()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to list pending orders for channel-accept capacity check")
+		return 0, false
+	}
+	var min uint64
+	found := false
+	for _, o := range orders {
+		if o.LSPBalance == 0 || !strings.EqualFold(o.LSPPubkey, lspPubkey) {
+			continue
+		}
+		if !found || o.LSPBalance < min {
+			min = o.LSPBalance
+			found = true
+		}
+	}
+	return min, found
+}
+
 // HandleOrderStateUpdate persists an order state change and publishes the SSE event to the frontend.
 // It is the single authoritative path for all state change sources (Nostr, HTTP webhook, polling).
 // The read and write are atomic inside a transaction — a lower-priority state can never overwrite a
 // higher-priority one even under concurrent callers (e.g. PAID → CREATED is silently skipped).
-func (m *LiquidityManager) HandleOrderStateUpdate(orderID, state, lspPubkey string) {
+func (m *LiquidityManager) HandleOrderStateUpdate(ctx context.Context, orderID, state, lspPubkey, fundingOutpoint string) {
+	// A Nostr-transported notification is keyed by the LSP's x-only Nostr
+	// pubkey, not its 66-hex node id; map it to the node id so the ownership
+	// guard (which compares against order.LSPPubkey, a node id) can match. An
+	// unresolvable value passes through unchanged and still fails the guard —
+	// the guard is never weakened (LOKIHUB-0026).
+	lspPubkey = m.resolveLSPNodeID(lspPubkey)
+
+	// Act only on recognised order states (LOKIHUB-0026).
+	if !isKnownLSPS1OrderState(state) {
+		logger.Logger.Warn().
+			Str("order_id", orderID).
+			Str("state", state).
+			Msg("Ignoring LSPS1 order update with unknown state")
+		return
+	}
+
+	// Never trust a bare COMPLETED: verify the LSP actually opened the channel
+	// it claims, against facts the node knows itself (LOKIHUB-0026). Computed
+	// before the priority transaction; the ownership guard inside
+	// UpdateOrderStateIfPriority still runs first for a forged notification.
+	completedVerified := true
+	if state == "COMPLETED" {
+		completedVerified = m.verifyOrderChannel(ctx, orderID, lspPubkey, fundingOutpoint)
+		if !completedVerified {
+			logger.Logger.Warn().
+				Str("order_id", orderID).
+				Str("lsp", lspPubkey).
+				Str("funding_outpoint", fundingOutpoint).
+				Msg("LSP reported order COMPLETED but no matching channel found on the node; not marking completed")
+		}
+	}
+
 	applied, err := m.cfg.LSPManager.UpdateOrderStateIfPriority(orderID, state, lspPubkey, func(current string) bool {
 		if orderStatePriority(current) > orderStatePriority(state) {
 			logger.Logger.Debug().
@@ -239,6 +395,9 @@ func (m *LiquidityManager) HandleOrderStateUpdate(orderID, state, lspPubkey stri
 				Str("current", current).
 				Str("new", state).
 				Msg("Skipping order state downgrade")
+			return false
+		}
+		if state == "COMPLETED" && !completedVerified {
 			return false
 		}
 		return true
@@ -783,9 +942,22 @@ func (m *LiquidityManager) openJIT(ctx context.Context, lspPubkey string, amount
 	if err != nil {
 		return nil, err
 	}
+	// The invoice's final route-hint hop MUST point at the counterparty we
+	// actually bought from — the known peer lspPubkey — NOT the lsp_node_id the
+	// LSP echoes back in its buy response (a non-standard field the LSP fully
+	// controls). An LSP that returns a different id would otherwise make the Hub
+	// mint invoices whose last hop is the wrong node, so payments can't route to
+	// the intercept SCID (self-DoS). We only surface a mismatch (LOKIHUB-0027).
+	if res.LSPNodeID != "" && !strings.EqualFold(res.LSPNodeID, lspPubkey) {
+		logger.Logger.Warn().
+			Str("lsp", lspPubkey).
+			Str("response_lsp_node_id", res.LSPNodeID).
+			Msg("LSPS2 buy response echoed a lsp_node_id different from the peer bought from; ignoring it and using the known peer pubkey")
+	}
 	return &JitChannelHints{
 		SCID:            fmt.Sprintf("%d", res.InterceptSCID),
-		LSPNodeID:       res.LSPNodeID,
+		LSPNodeID:       lspPubkey,
+		ClientTrustsLSP: res.ClientTrustsLSP,
 		CLTVExpiryDelta: res.CLTVExpiryDelta,
 		FeeMloki:        feeMloki,
 	}, nil
@@ -1057,6 +1229,23 @@ func (m *LiquidityManager) handleChannelAcceptRequest(
 	}
 
 	if whitelisted {
+		// Even from a trusted LSP, don't grant instant zero-conf trust to a
+		// channel smaller than the smallest inbound liquidity that LSP still
+		// owes us (a pending order's quoted lsp_balance). An under-capacity
+		// open falls back to a standard (confirmed) accept, so the COMPLETED
+		// reconciliation still gates the order (LOKIHUB-0026).
+		if minQuoted, ok := m.minPendingQuoteForLSP(requestPubkey); ok && req.Capacity < minQuoted {
+			logger.Logger.Warn().
+				Str("pubkey", req.NodePubkey).
+				Uint64("capacity", req.Capacity).
+				Uint64("min_quoted_lsp_balance", minQuoted).
+				Msg("Trusted LSP channel capacity below the smallest quoted lsp_balance; declining zero-conf, accepting as standard")
+			if err := respond(req.ID, true, false); err != nil {
+				logger.Logger.Error().Err(err).Str("pubkey", req.NodePubkey).
+					Msg("Failed to send standard channel accept response")
+			}
+			return
+		}
 		logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Accepting ZeroConf channel from trusted LSP")
 		if err := respond(req.ID, true, true); err != nil {
 			logger.Logger.Error().Err(err).Str("pubkey", req.NodePubkey).

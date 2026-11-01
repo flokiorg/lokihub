@@ -30,12 +30,13 @@ func (c *lspsEventConsumer) handleOrderStateChanged(ctx context.Context, event *
 	state, _ := props["state"].(string)
 	orderID, _ := props["order_id"].(string)
 	lspPubkey, _ := props["lsp_pubkey"].(string)
+	fundingOutpoint, _ := props["channel_point"].(string)
 
 	if orderID == "" || state == "" {
 		return
 	}
 
-	c.svc.GetLiquidityManager().HandleOrderStateUpdate(orderID, state, lspPubkey)
+	c.svc.GetLiquidityManager().HandleOrderStateUpdate(ctx, orderID, state, lspPubkey, fundingOutpoint)
 }
 
 func (c *lspsEventConsumer) handlePaymentIncoming(ctx context.Context, event *events.Event) {

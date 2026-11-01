@@ -253,6 +253,7 @@ func (h *ClientHandler) handleBuyResponse(peerPubkey, requestID string, jitChann
 		CLTVExpiryDelta:    result.LSPCLTVExpiryDelta,
 		PaymentSizeMloki:   jitChannel.PaymentSizeMloki,
 		LSPNodeID:          result.LSPNodeID,
+		ClientTrustsLSP:    result.ClientTrustedLSP,
 	})
 
 	return nil
