@@ -56,6 +56,7 @@ func (a *withdrawStubAPI) CashWithdrawStatus() (*cashwithdraw.EngineStatus, erro
 func TestWailsRouter_Withdraw(t *testing.T) {
 	stub := &withdrawStubAPI{}
 	app := &WailsApp{api: stub, ctx: context.Background()}
+	app.session.markUnlocked("full") // on-chain withdrawal routes are full-access
 	for _, r := range []struct{ route, method, body string }{
 		{"/api/cash-withdraw/node", "GET", ""},
 		{"/api/cash-withdraw/node", "PUT", `{"enabled":true}`},

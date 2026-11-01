@@ -23,6 +23,7 @@ func (a *circleStatsAPI) GetCircleHubStats(appID uint) (*api.CircleHubStatsRespo
 func TestWailsRouter_CircleHubStats(t *testing.T) {
 	stub := &circleStatsAPI{}
 	app := &WailsApp{api: stub}
+	app.session.markUnlocked("full") // circle-stats is a full-access route
 
 	res := app.WailsRequestRouter("/api/apps/7/circle-stats", "GET", "")
 	assert.Empty(t, res.Error)
