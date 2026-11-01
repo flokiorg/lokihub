@@ -365,14 +365,16 @@ func (svc *transactionsService) ResolveCircleHold(ctx context.Context, paymentHa
 			return fmt.Errorf("open the invoice's preimage: %w", err)
 		}
 		if preimage != "" {
-			_, err = svc.SettleHoldInvoice(ctx, preimage, lnClient)
+			// Hub-level reconciliation: not scoped to a NIP-47 caller's app.
+			_, err = svc.SettleHoldInvoice(ctx, preimage, lnClient, nil)
 			return err
 		}
 	}
 	if !ok {
 		svc.logger.Info().Str("payment_hash", paymentHash).Str("reason", reason).Msg("Cancelling a circle wallet payment the Hub refuses")
 	}
-	return svc.CancelHoldInvoice(ctx, paymentHash, lnClient)
+	// Hub-level reconciliation: not scoped to a NIP-47 caller's app.
+	return svc.CancelHoldInvoice(ctx, paymentHash, lnClient, nil)
 }
 
 // ResolveAcceptedCircleHolds resolves every Circle Wallet payment left accepted,
@@ -498,7 +500,8 @@ func (svc *transactionsService) CancelOpenCircleInvoices(ctx context.Context, wa
 			continue
 		}
 		if row.State == constants.TRANSACTION_STATE_ACCEPTED {
-			if err := svc.CancelHoldInvoice(ctx, row.PaymentHash, lnClient); err != nil {
+			// Hub-level teardown of a wallet's holds: not scoped to a NIP-47 caller's app.
+			if err := svc.CancelHoldInvoice(ctx, row.PaymentHash, lnClient, nil); err != nil {
 				return err
 			}
 			continue

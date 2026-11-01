@@ -70,8 +70,8 @@ type TransactionsService interface {
 	SendPaymentSync(payReq string, amountMloki *uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error)
 	SendKeysend(amount uint64, destination string, customRecords []lnclient.TLVRecord, preimage string, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error)
 	MakeHoldInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, paymentHash string, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error)
-	SettleHoldInvoice(ctx context.Context, preimage string, lnClient lnclient.LNClient) (*Transaction, error)
-	CancelHoldInvoice(ctx context.Context, paymentHash string, lnClient lnclient.LNClient) error
+	SettleHoldInvoice(ctx context.Context, preimage string, lnClient lnclient.LNClient, appId *uint) (*Transaction, error)
+	CancelHoldInvoice(ctx context.Context, paymentHash string, lnClient lnclient.LNClient, appId *uint) error
 	SetTransactionMetadata(ctx context.Context, id uint, metadata map[string]interface{}) error
 	SetLiquidityManager(lm *manager.LiquidityManager)
 	EstimateFee(payReq string) (uint64, error)
@@ -2221,7 +2221,36 @@ func (svc *transactionsService) findCustomKeyApp(customRecords []lnclient.TLVRec
 	return nil
 }
 
-func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage string, lnClient lnclient.LNClient) (*Transaction, error) {
+// holdInvoiceAppFilter reports the app_id a hold-invoice cancel/settle lookup
+// must be scoped to, or nil when it must not be scoped. For an isolated-kind
+// caller it returns the caller's own appId so it can act only on its own hold
+// invoices, mirroring the app_id gating LookupTransaction/ListTransactions
+// already enforce for the read path. A standard/shared-wallet connection (not
+// an isolated kind) and an internal caller (appId == nil) stay unscoped, as the
+// read siblings leave them. A caller app that no longer exists is not-found.
+func (svc *transactionsService) holdInvoiceAppFilter(appId *uint) (*uint, error) {
+	if appId == nil {
+		return nil, nil
+	}
+	var appKind string
+	err := svc.db.
+		Model(&db.App{}).
+		Where("id", *appId).
+		Pluck("kind", &appKind).
+		Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, NewNotFoundError()
+		}
+		return nil, err
+	}
+	if db.IsIsolatedKind(appKind) {
+		return appId, nil
+	}
+	return nil, nil
+}
+
+func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage string, lnClient lnclient.LNClient, appId *uint) (*Transaction, error) {
 	if len(preimage) != 64 {
 		return nil, errors.New("invalid preimage format")
 	}
@@ -2233,8 +2262,20 @@ func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage 
 	paymentHashBytes := sha256.Sum256(preimageBytes)
 	paymentHash := hex.EncodeToString(paymentHashBytes[:])
 
+	// Scope the lookup to the hold invoices the caller owns, so an
+	// isolated app cannot settle another app's accepted hold invoice by
+	// payment hash (same app_id gating as LookupTransaction/ListTransactions).
+	scopeAppId, err := svc.holdInvoiceAppFilter(appId)
+	if err != nil {
+		return nil, err
+	}
+
 	var dbTransaction db.Transaction
-	result := svc.db.Limit(1).Find(&dbTransaction, &db.Transaction{
+	query := svc.db.Limit(1)
+	if scopeAppId != nil {
+		query = query.Where("app_id = ?", *scopeAppId)
+	}
+	result := query.Find(&dbTransaction, &db.Transaction{
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
 		State:       constants.TRANSACTION_STATE_ACCEPTED,
 		PaymentHash: paymentHash,
@@ -2277,10 +2318,22 @@ func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage 
 	return settledTransaction, nil
 }
 
-func (svc *transactionsService) CancelHoldInvoice(ctx context.Context, paymentHash string, lnClient lnclient.LNClient) error {
+func (svc *transactionsService) CancelHoldInvoice(ctx context.Context, paymentHash string, lnClient lnclient.LNClient, appId *uint) error {
+
+	// Scope the lookup to the hold invoices the caller owns, so an
+	// isolated app cannot cancel another app's accepted hold invoice by
+	// payment hash (same app_id gating as LookupTransaction/ListTransactions).
+	scopeAppId, err := svc.holdInvoiceAppFilter(appId)
+	if err != nil {
+		return err
+	}
 
 	var dbTransaction db.Transaction
-	result := svc.db.Limit(1).Find(&dbTransaction, &db.Transaction{
+	query := svc.db.Limit(1)
+	if scopeAppId != nil {
+		query = query.Where("app_id = ?", *scopeAppId)
+	}
+	result := query.Find(&dbTransaction, &db.Transaction{
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
 		State:       constants.TRANSACTION_STATE_ACCEPTED,
 		PaymentHash: paymentHash,
@@ -2302,9 +2355,13 @@ func (svc *transactionsService) CancelHoldInvoice(ctx context.Context, paymentHa
 		}
 	}
 
-	err := svc.db.Transaction(func(tx *gorm.DB) error {
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
 		var dbTransaction db.Transaction
-		result := tx.Limit(1).Find(&dbTransaction, &db.Transaction{
+		query := tx.Limit(1)
+		if scopeAppId != nil {
+			query = query.Where("app_id = ?", *scopeAppId)
+		}
+		result := query.Find(&dbTransaction, &db.Transaction{
 			Type:        constants.TRANSACTION_TYPE_INCOMING,
 			State:       constants.TRANSACTION_STATE_ACCEPTED,
 			PaymentHash: paymentHash,

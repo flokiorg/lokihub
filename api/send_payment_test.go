@@ -82,11 +82,11 @@ func (s *stubTransactionsService) MakeHoldInvoice(_ context.Context, _ uint64, _
 	panic("MakeHoldInvoice: unexpected call in test")
 }
 
-func (s *stubTransactionsService) SettleHoldInvoice(_ context.Context, _ string, _ lnclient.LNClient) (*transactions.Transaction, error) {
+func (s *stubTransactionsService) SettleHoldInvoice(_ context.Context, _ string, _ lnclient.LNClient, _ *uint) (*transactions.Transaction, error) {
 	panic("SettleHoldInvoice: unexpected call in test")
 }
 
-func (s *stubTransactionsService) CancelHoldInvoice(_ context.Context, _ string, _ lnclient.LNClient) error {
+func (s *stubTransactionsService) CancelHoldInvoice(_ context.Context, _ string, _ lnclient.LNClient, _ *uint) error {
 	panic("CancelHoldInvoice: unexpected call in test")
 }
 
