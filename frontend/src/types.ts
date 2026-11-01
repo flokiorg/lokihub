@@ -364,6 +364,25 @@ export interface InfoResponse {
   enableMessageboardNwc: boolean;
   workDir: string;
   enablePolling?: boolean;
+  // lspService is the attached-lspd status (plan §3.4), present only when an
+  // LSP service endpoint is configured on the Hub and omitted otherwise, so the
+  // backoffice nav can gate on `lspService?.attached`. `configured` is
+  // endpoint-present; `reachable` is lspd's /info answered; `attached` is
+  // reachable AND the admin key was accepted. `error` explains a non-attached
+  // state ("unreachable", "key mismatch (403)", a signer error).
+  lspService?: LSPServiceInfo;
+}
+
+export interface LSPServiceInfo {
+  configured: boolean;
+  reachable: boolean;
+  attached: boolean;
+  endpoint?: string;
+  pubkey?: string;
+  version?: string;
+  alias?: string;
+  error?: string;
+  checkedAt?: string;
 }
 
 export type FlokicoinDisplayFormat = "loki" | "flc" | "auto";
