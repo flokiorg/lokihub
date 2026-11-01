@@ -123,6 +123,7 @@ type fakeFunds struct {
 	notReady  bool
 	atBound   bool
 	noCoins   bool
+	confirmed int64
 	signalled int
 }
 
@@ -130,12 +131,19 @@ const setAsidePrefix = "wdtest-setaside-"
 
 func (f *fakeFunds) Ready() bool { f.mu.Lock(); defer f.mu.Unlock(); return !f.notReady }
 func (f *fakeFunds) Snapshot(context.Context) (FundsSnapshot, error) {
-	return FundsSnapshot{ConfirmedSat: 1e9}, nil
-}
-func (f *fakeFunds) AtUnconfirmedBoundTx(*gorm.DB, FundsSnapshot, uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.atBound, nil
+	return FundsSnapshot{ConfirmedSat: f.confirmed}, nil
+}
+
+// setConfirmed changes the confirmed balance a later Snapshot reads, so a hook
+// at the commit lock can drop it (the step-3 bound re-reads it under the lock).
+func (f *fakeFunds) setConfirmed(sat int64) { f.mu.Lock(); f.confirmed = sat; f.mu.Unlock() }
+
+func (f *fakeFunds) AtUnconfirmedBoundTx(_ *gorm.DB, snap FundsSnapshot, _ uint64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.atBound || snap.ConfirmedSat == 0, nil
 }
 func (f *fakeFunds) CanSetAsideTx(*gorm.DB, uint64, uint64) (bool, error) {
 	f.mu.Lock()
@@ -184,7 +192,7 @@ func newWorld(t *testing.T) *world {
 	w := &world{svc: svc, hub: hub, now: time.Now().Truncate(time.Second)}
 	w.payer = &fakePayer{est: lnclient.FeeEstimate{SatPerKw: 1250, MinRelaySatPerKw: 253}}
 	w.node = &fakeNode{tip: 1000, privHex: hex.EncodeToString(mock.SigningKey.Serialize()), payer: w.payer}
-	w.funds = &fakeFunds{}
+	w.funds = &fakeFunds{confirmed: 1e9}
 	w.s = &Service{
 		DB: svc.DB, Cfg: svc.Cfg, Keys: svc.Keys, Apps: svc.AppsService, Events: svc.EventPublisher,
 		LN: func() lnclient.LNClient { return svc.LNClient }, NodeOverride: w.node,

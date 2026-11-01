@@ -254,6 +254,41 @@ func TestOrderIntake_LightningExpiresAndIsDropped(t *testing.T) {
 	assert.Zero(t, n, "an unpaid order's mark may go after deadline + H")
 }
 
+// The deadline + H floor is judged on the wall clock, as the commit and the
+// lookup judge the deadline: with the Hub's clock moved past it but the wall
+// clock not, an expired Lightning order keeps its record and its used mark.
+func TestOrderIntake_RetentionFloorOnWallClock(t *testing.T) {
+	f := newIntakeFixture(t)
+	f.ln.MockTransaction = &lnclient.Transaction{}
+	res, _, p := f.order(t, nipCO.PaymentLightning, 21_000, nil)
+	orderOf(t, res)
+	f.pastPayBy(t, p.RequestID)
+	f.engine.RunPayBy(context.TODO())
+	o := f.orderRow(t, p.RequestID)
+	require.Equal(t, db.CashOrderExpired, o.State)
+	floor := o.Deadline + 300
+	require.Greater(t, f.clock.Unix(), floor, "the Hub's clock is past deadline + H")
+
+	count := func(model any) int64 {
+		var n int64
+		require.NoError(t, f.svc.DB.Model(model).Where("request_id = ?", p.RequestID).Count(&n).Error)
+		return n
+	}
+	// The Hub's clock runs ahead of the wall clock, which is at deadline + H.
+	offset := time.Duration(f.clock.Unix()-floor) * time.Second
+	f.engine.Wall = func(t time.Time) time.Time { return t.Add(-offset) }
+	f.engine.RunRetention()
+	assert.EqualValues(t, 1, count(&db.CashOrder{}), "kept until deadline + H passed on the wall clock")
+	assert.EqualValues(t, 1, count(&db.CashRequestRecord{}))
+	assert.EqualValues(t, 1, count(&db.CashUsedRequestID{}))
+
+	offset -= time.Second
+	f.engine.RunRetention()
+	assert.Zero(t, count(&db.CashOrder{}))
+	assert.Zero(t, count(&db.CashRequestRecord{}))
+	assert.Zero(t, count(&db.CashUsedRequestID{}))
+}
+
 // U-22.5: on chain, an output is seen (paid), confirmed at its tier and minted
 // with its outpoint; at pay_by the order is closed, and a later output still
 // mints; an output missing from two scans before confirming is dropped; an

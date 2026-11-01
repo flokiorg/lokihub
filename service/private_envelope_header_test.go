@@ -106,3 +106,43 @@ func TestUnwrap_E5RefusalMarksTheNonceServed(t *testing.T) {
 	}
 	assert.False(t, pt.nonces.Seen(e4))
 }
+
+// NIP-CASH §Serving an Envelope (NIP-CASH:2573-2574): once an envelope passes E4
+// its nonce counts as served, so an envelope refused at E6 (its verification
+// budget exceeded) is still served — a byte-identical copy is dropped as a
+// replay, not answered again. (E5 is covered by TestUnwrap_E5RefusalMarksTheNonceServed.)
+func TestUnwrap_E6RefusalMarksTheNonceServed(t *testing.T) {
+	pt, _ := newUnwrapFixture(t)
+	limits := transport.DefaultLimits()
+	now := time.Now()
+	nonce, _ := transport.NewNonce()
+	reply, _ := transport.NewNonce()
+
+	// Each item declares many sources, each contributing verification cost,
+	// staying under MaxItems and MaxConsolidateSources so the refusal lands at
+	// E6 (the verify budget) rather than E5 (item count / envelope size).
+	source := `{"identity_event":"x","attestation_event":"x"}`
+	sources := make([]string, 45)
+	for i := range sources {
+		sources[i] = source
+	}
+	srcArr := strings.Join(sources, ",")
+	items := make([]string, 5)
+	for i := range items {
+		items[i] = fmt.Sprintf(`{"id":"%d","target":"%s","method":"cash_consolidate","params":{"sources":[%s]},"proof":{"kind":23192},"bill_proof":{"kind":23193}}`,
+			i, strings.Repeat("cc", 32), srcArr)
+	}
+	ev := sealPlaintext(t, pt, fmt.Sprintf(`{"nonce":"%s","reply_to":"%s","not_after":%d,"items":[%s]}`, nonce, reply, now.Unix()+60, strings.Join(items, ",")))
+
+	_, _, err := pt.unwrap(ev, limits, now)
+	var refusal *envelopeRefusal
+	require.True(t, errors.As(err, &refusal), "first copy: %v", err)
+	require.Equal(t, "QUOTA_EXCEEDED", refusal.code)
+	require.ErrorIs(t, err, transport.ErrVerifyBudgetExceeded, "refused at E6 (verify budget), not E5")
+	assert.True(t, pt.nonces.Seen(nonce), "a nonce past E4 is served even when E6 refuses")
+
+	_, _, err = pt.unwrap(ev, limits, now)
+	require.Error(t, err)
+	require.False(t, errors.As(err, &refusal), "a copy of an envelope refused at E6 was answered again")
+	assert.Contains(t, err.Error(), "already served")
+}
