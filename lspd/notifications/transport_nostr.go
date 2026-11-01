@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flokiorg/lokihub/lspd/common"
 	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
@@ -18,14 +19,21 @@ type NostrTransport struct {
 	lspPrivKey string // hex private key
 	lsps5      *nostrlsps5.LSPS5
 	relayPool  *RelayPool
+	// allowLoopback admits loopback relays for local development and tests
+	// (LSPS5_ALLOW_LOOPBACK_WEBHOOKS); every other non-public range stays
+	// refused by the dial-time address guard in Send.
+	allowLoopback bool
 }
 
-// NewNostrTransport creates a new Nostr transport
-func NewNostrTransport(lspPrivKey string) *NostrTransport {
+// NewNostrTransport creates a new Nostr transport. allowLoopback mirrors the
+// HTTPS transport's dev flag: it admits loopback relays for local development
+// and tests; other private/internal ranges remain refused at dial time.
+func NewNostrTransport(lspPrivKey string, allowLoopback bool) *NostrTransport {
 	return &NostrTransport{
-		lspPrivKey: lspPrivKey,
-		lsps5:      nostrlsps5.NewLSPS5(lspPrivKey),
-		relayPool:  NewRelayPool(),
+		lspPrivKey:    lspPrivKey,
+		lsps5:         nostrlsps5.NewLSPS5(lspPrivKey),
+		relayPool:     NewRelayPool(),
+		allowLoopback: allowLoopback,
 	}
 }
 
@@ -89,6 +97,16 @@ func (t *NostrTransport) Send(ctx context.Context, targetUri string, method stri
 			// Use separate context or same ctx?
 			// If we return early, we don't want to cancel the connection attempt for others if we want redundancy.
 			// But for latency, we just care about one.
+
+			// SSRF dial-time guard (FLSPD-0011 / R-LSP-6): re-resolve the
+			// client-supplied relay and refuse private/loopback/link-local/
+			// CGNAT addresses, mirroring the HTTPS transport's
+			// webhookDialControl. Registration validated the relay too, but
+			// DNS can change between registration and delivery.
+			if err := common.ValidateRelayUrl(relayUrl, t.allowLoopback); err != nil {
+				log.Warn().Err(err).Str("relay", relayUrl).Msg("NostrTransport: refusing to dial relay (address policy)")
+				return
+			}
 
 			log.Trace().Str("relay", relayUrl).Msg("NostrTransport: connecting to relay")
 			relay, err := t.relayPool.GetOrConnect(ctx, relayUrl)
