@@ -39,6 +39,7 @@ func TestWailsRouter_PurchaseTermsRefusalCarriesTheTerms(t *testing.T) {
 	for _, r := range routes {
 		stub := &purchaseStubAPI{err: fmt.Errorf("buy: %w", &manager.TermsWorseError{Terms: terms})}
 		app := &WailsApp{api: stub, ctx: context.Background()}
+		app.session.markUnlocked("full") // LSP purchase is a full-access route
 		res := app.WailsRequestRouter(r.route, "POST", r.body)
 		require.Contains(t, res.Error, "worse than it announced", r.route)
 		refusal, ok := res.Body.(*manager.TermsRefusal)
