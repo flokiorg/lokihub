@@ -55,7 +55,7 @@ func TestSelfHoldPaymentSettled(t *testing.T) {
 		tx, lookupErr := transactionsService.LookupTransaction(ctx, paymentHash, &incomingTransactionType, svc.LNClient, nil)
 		return lookupErr == nil && tx != nil && tx.State == constants.TRANSACTION_STATE_ACCEPTED
 	}, 2*time.Second, 2*time.Millisecond, "hold invoice was never marked accepted")
-	settledTransaction, err := transactionsService.SettleHoldInvoice(ctx, preimage, svc.LNClient)
+	settledTransaction, err := transactionsService.SettleHoldInvoice(ctx, preimage, svc.LNClient, nil)
 	assert.NoError(t, err)
 	require.NotNil(t, settledTransaction)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, settledTransaction.State)
@@ -104,7 +104,7 @@ func TestSelfHoldPaymentCanceled(t *testing.T) {
 		tx, lookupErr := transactionsService.LookupTransaction(ctx, paymentHash, &incomingTransactionType, svc.LNClient, nil)
 		return lookupErr == nil && tx != nil && tx.State == constants.TRANSACTION_STATE_ACCEPTED
 	}, 2*time.Second, 2*time.Millisecond, "hold invoice was never marked accepted")
-	err = transactionsService.CancelHoldInvoice(ctx, paymentHash, svc.LNClient)
+	err = transactionsService.CancelHoldInvoice(ctx, paymentHash, svc.LNClient, nil)
 	assert.NoError(t, err)
 
 	incomingTransactionType := constants.TRANSACTION_TYPE_INCOMING
