@@ -9,9 +9,7 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
 
-	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
@@ -20,25 +18,9 @@ import (
 // Two Hub processes sharing one postgres database each have their own connection
 // pool, so whatever keeps circle-wallet creation safe has to hold across pools,
 // not just across goroutines in one process. These tests split the race of the
-// separate-controllers tests across two pools on the same database. Postgres
-// only: a sqlite file has no second process to share it with.
-
-// secondProcess is svc as a second Hub process would see it: the same database
-// through its own connection pool.
-func secondProcess(t *testing.T, svc *tests.TestService) *tests.TestService {
-	t.Helper()
-	dialector, ok := svc.DB.Dialector.(*postgres.Dialector)
-	if !ok {
-		t.Skip("postgres only: run with TEST_DATABASE_URI pointing at a postgres database")
-	}
-	pool, err := db.NewDBWithConfig(&db.Config{URI: dialector.DSN})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Stop(pool) })
-	other := *svc
-	other.DB = pool
-	other.AppsService = apps.NewAppsService(pool, svc.EventPublisher, svc.Keys, svc.Cfg)
-	return &other
-}
+// separate-controllers tests across two pools on the same database
+// (tests.SecondProcess). Postgres only: a sqlite file has no second process to
+// share it with.
 
 // raceCircleJoinsAcross runs every request at once, alternating between the two
 // processes' pools, each request through its own controller.
@@ -89,7 +71,7 @@ func TestCreateCircleWallet_TwoProcesses_SameIdentity_ExactlyOneWallet(t *testin
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
-	other := secondProcess(t, svc)
+	other := tests.SecondProcess(t, svc)
 	provider := createCircleHub(t, svc, 7200, 100_000_000)
 
 	const rounds, perRound = 10, 6
