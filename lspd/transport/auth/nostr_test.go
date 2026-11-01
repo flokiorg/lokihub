@@ -365,6 +365,81 @@ func TestVerifyNostrAuth_ReplayStoreErrorFailsClosed(t *testing.T) {
 	assert.Contains(t, err.Error(), "unavailable")
 }
 
+// TestVerifyNostrAuth_ForwardedHostHonoredOnlyFromTrustedProxy is the A4-FL-3
+// regression: getFullUrl trusted X-Forwarded-* unconditionally, so once a
+// proxy fronts lspd a client talking to it directly could forge the host the
+// NIP-98 'u' tag is matched against. Forwarded headers must be honored only
+// when the immediate peer is a configured trusted proxy.
+func TestVerifyNostrAuth_ForwardedHostHonoredOnlyFromTrustedProxy(t *testing.T) {
+	sk, _ := newTestKeypair(t)
+	// The client signs the PUBLIC URL it reaches lspd through.
+	const signedURL = "https://dashboard.example/dashboard"
+
+	trusted, err := ParseTrustedProxies([]string{"10.1.2.0/24"})
+	require.NoError(t, err)
+
+	newReq := func(remoteAddr string) *http.Request {
+		resetReplayCache(t)
+		// lspd itself sees an internal Host; a fronting proxy advertises the
+		// public one via X-Forwarded-*.
+		r := httptest.NewRequest(http.MethodGet, "http://lspd-internal:8080/dashboard", nil)
+		r.RemoteAddr = remoteAddr
+		r.Header.Set("X-Forwarded-Host", "dashboard.example")
+		r.Header.Set("X-Forwarded-Proto", "https")
+		r.Header.Set("Authorization", buildAuthHeader(t, sk, authEventOpts{
+			method:    http.MethodGet,
+			url:       signedURL,
+			createdAt: time.Now().Unix(),
+		}))
+		return r
+	}
+
+	// From a trusted proxy: the forwarded host is honored, so the derived URL
+	// matches the signed 'u' tag.
+	_, err = VerifyNostrAuth(newReq("10.1.2.3:4567"), Options{TrustedProxies: trusted})
+	require.NoError(t, err)
+
+	// From an untrusted peer: forwarded headers are ignored, the URL falls
+	// back to the internal Host, and the 'u' tag no longer matches.
+	_, err = VerifyNostrAuth(newReq("203.0.113.7:4567"), Options{TrustedProxies: trusted})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "'u' tag mismatch")
+}
+
+// TestVerifyNostrAuth_ExpectedHostPinOverridesForwardedHeaders: a pinned
+// public host wins even over a trusted proxy's forwarded host, so a
+// mis-set/forged forwarded header cannot move the 'u'-tag binding.
+func TestVerifyNostrAuth_ExpectedHostPinOverridesForwardedHeaders(t *testing.T) {
+	resetReplayCache(t)
+	sk, _ := newTestKeypair(t)
+	const signedURL = "https://pinned.example/dashboard"
+
+	trusted, err := ParseTrustedProxies([]string{"10.0.0.0/8"})
+	require.NoError(t, err)
+
+	r := httptest.NewRequest(http.MethodGet, "http://internal/dashboard", nil)
+	r.RemoteAddr = "10.9.9.9:111" // trusted peer
+	r.Header.Set("X-Forwarded-Host", "attacker.example")
+	r.Header.Set("Authorization", buildAuthHeader(t, sk, authEventOpts{
+		method:    http.MethodGet,
+		url:       signedURL,
+		createdAt: time.Now().Unix(),
+	}))
+
+	_, err = VerifyNostrAuth(r, Options{ExpectedHost: "pinned.example", ExpectedScheme: "https", TrustedProxies: trusted})
+	require.NoError(t, err)
+}
+
+// TestParseTrustedProxies covers CIDRs, bare IPs, blanks, and a bad entry.
+func TestParseTrustedProxies(t *testing.T) {
+	nets, err := ParseTrustedProxies([]string{"10.0.0.0/8", "192.168.1.5", "", "  ", "2001:db8::1"})
+	require.NoError(t, err)
+	require.Len(t, nets, 3)
+
+	_, err = ParseTrustedProxies([]string{"not-an-ip"})
+	require.Error(t, err)
+}
+
 func TestVerifyNostrAuth_QueryParamFallback(t *testing.T) {
 	resetReplayCache(t)
 	sk, pk := newTestKeypair(t)
