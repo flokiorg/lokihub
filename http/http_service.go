@@ -3,11 +3,14 @@ package http
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,6 +34,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/flokiorg/lokihub/lspservice"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -60,8 +64,16 @@ type HttpService struct {
 	appStoreSvc    appstore.Service
 	logger         zerolog.Logger
 
+	// tokenRevocation is the server-side jti denylist backing logout and
+	// single-token revocation of the otherwise-stateless session JWTs.
+	tokenRevocation tokenRevocation
+
 	shutdownOnce sync.Once
 	shutdownCh   chan struct{}
+
+	// lspClient is the Hub's client to an attached lspd daemon (plan §3), or
+	// nil when no LSP service endpoint is configured (feature off).
+	lspClient *lspservice.Client
 
 	// svc is read only by the test hooks (testhooks builds).
 	svc service.Service
@@ -69,16 +81,18 @@ type HttpService struct {
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
 	return &HttpService{
-		api:            api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetLokiSvc(), eventPublisher),
-		lokiHttpSvc:    NewLokiHttpService(svc, svc.GetLokiSvc(), svc.GetConfig().GetEnv()),
-		cfg:            svc.GetConfig(),
-		eventPublisher: eventPublisher,
-		db:             svc.GetDB(),
-		appsSvc:        apps.NewAppsService(svc.GetDB(), eventPublisher, svc.GetKeys(), svc.GetConfig()),
-		appStoreSvc:    svc.GetAppStoreSvc(),
-		logger:         logger.Logger.With().Str("component", "http").Logger(),
-		shutdownCh:     make(chan struct{}),
-		svc:            svc,
+		api:             api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetLokiSvc(), eventPublisher),
+		lokiHttpSvc:     NewLokiHttpService(svc, svc.GetLokiSvc(), svc.GetConfig().GetEnv()),
+		cfg:             svc.GetConfig(),
+		eventPublisher:  eventPublisher,
+		db:              svc.GetDB(),
+		appsSvc:         apps.NewAppsService(svc.GetDB(), eventPublisher, svc.GetKeys(), svc.GetConfig()),
+		appStoreSvc:     svc.GetAppStoreSvc(),
+		logger:          logger.Logger.With().Str("component", "http").Logger(),
+		tokenRevocation: dbTokenRevocation{db: svc.GetDB()},
+		shutdownCh:      make(chan struct{}),
+		lspClient:       newLspClient(svc.GetConfig().GetEnv()),
+		svc:             svc,
 	}
 }
 
@@ -90,7 +104,23 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 func (httpSvc *HttpService) Shutdown() {
 	httpSvc.shutdownOnce.Do(func() {
 		close(httpSvc.shutdownCh)
+		if httpSvc.lspClient != nil {
+			httpSvc.lspClient.Close()
+		}
 	})
+}
+
+// tokenQueryParamPattern matches a `token` query parameter and its value in a
+// request URI (either `?token=…` or `&token=…`), capturing the `?`/`&` and the
+// `token=` prefix so only the value is replaced.
+var tokenQueryParamPattern = regexp.MustCompile(`([?&]token=)[^&]*`)
+
+// redactTokenQueryParam replaces the value of any `token` query parameter with
+// a fixed marker, so a bearer token passed via the query-token fallback (the
+// avatar <img> and SSE EventSource routes) never reaches the request logger or
+// the on-disk access log (nwc.log).
+func redactTokenQueryParam(uri string) string {
+	return tokenQueryParamPattern.ReplaceAllString(uri, "${1}[REDACTED]")
 }
 
 func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
@@ -120,7 +150,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 		LogRequestID: true,
 		LogValuesFunc: func(c echo.Context, values middleware.RequestLoggerValues) error {
 			logger.HttpLogger.Info().
-				Str("uri", values.URI).
+				Str("uri", redactTokenQueryParam(values.URI)).
 				Int("status", values.Status).
 				Str("remote_ip", values.RemoteIP).
 				Str("user_agent", values.UserAgent).
@@ -175,8 +205,11 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	frontend.RegisterHandlers(e)
 
 	// restricted routes
-	// Configure middleware with the custom claims type
-	jwtConfig := echojwt.Config{
+	// Configure middleware with the custom claims type. The base config is
+	// shared; only the token lookup differs between the header-only variant
+	// (almost every route) and the query-token variant (the two routes below
+	// that cannot send an Authorization header).
+	baseJWTConfig := echojwt.Config{
 		NewClaimsFunc: func(c echo.Context) jwt.Claims {
 			return new(jwtCustomClaims)
 		},
@@ -188,20 +221,40 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 			}
 			return []byte(secret), nil
 		},
-		TokenLookup: "header:Authorization:Bearer ,query:token",
 	}
-	// Read-only API group - accessible to both full and readonly tokens
-	readOnlyApiGroup := e.Group("/api")
-	readOnlyApiGroup.Use(echojwt.WithConfig(jwtConfig))
+	// Header-only auth: no query-token fallback. A bearer token in the query
+	// string lands in the request logger and the on-disk access log (nwc.log),
+	// so it is only accepted on the avatar-proxy and SSE groups below, which
+	// genuinely cannot set a request header.
+	headerOnlyJWTConfig := baseJWTConfig
+	headerOnlyJWTConfig.TokenLookup = "header:Authorization:Bearer "
+	// Query-token fallback, bound ONLY to the avatar-proxy <img> and the SSE
+	// EventSource routes.
+	queryTokenJWTConfig := baseJWTConfig
+	queryTokenJWTConfig.TokenLookup = "header:Authorization:Bearer ,query:token"
 
-	// Avatar proxy — see avatar_proxy.go. Requires login: unlike the app
-	// store logos route, this one fetches an arbitrary caller-supplied URL
-	// server-side, so leaving it unauthenticated would let anyone who can
-	// reach this port use the backend as an open SSRF-probe against its own
-	// local network, no login required. <img> tags can't set an
-	// Authorization header, so the frontend passes the token via the
-	// query-param fallback (TokenLookup above) instead.
-	readOnlyApiGroup.GET("/circle/avatar-proxy", httpSvc.avatarProxyHandler)
+	// Read-only API group - accessible to both full and readonly tokens.
+	// Header-only: the only read-only route needing a query token is the
+	// avatar proxy, which gets its own group below.
+	readOnlyApiGroup := e.Group("/api")
+	readOnlyApiGroup.Use(echojwt.WithConfig(headerOnlyJWTConfig))
+	readOnlyApiGroup.Use(httpSvc.rejectRevokedToken)
+
+	// Authenticated logout: revokes the presented token's jti server-side so a
+	// stateless JWT actually stops working at logout. Accepts any valid token
+	// (full or read-only) and is header-only (the frontend calls it via fetch).
+	readOnlyApiGroup.POST("/logout", httpSvc.logoutRevokeHandler)
+
+	// Avatar proxy — read-only access, but served to an <img> that cannot set
+	// an Authorization header, so this one route keeps the query-token
+	// fallback (queryTokenJWTConfig). See avatar_proxy.go: it fetches an
+	// arbitrary caller-supplied URL server-side, so leaving it unauthenticated
+	// would let anyone who can reach this port use the backend as an open
+	// SSRF-probe against its own local network, no login required.
+	avatarProxyGroup := e.Group("/api")
+	avatarProxyGroup.Use(echojwt.WithConfig(queryTokenJWTConfig))
+	avatarProxyGroup.Use(httpSvc.rejectRevokedToken)
+	avatarProxyGroup.GET("/circle/avatar-proxy", httpSvc.avatarProxyHandler)
 
 	readOnlyApiGroup.GET("/apps", httpSvc.appsListHandler)
 	readOnlyApiGroup.GET("/apps/:pubkey", httpSvc.appsShowByPubkeyHandler)
@@ -220,7 +273,6 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	readOnlyApiGroup.GET("/transactions/:paymentHash", httpSvc.lookupTransactionHandler)
 	readOnlyApiGroup.GET("/balances", httpSvc.balancesHandler)
 	readOnlyApiGroup.GET("/mempool", httpSvc.mempoolApiHandler)
-	readOnlyApiGroup.GET("/log/:type", httpSvc.getLogOutputHandler)
 	readOnlyApiGroup.GET("/health", httpSvc.healthHandler)
 	readOnlyApiGroup.GET("/commands", httpSvc.getCustomNodeCommandsHandler)
 	readOnlyApiGroup.GET("/swaps", httpSvc.listSwapsHandler)
@@ -235,13 +287,20 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 
 	// Full access API group - requires a token with full permissions
 	fullAccessApiGroup := e.Group("/api")
-	fullAccessApiGroup.Use(echojwt.WithConfig(jwtConfig))
+	fullAccessApiGroup.Use(echojwt.WithConfig(headerOnlyJWTConfig))
+	fullAccessApiGroup.Use(httpSvc.rejectRevokedToken)
 	fullAccessApiGroup.Use(httpSvc.requireFullAccess)
+
+	// The app log is the on-disk nwc.log tail: it can hold node internals and
+	// (historically) bearer tokens from query strings, so it is full-access
+	// only — a read-only token must not be able to read it.
+	fullAccessApiGroup.GET("/log/:type", httpSvc.getLogOutputHandler)
 
 	fullAccessApiGroup.POST("/api/event", httpSvc.eventHandler)
 	httpSvc.registerWithdrawRoutes(fullAccessApiGroup)
 	httpSvc.registerWithdrawTestHooks(fullAccessApiGroup)
 	httpSvc.registerListingRoutes(fullAccessApiGroup)
+	httpSvc.registerLspRoutes(fullAccessApiGroup)
 	fullAccessApiGroup.PATCH("/unlock-password", httpSvc.changeUnlockPasswordHandler)
 	fullAccessApiGroup.PATCH("/auto-unlock", httpSvc.autoUnlockHandler)
 	fullAccessApiGroup.PATCH("/settings", httpSvc.updateSettingsHandler)
@@ -339,8 +398,15 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	// This must be accessible without auth as external LSPs will call it
 	e.POST("/api/lsps5/webhook-callback", httpSvc.lsps5WebhookCallbackHandler)
 
-	// SSE endpoint for LSPS events - requires auth to subscribe
-	fullAccessApiGroup.GET("/lsps5/events", httpSvc.lsps5EventsSSEHandler)
+	// SSE endpoint for LSPS events — full access, but consumed by an
+	// EventSource that cannot set an Authorization header, so it keeps the
+	// query-token fallback (queryTokenJWTConfig) that the rest of the
+	// full-access API does not.
+	fullAccessSSEGroup := e.Group("/api")
+	fullAccessSSEGroup.Use(echojwt.WithConfig(queryTokenJWTConfig))
+	fullAccessSSEGroup.Use(httpSvc.rejectRevokedToken)
+	fullAccessSSEGroup.Use(httpSvc.requireFullAccess)
+	fullAccessSSEGroup.GET("/lsps5/events", httpSvc.lsps5EventsSSEHandler)
 
 	httpSvc.lokiHttpSvc.RegisterSharedRoutes(readOnlyApiGroup, fullAccessApiGroup, e)
 
@@ -382,6 +448,13 @@ func (httpSvc *HttpService) infoHandler(c echo.Context) error {
 		responseBody.RedactForUnauthenticated()
 	}
 	responseBody.Unlocked = unlocked
+
+	// Surface the attached-lspd status (plan §3.4) to authenticated callers
+	// only, and only when an LSP service is configured; otherwise the block is
+	// omitted so the frontend treats the feature as off (no backoffice nav).
+	if unlocked && httpSvc.lspClient != nil {
+		responseBody.LSPService = lspStatusToInfo(httpSvc.lspClient.Status(c.Request().Context()))
+	}
 
 	return c.JSON(http.StatusOK, responseBody)
 }
@@ -535,6 +608,30 @@ func (httpSvc *HttpService) requireFullAccess(next echo.HandlerFunc) echo.Handle
 	}
 }
 
+// rejectRevokedToken rejects a request whose token has been revoked (e.g. by
+// logout). It runs after the JWT middleware, which has already stored the
+// parsed token under "user". Tokens minted before the jti claim existed carry
+// no id and cannot be revoked individually; they are allowed through and
+// expire on their own, matching requireFullAccess's backward-compatibility.
+func (httpSvc *HttpService) rejectRevokedToken(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		token, ok := c.Get("user").(*jwt.Token)
+		if !ok {
+			return next(c)
+		}
+		claims, ok := token.Claims.(*jwtCustomClaims)
+		if !ok || claims.ID == "" {
+			return next(c)
+		}
+		if httpSvc.tokenRevocation.IsRevoked(claims.ID) {
+			return c.JSON(http.StatusUnauthorized, ErrorResponse{
+				Message: "Token has been revoked",
+			})
+		}
+		return next(c)
+	}
+}
+
 func (httpSvc *HttpService) changeUnlockPasswordHandler(c echo.Context) error {
 	var changeUnlockPasswordRequest api.ChangeUnlockPasswordRequest
 	if err := c.Bind(&changeUnlockPasswordRequest); err != nil {
@@ -589,27 +686,43 @@ func (httpSvc *HttpService) autoUnlockHandler(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// Session JWT lifetime bounds. maxTokenExpiryDays is a hard ceiling on a
+// caller-supplied tokenExpiryDays so a fund-moving token cannot be minted
+// effectively permanent; defaultTokenExpiryDays applies when none is supplied.
+const (
+	defaultTokenExpiryDays = 7
+	maxTokenExpiryDays     = 365
+)
+
 func (httpSvc *HttpService) createJWT(tokenExpiryDays *uint64, permission string) (string, error) {
 	if !slices.Contains([]string{"full", "readonly"}, permission) {
 		return "", errors.New("invalid token permission")
 	}
 
-	expiryDays := uint64(30)
+	expiryDays := uint64(defaultTokenExpiryDays)
 	if tokenExpiryDays != nil {
 		expiryDays = *tokenExpiryDays
 	}
-	// Cap at 100 years: caller-suppliable, and an oversized value would
-	// otherwise overflow the day*hour Duration multiplication below and
-	// silently produce a token that's already expired.
-	const maxExpiryDays = 100 * 365
-	if expiryDays > maxExpiryDays {
-		expiryDays = maxExpiryDays
+	// Cap the lifetime (caller-suppliable): a fund-moving token must not be
+	// mintable effectively permanent, and an oversized value would otherwise
+	// overflow the day*hour Duration multiplication below and silently produce
+	// a token that is already expired.
+	if expiryDays > maxTokenExpiryDays {
+		expiryDays = maxTokenExpiryDays
+	}
+
+	// A random jti lets logout and single-token revocation invalidate exactly
+	// this token server-side (see rejectRevokedToken / tokenRevocation).
+	jtiBytes := make([]byte, 16)
+	if _, err := rand.Read(jtiBytes); err != nil {
+		return "", fmt.Errorf("failed to generate token id: %w", err)
 	}
 
 	// Set custom claims
 	claims := &jwtCustomClaims{
 		Permission: permission,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        hex.EncodeToString(jtiBytes),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24 * time.Duration(expiryDays))), //nolint:gosec // expiryDays is capped above
 		},
 	}
@@ -1434,6 +1547,35 @@ func (httpSvc *HttpService) logoutHandler(c echo.Context) error {
 	}
 
 	return c.Redirect(http.StatusFound, redirectUrl)
+}
+
+// logoutRevokeHandler invalidates the presented token server-side by adding its
+// jti to the revocation denylist. The browser GET /logout above cannot carry a
+// bearer token, so the frontend calls this authenticated endpoint first; the
+// token is then rejected by rejectRevokedToken on every subsequent request.
+func (httpSvc *HttpService) logoutRevokeHandler(c echo.Context) error {
+	token, ok := c.Get("user").(*jwt.Token)
+	if !ok {
+		return c.NoContent(http.StatusNoContent)
+	}
+	claims, ok := token.Claims.(*jwtCustomClaims)
+	if !ok || claims.ID == "" {
+		// A token minted before the jti claim existed cannot be revoked
+		// individually; nothing to record.
+		return c.NoContent(http.StatusNoContent)
+	}
+
+	var expiresAt int64
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Unix()
+	}
+	if err := httpSvc.tokenRevocation.Revoke(claims.ID, expiresAt); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to revoke token on logout")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: "Failed to revoke session",
+		})
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (httpSvc *HttpService) createBackupHandler(c echo.Context) error {

@@ -7,6 +7,7 @@ import {
   LucideIcon,
   MegaphoneIcon,
   Plug2Icon,
+  ServerIcon,
   Settings,
   SquareStack,
   WalletIcon,
@@ -50,10 +51,20 @@ export function AppSidebar() {
   const _isHttpMode = isHttpMode();
 
   const logout = React.useCallback(async () => {
-    deleteAuthToken();
     if (_isHttpMode) {
+      // Revoke the session server-side before clearing the local token, so a
+      // leaked copy of this JWT stops working at logout, not only at expiry.
+      // request() reads the token from localStorage, so this must run before
+      // deleteAuthToken().
+      try {
+        await request("/api/logout", { method: "POST" });
+      } catch (error) {
+        console.error("Failed to revoke session", error);
+      }
+      deleteAuthToken();
       window.location.href = "/logout";
     } else {
+      deleteAuthToken();
       try {
         await request("/api/stop", {
           method: "POST",
@@ -101,6 +112,19 @@ export function AppSidebar() {
         url: "/apps",
         icon: Plug2Icon,
       },
+      // The LSP backoffice is shown only once the Hub is actually attached to an
+      // lspd daemon (info.lspService.attached), the same conditional-nav pattern
+      // as the Node entry's `hasChannelManagement` gate below. Operators who
+      // never attach an LSP never see it.
+      ...(info?.lspService?.attached
+        ? [
+            {
+              title: t("nav.lsp"),
+              url: "/lsp",
+              icon: ServerIcon,
+            },
+          ]
+        : []),
     ],
     navSecondary: [
       ...(hasChannelManagement

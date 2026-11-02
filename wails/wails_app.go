@@ -33,6 +33,10 @@ type WailsApp struct {
 	db       *gorm.DB
 	appsSvc  apps.AppsService
 	httpSvc  *http.HttpService
+	// session mirrors, in-process, the unlock state and permission tier the
+	// HTTP API carries in its JWT: the desktop IPC router has no per-call
+	// token, so full-access routes consult this instead. See wails_authz.go.
+	session desktopSession
 }
 
 func NewApp(svc service.Service) *WailsApp {

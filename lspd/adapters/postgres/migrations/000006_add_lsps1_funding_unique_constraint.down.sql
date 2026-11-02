@@ -1,0 +1,1 @@
+DROP INDEX lsps1.lsps1_orders_funding_point_idx;

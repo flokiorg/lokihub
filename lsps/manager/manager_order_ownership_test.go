@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -90,7 +91,7 @@ func TestHandleOrderStateUpdate_LSPPubkeyMismatch_StateNotChanged(t *testing.T) 
 
 	// Simulates a trusted-but-wrong LSP's forged Nostr notification reaching
 	// HandleOrderStateUpdate directly, exactly as the Nostr path does.
-	m.HandleOrderStateUpdate(order.OrderID, "COMPLETED", "mallory_pubkey")
+	m.HandleOrderStateUpdate(context.Background(), order.OrderID, "COMPLETED", "mallory_pubkey", "")
 
 	fetched, err := lspManager.GetOrder(order.OrderID)
 	require.NoError(t, err)

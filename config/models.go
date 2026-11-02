@@ -45,6 +45,22 @@ type AppConfig struct {
 	EnableSwap            bool `envconfig:"ENABLE_SWAP" default:"false"`
 	EnableMessageboardNwc bool `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
 
+	// LSP service attach (lspservice, plan §3.2). The Hub becomes the single
+	// privileged client of a separately-deployed lspd daemon's NIP-98 JSON-RPC
+	// dashboard. These are read-only wiring: the Hub never imports lspd code,
+	// it only talks to it over the network boundary.
+	//
+	// LSPServiceEndpoint is lspd's dashboard base URL (e.g. http://lspd:8080).
+	// Empty disables the feature entirely — no nav item, no calls to lspd.
+	LSPServiceEndpoint string `envconfig:"LSP_SERVICE_ENDPOINT"`
+	// LSPServiceNsec is a raw nsec1…/64-hex admin key. Exactly ONE of
+	// LSPServiceNsec / LSPServiceBunker must be set when the endpoint is
+	// present; its pubkey must equal lspd's DASHBOARD_ADMIN_PUBKEY.
+	LSPServiceNsec string `envconfig:"LSP_SERVICE_NSEC"`
+	// LSPServiceBunker is a NIP-46 bunker:// string, so the Hub host need not
+	// store the raw admin key. Exactly ONE of nsec/bunker, as above.
+	LSPServiceBunker string `envconfig:"LSP_SERVICE_BUNKER"`
+
 	// CashWalletRateLimitPerHour caps mint_cash calls per calling app
 	// pubkey. 0 disables the limit entirely (useful for dev/integration testing
 	// against a shared long-lived hub).
@@ -178,6 +194,9 @@ type Config interface {
 	CheckUnlockPassword(password string) bool
 	ChangeUnlockPassword(currentUnlockPassword string, newUnlockPassword string) error
 	SetAutoUnlockPassword(unlockPassword string) error
+	// GetAutoUnlockPassword returns the plaintext auto-unlock password,
+	// decrypting the at-rest value. Empty when auto-unlock is disabled.
+	GetAutoUnlockPassword() (string, error)
 	SaveUnlockPasswordCheck(encryptionKey string) error
 	SetupCompleted() bool
 	GetCurrency() string

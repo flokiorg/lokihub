@@ -1,0 +1,1 @@
+ALTER TABLE lsps5.webhooks ADD COLUMN transport VARCHAR(10) NOT NULL DEFAULT 'push';

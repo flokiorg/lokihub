@@ -27,7 +27,7 @@ func (controller *nip47Controller) HandleSettleHoldInvoiceEvent(ctx context.Cont
 		Interface("preimage", settleHoldInvoiceParams.Preimage).
 		Msg("Settling hold invoice")
 
-	_, err := controller.transactionsService.SettleHoldInvoice(ctx, settleHoldInvoiceParams.Preimage, controller.lnClient)
+	_, err := controller.transactionsService.SettleHoldInvoice(ctx, settleHoldInvoiceParams.Preimage, controller.lnClient, &appId)
 	if err != nil {
 		logger.Logger.Error().Err(err).
 			Interface("request_event_id", requestEventId).

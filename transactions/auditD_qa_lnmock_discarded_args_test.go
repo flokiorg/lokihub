@@ -146,7 +146,7 @@ func TestAuditDQA_SettleHoldInvoice_HandsTheNodeThePreimageThatFoundTheRow(t *te
 	}).Error)
 
 	settled, err := NewTransactionsService(svc.DB, svc.EventPublisher).
-		SettleHoldInvoice(context.Background(), preimage, ln)
+		SettleHoldInvoice(context.Background(), preimage, ln, nil)
 	require.NoError(t, err)
 	require.Equal(t, constants.TRANSACTION_STATE_SETTLED, settled.State)
 

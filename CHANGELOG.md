@@ -9,6 +9,9 @@ audits of both.
 
 ### Added
 
+- Folds the flspd LSP daemon into lokihub as an optional stand-alone `lspd`
+  daemon, with a Hub attach bridge the operator points at an endpoint and an
+  nsec or NIP-46 bunker, and a backoffice UI for it. (#172)
 - Warns at start when flnd accepts keysends without `keysend-hold-time`: such a
   node settles a keysend a circle wallet refuses instead of failing it (NIP-CW). (#170)
 - Asks again in the desktop app too when an LSP purchase is refused for
@@ -492,6 +495,31 @@ audits of both.
 
 ### Fixed
 
+- Encrypts the flnd admin macaroon at rest, strengthens the backup key
+  derivation to argon2id, and refuses an unverified-TLS connection to a
+  non-loopback flnd. (#174)
+- Makes logout actually end a session and bounds token lifetime: logout now
+  revokes the token server-side through a jti denylist (so a single leaked
+  token can be killed without rotating the unlock password), and a token's
+  lifetime is capped at one year with a shorter default. (#176)
+- Stops a read-only token from escalating to full access through the app log:
+  `GET /api/log/*` now requires full access, bearer tokens are no longer written
+  to the request log, and the `?token=` query fallback is limited to the avatar
+  and event-stream routes that cannot send an Authorization header. (#176)
+- Scopes `cancel_hold_invoice` and `settle_hold_invoice` to the app that owns the
+  hold invoice, so a `make_invoice`-scoped connection can no longer cancel or settle
+  another app's accepted hold invoice by its public payment hash (NWC sandbox
+  isolation, as `lookup_invoice` and `list_transactions` already enforce). A non-owner
+  now gets not-found. (#178)
+- Gates the desktop (Wails) IPC router behind the unlock session like the HTTP API, so a
+  readonly unlock or a locked app can no longer move funds or export the swap seed; every
+  fund-moving desktop operation now requires a full-access unlock. (#180)
+- Verifies an LSPS-opened channel through `ListChannels` before marking an
+  order complete, builds JIT route hints from the known peer node id, and
+  surfaces `client_trusts_lsp`. (#183)
+- Hardens the lspd dashboard: it SSRF-filters nostr webhooks, makes NIP-98
+  replay protection durable, serves `get_config` from a field allowlist, and
+  honours forwarded headers only from a trusted proxy. (#186)
 - Recomputes the step-3 unconfirmed-payout bound from the confirmed balance read under
   the commit lock, like the chain tip, so a block that confirmed or dropped funds between
   the quote and the commit cannot admit a payout against a stale higher balance (NIP-CASH
