@@ -187,7 +187,7 @@ func NewService(ctx context.Context) (*service, error) {
 
 	keys := keys.NewKeys()
 
-	lokiSvc := loki.NewLokiService(cfg)
+	lokiSvc := loki.NewLokiService(cfg, nil)
 
 	transactionsSvc := transactions.NewTransactionsService(gormDB, eventPublisher)
 
