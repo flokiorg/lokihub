@@ -151,8 +151,8 @@ The following configuration options can be set as environment variables or in a 
 - `LOG_LEVEL`: Log level for the main application. Higher is more verbose.
 - `NETWORK`: On-chain network used for the node.
 - `AUTO_UNLOCK_PASSWORD`: Provide unlock password to auto-unlock Lokihub on startup (e.g. after a machine restart). Unlock password still be required to access the interface.
-- `LOKIHUB_SERVICES_URL`: The URL for Lokihub's backend services API.
 - `LOKIHUB_STORE_URL`: The URL for Lokihub's App Store.
+- `LOKIHUB_SEED_FILE`: Path to a YAML file overriding the built-in service seed (explorer/relay suggestions, currencies, FAQ, info and the fiat-rate oracle pointer). Optional; the seed is embedded in the binary by default.
 - `ESPLORA_SERVER`: The Flokicoin Esplora server URL.
 - `MEMPOOL_API`: The Flokicoin Explorer API URL.
 - `LOG_TO_FILE`: Whether to log to a file.

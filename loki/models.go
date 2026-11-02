@@ -11,6 +11,14 @@ type LokiService interface {
 	GetFAQ(ctx context.Context) ([]FAQ, error)
 }
 
+// RateOracle supplies the latest Flokicoin fiat rate fetched from the NIP-78
+// oracle (see package ratesoracle). GetFlokicoinRate reads through it. Latest
+// returns an error when no rate has been fetched yet or the last-good one is
+// stale, which the UI degrades to sats/FLC on.
+type RateOracle interface {
+	Latest() (*FlokicoinRate, error)
+}
+
 type FAQ struct {
 	Question string `json:"question"`
 	Answer   string `json:"answer"`

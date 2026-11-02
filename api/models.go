@@ -880,26 +880,23 @@ type SetupRequest struct {
 	FLNDCertHex      string `json:"flndCertHex"`
 	FLNDMacaroonHex  string `json:"flndMacaroonHex"`
 
-	LokihubServicesURL string `json:"lokihubServicesURL"`
-	Relay              string `json:"relay"`
-	MempoolApi         string `json:"mempoolApi"`
+	Relay      string `json:"relay"`
+	MempoolApi string `json:"mempoolApi"`
 }
 
 type SetupLocalRequest struct {
-	UnlockPassword     string `json:"unlockPassword"`
-	LokihubServicesURL string `json:"lokihubServicesURL"`
-	Relay              string `json:"relay"`
-	MempoolApi         string `json:"mempoolApi"`
+	UnlockPassword string `json:"unlockPassword"`
+	Relay          string `json:"relay"`
+	MempoolApi     string `json:"mempoolApi"`
 }
 
 type SetupManualRequest struct {
-	UnlockPassword     string `json:"unlockPassword"`
-	FLNDAddress        string `json:"flndAddress"`
-	FLNDCertHex        string `json:"flndCertHex"`
-	FLNDMacaroonHex    string `json:"flndMacaroonHex"`
-	LokihubServicesURL string `json:"lokihubServicesURL"`
-	Relay              string `json:"relay"`
-	MempoolApi         string `json:"mempoolApi"`
+	UnlockPassword  string `json:"unlockPassword"`
+	FLNDAddress     string `json:"flndAddress"`
+	FLNDCertHex     string `json:"flndCertHex"`
+	FLNDMacaroonHex string `json:"flndMacaroonHex"`
+	Relay           string `json:"relay"`
+	MempoolApi      string `json:"mempoolApi"`
 }
 
 type SetupStatusResponse struct {
@@ -1033,7 +1030,6 @@ type InfoResponse struct {
 	NodeAlias          string    `json:"nodeAlias"`
 	MempoolUrl         string    `json:"mempoolUrl"`
 	LSPs               []LSPInfo `json:"lsps"`
-	LokihubServicesURL string    `json:"lokihubServicesURL"`
 	WorkDir            string    `json:"workDir"`
 	EnablePolling      bool      `json:"enablePolling"`
 	// LSPService is the attached-lspd status (plan §3.4), populated only for an
@@ -1084,7 +1080,6 @@ func (r *InfoResponse) RedactForUnauthenticated() {
 	r.NodeAlias = ""
 	r.MempoolUrl = ""
 	r.LSPs = []LSPInfo{}
-	r.LokihubServicesURL = ""
 	r.EnablePolling = false
 	r.LSPService = nil
 }
@@ -1138,7 +1133,6 @@ type PrivateTransportInfo struct {
 type UpdateSettingsRequest struct {
 	Currency               string  `json:"currency"`
 	FlokicoinDisplayFormat string  `json:"flokicoinDisplayFormat"`
-	LokihubServicesURL     string  `json:"lokihubServicesURL"`
 	Relay                  string  `json:"relay"`
 	GeneralRelay           *string `json:"generalRelay"`
 	TrustedNwcRelay        *bool   `json:"trustedNwcRelay"`
