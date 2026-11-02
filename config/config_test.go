@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/stretchr/testify/assert"
@@ -157,4 +158,45 @@ func TestGetRelayUrls_NeverYieldsAnEmptyRelay(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestUnlock_RewrapsLegacyArgon2iSecret pins the migration half of
+// LOKIHUB-0035: an at-rest secret stored with the legacy Argon2i KEK must still
+// unlock and be transparently re-wrapped under the hardened Argon2id KEK on the
+// next successful unlock, with no change to the plaintext.
+func TestUnlock_RewrapsLegacyArgon2iSecret(t *testing.T) {
+	logger.Init(strconv.Itoa(int(4)))
+	unlockPassword := "unlock-pw"
+
+	gdb, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, migrations.Migrate(gdb))
+
+	cfg, err := NewConfig(&AppConfig{Workdir: ".test"}, gdb)
+	require.NoError(t, err)
+
+	// Establish the unlock password (writes the password-check row under the
+	// hardened KEK).
+	require.NoError(t, cfg.SaveUnlockPasswordCheck(unlockPassword))
+	require.True(t, cfg.CheckUnlockPassword(unlockPassword))
+
+	// Simulate a pre-hardening secret written with the legacy Argon2i KEK.
+	const key = "LegacySecret"
+	const secret = "the mnemonic or an encrypted config value"
+	legacyBlob := legacyArgon2iWrap(t, secret, unlockPassword)
+	require.True(t, isLegacyWrappedSecret(legacyBlob))
+	require.NoError(t, gdb.Create(&db.UserConfig{Key: key, Value: legacyBlob, Encrypted: true}).Error)
+
+	// Unlock triggers the re-wrap migration.
+	require.NoError(t, cfg.Unlock(unlockPassword))
+
+	// The stored blob is now Argon2id-tagged, and still decrypts to the original.
+	var row db.UserConfig
+	require.NoError(t, gdb.Where(&db.UserConfig{Key: key}).First(&row).Error)
+	assert.False(t, isLegacyWrappedSecret(row.Value), "secret must be re-wrapped with the hardened KEK after unlock")
+	assert.True(t, row.Encrypted)
+
+	decrypted, err := AesGcmDecryptWithPassword(row.Value, unlockPassword)
+	require.NoError(t, err)
+	assert.Equal(t, secret, decrypted)
 }
