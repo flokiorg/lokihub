@@ -285,8 +285,10 @@ services:
       # unset value makes /logout redirect to a same-origin "/".
       - LN_BACKEND_TYPE=FLND
       - FLND_ADDRESS=flnd:10005
-      # No FLND_CERT_FILE: the flnd wrapper then skips verification, so tls.cert
-      # need not be shared into this container.
+      # rc.24 (#174) refuses the admin macaroon over a non-loopback flnd address
+      # without a pinned TLS cert, so pin flnd's tls.cert (mounted read-only at
+      # /flnd-data) rather than skipping verification.
+      - FLND_CERT_FILE=/flnd-data/tls.cert
       - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/regtest/admin.macaroon
       - RELAY=${RELAY:-ws://relay:5500}
       - AUTO_UNLOCK_PASSWORD=${DEV_UNLOCK_PASSWORD:?set DEV_UNLOCK_PASSWORD in .env (see .env.example)}
