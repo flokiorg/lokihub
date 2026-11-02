@@ -502,7 +502,7 @@ audits of both.
 - Removes the message-board feature entirely: the `LightningMessageboardWidget`
   and its Services/setup configuration, the `messageboardNwcUrl` /
   `enableMessageboardNwc` settings and info fields, and the
-  `MESSAGEBOARD_NWC_URL` / `ENABLE_MESSAGEBOARD_NWC` settings are all gone.
+  `MESSAGEBOARD_NWC_URL` / `ENABLE_MESSAGEBOARD_NWC` settings are all gone. (#191)
 
 ### Fixed
 
