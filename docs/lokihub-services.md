@@ -22,7 +22,6 @@ for a new user.
 | Search relay | profile and contact-list lookups (Circle Wallet's following checks) |
 | LSP(s) | who you buy Lightning liquidity from, picked from their NIP-LSP announcements |
 | Block explorer | on-chain data, mempool-style API |
-| Messageboard relay (optional) | an experimental nostr-messageboard integration |
 | Identity Authorities | who's trusted to vouch for a Cash Hub connection-key claim — see [NIP-CASH](https://github.com/ohstr/nips/blob/main/NIP-CASH.md) |
 
 ## Where the LSP list comes from
