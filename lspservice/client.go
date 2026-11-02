@@ -35,6 +35,15 @@ const (
 	httpTimeout  = 15 * time.Second
 	statusTTL    = 15 * time.Second
 	probeTimeout = 6 * time.Second
+
+	// maxResponseBytes caps every lspd response body the Hub buffers before
+	// decoding it. lspd is a separate, operator-configured daemon reached over a
+	// network boundary (and the documented example endpoint is plain http://),
+	// so it is semi-trusted: a compromised or MITM'd lspd could otherwise return
+	// a multi-GB 200 that the Hub would allocate in full and OOM on. 4 MiB is
+	// well above any real dashboard result yet bounds the allocation. Matches the
+	// 1 MiB cap already on the forwarded REQUEST body (http/lsp_handlers.go).
+	maxResponseBytes = 4 << 20
 )
 
 // ErrNotConfigured means no lspd endpoint is configured; the feature is off.
@@ -165,7 +174,9 @@ func (c *Client) call(ctx context.Context, method string, params json.RawMessage
 		Result json.RawMessage `json:"result"`
 		Error  *RPCError       `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+	// Bound the buffered success body: a hostile/oversized lspd response is
+	// rejected here rather than allocated in full (see maxResponseBytes).
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&rpcResp); err != nil {
 		return fmt.Errorf("lspservice: %s: decode response: %w", method, err)
 	}
 	if rpcResp.Error != nil {
@@ -236,7 +247,8 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 		return fmt.Errorf("lspservice: GET %s: unexpected status %d", path, resp.StatusCode)
 	}
 	if out != nil {
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		// Bound the buffered body on the public GET paths too (/info, /healthz).
+		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(out); err != nil {
 			return fmt.Errorf("lspservice: GET %s: decode: %w", path, err)
 		}
 	}

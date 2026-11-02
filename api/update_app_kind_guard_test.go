@@ -212,6 +212,40 @@ func TestUpdateApp_CircleWallet_BudgetChange_IsRejected(t *testing.T) {
 	assert.Equal(t, constants.ErrKindImmutable, err, "budget change on circle_wallet must still be rejected")
 }
 
+// TestUpdateApp_ExternallyHeldKind_ScopeAndBudget_IsRejected — LOKIHUB-0030.
+// cash_order (NIP-CO) and circle_hub_conn (NIP-CW) hold no balance and can
+// spend nothing, yet an Order connection's pairing secret is handed to an
+// EXTERNAL order party. A generic admin PATCH must not be able to grant such an
+// externally-held connection a fund-moving scope or a budget, so both scope and
+// budget edits are rejected as immutable just like the other constrained kinds.
+func TestUpdateApp_ExternallyHeldKind_ScopeAndBudget_IsRejected(t *testing.T) {
+	for _, kind := range []string{db.AppKindCashOrder, db.AppKindCircleHubConn} {
+		t.Run(kind, func(t *testing.T) {
+			svc, err := tests.CreateTestService(t)
+			require.NoError(t, err)
+			defer svc.Remove()
+
+			app := &db.App{Name: "external-" + kind, Kind: kind}
+			require.NoError(t, svc.DB.Create(app).Error)
+			perm := &db.AppPermission{AppId: app.ID, App: *app, Scope: constants.GET_BALANCE_SCOPE}
+			require.NoError(t, svc.DB.Create(&perm).Error)
+
+			theAPI := newTestAPIWithEventPub(t, svc)
+
+			// Adding a fund-moving scope must be refused.
+			err = theAPI.UpdateApp(app, &UpdateAppRequest{
+				Scopes: []string{constants.GET_BALANCE_SCOPE, constants.PAY_INVOICE_SCOPE},
+			})
+			assert.Equal(t, constants.ErrKindImmutable, err, "scope change on %s must be rejected", kind)
+
+			// Granting a budget must be refused too.
+			maxAmount := uint64(100000)
+			err = theAPI.UpdateApp(app, &UpdateAppRequest{MaxAmountLoki: &maxAmount})
+			assert.Equal(t, constants.ErrKindImmutable, err, "budget change on %s must be rejected", kind)
+		})
+	}
+}
+
 // TestUpdateApp_CashWalletCircleWallet_NameChange_IsRejected — Cash/circle
 // wallet names are system-generated (apps.GenerateChildName: "<hub> ·
 // <identity label> · <random>") and carry the identity used to resolve a
