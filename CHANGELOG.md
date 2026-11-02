@@ -9,6 +9,12 @@ audits of both.
 
 ### Added
 
+- Adds a built-in fiat-rate oracle: the Flokicoin fiat rate now comes from a
+  signed NIP-78 (kind 30078) event tagged `#d = flokicoin-fiat-rate`, published
+  by the oracle npub carried in the seed. Lokihub fetches the newest such event
+  from the oracle's relays, verifies its signature and author, caches it and
+  refreshes it on an interval, replacing the `rates.json` fetch; the rate
+  degrades gracefully to sats/FLC until a fresh, non-stale event is available.
 - Folds the flspd LSP daemon into lokihub as an optional stand-alone `lspd`
   daemon, with a Hub attach bridge the operator points at an endpoint and an
   nsec or NIP-46 bunker, and a backoffice UI for it. (#172)
@@ -503,6 +509,12 @@ audits of both.
   and its Services/setup configuration, the `messageboardNwcUrl` /
   `enableMessageboardNwc` settings and info fields, and the
   `MESSAGEBOARD_NWC_URL` / `ENABLE_MESSAGEBOARD_NWC` settings are all gone. (#191)
+- Removes the remote `lokihub-services` fetch entirely, now a built-in seed: the
+  explorer/relay suggestions, currencies, FAQ and info ship embedded in the
+  binary (`LOKIHUB_SEED_FILE` overrides them), so a fresh hub works offline and
+  the catalogue cannot drift from its release. The `LOKIHUB_SERVICES_URL`
+  setting and the cached `services.json` are gone; the fiat rate moves to a
+  NIP-78 oracle (see Added).
 
 ### Fixed
 
