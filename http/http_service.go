@@ -282,7 +282,9 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	// only — a read-only token must not be able to read it.
 	fullAccessApiGroup.GET("/log/:type", httpSvc.getLogOutputHandler)
 
-	fullAccessApiGroup.POST("/api/event", httpSvc.eventHandler)
+	// fullAccessApiGroup is already rooted at "/api"; the path here must not
+	// repeat it or the route lands at "/api/api/event" and "/api/event" 404s.
+	fullAccessApiGroup.POST("/event", httpSvc.eventHandler)
 	httpSvc.registerWithdrawRoutes(fullAccessApiGroup)
 	httpSvc.registerWithdrawTestHooks(fullAccessApiGroup)
 	httpSvc.registerListingRoutes(fullAccessApiGroup)
