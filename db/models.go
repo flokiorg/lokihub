@@ -915,11 +915,20 @@ func IsIsolatedKind(kind string) bool {
 
 // IsPrivilegedKind reports whether a kind is system-managed and must not have its
 // scopes modified after creation via the generic UpdateApp path.
+//
+// cash_order and circle_hub_conn are included because both hold no balance and
+// can spend nothing by design (NIP-CO §The Order Connection; NIP-CW §The Circle
+// Wallet Hub Connection), yet an Order connection's pairing secret is handed to
+// an EXTERNAL order party. Letting a generic admin PATCH add a fund-moving scope
+// to them would hand an externally-held credential spending capability — so
+// their scopes stay immutable like the other constrained kinds (LOKIHUB-0030).
 func IsPrivilegedKind(kind string) bool {
 	return kind == AppKindCashHub ||
 		kind == AppKindCashWallet ||
 		kind == AppKindCircleHub ||
-		kind == AppKindCircleWallet
+		kind == AppKindCircleWallet ||
+		kind == AppKindCashOrder ||
+		kind == AppKindCircleHubConn
 }
 
 // IsBudgetImmutableKind reports whether a kind's budget and expiry are
@@ -929,9 +938,16 @@ func IsPrivilegedKind(kind string) bool {
 // user-configurable like a regular app, it's only the wallets it issues that
 // have limits coming from a dedicated flow (per-member allocation, per-wallet
 // Cash config).
+//
+// cash_order and circle_hub_conn are included: both are capability-constrained,
+// hold no balance and spend nothing, so there is no legitimate budget/expiry to
+// edit — and granting one a budget via the generic PATCH is the same foot-gun
+// the scope guard closes above (LOKIHUB-0030).
 func IsBudgetImmutableKind(kind string) bool {
 	return kind == AppKindCashWallet ||
-		kind == AppKindCircleWallet
+		kind == AppKindCircleWallet ||
+		kind == AppKindCashOrder ||
+		kind == AppKindCircleHubConn
 }
 
 // IsNameImmutableKind reports whether a kind's name is system-generated
