@@ -14,7 +14,7 @@ audits of both.
   by the oracle npub carried in the seed. Lokihub fetches the newest such event
   from the oracle's relays, verifies its signature and author, caches it and
   refreshes it on an interval, replacing the `rates.json` fetch; the rate
-  degrades gracefully to sats/FLC until a fresh, non-stale event is available.
+  degrades gracefully to sats/FLC until a fresh, non-stale event is available. (#193)
 - Folds the flspd LSP daemon into lokihub as an optional stand-alone `lspd`
   daemon, with a Hub attach bridge the operator points at an endpoint and an
   nsec or NIP-46 bunker, and a backoffice UI for it. (#172)
@@ -514,7 +514,7 @@ audits of both.
   binary (`LOKIHUB_SEED_FILE` overrides them), so a fresh hub works offline and
   the catalogue cannot drift from its release. The `LOKIHUB_SERVICES_URL`
   setting and the cached `services.json` are gone; the fiat rate moves to a
-  NIP-78 oracle (see Added).
+  NIP-78 oracle (see Added). (#193)
 
 ### Fixed
 
