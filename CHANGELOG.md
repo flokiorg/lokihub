@@ -1008,6 +1008,12 @@ audits of both.
   AES-CTR, an unauthenticated stream cipher, despite its own comment deprecating
   the legacy OFB format for exactly that malleability. Existing backups
   (argon2id/PBKDF2 AES-CTR and legacy AES-OFB) still restore. (LOKIHUB-0034)
+- Hardens the at-rest key-encryption key that wraps the Mnemonic and every
+  encrypted config secret: the KDF moves from Argon2i (t=3, m=32 MiB, p=1) to
+  Argon2id at 64 MiB (RFC 9106 / OWASP). Secrets wrapped with the old params
+  still unlock and are transparently re-wrapped under the hardened KDF on the
+  next unlock or password change; the new params travel in a self-describing
+  header so future tuning stays backward-decryptable. (LOKIHUB-0035)
 
 ## [0.4.0]
 
