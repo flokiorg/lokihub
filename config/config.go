@@ -709,29 +709,6 @@ func (cfg *config) SetLokihubStoreURL(value string) error {
 	return nil
 }
 
-func (cfg *config) GetSwapServiceURL() string {
-	url, err := cfg.Get("SwapServiceUrl", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch SwapServiceUrl")
-	}
-	if url != "" {
-		return url
-	}
-	return cfg.Env.SwapServiceUrl
-}
-
-func (cfg *config) SetSwapServiceURL(value string) error {
-	if value == "" {
-		return errors.New("SwapServiceUrl cannot be empty")
-	}
-	err := cfg.SetUpdate("SwapServiceUrl", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update SwapServiceUrl")
-		return err
-	}
-	return nil
-}
-
 func (cfg *config) GetMessageboardNwcUrl() string {
 	url, err := cfg.Get("MessageboardNwcUrl", "")
 	if err != nil {
@@ -998,43 +975,6 @@ func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
 	if _, err := cashrequest.RaiseHorizon(cfg.db, limits.MaxRequestAgeSeconds, time.Now()); err != nil {
 		return fmt.Errorf("failed to store the horizon: %w", err)
 	}
-	return nil
-}
-
-func (cfg *config) EnableSwap() bool {
-	value, err := cfg.Get("EnableSwap", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch EnableSwap")
-		return cfg.Env.EnableSwap
-	}
-	if value == "" {
-		return cfg.Env.EnableSwap
-	}
-	return value == "true"
-}
-
-func (cfg *config) SetEnableSwap(enable bool) error {
-	var value string
-	if enable {
-		value = "true"
-	} else {
-		value = "false"
-	}
-	err := cfg.SetUpdate("EnableSwap", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update EnableSwap")
-		return err
-	}
-	// Update the in-memory Env as well so subsequent calls to EnableSwap() return the new value
-	// Note: This relies on EnableSwap() checking cfg.Env.EnableSwap which we might need to update or
-	// we should change EnableSwap() to check the db/cache like other methods.
-	// Looking at EnableSwap() implementation: return cfg.Env.EnableSwap.
-	// This means we need to update cfg.Env.EnableSwap.
-	// However, looking at other Set methods (e.g. SetMempoolApi), they don't seem to update Env.
-	// Let's check how other config values are retrieved. properties like GetMempoolApi check db/cache first then Env.
-	// EnableSwap currently ONLY checks Env. I should probably update EnableSwap to check DB too, or just update Env here.
-	// Since we are moving to dynamic config, I should update EnableSwap to look up the value using Get() like others.
-	// Rewriting EnableSwap to use Get() is better.
 	return nil
 }
 

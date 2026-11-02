@@ -29,7 +29,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/discovery"
-	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 
 	"github.com/flokiorg/lokihub/cashorder"
@@ -49,7 +48,6 @@ type service struct {
 	db                  *gorm.DB
 	lnClient            lnclient.LNClient
 	transactionsService transactions.TransactionsService
-	swapsService        swaps.SwapsService
 	lokiSvc             loki.LokiService
 	appStoreSvc         appstore.Service
 	eventPublisher      events.EventPublisher
@@ -381,23 +379,8 @@ func (svc *service) GetTransactionsService() transactions.TransactionsService {
 	return svc.transactionsService
 }
 
-func (svc *service) GetSwapsService() swaps.SwapsService {
-	return svc.swapsService
-}
-
 func (svc *service) GetLiquidityManager() *manager.LiquidityManager {
 	return svc.liquidityManager
-}
-
-func (svc *service) InitSwapsService() {
-	if svc.swapsService != nil {
-		return
-	}
-	if svc.lnClient == nil {
-		logger.Logger.Error().Msg("Cannot init swaps service: LNClient not started")
-		return
-	}
-	svc.swapsService = swaps.NewSwapsService(svc.ctx, svc.db, svc.cfg, svc.keys, svc.eventPublisher, svc.lnClient, svc.transactionsService)
 }
 
 func (svc *service) GetKeys() keys.Keys {

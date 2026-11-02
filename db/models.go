@@ -1080,30 +1080,6 @@ type Transaction struct {
 	OutboundPeriodStart int64
 }
 
-type Swap struct {
-	ID                 uint
-	SwapId             string `validate:"required" gorm:"unique;not null"`
-	Type               string
-	State              string
-	Invoice            string
-	SendAmount         uint64
-	ReceiveAmount      uint64
-	Preimage           string
-	PaymentHash        string
-	DestinationAddress string
-	RefundAddress      string
-	LockupAddress      string
-	LockupTxId         string
-	ClaimTxId          string
-	AutoSwap           bool
-	UsedXpub           bool
-	TimeoutBlockHeight uint32
-	BoltzPubkey        string
-	SwapTree           datatypes.JSON
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-}
-
 type Forward struct {
 	ID                           uint
 	OutboundAmountForwardedMloki uint64
