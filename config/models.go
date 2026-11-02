@@ -35,9 +35,6 @@ type AppConfig struct {
 	LogDBQueries        bool   `envconfig:"LOG_DB_QUERIES" default:"false"`
 	LokihubServicesURL  string `envconfig:"LOKIHUB_SERVICES_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-services/refs/heads/main"`
 	LokihubStoreURL     string `envconfig:"LOKIHUB_STORE_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"`
-	MessageboardNwcUrl  string `envconfig:"MESSAGEBOARD_NWC_URL"`
-
-	EnableMessageboardNwc bool `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
 
 	// LSP service attach (lspservice, plan §3.2). The Hub becomes the single
 	// privileged client of a separately-deployed lspd daemon's NIP-98 JSON-RPC
@@ -201,8 +198,6 @@ type Config interface {
 	SetLokihubServicesURL(value string) error
 	GetLokihubStoreURL() string
 	SetLokihubStoreURL(value string) error
-	GetMessageboardNwcUrl() string
-	SetMessageboardNwcUrl(value string) error
 	GetRelay() string
 	SetRelay(value string) error
 	GetGeneralRelayUrls() []string
@@ -212,8 +207,6 @@ type Config interface {
 	GetSearchRelay() string
 	SetSearchRelay(value string) error
 
-	EnableMessageboardNwc() bool
-	SetEnableMessageboardNwc(value bool) error
 	GetDefaultWorkDir() string
 	GetCachedServicesJSON() string
 	SetCachedServicesJSON(json string) error
