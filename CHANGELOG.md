@@ -493,6 +493,13 @@ audits of both.
 - Moves to `nmilat` v0.5.0-rc.45, the published client SDK with the NIP-CASH
   and NIP-CW wire changes in this release. (#153, #160)
 
+### Removed
+
+- Removes the on-chain ⇄ Lightning swap feature entirely: the swap screens and
+  on-chain send toggle, the `/api/swaps` and `/api/autoswap` routes, the swap
+  seed derivation, the `swaps` table, and the `SWAP_SERVICE_URL` / `ENABLE_SWAP`
+  settings are all gone.
+
 ### Fixed
 
 - Encrypts the flnd admin macaroon at rest, strengthens the backup key
