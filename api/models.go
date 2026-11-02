@@ -880,32 +880,26 @@ type SetupRequest struct {
 	FLNDCertHex      string `json:"flndCertHex"`
 	FLNDMacaroonHex  string `json:"flndMacaroonHex"`
 
-	LokihubServicesURL    string `json:"lokihubServicesURL"`
-	Relay                 string `json:"relay"`
-	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
-	MempoolApi            string `json:"mempoolApi"`
-	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
+	LokihubServicesURL string `json:"lokihubServicesURL"`
+	Relay              string `json:"relay"`
+	MempoolApi         string `json:"mempoolApi"`
 }
 
 type SetupLocalRequest struct {
-	UnlockPassword        string `json:"unlockPassword"`
-	LokihubServicesURL    string `json:"lokihubServicesURL"`
-	Relay                 string `json:"relay"`
-	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
-	MempoolApi            string `json:"mempoolApi"`
-	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
+	UnlockPassword     string `json:"unlockPassword"`
+	LokihubServicesURL string `json:"lokihubServicesURL"`
+	Relay              string `json:"relay"`
+	MempoolApi         string `json:"mempoolApi"`
 }
 
 type SetupManualRequest struct {
-	UnlockPassword        string `json:"unlockPassword"`
-	FLNDAddress           string `json:"flndAddress"`
-	FLNDCertHex           string `json:"flndCertHex"`
-	FLNDMacaroonHex       string `json:"flndMacaroonHex"`
-	LokihubServicesURL    string `json:"lokihubServicesURL"`
-	Relay                 string `json:"relay"`
-	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
-	MempoolApi            string `json:"mempoolApi"`
-	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
+	UnlockPassword     string `json:"unlockPassword"`
+	FLNDAddress        string `json:"flndAddress"`
+	FLNDCertHex        string `json:"flndCertHex"`
+	FLNDMacaroonHex    string `json:"flndMacaroonHex"`
+	LokihubServicesURL string `json:"lokihubServicesURL"`
+	Relay              string `json:"relay"`
+	MempoolApi         string `json:"mempoolApi"`
 }
 
 type SetupStatusResponse struct {
@@ -1034,16 +1028,14 @@ type InfoResponse struct {
 	PrivateTransport            PrivateTransportInfo `json:"privateTransport"`
 	// PendingCashRedeems counts cash_redeem payouts whose outcome is not known
 	// yet; each one's slice stays claimed until it settles or fails.
-	PendingCashRedeems    int       `json:"pendingCashRedeems"`
-	SearchRelay           string    `json:"searchRelay"`
-	NodeAlias             string    `json:"nodeAlias"`
-	MempoolUrl            string    `json:"mempoolUrl"`
-	LSPs                  []LSPInfo `json:"lsps"`
-	LokihubServicesURL    string    `json:"lokihubServicesURL"`
-	MessageboardNwcUrl    string    `json:"messageboardNwcUrl"`
-	EnableMessageboardNwc bool      `json:"enableMessageboardNwc"`
-	WorkDir               string    `json:"workDir"`
-	EnablePolling         bool      `json:"enablePolling"`
+	PendingCashRedeems int       `json:"pendingCashRedeems"`
+	SearchRelay        string    `json:"searchRelay"`
+	NodeAlias          string    `json:"nodeAlias"`
+	MempoolUrl         string    `json:"mempoolUrl"`
+	LSPs               []LSPInfo `json:"lsps"`
+	LokihubServicesURL string    `json:"lokihubServicesURL"`
+	WorkDir            string    `json:"workDir"`
+	EnablePolling      bool      `json:"enablePolling"`
 	// LSPService is the attached-lspd status (plan §3.4), populated only for an
 	// authenticated caller and only when an LSP service endpoint is configured;
 	// omitted (nil) otherwise so the frontend can gate its backoffice nav on it.
@@ -1093,8 +1085,6 @@ func (r *InfoResponse) RedactForUnauthenticated() {
 	r.MempoolUrl = ""
 	r.LSPs = []LSPInfo{}
 	r.LokihubServicesURL = ""
-	r.MessageboardNwcUrl = ""
-	r.EnableMessageboardNwc = false
 	r.EnablePolling = false
 	r.LSPService = nil
 }
@@ -1156,11 +1146,9 @@ type UpdateSettingsRequest struct {
 	// all-or-nothing rather than four independent fields because the values are
 	// validated against each other (a pad bucket cannot exceed the ceiling), so
 	// a partial update could not be checked coherently.
-	PrivateEnvelope       *PrivateEnvelopeInfo `json:"privateEnvelope"`
-	SearchRelay           *string              `json:"searchRelay"`
-	MessageboardNwcUrl    string               `json:"messageboardNwcUrl"`
-	MempoolApi            string               `json:"mempoolApi"`
-	EnableMessageboardNwc *bool                `json:"enableMessageboardNwc"`
+	PrivateEnvelope *PrivateEnvelopeInfo `json:"privateEnvelope"`
+	SearchRelay     *string              `json:"searchRelay"`
+	MempoolApi      string               `json:"mempoolApi"`
 }
 
 type SetNodeAliasRequest struct {
