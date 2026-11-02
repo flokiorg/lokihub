@@ -518,6 +518,10 @@ audits of both.
 
 ### Fixed
 
+- Stops one recipient's in-flight cash_redeem from transiently blocking a
+  co-recipient's fully-funded slice on the same shared bill: an external slice
+  redeem no longer stamps the generic Lightning fee reserve on its pending row,
+  which the isolated-balance read had been subtracting across the whole bill. (LOKIHUB-0023)
 - Encrypts the flnd admin macaroon at rest, strengthens the backup key
   derivation to argon2id, and refuses an unverified-TLS connection to a
   non-loopback flnd. (#174)
