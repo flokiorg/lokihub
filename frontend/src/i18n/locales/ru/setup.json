@@ -159,16 +159,10 @@
       "description": "Включает обмен Lightning на блокчейн (и обратно).",
       "custom": "Пользовательский сервис обмена"
     },
-    "messageboard": {
-      "title": "Доска сообщений",
-      "description": "Подключается к сервису доски сообщений с поддержкой NWC.",
-      "custom": "Пользовательская доска сообщений"
-    },
     "validation": {
       "relayRequired": "Требуется хотя бы один ретранслятор",
       "explorerRequired": "URL обозревателя Flokicoin обязателен",
       "swapRequired": "URL сервиса обмена обязателен при включении",
-      "messageboardRequired": "URL доски сообщений обязателен при включении",
       "invalidUrl": "{{field}}: неверный формат URL"
     },
     "connectHint": "Подключить доверенный сервис"

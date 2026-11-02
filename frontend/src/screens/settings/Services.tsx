@@ -37,8 +37,6 @@ export function Services() {
     trustedNwcRelay: true,
     generalRelay: "",
     searchRelay: "",
-    messageboardNwcUrl: "",
-    enableMessageboardNwc: true,
   });
 
   // Identity Authority Management Hook
@@ -61,13 +59,11 @@ export function Services() {
     if (info) {
       setConfig((prev) => ({
         ...prev,
-        messageboardNwcUrl: info.messageboardNwcUrl || "",
         relay: info.relay || "",
         trustedNwcRelay: info.trustedNwcRelay ?? true,
         generalRelay: info.generalRelay || "",
         searchRelay: info.searchRelay || "",
         mempoolApi: info.mempoolUrl || "",
-        enableMessageboardNwc: info.enableMessageboardNwc ?? true,
       }));
     }
   }, [info]);
@@ -101,9 +97,7 @@ export function Services() {
       config.trustedNwcRelay !== (info.trustedNwcRelay ?? true) ||
       config.generalRelay !== (info.generalRelay || "") ||
       config.searchRelay !== (info.searchRelay || "") ||
-      config.mempoolApi !== (info.mempoolUrl || "") ||
-      config.messageboardNwcUrl !== (info.messageboardNwcUrl || "") ||
-      config.enableMessageboardNwc !== (info.enableMessageboardNwc ?? true);
+      config.mempoolApi !== (info.mempoolUrl || "");
 
     // Check Identity Authorities dirty - compare by pubkey/name/relay_urls, sorted.
     const stripAuthorities = (authorities: IdentityAuthority[]) =>
@@ -171,8 +165,6 @@ export function Services() {
         generalRelay: config.generalRelay,
         searchRelay: config.searchRelay,
         mempoolApi: config.mempoolApi,
-        messageboardNwcUrl: config.messageboardNwcUrl,
-        enableMessageboardNwc: config.enableMessageboardNwc,
         // Identity Authorities omitted, handled above
       });
 

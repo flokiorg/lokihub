@@ -166,16 +166,10 @@
       "description": "Lightning과 온체인 간의 스왑(및 그 반대)을 활성화합니다.",
       "custom": "사용자 정의 스왑 서비스"
     },
-    "messageboard": {
-      "title": "메시지보드",
-      "description": "NWC를 지원하는 메시지보드 서비스에 연결합니다.",
-      "custom": "사용자 정의 메시지보드"
-    },
     "validation": {
       "relayRequired": "릴레이가 하나 이상 필요합니다",
       "explorerRequired": "Flokicoin 탐색기 URL은 필수입니다",
       "swapRequired": "활성화 시 스왑 서비스 URL은 필수입니다",
-      "messageboardRequired": "활성화 시 메시지보드 URL은 필수입니다",
       "invalidUrl": "{{field}}: 잘못된 URL 형식"
     },
     "connectHint": "신뢰할 수 있는 서비스 연결"
