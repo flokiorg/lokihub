@@ -1,6 +1,5 @@
 import {
   AlertCircle,
-  ArrowLeftRight,
   Globe,
   MessageCircle,
   Search,
@@ -44,9 +43,7 @@ export interface ServiceConfigState {
   trustedNwcRelay: boolean;
   generalRelay: string;
   searchRelay: string;
-  swapServiceUrl: string;
   messageboardNwcUrl: string;
-  enableSwap: boolean;
   enableMessageboardNwc: boolean;
 }
 
@@ -76,8 +73,6 @@ const fallbackT: TFunction = (
     "services.validation.relayRequired": "At least one relay is required",
     "services.validation.explorerRequired":
       "Flokicoin Explorer URL is required.",
-    "services.validation.swapRequired":
-      "Swap Service URL is required when enabled.",
     "services.validation.messageboardRequired":
       "Messageboard URL is required when enabled.",
     "services.validation.invalidUrl": `${options?.field ?? "Field"}: invalid URL format`,
@@ -153,18 +148,6 @@ export const validateServiceConfig = (
       );
   }
 
-  if (state.enableSwap) {
-    if (!state.swapServiceUrl) {
-      errors.push(t("services.validation.swapRequired"));
-    } else {
-      const swapErr = validateHTTPURL(state.swapServiceUrl, "Swap Service URL");
-      if (swapErr)
-        errors.push(
-          t("services.validation.invalidUrl", { field: "Swap Service URL" })
-        );
-    }
-  }
-
   if (state.enableMessageboardNwc) {
     if (!state.messageboardNwcUrl) {
       errors.push(t("services.validation.messageboardRequired"));
@@ -214,12 +197,10 @@ export function ServiceConfigForm({
   ];
 
   const [communityOptions, setCommunityOptions] = useState<{
-    swap: ServiceOption[];
     relay: ServiceOption[];
     messageboard: ServiceOption[];
     mempool: ServiceOption[];
   }>({
-    swap: [],
     relay: [],
     messageboard: [],
     mempool: [],
@@ -243,7 +224,6 @@ export function ServiceConfigForm({
           });
 
           setCommunityOptions({
-            swap: (services.swap_service || []).map(mapUrlService),
             relay: (services.nostr_relay || []).map(mapUrlService),
             messageboard: (services.messageboard_nwc || []).map(mapNwcService),
             mempool: (services.flokicoin_explorer || []).map(mapUrlService),
@@ -378,42 +358,6 @@ export function ServiceConfigForm({
         disabled={showLSPCatalogue === false}
         className="border-border shadow-sm"
       />
-
-      {/* Swap Service */}
-      <Card className="border-border shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ArrowLeftRight className="w-5 h-5 text-primary" />
-                {t("services.swap.title")}
-              </CardTitle>
-              <CardDescription>
-                {t("services.swap.description")}
-              </CardDescription>
-            </div>
-            <Switch
-              checked={state.enableSwap}
-              onCheckedChange={(checked) =>
-                onChange({ ...state, enableSwap: checked })
-              }
-            />
-          </div>
-        </CardHeader>
-        {state.enableSwap && (
-          <CardContent>
-            <ServiceCardSelector
-              value={state.swapServiceUrl}
-              onChange={(val) => onChange({ ...state, swapServiceUrl: val })}
-              options={communityOptions.swap}
-              placeholder="https://..."
-              disabled={!state.enableSwap}
-              customIcon={<ArrowLeftRight className="w-4 h-4" />}
-              customLabel={t("services.swap.custom")}
-            />
-          </CardContent>
-        )}
-      </Card>
 
       {/* Messageboard NWC */}
       <Card className="border-border shadow-sm">

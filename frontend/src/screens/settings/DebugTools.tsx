@@ -1,6 +1,5 @@
-import { ClipboardPasteIcon, InfoIcon, SettingsIcon } from "lucide-react";
+import { SettingsIcon } from "lucide-react";
 import React from "react";
-import { toast } from "sonner";
 import { ResetRoutingDataDialogContent } from "src/components/ResetRoutingDataDialogContent";
 import SettingsHeader from "src/components/SettingsHeader";
 import {
@@ -23,16 +22,8 @@ import {
 } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "src/components/ui/radio-group";
 import { Textarea } from "src/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "src/components/ui/tooltip";
 import { localStorageKeys } from "src/constants";
-import { useInfo } from "src/hooks/useInfo";
 import { useUnit } from "src/hooks/useUnit";
 
 import { request } from "src/utils/request";
@@ -152,160 +143,6 @@ function ProbeKeysendDialogContent({ apiRequest }: Props) {
   );
 }
 
-function RefundSwapDialogContent() {
-  const [swapId, setSwapId] = React.useState<string>("");
-  const [address, setAddress] = React.useState<string>("");
-  const [isInternal, setInternal] = React.useState<boolean>(true);
-
-  async function onConfirm() {
-    try {
-      const response = await request("/api/swaps/refund", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          swapId,
-          ...(address ? { address } : {}),
-        }),
-      });
-      console.info("Processed refund", response);
-      toast("Refund transaction broadcasted");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to process refund", {
-        description: "" + error,
-      });
-    }
-    setSwapId("");
-  }
-
-  const paste = async () => {
-    const text = await navigator.clipboard.readText();
-    setAddress(text.trim());
-  };
-
-  return (
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle className="capitalize">Refund Swap</AlertDialogTitle>
-        <AlertDialogDescription className="flex text-foreground flex-col gap-4">
-          <div className="flex flex-row gap-1 items-center text-muted-foreground">
-            Only On-chain {"->"} Lightning swaps need to be refunded
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="swapId">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <div className="flex flex-row gap-1 items-center text-muted-foreground">
-                      Swap Id
-                      <InfoIcon className="h-4 w-4 shrink-0" />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>
-                      To find the Swap ID, close this dialog and click on the
-                      "List Swaps" button. Then you can look through and find a
-                      swap that is in state "FAILED" and matches the amount you
-                      tried to swap. The latest swaps are at the bottom of the
-                      list.
-                    </p>
-                    <p className="mt-2">
-                      When you have found the swap, copy the value of the id
-                      field. The swap Id will look something like uNHoD8QrAr9b.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <Input
-              id="swapId"
-              name="swapId"
-              type="text"
-              required
-              autoFocus
-              value={swapId}
-              onChange={(e) => {
-                setSwapId(e.target.value.trim());
-              }}
-            />
-          </div>
-          <div className="flex flex-col gap-4">
-            <Label>Refund to</Label>
-            <RadioGroup
-              defaultValue="normal"
-              value={isInternal ? "internal" : "external"}
-              onValueChange={() => {
-                setAddress("");
-                setInternal(!isInternal);
-              }}
-              className="flex gap-4 flex-row"
-            >
-              <div className="flex items-start space-x-2 mb-2">
-                <RadioGroupItem
-                  value="internal"
-                  id="internal"
-                  className="shrink-0"
-                />
-                <Label
-                  htmlFor="internal"
-                  className="font-medium cursor-pointer"
-                >
-                  On-chain balance
-                </Label>
-              </div>
-              <div className="flex items-start space-x-2">
-                <RadioGroupItem
-                  value="external"
-                  id="external"
-                  className="shrink-0"
-                />
-                <Label
-                  htmlFor="external"
-                  className="font-medium cursor-pointer"
-                >
-                  External on-chain wallet
-                </Label>
-              </div>
-            </RadioGroup>
-          </div>
-          {!isInternal && (
-            <div className="grid gap-1.5">
-              <Label>On-chain address</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="bc1..."
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  required
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="px-2"
-                  onClick={paste}
-                >
-                  <ClipboardPasteIcon className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <AlertDialogAction
-          disabled={!swapId || (!isInternal && !address)}
-          onClick={onConfirm}
-        >
-          Confirm
-        </AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  );
-}
-
 function GetNetworkGraphDialogContent({ apiRequest }: Props) {
   const [nodeIds, setNodeIds] = React.useState<string>("");
 
@@ -398,7 +235,6 @@ export default function DebugTools() {
   const [dialog, setDialog] = React.useState<
     | "probeInvoice"
     | "probeKeysend"
-    | "refundSwap"
     | "getNetworkGraph"
     | "resetRoutingData"
   >();
@@ -413,8 +249,6 @@ export default function DebugTools() {
     setLogMaxLenState(value);
     localStorage.setItem(localStorageKeys.debugLogMaxLen, value);
   }
-
-  const { hasChannelManagement } = useInfo();
 
   async function apiRequest(
     endpoint: string,
@@ -475,30 +309,6 @@ export default function DebugTools() {
           >
             List Channels
           </Button>
-          {hasChannelManagement && (
-            <>
-              <Button
-                variant={"outline"}
-                onClick={() => apiRequest("/api/swaps", "GET")}
-              >
-                List Swaps
-              </Button>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant={"outline"}
-                  onClick={() => setDialog("refundSwap")}
-                >
-                  Refund Swap
-                </Button>
-              </AlertDialogTrigger>
-              <Button
-                variant={"outline"}
-                onClick={() => apiRequest("/api/swaps/mnemonic", "GET")}
-              >
-                Get Swap Mnemonic
-              </Button>
-            </>
-          )}
           <Button
             variant="outline"
             onClick={() =>
@@ -569,7 +379,6 @@ export default function DebugTools() {
           {dialog === "probeKeysend" && (
             <ProbeKeysendDialogContent apiRequest={apiRequest} />
           )}
-          {dialog === "refundSwap" && <RefundSwapDialogContent />}
           {dialog === "getNetworkGraph" && (
             <GetNetworkGraphDialogContent apiRequest={apiRequest} />
           )}
