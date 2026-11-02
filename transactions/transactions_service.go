@@ -547,7 +547,19 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 				return err
 			}
 			circleQuote = nil
-			feeSkim, feeReserve = feeSkimMloki, CalculateFeeReserveMloki(paymentAmount)
+			feeSkim = feeSkimMloki
+			// An external cash_redeem of one slice must not stamp the generic LN
+			// fee reserve on its pending row. The redeem route is already bounded
+			// by CashRedeemRouteCapKey and reconciled via cash_redeem_fee_mloki,
+			// so the reserve is dead weight here — and get_isolated_balance.go
+			// subtracts a pending row's reserve across the WHOLE shared bill, so
+			// stamping it would transiently reduce the readable balance of a
+			// co-recipient's fully-funded sibling slice and could block its
+			// redeem until this payment settles (LOKIHUB-0023). This mirrors the
+			// SkipFeeReserve headroom exemption already set above.
+			if !isCashClaimSlice {
+				feeReserve = CalculateFeeReserveMloki(paymentAmount)
+			}
 		}
 
 		var expiresAt *time.Time
