@@ -410,6 +410,77 @@ func TestLSPS5WebhookCallback_OrderStateChanged_WrongLSP_NotApplied(t *testing.T
 	assert.Equal(t, "CREATED", order.State, "a registered LSP must not be able to change the state of an order it doesn't own")
 }
 
+// TestLSPS5WebhookCallback_StaleTimestamp_Rejected is half of the LOKIHUB-0020
+// regression test: a notification that is validly signed from a registered LSP
+// but whose signed timestamp is far outside the freshness window must be
+// rejected. The signature proves authenticity, not freshness, so without the
+// freshness check a captured notification could be replayed indefinitely.
+func TestLSPS5WebhookCallback_StaleTimestamp_Rejected(t *testing.T) {
+	e := echo.New()
+	httpSvc, _ := createTestHttpService(t, false)
+
+	privKey, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	lspPubkey := hex.EncodeToString(privKey.PubKey().SerializeCompressed())
+	registerTestLSP(t, httpSvc, lspPubkey)
+
+	// A timestamp an hour in the past — signed correctly over that stale value.
+	timestamp := time.Now().Add(-time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
+	reqBody := `{"jsonrpc":"2.0","method":"lsps5.webhook_registered","params":{}}`
+	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-lsps5-timestamp", timestamp)
+	req.Header.Set("x-lsps5-signature", sig)
+	rec := httptest.NewRecorder()
+
+	err = httpSvc.lsps5WebhookCallbackHandler(e.NewContext(req, rec))
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Contains(t, resp.Message, "Stale or replayed")
+}
+
+// TestLSPS5WebhookCallback_Replay_Rejected is the other half: a fresh, validly
+// signed notification is honoured once, but re-delivering the identical signed
+// notification (a capture-and-replay) must be dropped as a duplicate.
+func TestLSPS5WebhookCallback_Replay_Rejected(t *testing.T) {
+	e := echo.New()
+	httpSvc, _ := createTestHttpService(t, false)
+
+	privKey, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	lspPubkey := hex.EncodeToString(privKey.PubKey().SerializeCompressed())
+	registerTestLSP(t, httpSvc, lspPubkey)
+
+	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	reqBody := `{"jsonrpc":"2.0","method":"lsps5.webhook_registered","params":{}}`
+	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
+
+	deliver := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-lsps5-timestamp", timestamp)
+		req.Header.Set("x-lsps5-signature", sig)
+		rec := httptest.NewRecorder()
+		require.NoError(t, httpSvc.lsps5WebhookCallbackHandler(e.NewContext(req, rec)))
+		return rec
+	}
+
+	// First delivery is accepted.
+	assert.Equal(t, http.StatusOK, deliver().Code)
+
+	// The identical signed notification replayed is rejected.
+	rec := deliver()
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Contains(t, resp.Message, "Stale or replayed")
+}
+
 // ========================
 // Helper Types
 // ========================

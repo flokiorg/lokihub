@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,6 +30,59 @@ const (
 	LSPS5MethodOnionMessageIncoming       = "lsps5.onion_message_incoming"
 	LSPS5MethodOrderStateChanged          = "lsps5.order_state_changed"
 )
+
+const (
+	// lsps5FreshnessWindow bounds how far a signed LSPS5 notification timestamp
+	// may be from now, in either direction (the second direction tolerates clock
+	// skew). A validly-signed notification outside it is treated as stale.
+	lsps5FreshnessWindow = 5 * time.Minute
+)
+
+// lsps5ReplayGuard drops replayed LSPS5 webhook notifications (LOKIHUB-0020).
+// The notification signature proves authenticity but not freshness, so without
+// this a captured, validly-signed notification could be replayed to re-trigger
+// SyncWallet + SSE broadcasts. The guard rejects a timestamp outside the
+// freshness window and remembers recently-seen (lsp, signature) pairs so a
+// capture cannot be re-delivered inside that window.
+type lsps5ReplayGuard struct {
+	window time.Duration
+	mu     sync.Mutex
+	seen   map[string]time.Time
+}
+
+func newLSPS5ReplayGuard() *lsps5ReplayGuard {
+	return &lsps5ReplayGuard{window: lsps5FreshnessWindow, seen: make(map[string]time.Time)}
+}
+
+// check returns a non-nil error when the notification must be rejected as stale
+// (the signed timestamp is outside the freshness window) or replayed (a
+// (lsp, signature) pair already seen inside the window). timestamp is the LSPS5
+// ISO8601 value that the verified signature also covers.
+func (g *lsps5ReplayGuard) check(lspPubkey, timestamp, signature string) error {
+	ts, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		return fmt.Errorf("unparseable timestamp %q: %w", timestamp, err)
+	}
+	now := time.Now()
+	if skew := now.Sub(ts); skew > g.window || skew < -g.window {
+		return fmt.Errorf("timestamp %s outside the %s freshness window", timestamp, g.window)
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	// Evict entries that have aged out of the window so the map stays bounded.
+	for k, seenAt := range g.seen {
+		if now.Sub(seenAt) > g.window {
+			delete(g.seen, k)
+		}
+	}
+	key := lspPubkey + "|" + signature
+	if _, dup := g.seen[key]; dup {
+		return errors.New("duplicate (lsp, signature) within the freshness window")
+	}
+	g.seen[key] = now
+	return nil
+}
 
 // LSPS5OrderStateChangedParams contains params for lsps5.order_state_changed
 type LSPS5OrderStateChangedParams struct {
@@ -227,6 +281,21 @@ func (httpSvc *HttpService) lsps5WebhookCallbackHandler(c echo.Context) error {
 			Msg("LSPS5 webhook notification from an unregistered LSP pubkey - rejecting")
 		return c.JSON(http.StatusUnauthorized, ErrorResponse{
 			Message: "LSP is not registered with this hub",
+		})
+	}
+
+	// The signature above proves authenticity but not freshness, so a captured,
+	// validly-signed notification could be replayed to re-trigger SyncWallet +
+	// SSE broadcasts. Drop anything whose signed timestamp is stale or whose
+	// (lsp, signature) was already seen inside the freshness window (LOKIHUB-0020).
+	if err := httpSvc.lsps5Replay.check(lspPubkey, timestamp, signature); err != nil {
+		logger.Logger.Warn().
+			Str("lsp", lspPubkey).
+			Str("timestamp", timestamp).
+			Err(err).
+			Msg("LSPS5 webhook notification rejected as stale or replayed")
+		return c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Message: "Stale or replayed notification",
 		})
 	}
 

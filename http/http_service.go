@@ -75,6 +75,9 @@ type HttpService struct {
 	// nil when no LSP service endpoint is configured (feature off).
 	lspClient *lspservice.Client
 
+	// lsps5Replay drops stale/replayed LSPS5 webhook notifications (LOKIHUB-0020).
+	lsps5Replay *lsps5ReplayGuard
+
 	// svc is read only by the test hooks (testhooks builds).
 	svc service.Service
 }
@@ -92,6 +95,7 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		tokenRevocation: dbTokenRevocation{db: svc.GetDB()},
 		shutdownCh:      make(chan struct{}),
 		lspClient:       newLspClient(svc.GetConfig().GetEnv()),
+		lsps5Replay:     newLSPS5ReplayGuard(),
 		svc:             svc,
 	}
 }
