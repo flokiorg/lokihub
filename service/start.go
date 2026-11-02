@@ -500,6 +500,13 @@ func (svc *service) StartApp(encryptionKey string) error {
 		}
 	}
 
+	// Fiat-rate oracle: subscribe to the NIP-78 price event and keep the cached
+	// rate fresh (replaces the former services.json rates sync).
+	svc.shutdownGroup.Go(func() error {
+		svc.rateOracle.Start(ctx)
+		return nil
+	})
+
 	svc.startLSPCatalogue(ctx, lspManager)
 	svc.publishAllAppInfoEvents()
 	svc.startListings(ctx)

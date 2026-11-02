@@ -40,6 +40,8 @@ import (
 	"github.com/flokiorg/lokihub/lsps/manager"
 	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
 	"github.com/flokiorg/lokihub/nip47"
+	"github.com/flokiorg/lokihub/ratesoracle"
+	"github.com/flokiorg/lokihub/seed"
 )
 
 type service struct {
@@ -49,6 +51,7 @@ type service struct {
 	lnClient            lnclient.LNClient
 	transactionsService transactions.TransactionsService
 	lokiSvc             loki.LokiService
+	rateOracle          *ratesoracle.Oracle
 	appStoreSvc         appstore.Service
 	eventPublisher      events.EventPublisher
 	ctx                 context.Context
@@ -187,7 +190,8 @@ func NewService(ctx context.Context) (*service, error) {
 
 	keys := keys.NewKeys()
 
-	lokiSvc := loki.NewLokiService(cfg, nil)
+	rateOracle := ratesoracle.FromSeed(seed.Get())
+	lokiSvc := loki.NewLokiService(cfg, rateOracle)
 
 	transactionsSvc := transactions.NewTransactionsService(gormDB, eventPublisher)
 
@@ -209,6 +213,7 @@ func NewService(ctx context.Context) (*service, error) {
 		ctx:            ctx,
 		eventPublisher: eventPublisher,
 		lokiSvc:        lokiSvc,
+		rateOracle:     rateOracle,
 
 		nip47Service:        nip47.NewNip47Service(gormDB, cfg, keys, eventPublisher, socialCache),
 		socialCache:         socialCache,
