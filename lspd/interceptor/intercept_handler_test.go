@@ -67,6 +67,16 @@ func (m *MockStore) GetPaidLsps1Order(clientNodeId string) (*core.Lsps1Order, er
 	return nil, nil // Not testing LSPS1 here
 }
 
+func (m *MockStore) UpdateLsps1OrderFunding(orderId string, fundingTxid string, fundingOutpoint int) (bool, error) {
+	args := m.Called(orderId, fundingTxid, fundingOutpoint)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockStore) UpdateLsps1OrderState(orderId, newState, newPaymentState, expectedCurrentState string) (bool, error) {
+	args := m.Called(orderId, newState, newPaymentState, expectedCurrentState)
+	return args.Bool(0), args.Error(1)
+}
+
 // ClaimLsps2Registration/ReleaseLsps2Registration/ConsumeLsps2Registration/
 // GetStuckLsps2Registrations: Phase 7 (F-15/T7-2). Routed through
 // m.Called() like every other method here -- tests that never exercise
