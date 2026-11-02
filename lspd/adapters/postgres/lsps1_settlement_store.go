@@ -222,11 +222,20 @@ func (s *PostgresOpeningStore) GetAllCreatedLsps1Orders() ([]*core.Lsps1Order, e
 // not an error -- rather than silently overwriting or racing with it.
 // Callers must treat claimed=false the same as "no unclaimed channel was
 // actually available."
+//
+// FLSPD-0021: the WHERE clause also guards on the order's own funding still
+// being null/empty, making this a one-shot first-write. The S-5 unique index
+// only stops two *different* orders claiming the same point; it does nothing
+// to stop a later caller re-writing *this* order's recorded funding to a
+// *different* point and silently losing the real channel record. Guarding
+// here means such a second write affects zero rows and returns
+// (false, nil) -- the same "back off, the funding is already settled" signal
+// every caller already handles -- instead of clobbering it.
 func (s *PostgresOpeningStore) UpdateLsps1OrderFunding(orderId string, fundingTxid string, fundingOutpoint int) (bool, error) {
 	result, err := s.pool.Exec(context.Background(),
 		`UPDATE lsps1.orders
 		 SET funding_txid = $2, funding_outpoint = $3
-		 WHERE order_id = $1`,
+		 WHERE order_id = $1 AND (funding_txid IS NULL OR funding_txid = '')`,
 		orderId, fundingTxid, fundingOutpoint)
 
 	if err != nil {

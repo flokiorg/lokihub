@@ -141,9 +141,12 @@ func TestHandleLsps1GetOrder_ActiveCreatedOrder(t *testing.T) {
 }
 
 // TestHandleLsps1GetOrder_ExpiredCreatedOrder_StateOverridden covers the
-// override path: a CREATED order past its expiry window must be reported
-// as EXPIRED even though that's not what's stored, since expiry is
-// computed on read rather than via a background sweep touching every row.
+// override path: a CREATED order past its expiry window is expired on read
+// (expiry is computed on read rather than via a background sweep touching
+// every row). FLSPD-0020: the internal EXPIRED state must be mapped to the
+// blip-0051 wire enums before it reaches the client -- order_state=FAILED
+// (terminal non-completion) and payment.bolt11.state=REFUNDED (blip-0051
+// §3.1's expiry outcome) -- never the non-spec literal "EXPIRED".
 func TestHandleLsps1GetOrder_ExpiredCreatedOrder_StateOverridden(t *testing.T) {
 	mockOS := new(MockOpeningService)
 	order := &core.Lsps1Order{
@@ -162,8 +165,56 @@ func TestHandleLsps1GetOrder_ExpiredCreatedOrder_StateOverridden(t *testing.T) {
 	require.Nil(t, resp.Error)
 	result, ok := resp.Result.(Lsps1CreateOrderResponse)
 	require.True(t, ok)
-	assert.Equal(t, string(Lsps1OrderStateExpired), result.OrderState)
-	assert.Equal(t, string(Lsps1PaymentStateExpired), result.Payment.Bolt11.State)
+	assert.Equal(t, string(Lsps1OrderStateFailed), result.OrderState, "an expired order must report the spec FAILED, not the non-spec EXPIRED")
+	assert.Equal(t, string(Lsps1PaymentStateRefunded), result.Payment.Bolt11.State, "an expired order's payment must report the spec REFUNDED, not the non-spec EXPIRED")
+}
+
+// TestHandleLsps1GetOrder_NeverReturnsNonSpecEnum is the FLSPD-0020
+// regression test: no matter the internal order_state / payment_state, the
+// get_order response's order_state is always in {CREATED,COMPLETED,FAILED}
+// and payment.bolt11.state is always in {EXPECT_PAYMENT,HOLD,PAID,REFUNDED}.
+// The internal EXPIRED/FAILED/PAID values that used to leak onto the wire are
+// the ones a strict LSPS1 client would fail to parse.
+func TestHandleLsps1GetOrder_NeverReturnsNonSpecEnum(t *testing.T) {
+	specOrderStates := map[string]bool{"CREATED": true, "COMPLETED": true, "FAILED": true}
+	specPaymentStates := map[string]bool{"EXPECT_PAYMENT": true, "HOLD": true, "PAID": true, "REFUNDED": true}
+
+	cases := []struct {
+		name         string
+		orderState   string
+		paymentState string
+	}{
+		{"internal PAID", string(Lsps1OrderStatePaid), string(Lsps1PaymentStatePaid)},
+		{"swept EXPIRED order", string(Lsps1OrderStateExpired), string(Lsps1PaymentStateExpectPayment)},
+		{"EXPIRED payment", string(Lsps1OrderStateExpired), string(Lsps1PaymentStateExpired)},
+		{"FAILED payment", string(Lsps1OrderStateFailed), string(Lsps1PaymentStateFailed)},
+		{"HOLD payment", string(Lsps1OrderStateCreated), string(Lsps1PaymentStateHold)},
+		{"completed order", string(Lsps1OrderStateCompleted), string(Lsps1PaymentStatePaid)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockOS := new(MockOpeningService)
+			order := &core.Lsps1Order{
+				OrderId:      "order-enum-" + tc.name,
+				CreatedAt:    time.Now(),
+				ExpiresAt:    time.Now().Add(time.Hour), // not expired-on-read; test the stored state directly
+				OrderState:   tc.orderState,
+				PaymentState: tc.paymentState,
+			}
+			mockOS.On("GetLsps1Order", order.OrderId).Return(order, nil)
+			server := newGetOrderTestServer(t, mockOS, 3600)
+
+			req := &JsonRpcRequest{Id: json.RawMessage(`"id"`), Params: json.RawMessage(`{"order_id":"` + order.OrderId + `"}`)}
+			resp := server.handleLsps1GetOrder(req)
+
+			require.Nil(t, resp.Error)
+			result, ok := resp.Result.(Lsps1CreateOrderResponse)
+			require.True(t, ok)
+			assert.Truef(t, specOrderStates[result.OrderState], "order_state %q is not a blip-0051 wire enum value", result.OrderState)
+			assert.Truef(t, specPaymentStates[result.Payment.Bolt11.State], "payment.bolt11.state %q is not a blip-0051 wire enum value", result.Payment.Bolt11.State)
+		})
+	}
 }
 
 // TestHandleLsps1GetOrder_UsesPersistedExpiresAt_NotLiveConfig is the
