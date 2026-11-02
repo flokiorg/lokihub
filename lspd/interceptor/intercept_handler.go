@@ -398,6 +398,31 @@ func (i *Interceptor) Intercept(req core.InterceptRequest) core.InterceptResult 
 					log.Error().Err(consumeErr).Msgf("Intercept: paymentHash=%s failed to consume LSPS2 registration scid=%d after successful channel open", reqPaymentHashStr, data.lsps2Scid)
 				}
 			}
+
+			// FLSPD-0015: the LSPS1 analogue of the LSPS2 Consume gate above.
+			// For a JIT channel opened against a PAID LSPS1 order (the
+			// GetPaidLsps1Order reconnect-fallback path in resolvePayment),
+			// SetFundingTx inside openChannel recorded the funding only on the
+			// payments row -- the lsps1.orders row stays PAID/PAID with
+			// funding_txid NULL, so GetPaidLsps1Order keeps returning it and a
+			// later HTLC or recoverStuckOrders pass would open ANOTHER channel
+			// for the same single fee. Mark the order funded + COMPLETED so it
+			// can't be re-opened. Non-fatal on error: the channel already
+			// opened and capital is committed, so failing the HTLC now would
+			// be strictly worse; UpdateLsps1OrderFunding's own first-write
+			// guard (FLSPD-0021) keeps a retry idempotent.
+			if data.tag != nil && *data.tag == lsps1JitTag && data.orderId != "" {
+				claimed, fundErr := i.store.UpdateLsps1OrderFunding(data.orderId, channelPoint.Hash.String(), int(channelPoint.Index))
+				if fundErr != nil {
+					log.Error().Err(fundErr).Msgf("Intercept: paymentHash=%s failed to record LSPS1 order %s funding after successful channel open", reqPaymentHashStr, data.orderId)
+				} else if claimed {
+					if _, stateErr := i.store.UpdateLsps1OrderState(data.orderId, string(lsps.Lsps1OrderStateCompleted), string(lsps.Lsps1PaymentStatePaid), string(lsps.Lsps1OrderStatePaid)); stateErr != nil {
+						log.Error().Err(stateErr).Msgf("Intercept: paymentHash=%s failed to mark LSPS1 order %s COMPLETED after recording funding", reqPaymentHashStr, data.orderId)
+					}
+				} else {
+					log.Warn().Msgf("Intercept: paymentHash=%s LSPS1 order %s funding already recorded or channel point claimed by another order, not re-opening", reqPaymentHashStr, data.orderId)
+				}
+			}
 		}
 
 		// Scale the forwarding amount proportionally for MPP parts. This
