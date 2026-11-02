@@ -521,7 +521,7 @@ audits of both.
 - Stops one recipient's in-flight cash_redeem from transiently blocking a
   co-recipient's fully-funded slice on the same shared bill: an external slice
   redeem no longer stamps the generic Lightning fee reserve on its pending row,
-  which the isolated-balance read had been subtracting across the whole bill. (LOKIHUB-0023)
+  which the isolated-balance read had been subtracting across the whole bill. (LOKIHUB-0023, #197)
 - Encrypts the flnd admin macaroon at rest, strengthens the backup key
   derivation to argon2id, and refuses an unverified-TLS connection to a
   non-loopback flnd. (#174)
@@ -1008,14 +1008,14 @@ audits of both.
 - Rejects stale or replayed LSPS5 webhook notifications: a validly-signed
   notification is now honoured only inside a freshness window and once per
   (LSP, signature), so a captured notification can no longer be replayed to
-  re-trigger a wallet sync and UI broadcast. (LOKIHUB-0020)
+  re-trigger a wallet sync and UI broadcast. (LOKIHUB-0020, #197)
 - Treats cash_order and circle_hub_conn connections as scope- and
   budget-immutable in the admin app-update path, so an admin edit can no longer
   grant a fund-moving scope or budget to a connection whose pairing secret is
-  held by an external party. (LOKIHUB-0030)
+  held by an external party. (LOKIHUB-0030, #197)
 - Bounds every lspd attach response body the Hub buffers (4 MiB) before
   decoding it, so a compromised or MITM'd lspd can no longer return a
-  multi-gigabyte response and OOM the Hub. (LOKIHUB-0044)
+  multi-gigabyte response and OOM the Hub. (LOKIHUB-0044, #197)
 - Authenticates the migration backup archive. New backups use a chunked
   AES-256-GCM (AEAD) format keyed by argon2id, so a tampered or bit-flipped
   archive and a wrong password now fail with a clean, detectable error instead
