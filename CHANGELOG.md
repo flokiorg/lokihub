@@ -518,6 +518,9 @@ audits of both.
 
 ### Fixed
 
+- Registers the analytics-event endpoint at its documented `POST /api/event`
+  path. It was declared on the `/api`-rooted group with a leading `/api`, so it
+  only answered at `/api/api/event` and `/api/event` returned 404. (LOKIHUB-0021)
 - Stops one recipient's in-flight cash_redeem from transiently blocking a
   co-recipient's fully-funded slice on the same shared bill: an external slice
   redeem no longer stamps the generic Lightning fee reserve on its pending row,
