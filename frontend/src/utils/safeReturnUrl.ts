@@ -30,3 +30,26 @@ export function safeReturnUrl(
   }
   return parsed.href;
 }
+
+// returnUrlOrigin is the web origin a postMessage to the opener should target,
+// derived from the validated return_to. Only http(s) return_to URLs name a real
+// web origin (a custom-scheme deep link has an opaque "null" origin and no web
+// opener to reach), so anything else yields undefined and the caller must not
+// broadcast to a wildcard "*" target.
+export function returnUrlOrigin(
+  url: string | null | undefined
+): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return undefined;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return undefined;
+  }
+  return parsed.origin;
+}

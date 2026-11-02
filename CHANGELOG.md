@@ -1008,6 +1008,13 @@ audits of both.
 
 ### Security
 
+- Posts the app-connection success message to the opener at the explicit web
+  origin derived from the validated `return_to`, never a wildcard `"*"`. A
+  wildcard target leaked the connection metadata (wallet pubkey, relay URLs,
+  lud16) to whatever origin happened to hold the opener; with no http(s)
+  `return_to` there is no trusted origin, so nothing is broadcast. The NWC
+  secret (carried on the `safeReturnUrl`-guarded `return_to`) and the JWT were
+  never in this message. (LOKIHUB-0041)
 - Routes an LNURL `successAction.url` (set by the payee's LNURL-pay server,
   untrusted) through the same scheme guard (`safeReturnUrl`) as every other
   externally-supplied navigation before it becomes a link or `window.open`
