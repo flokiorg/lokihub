@@ -27,8 +27,6 @@ export function SetupServices() {
     trustedNwcRelay: true,
     generalRelay: "",
     searchRelay: "",
-    messageboardNwcUrl: store.nodeInfo.messageboardNwcUrl || "",
-    enableMessageboardNwc: store.nodeInfo.enableMessageboardNwc ?? false,
   });
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -50,17 +48,8 @@ export function SetupServices() {
           setConfig((prev) => {
             const newConfig = { ...prev };
             if (!newConfig.relay && info.relay) newConfig.relay = info.relay;
-            if (!newConfig.messageboardNwcUrl && info.messageboardNwcUrl)
-              newConfig.messageboardNwcUrl = info.messageboardNwcUrl;
             if (!newConfig.mempoolApi && info.mempoolUrl)
               newConfig.mempoolApi = info.mempoolUrl;
-
-            // Boolean defaults
-            if (
-              store.nodeInfo.enableMessageboardNwc === undefined &&
-              info.enableMessageboardNwc !== undefined
-            )
-              newConfig.enableMessageboardNwc = info.enableMessageboardNwc;
 
             return newConfig;
           });
@@ -92,9 +81,7 @@ export function SetupServices() {
 
     store.updateNodeInfo({
       relay: config.relay,
-      messageboardNwcUrl: config.messageboardNwcUrl,
       mempoolApi: config.mempoolApi,
-      enableMessageboardNwc: config.enableMessageboardNwc,
     });
     navigate("/setup/node");
   }

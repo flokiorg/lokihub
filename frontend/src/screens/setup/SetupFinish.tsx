@@ -132,7 +132,6 @@ const finishSetup = async (
             unlockPassword,
             lokihubServicesURL: nodeInfo.lokihubServicesURL,
             relay: nodeInfo.relay,
-            messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
             mempoolApi: nodeInfo.mempoolApi,
           }),
         });
@@ -155,7 +154,6 @@ const finishSetup = async (
             flndMacaroonHex,
             lokihubServicesURL: nodeInfo.lokihubServicesURL,
             relay: nodeInfo.relay,
-            messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
             mempoolApi: nodeInfo.mempoolApi,
           }),
         });

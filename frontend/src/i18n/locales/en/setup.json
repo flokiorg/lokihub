@@ -176,16 +176,10 @@
       "description": "Enables Lightning to on-chain swaps (and vice-versa).",
       "custom": "Custom Swap Service"
     },
-    "messageboard": {
-      "title": "Messageboard",
-      "description": "Connects to a NWC-enabled messageboard service.",
-      "custom": "Custom Message Board"
-    },
     "validation": {
       "relayRequired": "At least one relay is required",
       "explorerRequired": "Flokicoin Explorer URL is required",
       "swapRequired": "Swap Service URL is required when enabled",
-      "messageboardRequired": "Messageboard URL is required when enabled",
       "invalidUrl": "{{field}}: invalid URL format"
     },
     "trustedNwcRelay": {
