@@ -521,6 +521,25 @@ audits of both.
 - Registers the analytics-event endpoint at its documented `POST /api/event`
   path. It was declared on the `/api`-rooted group with a leading `/api`, so it
   only answered at `/api/api/event` and `/api/event` returned 404. (LOKIHUB-0021, #201)
+- Computes the lspd LSPS2 JIT opening fee with the BLIP-52 formula
+  (`((payment_size*proportional)+999999)/1e6`, floored at `min_fee`) on the
+  gross payment size, via the same function the buy-time quote and liquidity
+  reservation use, instead of a gross-up on the forwarded amount. The LSP had
+  been collecting slightly less than the fee it quoted and reserved on every
+  JIT open. (FLSPD-0013, #199)
+- Rejects an LSPS2 fixed-size JIT HTLC whose incoming amount exceeds the
+  quoted `payment_size`, mirroring the variable-size worst-case cap, so a
+  channel is never opened larger than the capacity the buy-time reservation
+  committed to the ledger. (FLSPD-0014, #199)
+- Marks a PAID LSPS1 order funded and COMPLETED after the interceptor opens
+  its JIT channel, the LSPS1 analogue of the LSPS2 consume gate, so a funded
+  order can no longer be re-opened by a later HTLC or a recovery pass. (FLSPD-0015, #199)
+- Maps lspd `get_order` responses to the blip-0051 wire enums: `order_state`
+  is always one of `CREATED`/`COMPLETED`/`FAILED` and `payment.bolt11.state`
+  one of `EXPECT_PAYMENT`/`HOLD`/`PAID`/`REFUNDED`, so the internal `EXPIRED`
+  and `FAILED` values can no longer leak out and break a strict client. (FLSPD-0020, #199)
+- Guards `UpdateLsps1OrderFunding` as a one-shot first-write so a recorded
+  channel point cannot be silently overwritten on an already-funded order. (FLSPD-0021, #199)
 - Stops one recipient's in-flight cash_redeem from transiently blocking a
   co-recipient's fully-funded slice on the same shared bill: an external slice
   redeem no longer stamps the generic Lightning fee reserve on its pending row,

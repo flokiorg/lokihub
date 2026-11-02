@@ -7,6 +7,7 @@ import (
 	"github.com/flokiorg/go-flokicoin/wire"
 	"github.com/flokiorg/lokihub/lspd/core"
 	"github.com/flokiorg/lokihub/lspd/lightning"
+	"github.com/flokiorg/lokihub/lspd/lsps"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -64,6 +65,16 @@ func (m *MockStore) SetFundingTx(paymentHash []byte, channelPoint *wire.OutPoint
 
 func (m *MockStore) GetPaidLsps1Order(clientNodeId string) (*core.Lsps1Order, error) {
 	return nil, nil // Not testing LSPS1 here
+}
+
+func (m *MockStore) UpdateLsps1OrderFunding(orderId string, fundingTxid string, fundingOutpoint int) (bool, error) {
+	args := m.Called(orderId, fundingTxid, fundingOutpoint)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockStore) UpdateLsps1OrderState(orderId, newState, newPaymentState, expectedCurrentState string) (bool, error) {
+	args := m.Called(orderId, newState, newPaymentState, expectedCurrentState)
+	return args.Bool(0), args.Error(1)
 }
 
 // ClaimLsps2Registration/ReleaseLsps2Registration/ConsumeLsps2Registration/
@@ -132,11 +143,10 @@ func TestResolvePayment_JIT_Success(t *testing.T) {
 	mockStore.On("PaymentInfo", mock.Anything).Return("", "", nil, nil, nil, nil, int64(0), int64(0), nil, nil, nil) // Not found in payments table
 	mockStore.On("GetLsps2Order", scid).Return(order, nil)
 
-	// Expect Registration with CORRECT Fee Calculation: fees are charged on
-	// the forwarded (outgoing) amount, so outgoing = input / (1 + rate).
-	// rate = 4000/1_000_000 = 0.004
-	// outgoing = 20_000_000 / 1.004 = 19920318 (truncated)
-	// fee = 20_000_000 - 19920318 = 79682, which is above the 1000 floor.
+	// Expect Registration with the BLIP-52 opening fee on the GROSS payment
+	// size (FLSPD-0013): fee = ((20_000_000*4000)+999999)/1e6 = 80000 (above
+	// the 1000 floor), so outgoing = 20_000_000 - 80000 = 19920000 -- the same
+	// fee the buy-time quote reserved, not the old gross-up's 79682/19920318.
 	mockStore.On("RegisterPayment",
 		"token_1",
 		"order_1",
@@ -145,7 +155,7 @@ func TestResolvePayment_JIT_Success(t *testing.T) {
 		mock.Anything,   // hash
 		mock.Anything,   // secret
 		int64(20000000), // Incoming (Gross)
-		int64(19920318), // Outgoing (Net)
+		int64(19920000), // Outgoing (Net)
 		lsps2JitTag,
 	).Return(nil)
 
@@ -160,7 +170,7 @@ func TestResolvePayment_JIT_Success(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.Equal(t, int64(19920318), result.outgoingAmountMloki)
+	assert.Equal(t, int64(19920000), result.outgoingAmountMloki)
 	assert.True(t, result.isJit)
 	assert.True(t, result.isLsps2Registration)
 	require.NotNil(t, result.tag)
@@ -201,10 +211,53 @@ func TestResolvePayment_JIT_Underpayment(t *testing.T) {
 	assert.Contains(t, err.Error(), "underpayment")
 }
 
+// TestResolvePayment_JIT_FixedModeOverpaymentRejected is the FLSPD-0014
+// regression test: in fixed-size mode the reserved capacity was sized against
+// exactly payment_size at buy time, so an incoming HTLC larger than
+// payment_size must be rejected (mirroring the variable-mode worst-case cap)
+// rather than opening a channel sized on the larger incoming amount while the
+// reservation ledger still only counts payment_size.
+func TestResolvePayment_JIT_FixedModeOverpaymentRejected(t *testing.T) {
+	mockStore := new(MockStore)
+	interceptor := &Interceptor{store: mockStore}
+
+	scid := uint64(123456)
+	paymentSize := uint64(20000000) // fixed size the reservation was sized for
+
+	order := &core.Lsps2BuyRegistration{
+		Id:                 "order_1",
+		Scid:               scid,
+		PaymentSizeMloki:   &paymentSize,
+		ParamsMinFeeMloki:  1000,
+		ParamsProportional: 4000,
+		PeerId:             "02deadbeef",
+	}
+	mockStore.On("PaymentInfo", mock.Anything).Return("", "", nil, nil, nil, nil, int64(0), int64(0), nil, nil, nil)
+	mockStore.On("GetLsps2Order", scid).Return(order, nil)
+
+	// Sender pays MORE than the fixed payment_size.
+	req := core.InterceptRequest{
+		Scid:                lightning.ShortChannelID(scid),
+		IncomingAmountMloki: 21000000,
+		PaymentHash:         []byte("hash"),
+	}
+
+	result, err := interceptor.resolvePayment(req)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "exceeds fixed payment size")
+	// The over-payment must be rejected before any channel/registration is
+	// committed -- RegisterPayment is never reached.
+	mockStore.AssertNotCalled(t, "RegisterPayment")
+}
+
 // TestComputeJitOutgoingAmount covers the fee/floor math independently of
 // the mock store, including the case where the proportional fee falls
-// below the minFee floor (untested previously, since the panicking mock
-// setup masked it).
+// below the minFee floor. FLSPD-0013: the fee is now BLIP-52's
+// ((size*proportional)+999999)/1e6 on the GROSS payment size (fee=80000 on
+// 20M at 4000ppm), not the old gross-up (which charged only 79682); the
+// floor-dominated and zero-rate cases are unchanged.
 func TestComputeJitOutgoingAmount(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -219,8 +272,8 @@ func TestComputeJitOutgoingAmount(t *testing.T) {
 			paymentSizeMloki: 20000000,
 			minFeeMloki:      1000,
 			proportional:     4000,
-			wantOutgoing:     19920318,
-			wantFee:          79682,
+			wantOutgoing:     19920000,
+			wantFee:          80000,
 		},
 		{
 			name:             "proportional fee below floor, floor applies",
@@ -242,10 +295,38 @@ func TestComputeJitOutgoingAmount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			outgoing, fee := computeJitOutgoingAmount(tt.paymentSizeMloki, tt.minFeeMloki, tt.proportional)
+			outgoing, fee, err := computeJitOutgoingAmount(tt.paymentSizeMloki, tt.minFeeMloki, tt.proportional)
+			require.NoError(t, err)
 			assert.Equal(t, tt.wantOutgoing, outgoing, "outgoing mismatch")
 			assert.Equal(t, tt.wantFee, fee, "fee mismatch")
 		})
+	}
+}
+
+// TestComputeJitOutgoingAmount_MatchesBuyTimeQuote is the FLSPD-0013
+// regression test: the fee charged at JIT redemption must equal the fee the
+// buy-time quote computes via lsps.ComputeOpeningFee, since a client's
+// reservation was sized against exactly that figure. Both must be the gross
+// BLIP-52 fee, not the old outgoing-amount gross-up.
+func TestComputeJitOutgoingAmount_MatchesBuyTimeQuote(t *testing.T) {
+	cases := []struct {
+		paymentSize  uint64
+		minFee       uint64
+		proportional uint32
+	}{
+		{20_000_000, 1000, 4000},
+		{10_000_000, 100, 10_000},
+		{1_000_000, 750, 0},
+		{100_000, 1000, 4000}, // floor dominates
+	}
+	for _, c := range cases {
+		quoted, err := lsps.ComputeOpeningFee(c.paymentSize, c.minFee, uint64(c.proportional))
+		require.NoError(t, err)
+
+		_, jitFee, err := computeJitOutgoingAmount(int64(c.paymentSize), int64(c.minFee), c.proportional)
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(quoted), jitFee, "JIT fee must equal the buy-time quoted/reserved fee for size=%d prop=%d", c.paymentSize, c.proportional)
 	}
 }
 
