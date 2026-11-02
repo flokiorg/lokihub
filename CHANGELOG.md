@@ -999,6 +999,16 @@ audits of both.
 - Counts a payment made at the exact moment a budget period starts against
   that period; it counted against neither, so it escaped the budget. (#148)
 
+### Security
+
+- Authenticates the migration backup archive. New backups use a chunked
+  AES-256-GCM (AEAD) format keyed by argon2id, so a tampered or bit-flipped
+  archive and a wrong password now fail with a clean, detectable error instead
+  of silently restoring corrupt or garbage state — the old versioned format was
+  AES-CTR, an unauthenticated stream cipher, despite its own comment deprecating
+  the legacy OFB format for exactly that malleability. Existing backups
+  (argon2id/PBKDF2 AES-CTR and legacy AES-OFB) still restore. (LOKIHUB-0034)
+
 ## [0.4.0]
 
 Adds Circles and JIT Wallets, two ways to share your node's Lightning liquidity
