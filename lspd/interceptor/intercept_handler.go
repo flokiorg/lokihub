@@ -889,6 +889,21 @@ func (i *Interceptor) resolvePayment(req core.InterceptRequest) (*interceptData,
 			paymentSize := int64(req.IncomingAmountMloki)
 			if lsps2Order.PaymentSizeMloki != nil {
 				paymentSize = int64(*lsps2Order.PaymentSizeMloki)
+				// FLSPD-0014: fixed-size mode reserved capacity sized against
+				// exactly this payment_size at buy time (ReserveLsps2Buy).
+				// BLIP-52 treats payment_size_msat as the exact amount the
+				// payer sends, so an incoming HTLC larger than it would open
+				// a channel sized on the actual (larger) incoming amount
+				// while the reserved-liquidity ledger (F-16/F-20) still only
+				// counts payment_size for this registration -- under-counting
+				// real committed capital and letting concurrent orders
+				// over-commit the wallet. Reject the over-payment, mirroring
+				// the variable-mode worst-case upper cap below (the
+				// underpayment floor is enforced separately a few lines on).
+				if req.IncomingAmountMloki > *lsps2Order.PaymentSizeMloki {
+					log.Warn().Msgf("LSPS2 JIT: incoming amount %d exceeds fixed payment size %d", req.IncomingAmountMloki, *lsps2Order.PaymentSizeMloki)
+					return nil, fmt.Errorf("incoming amount %d exceeds fixed payment size %d", req.IncomingAmountMloki, *lsps2Order.PaymentSizeMloki)
+				}
 			} else if lsps2Order.MaxPaymentSizeMloki != nil && req.IncomingAmountMloki > *lsps2Order.MaxPaymentSizeMloki {
 				// F-22 (redemption-time half): in variable-size mode, the
 				// real incoming HTLC amount was only ever bounded by an
