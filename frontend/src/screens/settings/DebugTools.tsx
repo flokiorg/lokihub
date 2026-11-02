@@ -233,10 +233,7 @@ function LogSettingsDialogContent({
 export default function DebugTools() {
   const [apiResponse, setApiResponse] = React.useState<string>("");
   const [dialog, setDialog] = React.useState<
-    | "probeInvoice"
-    | "probeKeysend"
-    | "getNetworkGraph"
-    | "resetRoutingData"
+    "probeInvoice" | "probeKeysend" | "getNetworkGraph" | "resetRoutingData"
   >();
   // Get App/Node Logs fetch immediately with whatever this is currently set
   // to — it's configured separately (the Logs card's settings icon), not

@@ -27,7 +27,7 @@
       "count": 3
     },
     "curly": {
-      "count": 3
+      "count": 2
     }
   },
   "src/components/ServiceSelector.tsx": {
@@ -150,7 +150,7 @@
       "count": 1
     },
     "curly": {
-      "count": 6
+      "count": 4
     }
   },
   "src/screens/setup/node/FLNDForm.tsx": {
