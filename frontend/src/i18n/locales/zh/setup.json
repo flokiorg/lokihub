@@ -99,7 +99,7 @@
     "loading": "加载中...",
     "continue": "继续",
     "fetchError": "获取枢纽配置失败，请检查您的连接。",
-    "communityNote": "这些服务建议由社区提供。要建议更改或添加新服务，请向 <1>lokihub-services</1> 仓库提交 pull request。",
+    "communityNote": "这些浏览器和中继建议是内置的默认值。您可以选择其中之一，或输入您偏好的任何浏览器或中继。",
     "warning": "警告",
     "warningText": "您对所连接的服务负责。请确保信任这些 URL 的提供商。",
     "configErrors": "配置错误",
