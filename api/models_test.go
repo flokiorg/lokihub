@@ -28,8 +28,6 @@ func fullInfoResponse() InfoResponse {
 		MempoolUrl:                  "https://mempool.example.com",
 		LSPs:                        []LSPInfo{{Name: "Flowgate", Pubkey: "03abc", Host: "1.2.3.4:5521"}},
 		LokihubServicesURL:          "https://example.com/services",
-		MessageboardNwcUrl:          "https://example.com/board",
-		EnableMessageboardNwc:       true,
 		WorkDir:                     "/home/user/.lokihub",
 		EnablePolling:               true,
 	}
@@ -69,8 +67,6 @@ func TestInfoResponse_RedactForUnauthenticated_SetupCompleted(t *testing.T) {
 	assert.Empty(t, info.MempoolUrl)
 	assert.Empty(t, info.LSPs)
 	assert.Empty(t, info.LokihubServicesURL)
-	assert.Empty(t, info.MessageboardNwcUrl)
-	assert.False(t, info.EnableMessageboardNwc)
 	assert.False(t, info.EnablePolling)
 }
 

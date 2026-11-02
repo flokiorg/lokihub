@@ -166,16 +166,10 @@
       "description": "Habilita intercambios de Lightning a on-chain (y viceversa).",
       "custom": "Servicio de intercambio personalizado"
     },
-    "messageboard": {
-      "title": "Tablón de mensajes",
-      "description": "Se conecta a un servicio de tablón de mensajes habilitado con NWC.",
-      "custom": "Tablón de mensajes personalizado"
-    },
     "validation": {
       "relayRequired": "Se requiere al menos un relé",
       "explorerRequired": "La URL del Explorador Flokicoin es obligatoria",
       "swapRequired": "La URL del servicio de intercambio es obligatoria cuando está habilitado",
-      "messageboardRequired": "La URL del tablón de mensajes es obligatoria cuando está habilitado",
       "invalidUrl": "{{field}}: formato de URL inválido"
     },
     "connectHint": "Conectar un servicio de confianza"

@@ -166,16 +166,10 @@
       "description": "Lightning とオンチェーンのスワップ（およびその逆）を有効にします。",
       "custom": "カスタムスワップサービス"
     },
-    "messageboard": {
-      "title": "メッセージボード",
-      "description": "NWC対応のメッセージボードサービスに接続します。",
-      "custom": "カスタムメッセージボード"
-    },
     "validation": {
       "relayRequired": "少なくとも1つのリレーが必要です",
       "explorerRequired": "FlokicoinエクスプローラーのURLは必須です",
       "swapRequired": "有効時はスワップサービスのURLが必須です",
-      "messageboardRequired": "有効時はメッセージボードのURLが必須です",
       "invalidUrl": "{{field}}：URLフォーマットが無効です"
     },
     "connectHint": "信頼できるサービスに接続"

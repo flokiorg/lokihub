@@ -1517,7 +1517,6 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 			Online: relayStatus.Online,
 		})
 	}
-	info.MessageboardNwcUrl = api.cfg.GetMessageboardNwcUrl()
 
 	lnClient := api.svc.GetLNClient()
 	var nodeInfo *lnclient.NodeInfo
@@ -1598,7 +1597,6 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	}
 
 	info.MempoolUrl = api.cfg.GetMempoolApi()
-	info.EnableMessageboardNwc = api.cfg.EnableMessageboardNwc()
 	info.WorkDir = api.cfg.GetDefaultWorkDir()
 	info.EnablePolling = constants.DEFAULT_ENABLE_POLLING
 
@@ -1645,13 +1643,6 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		err := api.SetFlokicoinDisplayFormat(updateSettingsRequest.FlokicoinDisplayFormat)
 		if err != nil {
 			return fmt.Errorf("failed to set flokicoin display format: %w", err)
-		}
-	}
-
-	if updateSettingsRequest.EnableMessageboardNwc != nil {
-		err := api.cfg.SetEnableMessageboardNwc(*updateSettingsRequest.EnableMessageboardNwc)
-		if err != nil {
-			return fmt.Errorf("failed to set EnableMessageboardNwc: %w", err)
 		}
 	}
 
@@ -1744,16 +1735,6 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		err := api.cfg.SetMempoolApi(updateSettingsRequest.MempoolApi)
 		if err != nil {
 			return fmt.Errorf("failed to set MempoolApi: %w", err)
-		}
-	}
-
-	if updateSettingsRequest.MessageboardNwcUrl != "" {
-		if err := utils.ValidateMessageBoardURL(updateSettingsRequest.MessageboardNwcUrl); err != nil {
-			return fmt.Errorf("invalid Messageboard NWC URL: %w", err)
-		}
-		err := api.cfg.SetMessageboardNwcUrl(updateSettingsRequest.MessageboardNwcUrl)
-		if err != nil {
-			return fmt.Errorf("failed to set MessageboardNwcUrl: %w", err)
 		}
 	}
 
@@ -2087,14 +2068,6 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 		err = api.cfg.SetMempoolApi(setupRequest.MempoolApi)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save MempoolApi")
-			return err
-		}
-	}
-
-	if setupRequest.MessageboardNwcUrl != "" {
-		err = api.cfg.SetMessageboardNwcUrl(setupRequest.MessageboardNwcUrl)
-		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save MessageboardNwcUrl")
 			return err
 		}
 	}
@@ -2469,15 +2442,6 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 		}
 	}
 
-	if req.MessageboardNwcUrl != "" {
-		if err := utils.ValidateMessageBoardURL(req.MessageboardNwcUrl); err != nil {
-			return fmt.Errorf("invalid Messageboard NWC URL: %w", err)
-		}
-		if err := api.cfg.SetMessageboardNwcUrl(req.MessageboardNwcUrl); err != nil {
-			return err
-		}
-	}
-
 	if req.MempoolApi != "" {
 		if err := utils.ValidateHTTPURL(req.MempoolApi); err != nil {
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
@@ -2549,15 +2513,6 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		if err := api.cfg.SetRelay(req.Relay); err != nil {
-			return err
-		}
-	}
-
-	if req.MessageboardNwcUrl != "" {
-		if err := utils.ValidateMessageBoardURL(req.MessageboardNwcUrl); err != nil {
-			return fmt.Errorf("invalid Messageboard NWC URL: %w", err)
-		}
-		if err := api.cfg.SetMessageboardNwcUrl(req.MessageboardNwcUrl); err != nil {
 			return err
 		}
 	}

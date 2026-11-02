@@ -166,16 +166,10 @@
       "description": "启用 Lightning 网络与链上的兑换（反之亦然）。",
       "custom": "自定义兑换服务"
     },
-    "messageboard": {
-      "title": "留言板",
-      "description": "连接到支持 NWC 的留言板服务。",
-      "custom": "自定义留言板"
-    },
     "validation": {
       "relayRequired": "至少需要一个中继",
       "explorerRequired": "Flokicoin 浏览器 URL 为必填项",
       "swapRequired": "启用时兑换服务 URL 为必填项",
-      "messageboardRequired": "启用时留言板 URL 为必填项",
       "invalidUrl": "{{field}}：URL 格式无效"
     },
     "connectHint": "连接可信服务"

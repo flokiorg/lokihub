@@ -709,27 +709,6 @@ func (cfg *config) SetLokihubStoreURL(value string) error {
 	return nil
 }
 
-func (cfg *config) GetMessageboardNwcUrl() string {
-	url, err := cfg.Get("MessageboardNwcUrl", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch MessageboardNwcUrl")
-	}
-	if url != "" {
-		return url
-	}
-	return cfg.Env.MessageboardNwcUrl
-}
-
-func (cfg *config) SetMessageboardNwcUrl(value string) error {
-	// MessageboardNwcUrl can be empty
-	err := cfg.SetUpdate("MessageboardNwcUrl", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update MessageboardNwcUrl")
-		return err
-	}
-	return nil
-}
-
 func (cfg *config) GetRelay() string {
 	url, err := cfg.Get("Relay", "")
 	if err != nil {
@@ -974,33 +953,6 @@ func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
 	}
 	if _, err := cashrequest.RaiseHorizon(cfg.db, limits.MaxRequestAgeSeconds, time.Now()); err != nil {
 		return fmt.Errorf("failed to store the horizon: %w", err)
-	}
-	return nil
-}
-
-func (cfg *config) EnableMessageboardNwc() bool {
-	value, err := cfg.Get("EnableMessageboardNwc", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch EnableMessageboardNwc")
-		return cfg.Env.EnableMessageboardNwc
-	}
-	if value == "" {
-		return cfg.Env.EnableMessageboardNwc
-	}
-	return value == "true"
-}
-
-func (cfg *config) SetEnableMessageboardNwc(enable bool) error {
-	var value string
-	if enable {
-		value = "true"
-	} else {
-		value = "false"
-	}
-	err := cfg.SetUpdate("EnableMessageboardNwc", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update EnableMessageboardNwc")
-		return err
 	}
 	return nil
 }

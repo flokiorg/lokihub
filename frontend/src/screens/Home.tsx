@@ -4,7 +4,6 @@ import AppHeader from "src/components/AppHeader";
 import { BlockHeightWidget } from "src/components/home/widgets/BlockHeightWidget";
 import { ForwardsWidget } from "src/components/home/widgets/ForwardsWidget";
 import { LatestUsedAppsWidget } from "src/components/home/widgets/LatestUsedAppsWidget";
-import { LightningMessageboardWidget } from "src/components/home/widgets/LightningMessageboardWidget";
 import { NodeStatusWidget } from "src/components/home/widgets/NodeStatusWidget";
 import { OnchainFeesWidget } from "src/components/home/widgets/OnchainFeesWidget";
 import Loading from "src/components/Loading";
@@ -124,7 +123,6 @@ function Home() {
         <div className="grid gap-5">
           <OnboardingChecklist />
           <DashboardAlerts />
-          <LightningMessageboardWidget />
         </div>
 
         {/* RIGHT */}
