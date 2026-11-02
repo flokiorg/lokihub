@@ -1009,6 +1009,10 @@ audits of both.
   notification is now honoured only inside a freshness window and once per
   (LSP, signature), so a captured notification can no longer be replayed to
   re-trigger a wallet sync and UI broadcast. (LOKIHUB-0020)
+- Treats cash_order and circle_hub_conn connections as scope- and
+  budget-immutable in the admin app-update path, so an admin edit can no longer
+  grant a fund-moving scope or budget to a connection whose pairing secret is
+  held by an external party. (LOKIHUB-0030)
 - Authenticates the migration backup archive. New backups use a chunked
   AES-256-GCM (AEAD) format keyed by argon2id, so a tampered or bit-flipped
   archive and a wrong password now fail with a clean, detectable error instead
