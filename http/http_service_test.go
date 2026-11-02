@@ -318,6 +318,44 @@ func TestCreateApp_FullPermission(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec2.Code)
 }
 
+func TestEventRoute_RegisteredAtApiEvent(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := events.NewEventPublisher()
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	var atApiEvent, atDoubleApiEvent bool
+	for _, r := range e.Routes() {
+		if r.Method != http.MethodPost {
+			continue
+		}
+		switch r.Path {
+		case "/api/event":
+			atApiEvent = true
+		case "/api/api/event":
+			atDoubleApiEvent = true
+		}
+	}
+	assert.True(t, atApiEvent, "POST /api/event must be registered")
+	assert.False(t, atDoubleApiEvent, "POST /api/api/event must not be registered (double /api prefix)")
+}
+
 func TestCreateApp_ReadonlyPermission(t *testing.T) {
 	e := echo.New()
 	logger.Init(strconv.Itoa(int(4)))

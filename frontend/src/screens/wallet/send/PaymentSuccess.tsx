@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "src/components/ui/card";
 import { copyToClipboard } from "src/lib/clipboard";
+import { safeReturnUrl } from "src/utils/safeReturnUrl";
 
 import Tick from "src/assets/illustrations/tick.svg?react";
 import AppHeader from "src/components/AppHeader";
@@ -115,7 +116,12 @@ function SuccessAction({ action }: { action: Invoice["successAction"] }) {
           <p className="text-sm">{action.message}</p>
         </div>
       );
-    case "url":
+    case "url": {
+      // successAction.url comes from the payee's LNURL-pay server (untrusted),
+      // so it goes through the same scheme guard as every other externally
+      // supplied navigation before it can become a link / window.open target.
+      // A rejected URL (e.g. javascript:) is shown as plain text, never linked.
+      const safeUrl = safeReturnUrl(action.url);
       return (
         <>
           <div className="w-full p-4 border rounded-lg">
@@ -124,15 +130,20 @@ function SuccessAction({ action }: { action: Invoice["successAction"] }) {
           </div>
           <div className="w-full p-4 border rounded-lg">
             <div className="font-medium">URL</div>
-            <ExternalLink
-              to={action.url}
-              className="underline flex items-center"
-            >
-              <p className="text-sm">{action.url}</p>
-              <ExternalLinkIcon className="w-4 h-4 ml-2" />
-            </ExternalLink>
+            {safeUrl ? (
+              <ExternalLink
+                to={safeUrl}
+                className="underline flex items-center"
+              >
+                <p className="text-sm">{action.url}</p>
+                <ExternalLinkIcon className="w-4 h-4 ml-2" />
+              </ExternalLink>
+            ) : (
+              <p className="text-sm break-all">{action.url}</p>
+            )}
           </div>
         </>
       );
+    }
   }
 }

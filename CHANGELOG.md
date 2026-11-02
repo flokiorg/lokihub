@@ -518,6 +518,9 @@ audits of both.
 
 ### Fixed
 
+- Registers the analytics-event endpoint at its documented `POST /api/event`
+  path. It was declared on the `/api`-rooted group with a leading `/api`, so it
+  only answered at `/api/api/event` and `/api/event` returned 404. (LOKIHUB-0021, #201)
 - Computes the lspd LSPS2 JIT opening fee with the BLIP-52 formula
   (`((payment_size*proportional)+999999)/1e6`, floored at `min_fee`) on the
   gross payment size, via the same function the buy-time quote and liquidity
@@ -1024,6 +1027,20 @@ audits of both.
 
 ### Security
 
+- Posts the app-connection success message to the opener at the explicit web
+  origin derived from the validated `return_to`, never a wildcard `"*"`. A
+  wildcard target leaked the connection metadata (wallet pubkey, relay URLs,
+  lud16) to whatever origin happened to hold the opener; with no http(s)
+  `return_to` there is no trusted origin, so nothing is broadcast. The NWC
+  secret (carried on the `safeReturnUrl`-guarded `return_to`) and the JWT were
+  never in this message. (LOKIHUB-0041, #201)
+- Routes an LNURL `successAction.url` (set by the payee's LNURL-pay server,
+  untrusted) through the same scheme guard (`safeReturnUrl`) as every other
+  externally-supplied navigation before it becomes a link or `window.open`
+  target, so a `javascript:`/`data:` URL is shown as plain text instead of
+  being navigated; also corrects a misspelled `rel="noreferer noopener"` on
+  external links so `noreferrer` actually applies. Defense-in-depth: the prod
+  CSP already blocked the `javascript:` vector. (LOKIHUB-0040, #201)
 - Rejects stale or replayed LSPS5 webhook notifications: a validly-signed
   notification is now honoured only inside a freshness window and once per
   (LSP, signature), so a captured notification can no longer be replayed to
