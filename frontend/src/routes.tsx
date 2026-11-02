@@ -83,10 +83,6 @@ import Onchain from "src/screens/wallet/send/Onchain";
 import OnchainSuccess from "src/screens/wallet/send/OnchainSuccess";
 import PaymentSuccess from "src/screens/wallet/send/PaymentSuccess";
 import ZeroAmount from "src/screens/wallet/send/ZeroAmount";
-import Swap from "src/screens/wallet/swap";
-import AutoSwap from "src/screens/wallet/swap/AutoSwap";
-import SwapInStatus from "src/screens/wallet/swap/SwapInStatus";
-import SwapOutStatus from "src/screens/wallet/swap/SwapOutStatus";
 
 const routes: RouteObject[] = [
   {
@@ -119,28 +115,6 @@ const routes: RouteObject[] = [
               {
                 index: true,
                 element: <Wallet />,
-              },
-              {
-                path: "swap",
-                handle: { crumb: () => "Swap" },
-                children: [
-                  {
-                    index: true,
-                    element: <Swap />,
-                  },
-                  {
-                    path: "out/status/:swapId",
-                    element: <SwapOutStatus />,
-                  },
-                  {
-                    path: "in/status/:swapId",
-                    element: <SwapInStatus />,
-                  },
-                  {
-                    path: "auto",
-                    element: <AutoSwap />,
-                  },
-                ],
               },
               {
                 path: "receive",

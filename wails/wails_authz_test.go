@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/api"
-	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/tests/mocks"
 )
 
@@ -18,12 +17,12 @@ import (
 type authzStubAPI struct {
 	api.API
 	calls    []string
-	swapSeed string
+	nodeSeed string
 }
 
-func (a *authzStubAPI) GetSwapMnemonic() string {
-	a.calls = append(a.calls, "GetSwapMnemonic")
-	return a.swapSeed
+func (a *authzStubAPI) GetMnemonic(string) (*api.MnemonicResponse, error) {
+	a.calls = append(a.calls, "GetMnemonic")
+	return &api.MnemonicResponse{Mnemonic: a.nodeSeed}, nil
 }
 
 func (a *authzStubAPI) GetBalances(context.Context) (*api.BalancesResponse, error) {
@@ -51,28 +50,22 @@ func (a *authzStubAPI) RedeemOnchainFunds(context.Context, string, uint64, *uint
 	return &api.RedeemOnchainFundsResponse{}, nil
 }
 
-func (a *authzStubAPI) InitiateSwapOut(context.Context, *api.InitiateSwapRequest) (*swaps.SwapResponse, error) {
-	a.calls = append(a.calls, "InitiateSwapOut")
-	return &swaps.SwapResponse{}, nil
-}
-
 // fundMovingRoutes are the full-access routes a desktop session without the
-// "full" tier must be refused (LOKIHUB-0043), with the swap seed export the
+// "full" tier must be refused (LOKIHUB-0043), with the node seed export the
 // worst single instance (LOKIHUB-0042).
 var fundMovingRoutes = []struct{ route, method string }{
 	{"/api/payments/lnbc1", "POST"},
 	{"/api/transfers", "POST"},
 	{"/api/channels", "POST"},
 	{"/api/wallet/redeem-onchain-funds", "POST"},
-	{"/api/swaps/out", "POST"},
-	{"/api/swaps/mnemonic", "GET"},
+	{"/api/mnemonic", "POST"},
 	{"/api/command", "POST"},
 }
 
-// A readonly desktop session is refused every fund-moving route and the swap
+// A readonly desktop session is refused every fund-moving route and the node
 // seed, and the API is never reached — mirroring the HTTP requireFullAccess 403.
 func TestWailsRouter_ReadonlySessionRefusesFundRoutes(t *testing.T) {
-	stub := &authzStubAPI{swapSeed: "abandon abandon abandon"}
+	stub := &authzStubAPI{nodeSeed: "abandon abandon abandon"}
 	app := &WailsApp{api: stub, ctx: context.Background()}
 	app.session.markUnlocked("readonly")
 
@@ -87,7 +80,7 @@ func TestWailsRouter_ReadonlySessionRefusesFundRoutes(t *testing.T) {
 // A locked desktop app (session dropped on /api/stop) refuses fund ops even
 // though node state may linger in memory.
 func TestWailsRouter_LockedSessionRefusesFundRoutes(t *testing.T) {
-	stub := &authzStubAPI{swapSeed: "abandon abandon abandon"}
+	stub := &authzStubAPI{nodeSeed: "abandon abandon abandon"}
 	app := &WailsApp{api: stub, ctx: context.Background()}
 	app.session.markUnlocked("full")
 	app.session.markLocked() // the desktop lock action
@@ -99,17 +92,17 @@ func TestWailsRouter_LockedSessionRefusesFundRoutes(t *testing.T) {
 	assert.Empty(t, stub.calls, "no fund-moving route reached the API on a locked session")
 }
 
-// A full-access desktop session reaches the swap seed export, so the gate is
+// A full-access desktop session reaches the node seed export, so the gate is
 // additive and does not break the legitimate flow.
-func TestWailsRouter_FullSessionExportsSwapSeed(t *testing.T) {
-	stub := &authzStubAPI{swapSeed: "abandon abandon abandon"}
+func TestWailsRouter_FullSessionExportsNodeSeed(t *testing.T) {
+	stub := &authzStubAPI{nodeSeed: "abandon abandon abandon"}
 	app := &WailsApp{api: stub, ctx: context.Background()}
 	app.session.markUnlocked("full")
 
-	res := app.WailsRequestRouter("/api/swaps/mnemonic", "GET", "")
+	res := app.WailsRequestRouter("/api/mnemonic", "POST", "{}")
 	assert.Empty(t, res.Error)
-	assert.Equal(t, "abandon abandon abandon", res.Body)
-	assert.Equal(t, []string{"GetSwapMnemonic"}, stub.calls)
+	assert.Equal(t, api.MnemonicResponse{Mnemonic: "abandon abandon abandon"}, res.Body)
+	assert.Equal(t, []string{"GetMnemonic"}, stub.calls)
 }
 
 // A readonly session keeps its read access: readonly routes are left ungated,
@@ -127,16 +120,16 @@ func TestWailsRouter_ReadonlySessionKeepsReadAccess(t *testing.T) {
 // With no explicit router session, a running node (e.g. auto-unlock started it
 // at launch before any renderer unlock) is treated as a full-access session.
 func TestWailsRouter_AutoUnlockRunningNodeHasFullAccess(t *testing.T) {
-	stub := &authzStubAPI{swapSeed: "abandon abandon abandon"}
+	stub := &authzStubAPI{nodeSeed: "abandon abandon abandon"}
 	mockSvc := mocks.NewMockService(t)
 	mockSvc.On("GetLNClient").Return(mocks.NewMockLNClient(t))
 
 	app := &WailsApp{api: stub, svc: mockSvc, ctx: context.Background()}
 	// No markUnlocked / markLocked: the session falls back to node-running state.
 
-	res := app.WailsRequestRouter("/api/swaps/mnemonic", "GET", "")
+	res := app.WailsRequestRouter("/api/mnemonic", "POST", "{}")
 	assert.Empty(t, res.Error)
-	assert.Equal(t, "abandon abandon abandon", res.Body)
+	assert.Equal(t, api.MnemonicResponse{Mnemonic: "abandon abandon abandon"}, res.Body)
 }
 
 // routeRequiresFullAccess mirrors the HTTP auth tiers: public and readonly
@@ -162,17 +155,13 @@ func TestRouteRequiresFullAccess(t *testing.T) {
 		{"/api/apps/7", "GET", false},
 		{"/api/apps/02abcd", "GET", false},
 		{"/api/transactions/deadbeef", "GET", false},
-		{"/api/swaps/someswapid", "GET", false},
-		{"/api/swaps/out/info", "GET", false},
 		{"/api/circle/avatar-proxy?url=x", "GET", false},
 		{"/api/invoices/estimate-fee", "POST", false},
 		// full-access (fund-moving / mutating / sensitive)
-		{"/api/swaps/mnemonic", "GET", true},
 		{"/api/payments/lnbc1", "POST", true},
 		{"/api/transfers", "POST", true},
 		{"/api/channels", "POST", true},
 		{"/api/wallet/redeem-onchain-funds", "POST", true},
-		{"/api/swaps/out", "POST", true},
 		{"/api/command", "POST", true},
 		{"/api/apps", "POST", true},
 		{"/api/apps/7/cash-stats", "GET", true},

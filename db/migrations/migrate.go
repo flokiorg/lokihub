@@ -33,7 +33,6 @@ func Models() []any {
 		&db.RequestEvent{},
 		&db.ResponseEvent{},
 		&db.Transaction{},
-		&db.Swap{},
 		&db.Forward{},
 		&db.CircleIdentity{},
 		&db.CircleIdentityAllowedPubkey{},

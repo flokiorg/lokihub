@@ -14,7 +14,6 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/service"
-	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 	mock "github.com/stretchr/testify/mock"
 	"gorm.io/gorm"
@@ -620,52 +619,6 @@ func (_c *MockService_GetStartupState_Call) RunAndReturn(run func() string) *Moc
 	return _c
 }
 
-// GetSwapsService provides a mock function for the type MockService
-func (_mock *MockService) GetSwapsService() swaps.SwapsService {
-	ret := _mock.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetSwapsService")
-	}
-
-	var r0 swaps.SwapsService
-	if returnFunc, ok := ret.Get(0).(func() swaps.SwapsService); ok {
-		r0 = returnFunc()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(swaps.SwapsService)
-		}
-	}
-	return r0
-}
-
-// MockService_GetSwapsService_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSwapsService'
-type MockService_GetSwapsService_Call struct {
-	*mock.Call
-}
-
-// GetSwapsService is a helper method to define mock.On call
-func (_e *MockService_Expecter) GetSwapsService() *MockService_GetSwapsService_Call {
-	return &MockService_GetSwapsService_Call{Call: _e.mock.On("GetSwapsService")}
-}
-
-func (_c *MockService_GetSwapsService_Call) Run(run func()) *MockService_GetSwapsService_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockService_GetSwapsService_Call) Return(swapsService swaps.SwapsService) *MockService_GetSwapsService_Call {
-	_c.Call.Return(swapsService)
-	return _c
-}
-
-func (_c *MockService_GetSwapsService_Call) RunAndReturn(run func() swaps.SwapsService) *MockService_GetSwapsService_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GetTransactionsService provides a mock function for the type MockService
 func (_mock *MockService) GetTransactionsService() transactions.TransactionsService {
 	ret := _mock.Called()
@@ -709,39 +662,6 @@ func (_c *MockService_GetTransactionsService_Call) Return(transactionsService tr
 
 func (_c *MockService_GetTransactionsService_Call) RunAndReturn(run func() transactions.TransactionsService) *MockService_GetTransactionsService_Call {
 	_c.Call.Return(run)
-	return _c
-}
-
-// InitSwapsService provides a mock function for the type MockService
-func (_mock *MockService) InitSwapsService() {
-	_mock.Called()
-	return
-}
-
-// MockService_InitSwapsService_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InitSwapsService'
-type MockService_InitSwapsService_Call struct {
-	*mock.Call
-}
-
-// InitSwapsService is a helper method to define mock.On call
-func (_e *MockService_Expecter) InitSwapsService() *MockService_InitSwapsService_Call {
-	return &MockService_InitSwapsService_Call{Call: _e.mock.On("InitSwapsService")}
-}
-
-func (_c *MockService_InitSwapsService_Call) Run(run func()) *MockService_InitSwapsService_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockService_InitSwapsService_Call) Return() *MockService_InitSwapsService_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockService_InitSwapsService_Call) RunAndReturn(run func()) *MockService_InitSwapsService_Call {
-	_c.Run(run)
 	return _c
 }
 

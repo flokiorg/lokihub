@@ -5,7 +5,6 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import React from "react";
-import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { CloseChannelDialogContent } from "src/components/CloseChannelDialogContent";
 import ExternalLink from "src/components/ExternalLink";
@@ -35,16 +34,8 @@ export function ChannelDropdownMenu({
   channel,
 }: ChannelDropdownMenuProps) {
   const { data: info } = useInfo();
-  const [searchParams] = useSearchParams();
   const { t } = useTranslation("channels");
   const [dialog, setDialog] = React.useState<"closeChannel" | "routingFee">();
-
-  React.useEffect(() => {
-    // when opening the swap dialog, close existing dialog
-    if (searchParams.has("swap", "true")) {
-      setDialog(undefined);
-    }
-  }, [searchParams]);
 
   return (
     <AlertDialog

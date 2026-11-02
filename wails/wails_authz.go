@@ -80,7 +80,6 @@ var (
 	// deeper full-access children of /api/apps/:id are not shadowed.
 	readOnlyAppRegex         = regexp.MustCompile(`^/api/apps/[^/]+$`)
 	readOnlyTransactionRegex = regexp.MustCompile(`^/api/transactions/[^/]+$`)
-	readOnlySwapRegex        = regexp.MustCompile(`^/api/swaps/[^/]+$`)
 	readOnlyLogRegex         = regexp.MustCompile(`^/api/log/[^/]+$`)
 )
 
@@ -128,10 +127,6 @@ var readOnlyDesktopRoutes = map[string]map[string]bool{
 		"/api/mempool":              true,
 		"/api/health":               true,
 		"/api/commands":             true,
-		"/api/swaps":                true,
-		"/api/swaps/out/info":       true,
-		"/api/swaps/in/info":        true,
-		"/api/autoswap":             true,
 		"/api/forwards":             true,
 		"/api/appstore/apps":        true,
 		"/api/lsps2/info":           true,
@@ -156,14 +151,6 @@ func (app *WailsApp) routeRequiresFullAccess(route, method string) bool {
 		return false
 	}
 
-	// Full-access routes that a broader readonly pattern would otherwise shadow
-	// must be caught first. The swap mnemonic is a BIP39 seed controlling swap
-	// funds (LOKIHUB-0042): full-access only, never readonly, even though it
-	// matches the /api/swaps/:swapId readonly lookup pattern.
-	if path == "/api/swaps/mnemonic" {
-		return true
-	}
-
 	if publicDesktopRoutes[method][path] {
 		return false
 	}
@@ -181,7 +168,6 @@ func (app *WailsApp) routeRequiresFullAccess(route, method string) bool {
 		if strings.HasPrefix(path, "/api/circle/avatar-proxy") ||
 			readOnlyAppRegex.MatchString(path) ||
 			readOnlyTransactionRegex.MatchString(path) ||
-			readOnlySwapRegex.MatchString(path) ||
 			readOnlyLogRegex.MatchString(path) {
 			return false
 		}

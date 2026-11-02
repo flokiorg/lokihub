@@ -1,7 +1,7 @@
 # Services: everywhere else Lokihub looks
 
 A self-hosted Lightning wallet needs somewhere to get liquidity from, somewhere to check on-chain data,
-somewhere to do swaps, relays to talk Nostr over. Services is the screen where the wallet owner points
+relays to talk Nostr over. Services is the screen where the wallet owner points
 all of that at whatever they trust — their own infrastructure, or one of Lokihub's suggested defaults.
 Nothing here moves funds by itself; it's all "where do I look," never "what am I allowed to do."
 
@@ -22,7 +22,6 @@ for a new user.
 | Search relay | profile and contact-list lookups (Circle Wallet's following checks) |
 | LSP(s) | who you buy Lightning liquidity from, picked from their NIP-LSP announcements |
 | Block explorer | on-chain data, mempool-style API |
-| Swap service | on-chain ⇄ Lightning swaps |
 | Messageboard relay (optional) | an experimental nostr-messageboard integration |
 | Identity Authorities | who's trusted to vouch for a Cash Hub connection-key claim — see [NIP-CASH](https://github.com/ohstr/nips/blob/main/NIP-CASH.md) |
 
@@ -61,7 +60,7 @@ again.
 
 ## Where the trust actually lives
 
-Most of the table above is low-stakes from a security standpoint. A relay, a block explorer, a swap URL —
+Most of the table above is low-stakes from a security standpoint. A relay, a block explorer —
 none of them can move a sat on their own, since all they configure is where Lokihub *looks*, never what
 it's *authorized to do*. Even LSP connections are just request/response protocols; an LSP has no
 unilateral way to reach in and take funds.

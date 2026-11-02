@@ -78,7 +78,7 @@ func TestFullAccessRoute_RejectsQueryToken(t *testing.T) {
 	full := mintToken(t, httpSvc, "full")
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet,
-		"/api/swaps/mnemonic?token="+url.QueryEscape(full), nil)
+		"/api/identity-authorities?token="+url.QueryEscape(full), nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
