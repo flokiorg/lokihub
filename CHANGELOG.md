@@ -498,7 +498,7 @@ audits of both.
 - Removes the on-chain ⇄ Lightning swap feature entirely: the swap screens and
   on-chain send toggle, the `/api/swaps` and `/api/autoswap` routes, the swap
   seed derivation, the `swaps` table, and the `SWAP_SERVICE_URL` / `ENABLE_SWAP`
-  settings are all gone.
+  settings are all gone. (#189)
 
 ### Fixed
 
