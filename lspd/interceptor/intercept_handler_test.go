@@ -201,6 +201,47 @@ func TestResolvePayment_JIT_Underpayment(t *testing.T) {
 	assert.Contains(t, err.Error(), "underpayment")
 }
 
+// TestResolvePayment_JIT_FixedModeOverpaymentRejected is the FLSPD-0014
+// regression test: in fixed-size mode the reserved capacity was sized against
+// exactly payment_size at buy time, so an incoming HTLC larger than
+// payment_size must be rejected (mirroring the variable-mode worst-case cap)
+// rather than opening a channel sized on the larger incoming amount while the
+// reservation ledger still only counts payment_size.
+func TestResolvePayment_JIT_FixedModeOverpaymentRejected(t *testing.T) {
+	mockStore := new(MockStore)
+	interceptor := &Interceptor{store: mockStore}
+
+	scid := uint64(123456)
+	paymentSize := uint64(20000000) // fixed size the reservation was sized for
+
+	order := &core.Lsps2BuyRegistration{
+		Id:                 "order_1",
+		Scid:               scid,
+		PaymentSizeMloki:   &paymentSize,
+		ParamsMinFeeMloki:  1000,
+		ParamsProportional: 4000,
+		PeerId:             "02deadbeef",
+	}
+	mockStore.On("PaymentInfo", mock.Anything).Return("", "", nil, nil, nil, nil, int64(0), int64(0), nil, nil, nil)
+	mockStore.On("GetLsps2Order", scid).Return(order, nil)
+
+	// Sender pays MORE than the fixed payment_size.
+	req := core.InterceptRequest{
+		Scid:                lightning.ShortChannelID(scid),
+		IncomingAmountMloki: 21000000,
+		PaymentHash:         []byte("hash"),
+	}
+
+	result, err := interceptor.resolvePayment(req)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "exceeds fixed payment size")
+	// The over-payment must be rejected before any channel/registration is
+	// committed -- RegisterPayment is never reached.
+	mockStore.AssertNotCalled(t, "RegisterPayment")
+}
+
 // TestComputeJitOutgoingAmount covers the fee/floor math independently of
 // the mock store, including the case where the proportional fee falls
 // below the minFee floor (untested previously, since the panicking mock
