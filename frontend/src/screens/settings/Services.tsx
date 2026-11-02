@@ -37,9 +37,7 @@ export function Services() {
     trustedNwcRelay: true,
     generalRelay: "",
     searchRelay: "",
-    swapServiceUrl: "",
     messageboardNwcUrl: "",
-    enableSwap: true,
     enableMessageboardNwc: true,
   });
 
@@ -63,14 +61,12 @@ export function Services() {
     if (info) {
       setConfig((prev) => ({
         ...prev,
-        swapServiceUrl: info.swapServiceUrl || "",
         messageboardNwcUrl: info.messageboardNwcUrl || "",
         relay: info.relay || "",
         trustedNwcRelay: info.trustedNwcRelay ?? true,
         generalRelay: info.generalRelay || "",
         searchRelay: info.searchRelay || "",
         mempoolApi: info.mempoolUrl || "",
-        enableSwap: info.enableSwap ?? true,
         enableMessageboardNwc: info.enableMessageboardNwc ?? true,
       }));
     }
@@ -106,9 +102,7 @@ export function Services() {
       config.generalRelay !== (info.generalRelay || "") ||
       config.searchRelay !== (info.searchRelay || "") ||
       config.mempoolApi !== (info.mempoolUrl || "") ||
-      config.swapServiceUrl !== (info.swapServiceUrl || "") ||
       config.messageboardNwcUrl !== (info.messageboardNwcUrl || "") ||
-      config.enableSwap !== (info.enableSwap ?? true) ||
       config.enableMessageboardNwc !== (info.enableMessageboardNwc ?? true);
 
     // Check Identity Authorities dirty - compare by pubkey/name/relay_urls, sorted.
@@ -177,9 +171,7 @@ export function Services() {
         generalRelay: config.generalRelay,
         searchRelay: config.searchRelay,
         mempoolApi: config.mempoolApi,
-        swapServiceUrl: config.swapServiceUrl,
         messageboardNwcUrl: config.messageboardNwcUrl,
-        enableSwap: config.enableSwap,
         enableMessageboardNwc: config.enableMessageboardNwc,
         // Identity Authorities omitted, handled above
       });

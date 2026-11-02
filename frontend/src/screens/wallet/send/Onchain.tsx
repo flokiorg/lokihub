@@ -15,7 +15,6 @@ import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import Loading from "src/components/Loading";
 import { MempoolAlert } from "src/components/MempoolAlert";
-import { SpendingAlert } from "src/components/SpendingAlert";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
@@ -23,20 +22,17 @@ import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
-import { Switch } from "src/components/ui/switch";
 import { ONCHAIN_DUST_LOKI } from "src/constants";
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
-import { useSwapInfo } from "src/hooks/useSwaps";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
-import { RedeemOnchainFundsResponse, SwapResponse } from "src/types";
+import { RedeemOnchainFundsResponse } from "src/types";
 import { request } from "src/utils/request";
 
 export default function Onchain() {
   const { state } = useLocation();
   const navigate = useNavigate();
-  const [isSwap, setSwap] = React.useState(true);
   const [amountDisplay, setAmountDisplay] = React.useState("");
 
   const address = state?.args?.address as string;
@@ -81,21 +77,11 @@ export default function Onchain() {
             </Link>
           </div>
         </div>
-        {isSwap ? (
-          <SwapForm
-            address={address}
-            setSwap={setSwap}
-            amount={amountDisplay}
-            setAmount={setAmountDisplay}
-          />
-        ) : (
-          <OnchainForm
-            address={address}
-            setSwap={setSwap}
-            amount={amountDisplay}
-            setAmount={setAmountDisplay}
-          />
-        )}
+        <OnchainForm
+          address={address}
+          amount={amountDisplay}
+          setAmount={setAmountDisplay}
+        />
       </div>
     </div>
   );
@@ -103,14 +89,12 @@ export default function Onchain() {
 
 function OnchainForm({
   address,
-  setSwap,
   amount: amountDisplay,
   setAmount: setAmountDisplay,
 }: {
   address: string;
   amount: string;
   setAmount: React.Dispatch<React.SetStateAction<string>>;
-  setSwap: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
   const navigate = useNavigate();
   const { data: info } = useInfo();
@@ -154,7 +138,7 @@ function OnchainForm({
       }
       if (balances.onchain.spendable <= ONCHAIN_DUST_LOKI) {
         throw new Error(
-          `You currently don't have enough ${unit()} to pay for an on-chain transaction. Consider swapping from Spending Balance.`
+          `You currently don't have enough ${unit()} to pay for an on-chain transaction.`
         );
       }
       setLoading(true);
@@ -223,12 +207,6 @@ function OnchainForm({
             amount={balances.onchain.spendable}
           />
         </div>
-      </div>
-      <div className="flex items-center justify-between">
-        <Label htmlFor="swap" className="font-medium text-sm cursor-pointer">
-          Swap from Spending Balance
-        </Label>
-        <Switch id="swap" onCheckedChange={setSwap} />
       </div>
       <div className="grid gap-2 text-sm border-t pt-6">
         {!editFee ? (
@@ -315,154 +293,6 @@ function OnchainForm({
           </Alert>
         )}
       <AnchorReserveAlert
-        amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)}
-      />
-      <div className="flex gap-2">
-        <LinkButton to="/wallet/send" variant="outline">
-          Back
-        </LinkButton>
-        <LoadingButton loading={isLoading} type="submit" className="flex-1">
-          Send
-        </LoadingButton>
-      </div>
-    </form>
-  );
-}
-
-function SwapForm({
-  address,
-  setSwap,
-  amount: amountDisplay,
-  setAmount: setAmountDisplay,
-}: {
-  address: string;
-  amount: string;
-  setAmount: React.Dispatch<React.SetStateAction<string>>;
-  setSwap: React.Dispatch<React.SetStateAction<boolean>>;
-}) {
-  const navigate = useNavigate();
-  const { data: balances } = useBalances();
-  const { data: swapInfo } = useSwapInfo("out");
-  const { scaleInputAmount, parseInputAmount } = useUnit();
-
-  const [inputUnit, setInputUnit] = useInputUnit(balances?.onchain.spendable);
-
-  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
-    if (amountDisplay) {
-      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
-      if (!isNaN(amountLoki)) {
-        const newAmount = scaleInputAmount(amountLoki, newUnit);
-        setAmountDisplay(newAmount.toString());
-      }
-    }
-    setInputUnit(newUnit);
-  };
-
-  const [isLoading, setLoading] = React.useState(false);
-
-  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    try {
-      setLoading(true);
-      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
-      const swapOutResponse = await request<SwapResponse>("/api/swaps/out", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          swapAmount: amountLoki,
-          destination: address,
-        }),
-      });
-      if (!swapOutResponse) {
-        throw new Error("Error swapping out");
-      }
-      navigate(`/wallet/swap/out/status/${swapOutResponse.swapId}`);
-      toast("Initiated swap");
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to send payment", {
-        description: "" + e,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-  const { data: recommendedFees } = useMempoolApi<{
-    fastestFee: number;
-  }>("/v1/fees/recommended");
-
-  if (!balances || !swapInfo) {
-    return <Loading />;
-  }
-
-  return (
-    <form onSubmit={onSubmit} className="grid gap-6">
-      <div className="grid gap-2">
-        <Label htmlFor="amount">Amount</Label>
-        <CurrencyInput
-          id="amount"
-          amount={amountDisplay}
-          onAmountChange={(val) => setAmountDisplay(val)}
-          inputUnit={inputUnit}
-          onInputUnitChange={handleInputUnitChange}
-          min={
-            swapInfo.minAmount
-              ? scaleInputAmount(swapInfo.minAmount, inputUnit)
-              : 1
-          }
-          required
-          autoFocus
-        />
-        <div className="grid gap-1">
-          <div className="flex justify-between text-xs text-muted-foreground sensitive slashed-zero">
-            <div>
-              Spending Balance:{" "}
-              <FormattedFlokicoinAmount
-                amount={balances.lightning.totalSpendable}
-              />
-            </div>
-            <FormattedFiatAmount
-              className="text-xs"
-              amount={Math.floor(balances.lightning.totalSpendable / 1000)}
-            />
-          </div>
-          <div className="flex justify-between text-muted-foreground text-xs sensitive slashed-zero">
-            <div>
-              Minimum:{" "}
-              <FormattedFlokicoinAmount amount={swapInfo.minAmount * 1000} />
-            </div>
-            <FormattedFiatAmount
-              className="text-xs"
-              amount={swapInfo.minAmount}
-            />
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center justify-between">
-        <Label htmlFor="swap" className="font-medium text-sm cursor-pointer">
-          Swap from Spending Balance
-        </Label>
-        <Switch id="swap" checked onCheckedChange={setSwap} />
-      </div>
-      <div className="grid gap-2 text-sm border-t pt-6">
-        <div className="flex items-center justify-between">
-          <p className="text-muted-foreground">On-chain Fee Rate</p>
-          <div className="flex items-center gap-2">
-            {recommendedFees?.fastestFee ? (
-              <p>{recommendedFees?.fastestFee} loki/vB</p>
-            ) : (
-              <Loading className="w-4 h-4" />
-            )}
-          </div>
-        </div>
-        <div className="flex items-center justify-between">
-          <p className="text-muted-foreground">Swap Fee</p>
-          <p>{swapInfo.lokiServiceFee + swapInfo.boltzServiceFee}%</p>
-        </div>
-      </div>
-      <SpendingAlert
         amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)}
       />
       <div className="flex gap-2">

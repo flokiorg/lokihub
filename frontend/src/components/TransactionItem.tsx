@@ -2,8 +2,6 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import {
   ArrowDownIcon,
-  ArrowDownUpIcon,
-  ArrowUpDownIcon,
   ArrowUpIcon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -30,7 +28,6 @@ import {
 } from "src/components/ui/dialog";
 import { LOKI_ACCOUNT_APP_NAME } from "src/constants";
 import { useApp } from "src/hooks/useApp";
-import { useSwap } from "src/hooks/useSwaps";
 import { useLocale } from "src/hooks/useLocale";
 import i18n from "src/i18n";
 import { copyToClipboard } from "src/lib/clipboard";
@@ -52,14 +49,13 @@ function safeNpubEncode(hex: string): string | undefined {
 }
 
 // These metadata fields are already surfaced elsewhere in the dialog
-// (description, from/to, nostr zap link, swap link), so they're excluded
+// (description, from/to, nostr zap link), so they're excluded
 // from the generic key/value dump below.
 const HANDLED_METADATA_KEYS = new Set([
   "comment",
   "payer_data",
   "recipient_data",
   "nostr",
-  "swap_id",
 ]);
 
 function humanizeMetadataKey(key: string): string {
@@ -84,8 +80,6 @@ function TransactionItem({ tx }: Props) {
   const { t } = useTranslation("wallet");
   const { isRTL } = useLocale();
   const { data: app } = useApp(tx.appId);
-  const swapId = tx.metadata?.swap_id;
-  const { data: swap } = useSwap(swapId);
   const [showDetails, setShowDetails] = React.useState(false);
   const type = tx.type;
 
@@ -99,9 +93,7 @@ function TransactionItem({ tx }: Props) {
         ? t("transactions.fromPayer", { name: payerName })
         : npub
           ? t("transactions.zapFrom", { npub: npub.substring(0, 12) + "..." })
-          : swap
-            ? t("transactions.swapFrom", { address: swap.lockupAddress })
-            : undefined
+          : undefined
       : undefined;
 
   const recipientIdentifier = tx.metadata?.recipient_data?.identifier;
@@ -109,16 +101,14 @@ function TransactionItem({ tx }: Props) {
     type === "outgoing"
       ? npub
         ? t("transactions.zapTo", { npub: npub.substring(0, 12) + "..." })
-        : swap?.type === "out"
-          ? t("transactions.swapTo", { address: swap.destinationAddress })
-          : recipientIdentifier
-            ? t(
-                tx.state === "failed"
-                  ? "transactions.paymentTo"
-                  : "transactions.toRecipient",
-                { identifier: recipientIdentifier }
-              )
-            : undefined
+        : recipientIdentifier
+          ? t(
+              tx.state === "failed"
+                ? "transactions.paymentTo"
+                : "transactions.toRecipient",
+              { identifier: recipientIdentifier }
+            )
+          : undefined
       : undefined;
 
   const eventId = tx.metadata?.nostr?.tags?.find((t) => t[0] === "e")?.[1];
@@ -153,12 +143,8 @@ function TransactionItem({ tx }: Props) {
     tx.state === "failed"
       ? XIcon
       : tx.type === "outgoing"
-        ? swapId
-          ? ArrowUpDownIcon
-          : ArrowUpIcon
-        : swapId
-          ? ArrowDownUpIcon
-          : ArrowDownIcon;
+        ? ArrowUpIcon
+        : ArrowDownIcon;
 
   const copy = (text: string) => {
     copyToClipboard(text);
@@ -313,17 +299,6 @@ function TransactionItem({ tx }: Props) {
                       ? "Loki Account"
                       : app.name}
                   </p>
-                </Link>
-              </div>
-            )}
-            {swapId && (
-              <div className="mt-8">
-                <p>{t("transactions.swapId")}</p>
-                <Link
-                  to={`/wallet/swap/${type === "incoming" ? "in" : "out"}/status/${swapId}`}
-                  className="flex items-center gap-1"
-                >
-                  <p className="underline">{swapId}</p>
                 </Link>
               </div>
             )}

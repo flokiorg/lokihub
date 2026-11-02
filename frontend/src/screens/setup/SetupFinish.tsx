@@ -131,7 +131,6 @@ const finishSetup = async (
           body: JSON.stringify({
             unlockPassword,
             lokihubServicesURL: nodeInfo.lokihubServicesURL,
-            swapServiceUrl: nodeInfo.swapServiceUrl,
             relay: nodeInfo.relay,
             messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
             mempoolApi: nodeInfo.mempoolApi,
@@ -155,7 +154,6 @@ const finishSetup = async (
             flndCertHex,
             flndMacaroonHex,
             lokihubServicesURL: nodeInfo.lokihubServicesURL,
-            swapServiceUrl: nodeInfo.swapServiceUrl,
             relay: nodeInfo.relay,
             messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
             mempoolApi: nodeInfo.mempoolApi,
