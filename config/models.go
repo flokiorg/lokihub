@@ -33,7 +33,6 @@ type AppConfig struct {
 	EnableAdvancedSetup bool   `envconfig:"ENABLE_ADVANCED_SETUP" default:"true"`
 	AutoUnlockPassword  string `envconfig:"AUTO_UNLOCK_PASSWORD"`
 	LogDBQueries        bool   `envconfig:"LOG_DB_QUERIES" default:"false"`
-	LokihubServicesURL  string `envconfig:"LOKIHUB_SERVICES_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-services/refs/heads/main"`
 	LokihubStoreURL     string `envconfig:"LOKIHUB_STORE_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"`
 
 	// LSP service attach (lspservice, plan §3.2). The Hub becomes the single
@@ -194,8 +193,6 @@ type Config interface {
 	SetCurrency(value string) error
 	GetFlokicoinDisplayFormat() string
 	SetFlokicoinDisplayFormat(value string) error
-	GetLokihubServicesURL() string
-	SetLokihubServicesURL(value string) error
 	GetLokihubStoreURL() string
 	SetLokihubStoreURL(value string) error
 	GetRelay() string
@@ -208,6 +205,4 @@ type Config interface {
 	SetSearchRelay(value string) error
 
 	GetDefaultWorkDir() string
-	GetCachedServicesJSON() string
-	SetCachedServicesJSON(json string) error
 }

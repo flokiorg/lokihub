@@ -46,6 +46,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/flokiorg/lokihub/seed"
 	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/cashrequest"
@@ -1535,7 +1536,6 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	if info.NodeAlias == "" && nodeInfo != nil {
 		info.NodeAlias = nodeInfo.Alias
 	}
-	info.LokihubServicesURL = api.cfg.GetLokihubServicesURL()
 	info.Relay = api.cfg.GetRelay()
 	info.GeneralRelay = api.cfg.GetGeneralRelay()
 	info.TrustedNwcRelay = api.cfg.TrustedNwcRelay()
@@ -2048,14 +2048,6 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 		}
 	}
 
-	if setupRequest.LokihubServicesURL != "" {
-		err = api.cfg.SetLokihubServicesURL(setupRequest.LokihubServicesURL)
-		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save LokihubServicesURL")
-			return err
-		}
-	}
-
 	if setupRequest.Relay != "" {
 		err = api.cfg.SetRelay(setupRequest.Relay)
 		if err != nil {
@@ -2425,14 +2417,6 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 		return err
 	}
 
-	if req.LokihubServicesURL != "" {
-		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
-			return fmt.Errorf("invalid Hub Services URL: %w", err)
-		}
-		if err := api.cfg.SetLokihubServicesURL(req.LokihubServicesURL); err != nil {
-			return err
-		}
-	}
 	if req.Relay != "" {
 		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
@@ -2500,14 +2484,6 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 		return err
 	}
 
-	if req.LokihubServicesURL != "" {
-		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
-			return fmt.Errorf("invalid Hub Services URL: %w", err)
-		}
-		if err := api.cfg.SetLokihubServicesURL(req.LokihubServicesURL); err != nil {
-			return err
-		}
-	}
 	if req.Relay != "" {
 		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
@@ -2563,58 +2539,13 @@ func (api *api) verifyFLNDConnection(ctx context.Context, address, certHex, maca
 	return lastErr
 }
 
+// GetServices returns the embedded service catalogue (explorer and relay
+// suggestions). It is served at /api/setup/config in the same shape the
+// frontend already consumes. LSPs are intentionally absent: the LSP catalogue
+// comes from NIP-LSP announcements only (WP-26, LP-2). The suggestions are
+// defaults — an operator's own saved explorer/relay always wins.
 func (api *api) GetServices(ctx context.Context) (interface{}, error) {
-	// 1. Try Cache
-	cachedJSON := api.cfg.GetCachedServicesJSON()
-	if cachedJSON != "" {
-		var result interface{}
-		if err := json.Unmarshal([]byte(cachedJSON), &result); err == nil {
-			return withoutServicesLSPs(result), nil
-		}
-		logger.Logger.Error().Msg("Failed to unmarshal cached services JSON, falling back to network")
-	}
-
-	// 2. Fallback to Network (only if cache empty or invalid)
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	lokihubServicesURL := api.cfg.GetLokihubServicesURL()
-
-	// Ensure no trailing slash
-	lokihubServicesURL = strings.TrimSuffix(lokihubServicesURL, "/")
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, lokihubServicesURL+"/services.json", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch services: %s", resp.Status)
-	}
-
-	var result interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	return withoutServicesLSPs(result), nil
-}
-
-// withoutServicesLSPs drops services.json's lsps: the LSP list comes from
-// NIP-LSP announcements only (WP-26, LP-2). Rates, currencies, info and faq
-// stay.
-func withoutServicesLSPs(result interface{}) interface{} {
-	if m, ok := result.(map[string]interface{}); ok {
-		delete(m, "lsps")
-	}
-	return result
+	return seed.Get().Services, nil
 }
 
 // ReplaceCircleAllowlist replaces the full allowlist for the CircleIdentity

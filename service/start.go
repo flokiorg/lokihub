@@ -462,7 +462,7 @@ func (svc *service) StartApp(encryptionKey string) error {
 	// Initialize and start LiquidityManager (LSPS)
 	// Initialize and start LiquidityManager (LSPS)
 	lspManager := manager.NewLSPManager(svc.db)
-	lmCfg := manager.NewManagerConfig(svc.lnClient, lspManager, svc.eventPublisher, svc.cfg)
+	lmCfg := manager.NewManagerConfig(svc.lnClient, lspManager, svc.eventPublisher)
 
 	// Inject webhook configuration logic to allow LiquidityManager to auto-register
 	lmCfg.GetWebhookConfig = func() (string, string) {
@@ -497,12 +497,6 @@ func (svc *service) StartApp(encryptionKey string) error {
 			logger.Logger.Error().Err(err).Msg("Failed to start LiquidityManager")
 		} else {
 			logger.Logger.Info().Msg("LiquidityManager started")
-			// services.json (rates, currencies, info, faq; no LSPs).
-			svc.shutdownGroup.Go(func() error {
-				url := svc.cfg.GetLokihubServicesURL()
-				lm.StartSyncService(ctx, url)
-				return nil
-			})
 		}
 	}
 
