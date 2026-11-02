@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +46,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/flokiorg/lokihub/seed"
 	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/cashrequest"
@@ -55,7 +55,6 @@ import (
 	"github.com/flokiorg/lokihub/keys"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
 	"github.com/flokiorg/lokihub/service"
-	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/utils"
 )
 
@@ -1273,232 +1272,6 @@ func (api *api) GetNodeConnectionInfo(ctx context.Context) (*lnclient.NodeConnec
 	return api.svc.GetLNClient().GetNodeConnectionInfo(ctx)
 }
 
-func (api *api) RefundSwap(refundSwapRequest *RefundSwapRequest) error {
-	if api.svc.GetSwapsService() == nil {
-		return errors.New("SwapsService not started")
-	}
-	return api.svc.GetSwapsService().RefundSwap(refundSwapRequest.SwapId, refundSwapRequest.Address, false)
-}
-
-func (api *api) GetAutoSwapConfig() (*GetAutoSwapConfigResponse, error) {
-	swapOutBalanceThresholdStr, _ := api.cfg.Get(config.AutoSwapBalanceThresholdKey, "")
-	swapOutAmountStr, _ := api.cfg.Get(config.AutoSwapAmountKey, "")
-	swapOutDestination, _ := api.cfg.Get(config.AutoSwapDestinationKey, "")
-
-	swapOutEnabled := swapOutBalanceThresholdStr != "" && swapOutAmountStr != ""
-	var swapOutBalanceThreshold, swapOutAmount uint64
-	if swapOutEnabled {
-		var err error
-		if swapOutBalanceThreshold, err = strconv.ParseUint(swapOutBalanceThresholdStr, 10, 64); err != nil {
-			return nil, fmt.Errorf("invalid autoswap out balance threshold: %w", err)
-		}
-		if swapOutAmount, err = strconv.ParseUint(swapOutAmountStr, 10, 64); err != nil {
-			return nil, fmt.Errorf("invalid autoswap out amount: %w", err)
-		}
-	}
-
-	return &GetAutoSwapConfigResponse{
-		Type:             constants.SWAP_TYPE_OUT,
-		Enabled:          swapOutEnabled,
-		BalanceThreshold: swapOutBalanceThreshold,
-		SwapAmount:       swapOutAmount,
-		Destination:      swapOutDestination,
-	}, nil
-}
-
-func (api *api) LookupSwap(swapId string) (*LookupSwapResponse, error) {
-	if api.svc.GetSwapsService() == nil {
-		return nil, errors.New("SwapsService not started")
-	}
-	dbSwap, err := api.svc.GetSwapsService().GetSwap(swapId)
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("failed to fetch swap info")
-		return nil, err
-	}
-
-	return toApiSwap(dbSwap), nil
-}
-
-func (api *api) ListSwaps() (*ListSwapsResponse, error) {
-	if api.svc.GetSwapsService() == nil {
-		return nil, errors.New("SwapsService not started")
-	}
-	swaps, err := api.svc.GetSwapsService().ListSwaps()
-	if err != nil {
-		return nil, err
-	}
-
-	apiSwaps := []Swap{}
-	for _, swap := range swaps {
-		apiSwaps = append(apiSwaps, *toApiSwap(&swap))
-	}
-
-	return &ListSwapsResponse{
-		Swaps: apiSwaps,
-	}, nil
-}
-
-func toApiSwap(swap *swaps.Swap) *Swap {
-	return &Swap{
-		Id:                 swap.SwapId,
-		Type:               swap.Type,
-		State:              swap.State,
-		Invoice:            swap.Invoice,
-		SendAmount:         swap.SendAmount,
-		ReceiveAmount:      swap.ReceiveAmount,
-		PaymentHash:        swap.PaymentHash,
-		DestinationAddress: swap.DestinationAddress,
-		RefundAddress:      swap.RefundAddress,
-		LockupAddress:      swap.LockupAddress,
-		LockupTxId:         swap.LockupTxId,
-		ClaimTxId:          swap.ClaimTxId,
-		AutoSwap:           swap.AutoSwap,
-		BoltzPubkey:        swap.BoltzPubkey,
-		CreatedAt:          swap.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:          swap.UpdatedAt.Format(time.RFC3339),
-		UsedXpub:           swap.UsedXpub,
-	}
-}
-
-func (api *api) GetSwapInInfo() (*SwapInfoResponse, error) {
-	if api.svc.GetSwapsService() == nil {
-		return nil, errors.New("SwapsService not started")
-	}
-	swapInInfo, err := api.svc.GetSwapsService().GetSwapInInfo()
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("failed to calculate fee info")
-		return nil, err
-	}
-
-	return &SwapInfoResponse{
-		LokiServiceFee:  swapInInfo.LokiServiceFee,
-		BoltzServiceFee: swapInInfo.BoltzServiceFee,
-		BoltzNetworkFee: swapInInfo.BoltzNetworkFee,
-		MinAmount:       swapInInfo.MinAmount,
-		MaxAmount:       swapInInfo.MaxAmount,
-	}, nil
-}
-
-func (api *api) GetSwapOutInfo() (*SwapInfoResponse, error) {
-	if api.svc.GetSwapsService() == nil {
-		return nil, errors.New("SwapsService not started")
-	}
-	swapOutInfo, err := api.svc.GetSwapsService().GetSwapOutInfo()
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("failed to calculate fee info")
-		return nil, err
-	}
-
-	return &SwapInfoResponse{
-		LokiServiceFee:  swapOutInfo.LokiServiceFee,
-		BoltzServiceFee: swapOutInfo.BoltzServiceFee,
-		BoltzNetworkFee: swapOutInfo.BoltzNetworkFee,
-		MinAmount:       swapOutInfo.MinAmount,
-		MaxAmount:       swapOutInfo.MaxAmount,
-	}, nil
-}
-
-func (api *api) InitiateSwapOut(ctx context.Context, initiateSwapOutRequest *InitiateSwapRequest) (*swaps.SwapResponse, error) {
-	lnClient := api.svc.GetLNClient()
-	if lnClient == nil {
-		return nil, errors.New("LNClient not started")
-	}
-
-	if api.svc.GetSwapsService() == nil {
-		return nil, errors.New("SwapsService not started")
-	}
-
-	amount := initiateSwapOutRequest.SwapAmount
-	destination := initiateSwapOutRequest.Destination
-
-	if amount == 0 {
-		return nil, errors.New("invalid swap amount")
-	}
-
-	swapOutResponse, err := api.svc.GetSwapsService().SwapOut(amount, destination, false, false)
-	if err != nil {
-		logger.Logger.Error().Err(err).
-			Uint64("amount", amount).
-			Str("destination", destination).
-			Msg("Failed to initiate swap out")
-		return nil, err
-	}
-
-	return swapOutResponse, nil
-}
-
-func (api *api) InitiateSwapIn(ctx context.Context, initiateSwapInRequest *InitiateSwapRequest) (*swaps.SwapResponse, error) {
-	lnClient := api.svc.GetLNClient()
-	if lnClient == nil {
-		return nil, errors.New("LNClient not started")
-	}
-
-	if api.svc.GetSwapsService() == nil {
-		return nil, errors.New("SwapsService not started")
-	}
-
-	amount := initiateSwapInRequest.SwapAmount
-
-	if amount == 0 {
-		return nil, errors.New("invalid swap amount")
-	}
-
-	swapInResponse, err := api.svc.GetSwapsService().SwapIn(amount, false)
-	if err != nil {
-		logger.Logger.Error().Err(err).
-			Uint64("amount", amount).
-			Msg("Failed to initiate swap in")
-		return nil, err
-	}
-
-	return swapInResponse, nil
-}
-
-func (api *api) EnableAutoSwapOut(ctx context.Context, enableAutoSwapsRequest *EnableAutoSwapRequest) error {
-	err := api.cfg.SetUpdate(config.AutoSwapBalanceThresholdKey, strconv.FormatUint(enableAutoSwapsRequest.BalanceThreshold, 10), "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to save autoswap balance threshold to config")
-		return err
-	}
-
-	err = api.cfg.SetUpdate(config.AutoSwapAmountKey, strconv.FormatUint(enableAutoSwapsRequest.SwapAmount, 10), "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to save autoswap amount to config")
-		return err
-	}
-
-	err = api.cfg.SetUpdate(config.AutoSwapDestinationKey, enableAutoSwapsRequest.Destination, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to save autoswap destination to config")
-		return err
-	}
-
-	if api.svc.GetSwapsService() == nil {
-		return errors.New("SwapsService not started")
-	}
-	return api.svc.GetSwapsService().EnableAutoSwapOut()
-}
-
-func (api *api) DisableAutoSwap() error {
-	keys := []string{config.AutoSwapBalanceThresholdKey, config.AutoSwapAmountKey, config.AutoSwapDestinationKey}
-
-	for _, key := range keys {
-		if err := api.cfg.SetUpdate(key, "", ""); err != nil {
-			logger.Logger.Error().Err(err).Str("key", key).Msg("Failed to remove autoswap config")
-			return err
-		}
-	}
-
-	if api.svc.GetSwapsService() != nil {
-		api.svc.GetSwapsService().StopAutoSwapOut()
-	}
-	return nil
-}
-
-func (api *api) GetSwapMnemonic() string {
-	return api.keys.GetSwapMnemonic()
-}
-
 func (api *api) GetNodeStatus(ctx context.Context) (*lnclient.NodeStatus, error) {
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
@@ -1750,7 +1523,6 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 			Online: relayStatus.Online,
 		})
 	}
-	info.MessageboardNwcUrl = api.cfg.GetMessageboardNwcUrl()
 
 	lnClient := api.svc.GetLNClient()
 	var nodeInfo *lnclient.NodeInfo
@@ -1769,8 +1541,6 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	if info.NodeAlias == "" && nodeInfo != nil {
 		info.NodeAlias = nodeInfo.Alias
 	}
-	info.LokihubServicesURL = api.cfg.GetLokihubServicesURL()
-	info.SwapServiceUrl = api.cfg.GetSwapServiceURL()
 	info.Relay = api.cfg.GetRelay()
 	info.GeneralRelay = api.cfg.GetGeneralRelay()
 	info.TrustedNwcRelay = api.cfg.TrustedNwcRelay()
@@ -1832,8 +1602,6 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	}
 
 	info.MempoolUrl = api.cfg.GetMempoolApi()
-	info.EnableSwap = api.cfg.EnableSwap()
-	info.EnableMessageboardNwc = api.cfg.EnableMessageboardNwc()
 	info.WorkDir = api.cfg.GetDefaultWorkDir()
 	info.EnablePolling = constants.DEFAULT_ENABLE_POLLING
 
@@ -1880,47 +1648,6 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		err := api.SetFlokicoinDisplayFormat(updateSettingsRequest.FlokicoinDisplayFormat)
 		if err != nil {
 			return fmt.Errorf("failed to set flokicoin display format: %w", err)
-		}
-	}
-
-	if updateSettingsRequest.EnableSwap != nil {
-		err := api.cfg.SetEnableSwap(*updateSettingsRequest.EnableSwap)
-		if err != nil {
-			return fmt.Errorf("failed to set EnableSwap: %w", err)
-		}
-		// Reload swap service if it was enabled or disabled (to stop/start connection)
-		// Currently Reload() just reconnects. If disabled, we might want to close connection?
-		// For now, Reload() is fine as it will re-read config (although Connect logic in NewSwapsService doesn't check EnableSwap,
-		// maybe it should? But user only asked for "disable as feature").
-		// If "disable as feature" means backend endpoints reject requests (which we implemented),
-		// then Reload() might not be strictly necessary for *disabling*, but good for *enabling* if we want to ensure connection is fresh.
-		// However, if we change URL, we definitely need Reload().
-		// Let's call Reload() if URL changed OR if EnableSwap changed (just to be safe/consistent).
-		if *updateSettingsRequest.EnableSwap {
-			api.svc.InitSwapsService()
-		}
-		if api.svc.GetSwapsService() != nil {
-			api.svc.GetSwapsService().Reload()
-		}
-	}
-
-	if updateSettingsRequest.EnableMessageboardNwc != nil {
-		err := api.cfg.SetEnableMessageboardNwc(*updateSettingsRequest.EnableMessageboardNwc)
-		if err != nil {
-			return fmt.Errorf("failed to set EnableMessageboardNwc: %w", err)
-		}
-	}
-
-	if updateSettingsRequest.SwapServiceUrl != "" {
-		if err := utils.ValidateHTTPURL(updateSettingsRequest.SwapServiceUrl); err != nil {
-			return fmt.Errorf("invalid Swap Service URL: %w", err)
-		}
-		err := api.cfg.SetSwapServiceURL(updateSettingsRequest.SwapServiceUrl)
-		if err != nil {
-			return fmt.Errorf("failed to set SwapServiceUrl: %w", err)
-		}
-		if api.svc.GetSwapsService() != nil {
-			api.svc.GetSwapsService().Reload()
 		}
 	}
 
@@ -2013,16 +1740,6 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		err := api.cfg.SetMempoolApi(updateSettingsRequest.MempoolApi)
 		if err != nil {
 			return fmt.Errorf("failed to set MempoolApi: %w", err)
-		}
-	}
-
-	if updateSettingsRequest.MessageboardNwcUrl != "" {
-		if err := utils.ValidateMessageBoardURL(updateSettingsRequest.MessageboardNwcUrl); err != nil {
-			return fmt.Errorf("invalid Messageboard NWC URL: %w", err)
-		}
-		err := api.cfg.SetMessageboardNwcUrl(updateSettingsRequest.MessageboardNwcUrl)
-		if err != nil {
-			return fmt.Errorf("failed to set MessageboardNwcUrl: %w", err)
 		}
 	}
 
@@ -2335,22 +2052,6 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 		}
 	}
 
-	if setupRequest.LokihubServicesURL != "" {
-		err = api.cfg.SetLokihubServicesURL(setupRequest.LokihubServicesURL)
-		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save LokihubServicesURL")
-			return err
-		}
-	}
-
-	if setupRequest.SwapServiceUrl != "" {
-		err = api.cfg.SetSwapServiceURL(setupRequest.SwapServiceUrl)
-		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save SwapServiceUrl")
-			return err
-		}
-	}
-
 	if setupRequest.Relay != "" {
 		err = api.cfg.SetRelay(setupRequest.Relay)
 		if err != nil {
@@ -2363,20 +2064,6 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 		err = api.cfg.SetMempoolApi(setupRequest.MempoolApi)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save MempoolApi")
-			return err
-		}
-	}
-
-	if setupRequest.EnableSwap != nil {
-		if err := api.cfg.SetEnableSwap(*setupRequest.EnableSwap); err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save EnableSwap")
-		}
-	}
-
-	if setupRequest.MessageboardNwcUrl != "" {
-		err = api.cfg.SetMessageboardNwcUrl(setupRequest.MessageboardNwcUrl)
-		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save MessageboardNwcUrl")
 			return err
 		}
 	}
@@ -2734,37 +2421,11 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 		return err
 	}
 
-	if req.LokihubServicesURL != "" {
-		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
-			return fmt.Errorf("invalid Hub Services URL: %w", err)
-		}
-		if err := api.cfg.SetLokihubServicesURL(req.LokihubServicesURL); err != nil {
-			return err
-		}
-	}
-	if req.SwapServiceUrl != "" {
-		if err := utils.ValidateHTTPURL(req.SwapServiceUrl); err != nil {
-			return fmt.Errorf("invalid Swap Service URL: %w", err)
-		}
-		if err := api.cfg.SetSwapServiceURL(req.SwapServiceUrl); err != nil {
-			return err
-		}
-	}
-
 	if req.Relay != "" {
 		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		if err := api.cfg.SetRelay(req.Relay); err != nil {
-			return err
-		}
-	}
-
-	if req.MessageboardNwcUrl != "" {
-		if err := utils.ValidateMessageBoardURL(req.MessageboardNwcUrl); err != nil {
-			return fmt.Errorf("invalid Messageboard NWC URL: %w", err)
-		}
-		if err := api.cfg.SetMessageboardNwcUrl(req.MessageboardNwcUrl); err != nil {
 			return err
 		}
 	}
@@ -2827,37 +2488,11 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 		return err
 	}
 
-	if req.LokihubServicesURL != "" {
-		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
-			return fmt.Errorf("invalid Hub Services URL: %w", err)
-		}
-		if err := api.cfg.SetLokihubServicesURL(req.LokihubServicesURL); err != nil {
-			return err
-		}
-	}
-	if req.SwapServiceUrl != "" {
-		if err := utils.ValidateHTTPURL(req.SwapServiceUrl); err != nil {
-			return fmt.Errorf("invalid Swap Service URL: %w", err)
-		}
-		if err := api.cfg.SetSwapServiceURL(req.SwapServiceUrl); err != nil {
-			return err
-		}
-	}
-
 	if req.Relay != "" {
 		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		if err := api.cfg.SetRelay(req.Relay); err != nil {
-			return err
-		}
-	}
-
-	if req.MessageboardNwcUrl != "" {
-		if err := utils.ValidateMessageBoardURL(req.MessageboardNwcUrl); err != nil {
-			return fmt.Errorf("invalid Messageboard NWC URL: %w", err)
-		}
-		if err := api.cfg.SetMessageboardNwcUrl(req.MessageboardNwcUrl); err != nil {
 			return err
 		}
 	}
@@ -2908,58 +2543,13 @@ func (api *api) verifyFLNDConnection(ctx context.Context, address, certHex, maca
 	return lastErr
 }
 
+// GetServices returns the embedded service catalogue (explorer and relay
+// suggestions). It is served at /api/setup/config in the same shape the
+// frontend already consumes. LSPs are intentionally absent: the LSP catalogue
+// comes from NIP-LSP announcements only (WP-26, LP-2). The suggestions are
+// defaults — an operator's own saved explorer/relay always wins.
 func (api *api) GetServices(ctx context.Context) (interface{}, error) {
-	// 1. Try Cache
-	cachedJSON := api.cfg.GetCachedServicesJSON()
-	if cachedJSON != "" {
-		var result interface{}
-		if err := json.Unmarshal([]byte(cachedJSON), &result); err == nil {
-			return withoutServicesLSPs(result), nil
-		}
-		logger.Logger.Error().Msg("Failed to unmarshal cached services JSON, falling back to network")
-	}
-
-	// 2. Fallback to Network (only if cache empty or invalid)
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	lokihubServicesURL := api.cfg.GetLokihubServicesURL()
-
-	// Ensure no trailing slash
-	lokihubServicesURL = strings.TrimSuffix(lokihubServicesURL, "/")
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, lokihubServicesURL+"/services.json", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch services: %s", resp.Status)
-	}
-
-	var result interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	return withoutServicesLSPs(result), nil
-}
-
-// withoutServicesLSPs drops services.json's lsps: the LSP list comes from
-// NIP-LSP announcements only (WP-26, LP-2). Rates, currencies, info and faq
-// stay.
-func withoutServicesLSPs(result interface{}) interface{} {
-	if m, ok := result.(map[string]interface{}); ok {
-		delete(m, "lsps")
-	}
-	return result
+	return seed.Get().Services, nil
 }
 
 // ReplaceCircleAllowlist replaces the full allowlist for the CircleIdentity

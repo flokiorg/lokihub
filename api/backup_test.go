@@ -28,6 +28,9 @@ func TestBackupEncryptDecrypt_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	_, err = cw.Write(plaintext)
 	require.NoError(t, err)
+	// Close seals the final authenticated chunk; the current format is an AEAD
+	// stream, so the archive is incomplete until it is closed.
+	require.NoError(t, cw.Close())
 
 	cr, err := decryptingReader(&buf, password)
 	require.NoError(t, err)
@@ -37,6 +40,33 @@ func TestBackupEncryptDecrypt_RoundTrip(t *testing.T) {
 	assert.Equal(t, plaintext, decrypted)
 }
 
+// TestBackupEncryptDecrypt_RoundTripLarge exercises the chunked AEAD framing
+// across many full chunks plus a partial tail, so the chunk-boundary and
+// final-chunk handling is covered rather than just a single sub-chunk payload.
+func TestBackupEncryptDecrypt_RoundTripLarge(t *testing.T) {
+	password := "test-password"
+	plaintext := make([]byte, backupGCMChunkSize*3+123)
+	_, err := rand.Read(plaintext)
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	cw, err := encryptingWriter(&buf, password)
+	require.NoError(t, err)
+	_, err = cw.Write(plaintext)
+	require.NoError(t, err)
+	require.NoError(t, cw.Close())
+
+	cr, err := decryptingReader(&buf, password)
+	require.NoError(t, err)
+	decrypted, err := io.ReadAll(cr)
+	require.NoError(t, err)
+
+	assert.Equal(t, plaintext, decrypted)
+}
+
+// TestBackupEncryptDecrypt_WrongPassword pins LOKIHUB-0034: a wrong password
+// must now FAIL cleanly (AEAD authentication error) rather than yielding silent
+// garbage the way the old unauthenticated AES-CTR format did.
 func TestBackupEncryptDecrypt_WrongPassword(t *testing.T) {
 	plaintext := []byte("this is a fake zip archive of a lokihub backup")
 
@@ -45,13 +75,68 @@ func TestBackupEncryptDecrypt_WrongPassword(t *testing.T) {
 	require.NoError(t, err)
 	_, err = cw.Write(plaintext)
 	require.NoError(t, err)
+	require.NoError(t, cw.Close())
 
 	cr, err := decryptingReader(&buf, "wrong-password")
 	require.NoError(t, err)
-	decrypted, err := io.ReadAll(cr)
+	_, err = io.ReadAll(cr)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "authentication failed")
+}
+
+// TestBackupDecrypt_TamperedFails pins LOKIHUB-0034: flipping a byte of the
+// ciphertext must be detected as an authentication failure, not silently
+// restored (the malleability the old AES-CTR format allowed).
+func TestBackupDecrypt_TamperedFails(t *testing.T) {
+	password := "test-password"
+	plaintext := []byte("this is a fake zip archive of a lokihub backup")
+
+	var buf bytes.Buffer
+	cw, err := encryptingWriter(&buf, password)
+	require.NoError(t, err)
+	_, err = cw.Write(plaintext)
+	require.NoError(t, err)
+	require.NoError(t, cw.Close())
+
+	// Flip a bit in the ciphertext body (past the magic/version/salt header).
+	b := buf.Bytes()
+	tamperAt := len(backupMagic) + 1 + backupSaltLenCurrent + 2
+	require.Less(t, tamperAt, len(b))
+	b[tamperAt] ^= 0x01
+
+	cr, err := decryptingReader(bytes.NewReader(b), password)
+	require.NoError(t, err)
+	_, err = io.ReadAll(cr)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "authentication failed")
+}
+
+// TestBackupDecrypt_TruncatedFails pins LOKIHUB-0034: dropping the final
+// authenticated chunk must be rejected as truncation, not accepted as a
+// complete (shorter) archive.
+func TestBackupDecrypt_TruncatedFails(t *testing.T) {
+	password := "test-password"
+	plaintext := make([]byte, backupGCMChunkSize*2+10)
+	_, err := rand.Read(plaintext)
 	require.NoError(t, err)
 
-	assert.NotEqual(t, plaintext, decrypted)
+	var buf bytes.Buffer
+	cw, err := encryptingWriter(&buf, password)
+	require.NoError(t, err)
+	_, err = cw.Write(plaintext)
+	require.NoError(t, err)
+	require.NoError(t, cw.Close())
+
+	// Drop the trailing (final, short) chunk so the stream ends after a
+	// non-final chunk.
+	b := buf.Bytes()
+	truncated := b[:len(backupMagic)+1+backupSaltLenCurrent+backupGCMEncChunkSize]
+
+	cr, err := decryptingReader(bytes.NewReader(truncated), password)
+	require.NoError(t, err)
+	_, err = io.ReadAll(cr)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "truncated")
 }
 
 // legacyEncrypt reproduces the pre-versioning backup format (no magic/version
@@ -97,20 +182,22 @@ func TestBackupDecrypt_LegacyOFBFormat(t *testing.T) {
 	assert.Equal(t, plaintext, decrypted)
 }
 
-// TestBackupEncrypt_UsesArgon2idFormat pins LOKIHUB-0032: new backups use the
-// strengthened format — the argon2id version marker and a >=16-byte salt (plus
-// the 16-byte IV) in the header.
-func TestBackupEncrypt_UsesArgon2idFormat(t *testing.T) {
+// TestBackupEncrypt_UsesAEADFormat pins LOKIHUB-0034 (and LOKIHUB-0032): new
+// backups use the authenticated argon2id AES-256-GCM format — the GCM version
+// marker and a >=16-byte argon2id salt in the header (no IV: the AEAD format
+// uses per-chunk counter nonces, not a stored IV).
+func TestBackupEncrypt_UsesAEADFormat(t *testing.T) {
 	var buf bytes.Buffer
 	cw, err := encryptingWriter(&buf, "test-password")
 	require.NoError(t, err)
 	_, err = cw.Write([]byte("payload"))
 	require.NoError(t, err)
+	require.NoError(t, cw.Close())
 
 	b := buf.Bytes()
-	require.GreaterOrEqual(t, len(b), len(backupMagic)+1+backupSaltLenCurrent+aes.BlockSize)
+	require.GreaterOrEqual(t, len(b), len(backupMagic)+1+backupSaltLenCurrent)
 	require.Equal(t, backupMagic, b[:len(backupMagic)])
-	require.Equal(t, byte(backupFormatArgon2idCTR), b[len(backupMagic)], "new backups must use the argon2id format")
+	require.Equal(t, byte(backupFormatArgon2idGCM), b[len(backupMagic)], "new backups must use the authenticated AES-GCM format")
 	require.GreaterOrEqual(t, backupSaltLenCurrent, 16, "salt must be at least 16 bytes")
 }
 
@@ -201,6 +288,9 @@ func TestRestoreBackup_ZipSlipRejected(t *testing.T) {
 	_, err = zf.Write([]byte("pwned"))
 	require.NoError(t, err)
 	require.NoError(t, zw.Close())
+	// Seal the final AEAD chunk so the archive decrypts; otherwise restore would
+	// fail at the (correct) truncation check before reaching the zip-slip guard.
+	require.NoError(t, cw.Close())
 
 	theAPI := &api{db: svc.DB, cfg: svc.Cfg}
 	err = theAPI.RestoreBackup(password, &encrypted)

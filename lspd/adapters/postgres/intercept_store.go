@@ -78,6 +78,19 @@ func (s *PostgresInterceptStore) SetFundingTx(paymentHash []byte, channelPoint *
 	return err
 }
 
+// UpdateLsps1OrderFunding and UpdateLsps1OrderState let the interceptor's
+// LSPS1 JIT path mark an order funded + COMPLETED on the shared lsps1.orders
+// table (FLSPD-0015). Both delegate to the canonical PostgresOpeningStore
+// implementations over the same pool rather than re-copying their SQL, so the
+// FLSPD-0021 first-write guard and the S-5 conflict handling stay in one place.
+func (s *PostgresInterceptStore) UpdateLsps1OrderFunding(orderId string, fundingTxid string, fundingOutpoint int) (bool, error) {
+	return NewPostgresOpeningStore(s.pool).UpdateLsps1OrderFunding(orderId, fundingTxid, fundingOutpoint)
+}
+
+func (s *PostgresInterceptStore) UpdateLsps1OrderState(orderId, newState, newPaymentState, expectedCurrentState string) (bool, error) {
+	return NewPostgresOpeningStore(s.pool).UpdateLsps1OrderState(orderId, newState, newPaymentState, expectedCurrentState)
+}
+
 func (s *PostgresInterceptStore) RegisterPayment(token string, orderId string, params *core.OpeningFeeParams, destination, paymentHash, paymentSecret []byte, incomingAmountMloki, outgoingAmountMloki int64, tag string) error {
 	var t *string
 	if tag != "" {

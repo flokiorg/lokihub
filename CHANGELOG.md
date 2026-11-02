@@ -9,6 +9,12 @@ audits of both.
 
 ### Added
 
+- Adds a built-in fiat-rate oracle: the Flokicoin fiat rate now comes from a
+  signed NIP-78 (kind 30078) event tagged `#d = flokicoin-fiat-rate`, published
+  by the oracle npub carried in the seed. Lokihub fetches the newest such event
+  from the oracle's relays, verifies its signature and author, caches it and
+  refreshes it on an interval, replacing the `rates.json` fetch; the rate
+  degrades gracefully to sats/FLC until a fresh, non-stale event is available. (#193)
 - Folds the flspd LSP daemon into lokihub as an optional stand-alone `lspd`
   daemon, with a Hub attach bridge the operator points at an endpoint and an
   nsec or NIP-46 bunker, and a backoffice UI for it. (#172)
@@ -493,8 +499,51 @@ audits of both.
 - Moves to `nmilat` v0.5.0-rc.45, the published client SDK with the NIP-CASH
   and NIP-CW wire changes in this release. (#153, #160)
 
+### Removed
+
+- Removes the on-chain ⇄ Lightning swap feature entirely: the swap screens and
+  on-chain send toggle, the `/api/swaps` and `/api/autoswap` routes, the swap
+  seed derivation, the `swaps` table, and the `SWAP_SERVICE_URL` / `ENABLE_SWAP`
+  settings are all gone. (#189)
+- Removes the message-board feature entirely: the `LightningMessageboardWidget`
+  and its Services/setup configuration, the `messageboardNwcUrl` /
+  `enableMessageboardNwc` settings and info fields, and the
+  `MESSAGEBOARD_NWC_URL` / `ENABLE_MESSAGEBOARD_NWC` settings are all gone. (#191)
+- Removes the remote `lokihub-services` fetch entirely, now a built-in seed: the
+  explorer/relay suggestions, currencies, FAQ and info ship embedded in the
+  binary (`LOKIHUB_SEED_FILE` overrides them), so a fresh hub works offline and
+  the catalogue cannot drift from its release. The `LOKIHUB_SERVICES_URL`
+  setting and the cached `services.json` are gone; the fiat rate moves to a
+  NIP-78 oracle (see Added). (#193)
+
 ### Fixed
 
+- Registers the analytics-event endpoint at its documented `POST /api/event`
+  path. It was declared on the `/api`-rooted group with a leading `/api`, so it
+  only answered at `/api/api/event` and `/api/event` returned 404. (LOKIHUB-0021, #201)
+- Computes the lspd LSPS2 JIT opening fee with the BLIP-52 formula
+  (`((payment_size*proportional)+999999)/1e6`, floored at `min_fee`) on the
+  gross payment size, via the same function the buy-time quote and liquidity
+  reservation use, instead of a gross-up on the forwarded amount. The LSP had
+  been collecting slightly less than the fee it quoted and reserved on every
+  JIT open. (FLSPD-0013, #199)
+- Rejects an LSPS2 fixed-size JIT HTLC whose incoming amount exceeds the
+  quoted `payment_size`, mirroring the variable-size worst-case cap, so a
+  channel is never opened larger than the capacity the buy-time reservation
+  committed to the ledger. (FLSPD-0014, #199)
+- Marks a PAID LSPS1 order funded and COMPLETED after the interceptor opens
+  its JIT channel, the LSPS1 analogue of the LSPS2 consume gate, so a funded
+  order can no longer be re-opened by a later HTLC or a recovery pass. (FLSPD-0015, #199)
+- Maps lspd `get_order` responses to the blip-0051 wire enums: `order_state`
+  is always one of `CREATED`/`COMPLETED`/`FAILED` and `payment.bolt11.state`
+  one of `EXPECT_PAYMENT`/`HOLD`/`PAID`/`REFUNDED`, so the internal `EXPIRED`
+  and `FAILED` values can no longer leak out and break a strict client. (FLSPD-0020, #199)
+- Guards `UpdateLsps1OrderFunding` as a one-shot first-write so a recorded
+  channel point cannot be silently overwritten on an already-funded order. (FLSPD-0021, #199)
+- Stops one recipient's in-flight cash_redeem from transiently blocking a
+  co-recipient's fully-funded slice on the same shared bill: an external slice
+  redeem no longer stamps the generic Lightning fee reserve on its pending row,
+  which the isolated-balance read had been subtracting across the whole bill. (LOKIHUB-0023, #197)
 - Encrypts the flnd admin macaroon at rest, strengthens the backup key
   derivation to argon2id, and refuses an unverified-TLS connection to a
   non-loopback flnd. (#174)
@@ -975,6 +1024,47 @@ audits of both.
   (#148)
 - Counts a payment made at the exact moment a budget period starts against
   that period; it counted against neither, so it escaped the budget. (#148)
+
+### Security
+
+- Posts the app-connection success message to the opener at the explicit web
+  origin derived from the validated `return_to`, never a wildcard `"*"`. A
+  wildcard target leaked the connection metadata (wallet pubkey, relay URLs,
+  lud16) to whatever origin happened to hold the opener; with no http(s)
+  `return_to` there is no trusted origin, so nothing is broadcast. The NWC
+  secret (carried on the `safeReturnUrl`-guarded `return_to`) and the JWT were
+  never in this message. (LOKIHUB-0041, #201)
+- Routes an LNURL `successAction.url` (set by the payee's LNURL-pay server,
+  untrusted) through the same scheme guard (`safeReturnUrl`) as every other
+  externally-supplied navigation before it becomes a link or `window.open`
+  target, so a `javascript:`/`data:` URL is shown as plain text instead of
+  being navigated; also corrects a misspelled `rel="noreferer noopener"` on
+  external links so `noreferrer` actually applies. Defense-in-depth: the prod
+  CSP already blocked the `javascript:` vector. (LOKIHUB-0040, #201)
+- Rejects stale or replayed LSPS5 webhook notifications: a validly-signed
+  notification is now honoured only inside a freshness window and once per
+  (LSP, signature), so a captured notification can no longer be replayed to
+  re-trigger a wallet sync and UI broadcast. (LOKIHUB-0020, #197)
+- Treats cash_order and circle_hub_conn connections as scope- and
+  budget-immutable in the admin app-update path, so an admin edit can no longer
+  grant a fund-moving scope or budget to a connection whose pairing secret is
+  held by an external party. (LOKIHUB-0030, #197)
+- Bounds every lspd attach response body the Hub buffers (4 MiB) before
+  decoding it, so a compromised or MITM'd lspd can no longer return a
+  multi-gigabyte response and OOM the Hub. (LOKIHUB-0044, #197)
+- Authenticates the migration backup archive. New backups use a chunked
+  AES-256-GCM (AEAD) format keyed by argon2id, so a tampered or bit-flipped
+  archive and a wrong password now fail with a clean, detectable error instead
+  of silently restoring corrupt or garbage state — the old versioned format was
+  AES-CTR, an unauthenticated stream cipher, despite its own comment deprecating
+  the legacy OFB format for exactly that malleability. Existing backups
+  (argon2id/PBKDF2 AES-CTR and legacy AES-OFB) still restore. (LOKIHUB-0034, #195)
+- Hardens the at-rest key-encryption key that wraps the Mnemonic and every
+  encrypted config secret: the KDF moves from Argon2i (t=3, m=32 MiB, p=1) to
+  Argon2id at 64 MiB (RFC 9106 / OWASP). Secrets wrapped with the old params
+  still unlock and are transparently re-wrapped under the hardened KDF on the
+  next unlock or password change; the new params travel in a self-describing
+  header so future tuning stays backward-decryptable. (LOKIHUB-0035, #195)
 
 ## [0.4.0]
 

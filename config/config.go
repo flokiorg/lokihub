@@ -177,6 +177,52 @@ func (cfg *config) ensureMacaroonEncrypted(encryptionKey string) error {
 	return nil
 }
 
+// rewrapLegacySecrets re-wraps at-rest config secrets that are still sealed with
+// the legacy Argon2i KEK under the hardened Argon2id KEK (LOKIHUB-0035). It runs
+// on every unlock and is idempotent: once a blob carries the Argon2id header it
+// is skipped, so after the first unlock following the upgrade this is a cheap
+// scan. A password change migrates everything on its own (it re-encrypts every
+// secret), so this covers the common case where the password never changes.
+//
+// It is best-effort: a per-key failure is logged and the loop continues, and an
+// un-migrated blob still decrypts with the legacy params on the next attempt.
+// It never returns an error, so a transient DB hiccup here can never strand an
+// otherwise valid unlock.
+func (cfg *config) rewrapLegacySecrets(encryptionKey string) {
+	if encryptionKey == "" {
+		return
+	}
+
+	var encryptedUserConfigs []db.UserConfig
+	if err := cfg.db.Where(&db.UserConfig{Encrypted: true}).Find(&encryptedUserConfigs).Error; err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to list encrypted config entries for KEK migration")
+		return
+	}
+
+	migrated := 0
+	for _, userConfig := range encryptedUserConfigs {
+		if !isLegacyWrappedSecret(userConfig.Value) {
+			continue
+		}
+
+		decrypted, err := cfg.get(userConfig.Key, encryptionKey, cfg.db)
+		if err != nil {
+			logger.Logger.Error().Err(err).Str("key", userConfig.Key).Msg("Failed to decrypt legacy-wrapped secret during KEK migration")
+			continue
+		}
+
+		if err := cfg.SetUpdate(userConfig.Key, decrypted, encryptionKey); err != nil {
+			logger.Logger.Error().Err(err).Str("key", userConfig.Key).Msg("Failed to re-wrap secret with hardened KEK")
+			continue
+		}
+		migrated++
+	}
+
+	if migrated > 0 {
+		logger.Logger.Info().Int("count", migrated).Msg("Re-wrapped at-rest secrets with the hardened Argon2id KEK")
+	}
+}
+
 func (cfg *config) SetupCompleted() bool {
 	nodeLastStartTime, _ := cfg.Get("NodeLastStartTime", "")
 
@@ -251,6 +297,12 @@ func (cfg *config) Unlock(encryptionKey string) error {
 	if err := cfg.ensureMacaroonEncrypted(encryptionKey); err != nil {
 		return err
 	}
+
+	// Transparently upgrade any at-rest secret still wrapped with the legacy
+	// Argon2i KEK to the hardened Argon2id params (LOKIHUB-0035). Best-effort:
+	// a re-wrap failure is logged but must not block unlock, and the old blob
+	// still decrypts until the next attempt.
+	cfg.rewrapLegacySecrets(encryptionKey)
 
 	if err := cfg.loadJWTSecret(encryptionKey); err != nil {
 		return err
@@ -663,29 +715,6 @@ func (cfg *config) SetFlokicoinDisplayFormat(value string) error {
 	return nil
 }
 
-func (cfg *config) GetLokihubServicesURL() string {
-	url, err := cfg.Get("LokihubServicesURL", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch LokihubServicesURL")
-	}
-	if url != "" {
-		return url
-	}
-	return cfg.Env.LokihubServicesURL
-}
-
-func (cfg *config) SetLokihubServicesURL(value string) error {
-	if value == "" {
-		return errors.New("LokihubServicesURL cannot be empty")
-	}
-	err := cfg.SetUpdate("LokihubServicesURL", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update LokihubServicesURL")
-		return err
-	}
-	return nil
-}
-
 func (cfg *config) GetLokihubStoreURL() string {
 	url, err := cfg.Get("LokihubStoreURL", "")
 	if err != nil {
@@ -704,50 +733,6 @@ func (cfg *config) SetLokihubStoreURL(value string) error {
 	err := cfg.SetUpdate("LokihubStoreURL", value, "")
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to update LokihubStoreURL")
-		return err
-	}
-	return nil
-}
-
-func (cfg *config) GetSwapServiceURL() string {
-	url, err := cfg.Get("SwapServiceUrl", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch SwapServiceUrl")
-	}
-	if url != "" {
-		return url
-	}
-	return cfg.Env.SwapServiceUrl
-}
-
-func (cfg *config) SetSwapServiceURL(value string) error {
-	if value == "" {
-		return errors.New("SwapServiceUrl cannot be empty")
-	}
-	err := cfg.SetUpdate("SwapServiceUrl", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update SwapServiceUrl")
-		return err
-	}
-	return nil
-}
-
-func (cfg *config) GetMessageboardNwcUrl() string {
-	url, err := cfg.Get("MessageboardNwcUrl", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch MessageboardNwcUrl")
-	}
-	if url != "" {
-		return url
-	}
-	return cfg.Env.MessageboardNwcUrl
-}
-
-func (cfg *config) SetMessageboardNwcUrl(value string) error {
-	// MessageboardNwcUrl can be empty
-	err := cfg.SetUpdate("MessageboardNwcUrl", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update MessageboardNwcUrl")
 		return err
 	}
 	return nil
@@ -1001,91 +986,9 @@ func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
 	return nil
 }
 
-func (cfg *config) EnableSwap() bool {
-	value, err := cfg.Get("EnableSwap", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch EnableSwap")
-		return cfg.Env.EnableSwap
-	}
-	if value == "" {
-		return cfg.Env.EnableSwap
-	}
-	return value == "true"
-}
-
-func (cfg *config) SetEnableSwap(enable bool) error {
-	var value string
-	if enable {
-		value = "true"
-	} else {
-		value = "false"
-	}
-	err := cfg.SetUpdate("EnableSwap", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update EnableSwap")
-		return err
-	}
-	// Update the in-memory Env as well so subsequent calls to EnableSwap() return the new value
-	// Note: This relies on EnableSwap() checking cfg.Env.EnableSwap which we might need to update or
-	// we should change EnableSwap() to check the db/cache like other methods.
-	// Looking at EnableSwap() implementation: return cfg.Env.EnableSwap.
-	// This means we need to update cfg.Env.EnableSwap.
-	// However, looking at other Set methods (e.g. SetMempoolApi), they don't seem to update Env.
-	// Let's check how other config values are retrieved. properties like GetMempoolApi check db/cache first then Env.
-	// EnableSwap currently ONLY checks Env. I should probably update EnableSwap to check DB too, or just update Env here.
-	// Since we are moving to dynamic config, I should update EnableSwap to look up the value using Get() like others.
-	// Rewriting EnableSwap to use Get() is better.
-	return nil
-}
-
-func (cfg *config) EnableMessageboardNwc() bool {
-	value, err := cfg.Get("EnableMessageboardNwc", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch EnableMessageboardNwc")
-		return cfg.Env.EnableMessageboardNwc
-	}
-	if value == "" {
-		return cfg.Env.EnableMessageboardNwc
-	}
-	return value == "true"
-}
-
-func (cfg *config) SetEnableMessageboardNwc(enable bool) error {
-	var value string
-	if enable {
-		value = "true"
-	} else {
-		value = "false"
-	}
-	err := cfg.SetUpdate("EnableMessageboardNwc", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update EnableMessageboardNwc")
-		return err
-	}
-	return nil
-}
-
 func (cfg *config) GetDefaultWorkDir() string {
 	if cfg.Env.Workdir != "" {
 		return cfg.Env.Workdir
 	}
 	return filepath.Join(xdg.DataHome, "lokihub")
-}
-
-func (cfg *config) GetCachedServicesJSON() string {
-	json, err := cfg.Get("CachedServicesJSON", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch CachedServicesJSON")
-	}
-	return json
-}
-
-func (cfg *config) SetCachedServicesJSON(value string) error {
-	// We use SetUpdate to persist it unencrypted (it's public data)
-	err := cfg.SetUpdate("CachedServicesJSON", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update CachedServicesJSON")
-		return err
-	}
-	return nil
 }

@@ -20,11 +20,7 @@ export default function LowReceivingCapacityAlert({
         <Link className="underline" to="/wallet/send">
           spend
         </Link>
-        ,{" "}
-        <Link className="underline" to="/wallet/swap?type=out">
-          swap out funds
-        </Link>
-        {jitAvailable && ", or purchase liquidity via JIT"}.
+        {jitAvailable && " or purchase liquidity via JIT"}.
       </AlertDescription>
     </Alert>
   );

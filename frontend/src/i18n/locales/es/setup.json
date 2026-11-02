@@ -99,7 +99,7 @@
     "loading": "Cargando...",
     "continue": "Continuar",
     "fetchError": "Error al obtener la configuración del Hub. Verifique su conexión.",
-    "communityNote": "Estas sugerencias de servicios son proporcionadas por la comunidad. Para sugerir cambios o agregar nuevos servicios, envíe un pull request al repositorio <1>lokihub-services</1>.",
+    "communityNote": "Estas sugerencias de exploradores y relés son valores predeterminados integrados. Puede seleccionar una o introducir el explorador o relé que prefiera.",
     "warning": "Advertencia",
     "warningText": "Usted es responsable de los servicios a los que se conecta. Asegúrese de confiar en los proveedores de estas URLs.",
     "configErrors": "Errores de configuración",
@@ -166,16 +166,10 @@
       "description": "Habilita intercambios de Lightning a on-chain (y viceversa).",
       "custom": "Servicio de intercambio personalizado"
     },
-    "messageboard": {
-      "title": "Tablón de mensajes",
-      "description": "Se conecta a un servicio de tablón de mensajes habilitado con NWC.",
-      "custom": "Tablón de mensajes personalizado"
-    },
     "validation": {
       "relayRequired": "Se requiere al menos un relé",
       "explorerRequired": "La URL del Explorador Flokicoin es obligatoria",
       "swapRequired": "La URL del servicio de intercambio es obligatoria cuando está habilitado",
-      "messageboardRequired": "La URL del tablón de mensajes es obligatoria cuando está habilitado",
       "invalidUrl": "{{field}}: formato de URL inválido"
     },
     "connectHint": "Conectar un servicio de confianza"

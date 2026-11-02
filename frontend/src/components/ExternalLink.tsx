@@ -16,7 +16,7 @@ export default function ExternalLink({ to, className, children }: Props) {
     <Link
       to={to}
       target="_blank"
-      rel="noreferer noopener"
+      rel="noreferrer noopener"
       className={className}
     >
       {children}

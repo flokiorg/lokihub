@@ -92,7 +92,7 @@
     "loading": "Loading...",
     "continue": "Continue",
     "fetchError": "Failed to fetch Hub Configuration. Please check your connection.",
-    "communityNote": "These service suggestions are provided by the community. To suggest changes or add new services, please submit a pull request to the <1>lokihub-services</1> repository.",
+    "communityNote": "These explorer and relay suggestions are built-in defaults. You can select one, or enter any explorer or relay you prefer.",
     "connectHint": "Connect a trusted service",
     "warning": "Warning",
     "warningText": "You are responsible for the services you connect to. Ensure you trust the providers of these URLs.",
@@ -176,16 +176,10 @@
       "description": "Enables Lightning to on-chain swaps (and vice-versa).",
       "custom": "Custom Swap Service"
     },
-    "messageboard": {
-      "title": "Messageboard",
-      "description": "Connects to a NWC-enabled messageboard service.",
-      "custom": "Custom Message Board"
-    },
     "validation": {
       "relayRequired": "At least one relay is required",
       "explorerRequired": "Flokicoin Explorer URL is required",
       "swapRequired": "Swap Service URL is required when enabled",
-      "messageboardRequired": "Messageboard URL is required when enabled",
       "invalidUrl": "{{field}}: invalid URL format"
     },
     "trustedNwcRelay": {

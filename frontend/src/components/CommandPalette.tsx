@@ -11,11 +11,9 @@ import {
   Network,
   Plug,
   QrCode,
-  RefreshCw,
   Send,
   Settings,
   Shield,
-  Shuffle,
   SquareStack,
   User,
   UserPlus2,
@@ -131,18 +129,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           >
             <QrCode />
             <span>Receive Payment</span>
-          </CommandItem>
-          <CommandItem
-            onSelect={() => runCommand(() => navigate("/wallet/swap"))}
-          >
-            <Shuffle />
-            <span>Swap</span>
-          </CommandItem>
-          <CommandItem
-            onSelect={() => runCommand(() => navigate("/wallet/swap/auto"))}
-          >
-            <RefreshCw />
-            <span>Auto Swap</span>
           </CommandItem>
           <CommandItem
             onSelect={() =>

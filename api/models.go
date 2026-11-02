@@ -13,7 +13,6 @@ import (
 	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/lsps2"
 	"github.com/flokiorg/lokihub/lsps/manager"
-	"github.com/flokiorg/lokihub/swaps"
 )
 
 type API interface {
@@ -122,17 +121,6 @@ type API interface {
 	SetCurrency(currency string) error
 	SetFlokicoinDisplayFormat(format string) error
 	UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) error
-	LookupSwap(swapId string) (*LookupSwapResponse, error)
-	ListSwaps() (*ListSwapsResponse, error)
-	GetSwapInInfo() (*SwapInfoResponse, error)
-	GetSwapOutInfo() (*SwapInfoResponse, error)
-	InitiateSwapIn(ctx context.Context, initiateSwapInRequest *InitiateSwapRequest) (*swaps.SwapResponse, error)
-	InitiateSwapOut(ctx context.Context, initiateSwapOutRequest *InitiateSwapRequest) (*swaps.SwapResponse, error)
-	RefundSwap(refundSwapRequest *RefundSwapRequest) error
-	GetSwapMnemonic() string
-	GetAutoSwapConfig() (*GetAutoSwapConfigResponse, error)
-	EnableAutoSwapOut(ctx context.Context, autoSwapRequest *EnableAutoSwapRequest) error
-	DisableAutoSwap() error
 	SetNodeAlias(ctx context.Context, nodeAlias string) error
 	PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error
 	// RotatePrivateTransportInbox rotates the private transport's inbox key
@@ -854,64 +842,6 @@ type IdentityAuthorityResponse struct {
 	UnredeemedSliceCount int `json:"unredeemed_slice_count"`
 }
 
-type InitiateSwapRequest struct {
-	SwapAmount  uint64 `json:"swapAmount"`
-	Destination string `json:"destination"`
-}
-
-type RefundSwapRequest struct {
-	SwapId  string `json:"swapId"`
-	Address string `json:"address"`
-}
-
-type EnableAutoSwapRequest struct {
-	BalanceThreshold uint64 `json:"balanceThreshold"`
-	SwapAmount       uint64 `json:"swapAmount"`
-	Destination      string `json:"destination"`
-}
-
-type GetAutoSwapConfigResponse struct {
-	Type             string `json:"type"`
-	Enabled          bool   `json:"enabled"`
-	BalanceThreshold uint64 `json:"balanceThreshold"`
-	SwapAmount       uint64 `json:"swapAmount"`
-	Destination      string `json:"destination"`
-}
-
-type SwapInfoResponse struct {
-	LokiServiceFee  float64 `json:"lokiServiceFee"`
-	BoltzServiceFee float64 `json:"boltzServiceFee"`
-	BoltzNetworkFee uint64  `json:"boltzNetworkFee"`
-	MinAmount       uint64  `json:"minAmount"`
-	MaxAmount       uint64  `json:"maxAmount"`
-}
-
-type ListSwapsResponse struct {
-	Swaps []Swap `json:"swaps"`
-}
-
-type LookupSwapResponse = Swap
-
-type Swap struct {
-	Id                 string `json:"id"`
-	Type               string `json:"type"`
-	State              string `json:"state"`
-	Invoice            string `json:"invoice"`
-	SendAmount         uint64 `json:"sendAmount"`
-	ReceiveAmount      uint64 `json:"receiveAmount"`
-	PaymentHash        string `json:"paymentHash"`
-	DestinationAddress string `json:"destinationAddress"`
-	RefundAddress      string `json:"refundAddress"`
-	LockupAddress      string `json:"lockupAddress"`
-	LockupTxId         string `json:"lockupTxId"`
-	ClaimTxId          string `json:"claimTxId"`
-	AutoSwap           bool   `json:"autoSwap"`
-	BoltzPubkey        string `json:"boltzPubkey"`
-	CreatedAt          string `json:"createdAt"`
-	UpdatedAt          string `json:"updatedAt"`
-	UsedXpub           bool   `json:"usedXpub"`
-}
-
 type StartRequest struct {
 	UnlockPassword string `json:"unlockPassword"`
 }
@@ -950,36 +880,23 @@ type SetupRequest struct {
 	FLNDCertHex      string `json:"flndCertHex"`
 	FLNDMacaroonHex  string `json:"flndMacaroonHex"`
 
-	LokihubServicesURL    string `json:"lokihubServicesURL"`
-	SwapServiceUrl        string `json:"swapServiceUrl"`
-	Relay                 string `json:"relay"`
-	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
-	MempoolApi            string `json:"mempoolApi"`
-	EnableSwap            *bool  `json:"enableSwap"`
-	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
+	Relay      string `json:"relay"`
+	MempoolApi string `json:"mempoolApi"`
 }
 
 type SetupLocalRequest struct {
-	UnlockPassword        string `json:"unlockPassword"`
-	LokihubServicesURL    string `json:"lokihubServicesURL"`
-	SwapServiceUrl        string `json:"swapServiceUrl"`
-	Relay                 string `json:"relay"`
-	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
-	MempoolApi            string `json:"mempoolApi"`
-	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
+	UnlockPassword string `json:"unlockPassword"`
+	Relay          string `json:"relay"`
+	MempoolApi     string `json:"mempoolApi"`
 }
 
 type SetupManualRequest struct {
-	UnlockPassword        string `json:"unlockPassword"`
-	FLNDAddress           string `json:"flndAddress"`
-	FLNDCertHex           string `json:"flndCertHex"`
-	FLNDMacaroonHex       string `json:"flndMacaroonHex"`
-	LokihubServicesURL    string `json:"lokihubServicesURL"`
-	SwapServiceUrl        string `json:"swapServiceUrl"`
-	Relay                 string `json:"relay"`
-	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
-	MempoolApi            string `json:"mempoolApi"`
-	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
+	UnlockPassword  string `json:"unlockPassword"`
+	FLNDAddress     string `json:"flndAddress"`
+	FLNDCertHex     string `json:"flndCertHex"`
+	FLNDMacaroonHex string `json:"flndMacaroonHex"`
+	Relay           string `json:"relay"`
+	MempoolApi      string `json:"mempoolApi"`
 }
 
 type SetupStatusResponse struct {
@@ -1108,18 +1025,13 @@ type InfoResponse struct {
 	PrivateTransport            PrivateTransportInfo `json:"privateTransport"`
 	// PendingCashRedeems counts cash_redeem payouts whose outcome is not known
 	// yet; each one's slice stays claimed until it settles or fails.
-	PendingCashRedeems    int       `json:"pendingCashRedeems"`
-	SearchRelay           string    `json:"searchRelay"`
-	NodeAlias             string    `json:"nodeAlias"`
-	MempoolUrl            string    `json:"mempoolUrl"`
-	LSPs                  []LSPInfo `json:"lsps"`
-	LokihubServicesURL    string    `json:"lokihubServicesURL"`
-	SwapServiceUrl        string    `json:"swapServiceUrl"`
-	MessageboardNwcUrl    string    `json:"messageboardNwcUrl"`
-	EnableSwap            bool      `json:"enableSwap"`
-	EnableMessageboardNwc bool      `json:"enableMessageboardNwc"`
-	WorkDir               string    `json:"workDir"`
-	EnablePolling         bool      `json:"enablePolling"`
+	PendingCashRedeems int       `json:"pendingCashRedeems"`
+	SearchRelay        string    `json:"searchRelay"`
+	NodeAlias          string    `json:"nodeAlias"`
+	MempoolUrl         string    `json:"mempoolUrl"`
+	LSPs               []LSPInfo `json:"lsps"`
+	WorkDir            string    `json:"workDir"`
+	EnablePolling      bool      `json:"enablePolling"`
 	// LSPService is the attached-lspd status (plan §3.4), populated only for an
 	// authenticated caller and only when an LSP service endpoint is configured;
 	// omitted (nil) otherwise so the frontend can gate its backoffice nav on it.
@@ -1168,11 +1080,6 @@ func (r *InfoResponse) RedactForUnauthenticated() {
 	r.NodeAlias = ""
 	r.MempoolUrl = ""
 	r.LSPs = []LSPInfo{}
-	r.LokihubServicesURL = ""
-	r.SwapServiceUrl = ""
-	r.MessageboardNwcUrl = ""
-	r.EnableSwap = false
-	r.EnableMessageboardNwc = false
 	r.EnablePolling = false
 	r.LSPService = nil
 }
@@ -1226,8 +1133,6 @@ type PrivateTransportInfo struct {
 type UpdateSettingsRequest struct {
 	Currency               string  `json:"currency"`
 	FlokicoinDisplayFormat string  `json:"flokicoinDisplayFormat"`
-	LokihubServicesURL     string  `json:"lokihubServicesURL"`
-	SwapServiceUrl         string  `json:"swapServiceUrl"`
 	Relay                  string  `json:"relay"`
 	GeneralRelay           *string `json:"generalRelay"`
 	TrustedNwcRelay        *bool   `json:"trustedNwcRelay"`
@@ -1235,12 +1140,9 @@ type UpdateSettingsRequest struct {
 	// all-or-nothing rather than four independent fields because the values are
 	// validated against each other (a pad bucket cannot exceed the ceiling), so
 	// a partial update could not be checked coherently.
-	PrivateEnvelope       *PrivateEnvelopeInfo `json:"privateEnvelope"`
-	SearchRelay           *string              `json:"searchRelay"`
-	MessageboardNwcUrl    string               `json:"messageboardNwcUrl"`
-	MempoolApi            string               `json:"mempoolApi"`
-	EnableSwap            *bool                `json:"enableSwap"`
-	EnableMessageboardNwc *bool                `json:"enableMessageboardNwc"`
+	PrivateEnvelope *PrivateEnvelopeInfo `json:"privateEnvelope"`
+	SearchRelay     *string              `json:"searchRelay"`
+	MempoolApi      string               `json:"mempoolApi"`
 }
 
 type SetNodeAliasRequest struct {

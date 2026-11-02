@@ -5,7 +5,6 @@
 package mocks
 
 import (
-	btcec "github.com/flokiorg/go-flokicoin/crypto"
 	"github.com/flokiorg/lokihub/config"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/tyler-smith/go-bip32"
@@ -336,106 +335,6 @@ func (_c *MockKeys_GetNostrSecretKey_Call) Return(s string) *MockKeys_GetNostrSe
 }
 
 func (_c *MockKeys_GetNostrSecretKey_Call) RunAndReturn(run func() string) *MockKeys_GetNostrSecretKey_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetSwapKey provides a mock function for the type MockKeys
-func (_mock *MockKeys) GetSwapKey(childIndex uint) (*btcec.PrivateKey, error) {
-	ret := _mock.Called(childIndex)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetSwapKey")
-	}
-
-	var r0 *btcec.PrivateKey
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) (*btcec.PrivateKey, error)); ok {
-		return returnFunc(childIndex)
-	}
-	if returnFunc, ok := ret.Get(0).(func(uint) *btcec.PrivateKey); ok {
-		r0 = returnFunc(childIndex)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*btcec.PrivateKey)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
-		r1 = returnFunc(childIndex)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockKeys_GetSwapKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSwapKey'
-type MockKeys_GetSwapKey_Call struct {
-	*mock.Call
-}
-
-// GetSwapKey is a helper method to define mock.On call
-//   - childIndex
-func (_e *MockKeys_Expecter) GetSwapKey(childIndex interface{}) *MockKeys_GetSwapKey_Call {
-	return &MockKeys_GetSwapKey_Call{Call: _e.mock.On("GetSwapKey", childIndex)}
-}
-
-func (_c *MockKeys_GetSwapKey_Call) Run(run func(childIndex uint)) *MockKeys_GetSwapKey_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(uint))
-	})
-	return _c
-}
-
-func (_c *MockKeys_GetSwapKey_Call) Return(v *btcec.PrivateKey, err error) *MockKeys_GetSwapKey_Call {
-	_c.Call.Return(v, err)
-	return _c
-}
-
-func (_c *MockKeys_GetSwapKey_Call) RunAndReturn(run func(childIndex uint) (*btcec.PrivateKey, error)) *MockKeys_GetSwapKey_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetSwapMnemonic provides a mock function for the type MockKeys
-func (_mock *MockKeys) GetSwapMnemonic() string {
-	ret := _mock.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetSwapMnemonic")
-	}
-
-	var r0 string
-	if returnFunc, ok := ret.Get(0).(func() string); ok {
-		r0 = returnFunc()
-	} else {
-		r0 = ret.Get(0).(string)
-	}
-	return r0
-}
-
-// MockKeys_GetSwapMnemonic_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSwapMnemonic'
-type MockKeys_GetSwapMnemonic_Call struct {
-	*mock.Call
-}
-
-// GetSwapMnemonic is a helper method to define mock.On call
-func (_e *MockKeys_Expecter) GetSwapMnemonic() *MockKeys_GetSwapMnemonic_Call {
-	return &MockKeys_GetSwapMnemonic_Call{Call: _e.mock.On("GetSwapMnemonic")}
-}
-
-func (_c *MockKeys_GetSwapMnemonic_Call) Run(run func()) *MockKeys_GetSwapMnemonic_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockKeys_GetSwapMnemonic_Call) Return(s string) *MockKeys_GetSwapMnemonic_Call {
-	_c.Call.Return(s)
-	return _c
-}
-
-func (_c *MockKeys_GetSwapMnemonic_Call) RunAndReturn(run func() string) *MockKeys_GetSwapMnemonic_Call {
 	_c.Call.Return(run)
 	return _c
 }

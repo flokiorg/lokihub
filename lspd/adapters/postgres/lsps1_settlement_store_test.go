@@ -154,6 +154,34 @@ func TestUpdateLsps1OrderFunding_UpdatesFields(t *testing.T) {
 	assert.Equal(t, 2, *order.FundingOutpoint)
 }
 
+// TestUpdateLsps1OrderFunding_SecondWriteOnFundedOrderRejected is the
+// regression test for FLSPD-0021: once an order's funding is recorded, a
+// later write with a DIFFERENT channel point must not silently overwrite it.
+// The S-5 unique index only prevents two orders claiming the same point; the
+// null-guard in the WHERE clause is what prevents an order clobbering its own
+// recorded funding. The second write must affect zero rows (claimed=false)
+// and leave the original point intact.
+func TestUpdateLsps1OrderFunding_SecondWriteOnFundedOrderRejected(t *testing.T) {
+	store := NewPostgresOpeningStore(testPool)
+	orderId := "funding-overwrite-order"
+	insertTestOrder(t, orderId, "PAID")
+
+	claimed, err := store.UpdateLsps1OrderFunding(orderId, "first-txid", 1)
+	require.NoError(t, err)
+	require.True(t, claimed, "the first write must claim the funding")
+
+	claimedAgain, err := store.UpdateLsps1OrderFunding(orderId, "second-txid", 9)
+	require.NoError(t, err, "a rejected overwrite must not surface as an error")
+	assert.False(t, claimedAgain, "a second write on an already-funded order must not be claimed")
+
+	order, err := store.GetLsps1Order(orderId)
+	require.NoError(t, err)
+	require.NotNil(t, order.FundingTxid)
+	assert.Equal(t, "first-txid", *order.FundingTxid, "the original funding point must be preserved")
+	require.NotNil(t, order.FundingOutpoint)
+	assert.Equal(t, 1, *order.FundingOutpoint, "the original outpoint must be preserved")
+}
+
 // TestUpdateLsps1OrderFunding_UnknownOrderIsNotAnError documents the
 // current contract: updating a non-existent order_id affects zero rows,
 // logs a warning, but does not return an error -- callers relying on this

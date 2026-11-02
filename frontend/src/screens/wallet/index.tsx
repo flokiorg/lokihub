@@ -2,7 +2,6 @@ import dayjs from "dayjs";
 import {
   AlertTriangleIcon,
   ArrowDownIcon,
-  ArrowDownUpIcon,
   ArrowUpIcon,
   ExternalLinkIcon,
   LightbulbIcon,
@@ -120,12 +119,6 @@ function Wallet() {
           </LinkButton>
         </div>
         <div className="flex items-center gap-3">
-          {hasChannelManagement && info.enableSwap && (
-            <LinkButton to="/wallet/swap" variant="secondary">
-              <ArrowDownUpIcon />
-              {t("header.swap")}
-            </LinkButton>
-          )}
           <div>
             <TransactionsListMenu />
           </div>

@@ -75,6 +75,9 @@ type HttpService struct {
 	// nil when no LSP service endpoint is configured (feature off).
 	lspClient *lspservice.Client
 
+	// lsps5Replay drops stale/replayed LSPS5 webhook notifications (LOKIHUB-0020).
+	lsps5Replay *lsps5ReplayGuard
+
 	// svc is read only by the test hooks (testhooks builds).
 	svc service.Service
 }
@@ -92,6 +95,7 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		tokenRevocation: dbTokenRevocation{db: svc.GetDB()},
 		shutdownCh:      make(chan struct{}),
 		lspClient:       newLspClient(svc.GetConfig().GetEnv()),
+		lsps5Replay:     newLSPS5ReplayGuard(),
 		svc:             svc,
 	}
 }
@@ -190,18 +194,6 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	e.POST("/api/backup", httpSvc.createBackupHandler, unlockRateLimiter)
 	e.GET("/logout", httpSvc.logoutHandler, unlockRateLimiter)
 
-	// Redirect /wallet/swap to /settings if swap is disabled
-	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			if c.Request().Method == http.MethodGet && (c.Path() == "/wallet/swap" || strings.HasPrefix(c.Request().URL.Path, "/wallet/swap")) {
-				if !httpSvc.cfg.EnableSwap() {
-					return c.Redirect(http.StatusTemporaryRedirect, "/settings")
-				}
-			}
-			return next(c)
-		}
-	})
-
 	frontend.RegisterHandlers(e)
 
 	// restricted routes
@@ -275,12 +267,6 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	readOnlyApiGroup.GET("/mempool", httpSvc.mempoolApiHandler)
 	readOnlyApiGroup.GET("/health", httpSvc.healthHandler)
 	readOnlyApiGroup.GET("/commands", httpSvc.getCustomNodeCommandsHandler)
-	readOnlyApiGroup.GET("/swaps", httpSvc.listSwapsHandler)
-	readOnlyApiGroup.GET("/swaps/:swapId", httpSvc.lookupSwapHandler)
-	readOnlyApiGroup.GET("/swaps/out/info", httpSvc.getSwapOutInfoHandler)
-	readOnlyApiGroup.GET("/swaps/in/info", httpSvc.getSwapInInfoHandler)
-
-	readOnlyApiGroup.GET("/autoswap", httpSvc.getAutoSwapConfigHandler)
 	readOnlyApiGroup.GET("/forwards", httpSvc.forwardsHandler)
 	readOnlyApiGroup.GET("/appstore/apps", httpSvc.getAppStoreAppsHandler)
 	readOnlyApiGroup.GET("/lsps2/info", httpSvc.getLSPS2InfoHandler)
@@ -296,7 +282,9 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	// only — a read-only token must not be able to read it.
 	fullAccessApiGroup.GET("/log/:type", httpSvc.getLogOutputHandler)
 
-	fullAccessApiGroup.POST("/api/event", httpSvc.eventHandler)
+	// fullAccessApiGroup is already rooted at "/api"; the path here must not
+	// repeat it or the route lands at "/api/api/event" and "/api/event" 404s.
+	fullAccessApiGroup.POST("/event", httpSvc.eventHandler)
 	httpSvc.registerWithdrawRoutes(fullAccessApiGroup)
 	httpSvc.registerWithdrawTestHooks(fullAccessApiGroup)
 	httpSvc.registerListingRoutes(fullAccessApiGroup)
@@ -342,12 +330,6 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/identity-authorities/:pubkey", httpSvc.identityAuthoritiesDeleteHandler)
 
 	fullAccessApiGroup.POST("/mnemonic", httpSvc.mnemonicHandler)
-	// Full access, not read-only. This returns a BIP39 seed controlling swap
-	// funds: anyone holding it can sweep them with no further help from this
-	// hub, so it is spending material and "readonly" is precisely the tier
-	// that must not reach it. The node's own mnemonic one line up sets the
-	// standard — full access, and the password re-entered.
-	fullAccessApiGroup.GET("/swaps/mnemonic", httpSvc.swapMnemonicHandler)
 	fullAccessApiGroup.PATCH("/backup-reminder", httpSvc.backupReminderHandler)
 	fullAccessApiGroup.POST("/channels", httpSvc.openChannelHandler)
 
@@ -368,11 +350,6 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.POST("/send-payment-probes", httpSvc.sendPaymentProbesHandler)
 	fullAccessApiGroup.POST("/send-spontaneous-payment-probes", httpSvc.sendSpontaneousPaymentProbesHandler)
 	fullAccessApiGroup.POST("/command", httpSvc.execCustomNodeCommandHandler)
-	fullAccessApiGroup.POST("/swaps/out", httpSvc.initiateSwapOutHandler)
-	fullAccessApiGroup.POST("/swaps/in", httpSvc.initiateSwapInHandler)
-	fullAccessApiGroup.POST("/swaps/refund", httpSvc.refundSwapHandler)
-	fullAccessApiGroup.POST("/autoswap", httpSvc.enableAutoSwapOutHandler)
-	fullAccessApiGroup.DELETE("/autoswap", httpSvc.disableAutoSwapOutHandler)
 	fullAccessApiGroup.POST("/node/alias", httpSvc.setNodeAliasHandler)
 	fullAccessApiGroup.POST("/node/profile", httpSvc.publishNodeProfileHandler)
 	fullAccessApiGroup.POST("/private-transport/rotate-inbox", httpSvc.rotateInboxHandler)
@@ -1652,151 +1629,6 @@ func (httpSvc *HttpService) healthHandler(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, healthResponse)
-}
-
-func (httpSvc *HttpService) listSwapsHandler(c echo.Context) error {
-	swaps, err := httpSvc.api.ListSwaps()
-
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: err.Error(),
-		})
-	}
-
-	return c.JSON(http.StatusOK, swaps)
-}
-
-func (httpSvc *HttpService) lookupSwapHandler(c echo.Context) error {
-	swap, err := httpSvc.api.LookupSwap(c.Param("swapId"))
-	if err != nil {
-		return c.JSON(http.StatusNotFound, ErrorResponse{
-			Message: "App not found",
-		})
-	}
-
-	return c.JSON(http.StatusOK, swap)
-}
-
-func (httpSvc *HttpService) getSwapOutInfoHandler(c echo.Context) error {
-	swapOutFeesResponse, err := httpSvc.api.GetSwapOutInfo()
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: fmt.Sprintf("Failed to get swap out info: %v", err),
-		})
-	}
-
-	return c.JSON(http.StatusOK, swapOutFeesResponse)
-}
-
-func (httpSvc *HttpService) getSwapInInfoHandler(c echo.Context) error {
-	swapOutFeesResponse, err := httpSvc.api.GetSwapInInfo()
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: fmt.Sprintf("Failed to get swap in info: %v", err),
-		})
-	}
-
-	return c.JSON(http.StatusOK, swapOutFeesResponse)
-}
-
-func (httpSvc *HttpService) initiateSwapOutHandler(c echo.Context) error {
-	var initiateSwapOutRequest api.InitiateSwapRequest
-	if err := c.Bind(&initiateSwapOutRequest); err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Message: fmt.Sprintf("Bad request: %s", err.Error()),
-		})
-	}
-
-	swapOutResponse, err := httpSvc.api.InitiateSwapOut(c.Request().Context(), &initiateSwapOutRequest)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: fmt.Sprintf("Failed to initiate swap out: %v", err),
-		})
-	}
-
-	return c.JSON(http.StatusOK, swapOutResponse)
-}
-
-func (httpSvc *HttpService) initiateSwapInHandler(c echo.Context) error {
-	var initiateSwapInRequest api.InitiateSwapRequest
-	if err := c.Bind(&initiateSwapInRequest); err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Message: fmt.Sprintf("Bad request: %s", err.Error()),
-		})
-	}
-
-	txId, err := httpSvc.api.InitiateSwapIn(c.Request().Context(), &initiateSwapInRequest)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: fmt.Sprintf("Failed to initiate swap in: %v", err),
-		})
-	}
-
-	return c.JSON(http.StatusOK, txId)
-}
-
-func (httpSvc *HttpService) refundSwapHandler(c echo.Context) error {
-	var refundSwapInRequest api.RefundSwapRequest
-	if err := c.Bind(&refundSwapInRequest); err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Message: fmt.Sprintf("Bad request: %s", err.Error()),
-		})
-	}
-
-	err := httpSvc.api.RefundSwap(&refundSwapInRequest)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: err.Error(),
-		})
-	}
-
-	return c.NoContent(http.StatusNoContent)
-}
-
-func (httpSvc *HttpService) swapMnemonicHandler(c echo.Context) error {
-	mnemonic := httpSvc.api.GetSwapMnemonic()
-	return c.JSON(http.StatusOK, mnemonic)
-}
-
-func (httpSvc *HttpService) getAutoSwapConfigHandler(c echo.Context) error {
-	getAutoSwapConfigResponse, err := httpSvc.api.GetAutoSwapConfig()
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: fmt.Sprintf("Failed to get swap settings: %v", err),
-		})
-	}
-
-	return c.JSON(http.StatusOK, getAutoSwapConfigResponse)
-}
-
-func (httpSvc *HttpService) enableAutoSwapOutHandler(c echo.Context) error {
-	var enableAutoSwapRequest api.EnableAutoSwapRequest
-	if err := c.Bind(&enableAutoSwapRequest); err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Message: fmt.Sprintf("Bad request: %s", err.Error()),
-		})
-	}
-
-	err := httpSvc.api.EnableAutoSwapOut(c.Request().Context(), &enableAutoSwapRequest)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: fmt.Sprintf("Failed to save swap settings: %v", err),
-		})
-	}
-
-	return c.NoContent(http.StatusNoContent)
-}
-
-func (httpSvc *HttpService) disableAutoSwapOutHandler(c echo.Context) error {
-	err := httpSvc.api.DisableAutoSwap()
-
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: err.Error(),
-		})
-	}
-
-	return c.NoContent(http.StatusNoContent)
 }
 
 func (httpSvc *HttpService) setNodeAliasHandler(c echo.Context) error {

@@ -99,7 +99,7 @@
     "loading": "加载中...",
     "continue": "继续",
     "fetchError": "获取枢纽配置失败，请检查您的连接。",
-    "communityNote": "这些服务建议由社区提供。要建议更改或添加新服务，请向 <1>lokihub-services</1> 仓库提交 pull request。",
+    "communityNote": "这些浏览器和中继建议是内置的默认值。您可以选择其中之一，或输入您偏好的任何浏览器或中继。",
     "warning": "警告",
     "warningText": "您对所连接的服务负责。请确保信任这些 URL 的提供商。",
     "configErrors": "配置错误",
@@ -166,16 +166,10 @@
       "description": "启用 Lightning 网络与链上的兑换（反之亦然）。",
       "custom": "自定义兑换服务"
     },
-    "messageboard": {
-      "title": "留言板",
-      "description": "连接到支持 NWC 的留言板服务。",
-      "custom": "自定义留言板"
-    },
     "validation": {
       "relayRequired": "至少需要一个中继",
       "explorerRequired": "Flokicoin 浏览器 URL 为必填项",
       "swapRequired": "启用时兑换服务 URL 为必填项",
-      "messageboardRequired": "启用时留言板 URL 为必填项",
       "invalidUrl": "{{field}}：URL 格式无效"
     },
     "connectHint": "连接可信服务"

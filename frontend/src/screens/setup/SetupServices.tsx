@@ -27,10 +27,6 @@ export function SetupServices() {
     trustedNwcRelay: true,
     generalRelay: "",
     searchRelay: "",
-    swapServiceUrl: store.nodeInfo.swapServiceUrl || "",
-    messageboardNwcUrl: store.nodeInfo.messageboardNwcUrl || "",
-    enableSwap: store.nodeInfo.enableSwap ?? false,
-    enableMessageboardNwc: store.nodeInfo.enableMessageboardNwc ?? false,
   });
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -51,25 +47,9 @@ export function SetupServices() {
 
           setConfig((prev) => {
             const newConfig = { ...prev };
-            if (!newConfig.swapServiceUrl && info.swapServiceUrl)
-              newConfig.swapServiceUrl = info.swapServiceUrl;
             if (!newConfig.relay && info.relay) newConfig.relay = info.relay;
-            if (!newConfig.messageboardNwcUrl && info.messageboardNwcUrl)
-              newConfig.messageboardNwcUrl = info.messageboardNwcUrl;
             if (!newConfig.mempoolApi && info.mempoolUrl)
               newConfig.mempoolApi = info.mempoolUrl;
-
-            // Boolean defaults
-            if (
-              store.nodeInfo.enableSwap === undefined &&
-              info.enableSwap !== undefined
-            )
-              newConfig.enableSwap = info.enableSwap;
-            if (
-              store.nodeInfo.enableMessageboardNwc === undefined &&
-              info.enableMessageboardNwc !== undefined
-            )
-              newConfig.enableMessageboardNwc = info.enableMessageboardNwc;
 
             return newConfig;
           });
@@ -100,12 +80,8 @@ export function SetupServices() {
     }
 
     store.updateNodeInfo({
-      swapServiceUrl: config.swapServiceUrl,
       relay: config.relay,
-      messageboardNwcUrl: config.messageboardNwcUrl,
       mempoolApi: config.mempoolApi,
-      enableSwap: config.enableSwap,
-      enableMessageboardNwc: config.enableMessageboardNwc,
     });
     navigate("/setup/node");
   }

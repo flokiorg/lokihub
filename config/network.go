@@ -32,8 +32,8 @@ func nodeChain(nodeNetwork string) string {
 }
 
 // CheckNodeNetwork refuses a NETWORK that lokihub does not take, or one that
-// names another chain than the node is on: swap keys, swap addresses and the
-// swap service would otherwise use another chain's parameters.
+// names another chain than the node is on: on-chain keys and addresses would
+// otherwise use another chain's parameters.
 func CheckNodeNetwork(network, nodeNetwork string) error {
 	chain, ok := networkNames[network]
 	if !ok {

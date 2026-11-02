@@ -164,12 +164,9 @@ The following configuration options can be set as environment variables or in a 
 - `LOG_LEVEL`: Log level for the main application. Higher is more verbose.
 - `NETWORK`: On-chain network used for the node.
 - `AUTO_UNLOCK_PASSWORD`: Provide unlock password to auto-unlock Lokihub on startup (e.g. after a machine restart). Unlock password still be required to access the interface.
-- `LOKIHUB_SERVICES_URL`: The URL for Lokihub's backend services API.
 - `LOKIHUB_STORE_URL`: The URL for Lokihub's App Store.
+- `LOKIHUB_SEED_FILE`: Path to a YAML file overriding the built-in service seed (explorer/relay suggestions, currencies, FAQ, info and the fiat-rate oracle pointer). Optional; the seed is embedded in the binary by default.
 - `ESPLORA_SERVER`: The Flokicoin Esplora server URL.
-- `SWAP_SERVICE_URL`: The swap service URL.
-- `ENABLE_SWAP`: Enable swap feature (default: true).
-- `MESSAGEBOARD_NWC_URL`: The Nostr Wallet Connect URL for the messageboard.
 - `MEMPOOL_API`: The Flokicoin Explorer API URL.
 - `LOG_TO_FILE`: Whether to log to a file.
 - `ENABLE_ADVANCED_SETUP`: Enable advanced setup options.
@@ -346,7 +343,6 @@ Internally Lokihub uses a basic implementation of the pubsub messaging pattern w
 - `nwc_app_created` - a new app connection was created
 - `nwc_app_deleted` - an app connection was deleted
 - `nwc_lnclient_*` - underlying LNClient events, consumed only by the transactions service.
-- `nwc_swap_succeeded` - successfully made a boltz swap
 - `nwc_payment_forwarded` - successfully forwarded a payment and earned routing fees
 
 ### NIP-47 Handlers

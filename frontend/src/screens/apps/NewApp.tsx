@@ -53,7 +53,7 @@ import { useInfo } from "src/hooks/useInfo";
 import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
 import { formatFlokicoinAmount } from "src/utils/flokicoinFormatting";
 import { handleRequestError } from "src/utils/handleRequestError";
-import { safeReturnUrl } from "src/utils/safeReturnUrl";
+import { returnUrlOrigin, safeReturnUrl } from "src/utils/safeReturnUrl";
 import Permissions from "../../components/Permissions";
 import { AppStoreApp } from "../../components/connections/SuggestedAppData";
 
@@ -348,8 +348,14 @@ const NewAppInternal = ({
       });
       window.dispatchEvent(nwcEvent);
 
-      // notify the opener of the successful connection
-      if (window.opener) {
+      // notify the opener of the successful connection. The target origin is
+      // the explicit web origin of the validated return_to, never "*": a
+      // wildcard leaks the connection metadata (pubkey, relays, lud16) to
+      // whatever origin happens to hold the opener. With no http(s) return_to
+      // there is no trusted origin to post to, so nothing is broadcast
+      // (LOKIHUB-0041).
+      const openerOrigin = returnUrlOrigin(returnTo);
+      if (window.opener && openerOrigin) {
         window.opener.postMessage(
           {
             type: "nwc:success",
@@ -358,7 +364,7 @@ const NewAppInternal = ({
             walletPubkey: createAppResponse.walletPubkey,
             lud16: createAppResponse.lud16,
           },
-          "*"
+          openerOrigin
         );
       }
 

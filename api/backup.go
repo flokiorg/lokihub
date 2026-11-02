@@ -40,17 +40,23 @@ var backupMagic = []byte("LKHB")
 //     with an 8-byte salt. Superseded — 4096 iterations is GPU-brute-forceable,
 //     far weaker than the argon2 used for config at rest, yet this archive is
 //     the most exposed artifact (it leaves the device and bundles the live
-//     admin.macaroon). New backups no longer use it; it is read for restore.
-//   - backupFormatArgon2idCTR: AES-CTR keyed by argon2id with a 16-byte salt —
-//     the current format. argon2id is memory-hard, matching the KDF family used
-//     for config at rest, so the strengthened KDF now covers the whole archive
-//     including the admin.macaroon it contains.
+//     admin.macaroon). Read for restore only.
+//   - backupFormatArgon2idCTR: AES-CTR keyed by argon2id with a 16-byte salt.
+//     argon2id made the KDF memory-hard, but AES-CTR is an *unauthenticated*
+//     stream cipher: a stored archive is malleable (bit-flippable) and a wrong
+//     password decrypts to garbage with no clean error. Read for restore only.
+//   - backupFormatArgon2idGCM: chunked AES-256-GCM (AEAD) keyed by argon2id with
+//     a 16-byte salt — the current format. The whole archive is authenticated,
+//     so tampering, truncation and a wrong password all fail with a clean,
+//     detectable error instead of silently restoring corrupt or garbage state.
+//     See backupstream.go for the chunk framing.
 //
 // AES-OFB (the unversioned legacy format, no magic prefix) is also read for
-// restore; it is an unauthenticated stream cipher and never written anymore.
+// restore; it too is an unauthenticated stream cipher and never written anymore.
 const (
 	backupFormatCTR         = 0x02
 	backupFormatArgon2idCTR = 0x03
+	backupFormatArgon2idGCM = 0x04
 )
 
 // Backup KDF parameters. argon2id costs are in the same range as config at rest
@@ -81,9 +87,8 @@ func deriveBackupKeyPBKDF2(password string, salt []byte) []byte {
 // disk. Generous enough to cover a Lightning node's db/channel state.
 const maxBackupEntrySize = 20 * 1024 * 1024 * 1024 // 20 GiB
 
-func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
+func (api *api) CreateBackup(unlockPassword string, w io.Writer) (err error) {
 	logger.Logger.Info().Msg("Creating backup to migrate Lokihub to another device")
-	var err error
 
 	if !api.cfg.CheckUnlockPassword(unlockPassword) {
 		return errors.New("invalid unlock password")
@@ -160,11 +165,30 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 	}
 
 	zw := zip.NewWriter(cw)
+	// Finalisation order matters: zw.Close() first flushes the zip's central
+	// directory into the encrypting writer, then cw.Close() seals the final
+	// AEAD chunk. A failed zw.Close() means the central directory never got
+	// flushed (archive truncated/corrupt); a failed cw.Close() means the final
+	// authenticated chunk was never written, so the archive would not restore.
+	finalized := false
+	finalize := func() error {
+		if finalized {
+			return nil
+		}
+		finalized = true
+		zerr := zw.Close()
+		cerr := cw.Close()
+		if zerr != nil {
+			return fmt.Errorf("failed to finalize backup zip archive: %w", zerr)
+		}
+		if cerr != nil {
+			return fmt.Errorf("failed to finalize encrypted backup stream: %w", cerr)
+		}
+		return nil
+	}
 	defer func() {
-		// A failed Close means the zip's central directory never got
-		// flushed, so the backup archive is likely truncated/corrupt.
-		if err := zw.Close(); err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to finalize backup zip archive")
+		if ferr := finalize(); ferr != nil && err == nil {
+			err = ferr
 		}
 	}()
 
@@ -208,6 +232,12 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 			logger.Logger.Error().Err(err).Msg("Failed to write file to zip")
 			return fmt.Errorf("failed to write input file to zip: %w", err)
 		}
+	}
+
+	// Finalise explicitly so a failure to flush/seal the archive is returned to
+	// the caller rather than only surfacing (and being swallowed) in the defer.
+	if err := finalize(); err != nil {
+		return err
 	}
 
 	logger.Logger.Info().Msg("Successfully created backup to migrate Lokihub to another device")
@@ -343,50 +373,53 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 	return nil
 }
 
-func encryptingWriter(w io.Writer, password string) (io.Writer, error) {
+// encryptingWriter returns the writer for NEW backups: chunked AES-256-GCM
+// (AEAD) keyed by argon2id. The returned writer MUST be closed to seal the final
+// authenticated chunk (see CreateBackup's finalize step).
+func encryptingWriter(w io.Writer, password string) (io.WriteCloser, error) {
 	salt := make([]byte, backupSaltLenCurrent)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, fmt.Errorf("failed to generate salt: %w", err)
 	}
 
 	encKey := deriveBackupKeyArgon2id(password, salt)
-	block, err := aes.NewCipher(encKey)
+	aead, err := newBackupAEAD(encKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
-	}
-
-	iv := make([]byte, aes.BlockSize)
-	if _, err = rand.Read(iv); err != nil {
-		return nil, fmt.Errorf("failed to generate IV: %w", err)
+		return nil, err
 	}
 
 	if _, err = w.Write(backupMagic); err != nil {
 		return nil, fmt.Errorf("failed to write format magic: %w", err)
 	}
-
-	if _, err = w.Write([]byte{backupFormatArgon2idCTR}); err != nil {
+	if _, err = w.Write([]byte{backupFormatArgon2idGCM}); err != nil {
 		return nil, fmt.Errorf("failed to write format version: %w", err)
 	}
-
-	_, err = w.Write(salt)
-	if err != nil {
+	if _, err = w.Write(salt); err != nil {
 		return nil, fmt.Errorf("failed to write salt: %w", err)
 	}
 
-	_, err = w.Write(iv)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write IV: %w", err)
-	}
-
-	stream := cipher.NewCTR(block, iv)
-	cw := &cipher.StreamWriter{
-		S: stream,
-		W: w,
-	}
-
-	return cw, nil
+	return newAEADChunkWriter(w, aead), nil
 }
 
+// newBackupAEAD builds the AES-256-GCM AEAD used for the authenticated backup
+// format.
+func newBackupAEAD(key []byte) (cipher.AEAD, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AES-GCM: %w", err)
+	}
+	return aead, nil
+}
+
+// decryptingReader dispatches on the backup format version and returns a reader
+// over the plaintext. The current format (backupFormatArgon2idGCM) is
+// authenticated: a tampered archive or wrong password surfaces as a read error.
+// The older unauthenticated formats (argon2id/PBKDF2 AES-CTR and legacy AES-OFB)
+// are still read so existing backups keep restoring.
 func decryptingReader(r io.Reader, password string) (io.Reader, error) {
 	header := make([]byte, len(backupMagic)+1)
 	n, err := io.ReadFull(r, header)
@@ -394,28 +427,53 @@ func decryptingReader(r io.Reader, password string) (io.Reader, error) {
 		return nil, fmt.Errorf("failed to read backup header: %w", err)
 	}
 
-	var (
-		streamCipher func(block cipher.Block, iv []byte) cipher.Stream
-		deriveKey    func(password string, salt []byte) []byte
-		saltLen      int
-	)
 	if n == len(header) && bytes.Equal(header[:len(backupMagic)], backupMagic) {
 		switch header[len(backupMagic)] {
+		case backupFormatArgon2idGCM:
+			return newAEADDecryptingReader(r, password)
 		case backupFormatArgon2idCTR:
-			streamCipher, deriveKey, saltLen = cipher.NewCTR, deriveBackupKeyArgon2id, backupSaltLenCurrent
+			return newStreamDecryptingReader(r, password, cipher.NewCTR, deriveBackupKeyArgon2id, backupSaltLenCurrent)
 		case backupFormatCTR:
-			streamCipher, deriveKey, saltLen = cipher.NewCTR, deriveBackupKeyPBKDF2, backupSaltLenLegacy
+			return newStreamDecryptingReader(r, password, cipher.NewCTR, deriveBackupKeyPBKDF2, backupSaltLenLegacy)
 		default:
 			return nil, fmt.Errorf("unsupported backup format version: %d", header[len(backupMagic)])
 		}
-	} else {
-		// No recognized magic/version prefix: assume a legacy (pre-versioning)
-		// OFB-encrypted backup, whose first bytes are the random salt itself.
-		// Splice the bytes already consumed from r back onto the front.
-		r = io.MultiReader(bytes.NewReader(header[:n]), r)
-		streamCipher, deriveKey, saltLen = cipher.NewOFB, deriveBackupKeyPBKDF2, backupSaltLenLegacy //nolint:staticcheck // required to decrypt pre-versioning backups; new backups use backupFormatArgon2idCTR
 	}
 
+	// No recognized magic/version prefix: assume a legacy (pre-versioning)
+	// OFB-encrypted backup, whose first bytes are the random salt itself.
+	// Splice the bytes already consumed from r back onto the front.
+	r = io.MultiReader(bytes.NewReader(header[:n]), r)
+	return newStreamDecryptingReader(r, password, cipher.NewOFB, deriveBackupKeyPBKDF2, backupSaltLenLegacy) //nolint:staticcheck // required to decrypt pre-versioning backups; new backups use backupFormatArgon2idGCM
+}
+
+// newAEADDecryptingReader reads the argon2id salt header and returns the chunked
+// AES-256-GCM reader for the current authenticated backup format.
+func newAEADDecryptingReader(r io.Reader, password string) (io.Reader, error) {
+	salt := make([]byte, backupSaltLenCurrent)
+	if _, err := io.ReadFull(r, salt); err != nil {
+		return nil, fmt.Errorf("failed to read salt: %w", err)
+	}
+
+	encKey := deriveBackupKeyArgon2id(password, salt)
+	aead, err := newBackupAEAD(encKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return newAEADChunkReader(r, aead), nil
+}
+
+// newStreamDecryptingReader reads the salt + IV header and returns a reader over
+// one of the superseded unauthenticated stream-cipher formats (AES-CTR / legacy
+// AES-OFB), kept for restoring existing backups only.
+func newStreamDecryptingReader(
+	r io.Reader,
+	password string,
+	newStream func(block cipher.Block, iv []byte) cipher.Stream,
+	deriveKey func(password string, salt []byte) []byte,
+	saltLen int,
+) (io.Reader, error) {
 	salt := make([]byte, saltLen)
 	if _, err := io.ReadFull(r, salt); err != nil {
 		return nil, fmt.Errorf("failed to read salt: %w", err)
@@ -432,11 +490,5 @@ func decryptingReader(r io.Reader, password string) (io.Reader, error) {
 		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
 	}
 
-	stream := streamCipher(block, iv)
-	cr := &cipher.StreamReader{
-		S: stream,
-		R: r,
-	}
-
-	return cr, nil
+	return &cipher.StreamReader{S: newStream(block, iv), R: r}, nil
 }

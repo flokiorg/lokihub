@@ -1,7 +1,7 @@
 # Services: everywhere else Lokihub looks
 
 A self-hosted Lightning wallet needs somewhere to get liquidity from, somewhere to check on-chain data,
-somewhere to do swaps, relays to talk Nostr over. Services is the screen where the wallet owner points
+relays to talk Nostr over. Services is the screen where the wallet owner points
 all of that at whatever they trust — their own infrastructure, or one of Lokihub's suggested defaults.
 Nothing here moves funds by itself; it's all "where do I look," never "what am I allowed to do."
 
@@ -22,8 +22,6 @@ for a new user.
 | Search relay | profile and contact-list lookups (Circle Wallet's following checks) |
 | LSP(s) | who you buy Lightning liquidity from, picked from their NIP-LSP announcements |
 | Block explorer | on-chain data, mempool-style API |
-| Swap service | on-chain ⇄ Lightning swaps |
-| Messageboard relay (optional) | an experimental nostr-messageboard integration |
 | Identity Authorities | who's trusted to vouch for a Cash Hub connection-key claim — see [NIP-CASH](https://github.com/ohstr/nips/blob/main/NIP-CASH.md) |
 
 ## Where the LSP list comes from
@@ -57,11 +55,23 @@ LSP sells nothing new, and a closed one disappears from the list (existing chann
 purchase the live LSPS answers decide: when they are worse than announced, Lokihub shows both and asks
 again.
 
-`services.json` still provides the rates, currencies, info and FAQ, but no LSPs.
+The currencies, info, FAQ and the explorer/relay suggestions ship as a built-in seed embedded in the
+binary — there is no remote `services.json` fetch any more. The explorer and relay entries are suggested
+defaults only; an operator's own choice always wins. Set `LOKIHUB_SEED_FILE` to a YAML path to override
+the embedded seed at runtime.
+
+## Where the fiat rate comes from
+
+The Flokicoin fiat rate is published as a NIP-78 (kind 30078) parameterized-replaceable event, tagged
+`#d = flokicoin-fiat-rate`, by the oracle pubkey carried in the seed. Lokihub subscribes to the oracle's
+relays, fetches the newest such event, verifies its signature and that the author matches the oracle
+pubkey, and reads `event.content` as the rate (the same JSON body the old `rates.json` carried). The
+last-good rate is served until it ages past the staleness TTL, after which the UI degrades to sats/FLC
+until a fresh event arrives.
 
 ## Where the trust actually lives
 
-Most of the table above is low-stakes from a security standpoint. A relay, a block explorer, a swap URL —
+Most of the table above is low-stakes from a security standpoint. A relay, a block explorer —
 none of them can move a sat on their own, since all they configure is where Lokihub *looks*, never what
 it's *authorized to do*. Even LSP connections are just request/response protocols; an LSP has no
 unilateral way to reach in and take funds.

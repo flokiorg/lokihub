@@ -20,6 +20,7 @@ package transactions
 // the others' — the property that actually makes the shared-pool model safe.
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,6 +29,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
+	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/tests"
 )
 
@@ -180,6 +182,64 @@ func TestSendPaymentSync_CashWallet_ClaimSlice_OtherSlicesUnaffected(t *testing.
 	balanceAfterSecond := queries.GetIsolatedBalance(svc.DB, wallet.ID)
 	assert.Greater(t, balanceAfterSecond, int64(0), "recipient 3's slice must still be present")
 	assert.Less(t, balanceAfterSecond, balanceAfterFirst, "recipient 2's payment must have deducted something on top of recipient 1's")
+}
+
+// TestSendPaymentSync_CashWallet_ClaimSlice_PendingReserveDoesNotBlockSibling is
+// the regression test for LOKIHUB-0023: an external cash_redeem of one slice of a
+// SHARED bill must not stamp the generic LN fee reserve on its pending row.
+// get_isolated_balance subtracts a pending outgoing row's fee_reserve across the
+// WHOLE bill, so a stamped reserve would transiently shrink the readable balance
+// attributed to a DIFFERENT recipient's fully-funded sibling slice and could
+// refuse its redeem as "insufficient balance" until the first payment settles.
+// Two 1,000,000-mloki slices share one bill; recipient A's redeem is left in
+// flight (ErrPaymentPending keeps its row PENDING) and recipient B's full
+// 1,000,000-mloki slice must still read as fully spendable.
+func TestSendPaymentSync_CashWallet_ClaimSlice_PendingReserveDoesNotBlockSibling(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	const sliceMloki = 1_000_000
+	// newSharedCashWallet's cap is in LOKI (1 LOKI = 1000 mloki); 2000 LOKI
+	// covers both slices so the quota check never trips.
+	wallet := newSharedCashWallet(t, svc, 2*sliceMloki/1000)
+	svc.DB.Create(&db.Transaction{
+		AppId: &wallet.ID, State: constants.TRANSACTION_STATE_SETTLED,
+		Type: constants.TRANSACTION_TYPE_INCOMING, AmountMloki: 2 * sliceMloki,
+	})
+
+	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
+	require.EqualValues(t, 2*sliceMloki, queries.GetIsolatedBalance(svc.DB, wallet.ID))
+
+	// Recipient A's external redeem is left in flight: the node reports the
+	// outcome as unknown, so the outgoing row stays PENDING and never settles —
+	// exactly the window in which a stamped reserve would distort the balance.
+	mockLn := svc.LNClient.(*tests.MockLn)
+	mockLn.PayInvoiceResponses = append(mockLn.PayInvoiceResponses, nil)
+	mockLn.PayInvoiceErrors = append(mockLn.PayInvoiceErrors, fmt.Errorf("%w: node still deciding", lnclient.ErrPaymentPending))
+
+	dbRequestEvent := &db.RequestEvent{NostrId: tests.RandomHex32()}
+	require.NoError(t, svc.DB.Create(dbRequestEvent).Error)
+	amt := uint64(sliceMloki)
+	_, err = transactionsService.SendPaymentSync(
+		tests.MockZeroAmountInvoice, &amt, map[string]interface{}{"cash_claim_slice": true},
+		svc.LNClient, &wallet.ID, &dbRequestEvent.ID,
+	)
+	require.ErrorIs(t, err, lnclient.ErrPaymentPending, "A's redeem must be left in flight so its row stays PENDING")
+
+	// The pending row must carry no generic fee reserve.
+	var pending db.Transaction
+	require.NoError(t, svc.DB.
+		Where("app_id = ?", wallet.ID).
+		Where(&db.Transaction{Type: constants.TRANSACTION_TYPE_OUTGOING, State: constants.TRANSACTION_STATE_PENDING}).
+		First(&pending).Error)
+	assert.Zero(t, pending.FeeReserveMloki, "an external cash_claim_slice must stamp fee_reserve_mloki = 0 on its pending row (LOKIHUB-0023)")
+
+	// B's fully-funded sibling slice is still readable in full. Before the fix,
+	// the ~10,000-mloki reserve on A's pending row would drop this to 990,000
+	// and A's unrelated in-flight redeem would block B's valid 1,000,000 redeem.
+	assert.EqualValues(t, sliceMloki, queries.GetIsolatedBalance(svc.DB, wallet.ID),
+		"a co-recipient's fully-funded slice must stay fully spendable while another slice's redeem is in flight")
 }
 
 func ptrUint64Transactions(v uint64) *uint64 { return &v }

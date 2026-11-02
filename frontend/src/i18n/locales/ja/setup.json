@@ -99,7 +99,7 @@
     "loading": "読み込み中...",
     "continue": "続ける",
     "fetchError": "ハブ設定の取得に失敗しました。接続を確認してください。",
-    "communityNote": "これらのサービス提案はコミュニティから提供されています。変更の提案や新しいサービスの追加は、<1>lokihub-services</1> リポジトリにプルリクエストを送ってください。",
+    "communityNote": "これらのエクスプローラーとリレーの提案は組み込みの既定値です。いずれかを選択するか、任意のエクスプローラーやリレーを入力できます。",
     "warning": "警告",
     "warningText": "接続するサービスの責任はあなたにあります。これらのURLのプロバイダーを信頼していることを確認してください。",
     "configErrors": "設定エラー",
@@ -166,16 +166,10 @@
       "description": "Lightning とオンチェーンのスワップ（およびその逆）を有効にします。",
       "custom": "カスタムスワップサービス"
     },
-    "messageboard": {
-      "title": "メッセージボード",
-      "description": "NWC対応のメッセージボードサービスに接続します。",
-      "custom": "カスタムメッセージボード"
-    },
     "validation": {
       "relayRequired": "少なくとも1つのリレーが必要です",
       "explorerRequired": "FlokicoinエクスプローラーのURLは必須です",
       "swapRequired": "有効時はスワップサービスのURLが必須です",
-      "messageboardRequired": "有効時はメッセージボードのURLが必須です",
       "invalidUrl": "{{field}}：URLフォーマットが無効です"
     },
     "connectHint": "信頼できるサービスに接続"

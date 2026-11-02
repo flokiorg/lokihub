@@ -45,6 +45,40 @@ const (
 	Lsps1PaymentStateFailed        Lsps1PaymentState = "FAILED"
 )
 
+// toSpecOrderState maps an internal order_state to a blip-0051 wire value
+// (FLSPD-0020). The spec order_state enum is only CREATED|COMPLETED|FAILED
+// (blip-0051 §2.4.1): the internal PAID ("paid, not yet funded") reports as
+// CREATED, and EXPIRED ("swept past expires_at before completing") reports as
+// FAILED -- an expired order is a terminal non-completion. CREATED, COMPLETED
+// and FAILED pass through unchanged.
+func toSpecOrderState(internal string) string {
+	switch internal {
+	case string(Lsps1OrderStatePaid):
+		return string(Lsps1OrderStateCreated)
+	case string(Lsps1OrderStateExpired):
+		return string(Lsps1OrderStateFailed)
+	default:
+		return internal
+	}
+}
+
+// toSpecPaymentState maps an internal payment.bolt11.state to a blip-0051
+// wire value (FLSPD-0020). The spec enum is only
+// EXPECT_PAYMENT|HOLD|PAID|REFUNDED (blip-0051 §2.4.1). Internal EXPIRED and
+// FAILED both report as REFUNDED, matching blip-0051 §3.1 ("the client gets
+// refunded automatically in case ... the order expires") -- for an order that
+// never captured funds this is vacuously true (nothing to return), and for
+// one whose held HTLC was released it is the correct terminal state. The four
+// spec values pass through unchanged.
+func toSpecPaymentState(internal string) string {
+	switch internal {
+	case string(Lsps1PaymentStateExpired), string(Lsps1PaymentStateFailed):
+		return string(Lsps1PaymentStateRefunded)
+	default:
+		return internal
+	}
+}
+
 type Lsps1GetInfoResponse struct {
 	Options                         []string                 `json:"options"`
 	OpeningFeeParams                []*Lsps2OpeningFeeParams `json:"opening_fee_params,omitempty"`
@@ -613,13 +647,13 @@ func (s *Handlers) handleLsps1GetOrder(req *JsonRpcRequest) *JsonRpcResponse {
 	// Maybe I can just decode the invoice... but I don't have a bolt11 decoder imported.
 	// I will just store `order_total_loki` in the DB. I'll issue a new schema migration command now.
 
-	// Map internal PAID state back to spec-compliant states for response if necessary
-	// LSPS1 spec only defines CREATED, COMPLETED, FAILED.
-	// We'll return CREATED if conceptually paid but not yet COMPLETED.
-	respOrderState := orderState
-	if orderState == string(Lsps1OrderStatePaid) {
-		respOrderState = string(Lsps1OrderStateCreated)
-	}
+	// Map internal-only states back to the blip-0051 wire enums before they
+	// reach the client (FLSPD-0020). order_state is only CREATED|COMPLETED|
+	// FAILED on the wire and payment.bolt11.state is only EXPECT_PAYMENT|HOLD|
+	// PAID|REFUNDED; the internal PAID/EXPIRED/FAILED values leaking out as-is
+	// made a strict LSPS1 client fail to parse the response.
+	respOrderState := toSpecOrderState(orderState)
+	paymentState = toSpecPaymentState(paymentState)
 
 	// Only report channel details once the order has actually reached
 	// COMPLETED. FundingTxid alone is no longer sufficient: for a

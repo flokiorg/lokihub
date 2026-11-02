@@ -29,7 +29,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/discovery"
-	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 
 	"github.com/flokiorg/lokihub/cashorder"
@@ -41,6 +40,8 @@ import (
 	"github.com/flokiorg/lokihub/lsps/manager"
 	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
 	"github.com/flokiorg/lokihub/nip47"
+	"github.com/flokiorg/lokihub/ratesoracle"
+	"github.com/flokiorg/lokihub/seed"
 )
 
 type service struct {
@@ -49,8 +50,8 @@ type service struct {
 	db                  *gorm.DB
 	lnClient            lnclient.LNClient
 	transactionsService transactions.TransactionsService
-	swapsService        swaps.SwapsService
 	lokiSvc             loki.LokiService
+	rateOracle          *ratesoracle.Oracle
 	appStoreSvc         appstore.Service
 	eventPublisher      events.EventPublisher
 	ctx                 context.Context
@@ -194,7 +195,8 @@ func NewService(ctx context.Context) (*service, error) {
 
 	keys := keys.NewKeys()
 
-	lokiSvc := loki.NewLokiService(cfg)
+	rateOracle := ratesoracle.FromSeed(seed.Get())
+	lokiSvc := loki.NewLokiService(cfg, rateOracle)
 
 	transactionsSvc := transactions.NewTransactionsService(gormDB, eventPublisher)
 
@@ -216,6 +218,7 @@ func NewService(ctx context.Context) (*service, error) {
 		ctx:            ctx,
 		eventPublisher: eventPublisher,
 		lokiSvc:        lokiSvc,
+		rateOracle:     rateOracle,
 
 		nip47Service:        nip47.NewNip47Service(gormDB, cfg, keys, eventPublisher, socialCache),
 		socialCache:         socialCache,
@@ -386,23 +389,8 @@ func (svc *service) GetTransactionsService() transactions.TransactionsService {
 	return svc.transactionsService
 }
 
-func (svc *service) GetSwapsService() swaps.SwapsService {
-	return svc.swapsService
-}
-
 func (svc *service) GetLiquidityManager() *manager.LiquidityManager {
 	return svc.liquidityManager
-}
-
-func (svc *service) InitSwapsService() {
-	if svc.swapsService != nil {
-		return
-	}
-	if svc.lnClient == nil {
-		logger.Logger.Error().Msg("Cannot init swaps service: LNClient not started")
-		return
-	}
-	svc.swapsService = swaps.NewSwapsService(svc.ctx, svc.db, svc.cfg, svc.keys, svc.eventPublisher, svc.lnClient, svc.transactionsService)
 }
 
 func (svc *service) GetKeys() keys.Keys {
