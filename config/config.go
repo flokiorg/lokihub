@@ -177,6 +177,52 @@ func (cfg *config) ensureMacaroonEncrypted(encryptionKey string) error {
 	return nil
 }
 
+// rewrapLegacySecrets re-wraps at-rest config secrets that are still sealed with
+// the legacy Argon2i KEK under the hardened Argon2id KEK (LOKIHUB-0035). It runs
+// on every unlock and is idempotent: once a blob carries the Argon2id header it
+// is skipped, so after the first unlock following the upgrade this is a cheap
+// scan. A password change migrates everything on its own (it re-encrypts every
+// secret), so this covers the common case where the password never changes.
+//
+// It is best-effort: a per-key failure is logged and the loop continues, and an
+// un-migrated blob still decrypts with the legacy params on the next attempt.
+// It never returns an error, so a transient DB hiccup here can never strand an
+// otherwise valid unlock.
+func (cfg *config) rewrapLegacySecrets(encryptionKey string) {
+	if encryptionKey == "" {
+		return
+	}
+
+	var encryptedUserConfigs []db.UserConfig
+	if err := cfg.db.Where(&db.UserConfig{Encrypted: true}).Find(&encryptedUserConfigs).Error; err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to list encrypted config entries for KEK migration")
+		return
+	}
+
+	migrated := 0
+	for _, userConfig := range encryptedUserConfigs {
+		if !isLegacyWrappedSecret(userConfig.Value) {
+			continue
+		}
+
+		decrypted, err := cfg.get(userConfig.Key, encryptionKey, cfg.db)
+		if err != nil {
+			logger.Logger.Error().Err(err).Str("key", userConfig.Key).Msg("Failed to decrypt legacy-wrapped secret during KEK migration")
+			continue
+		}
+
+		if err := cfg.SetUpdate(userConfig.Key, decrypted, encryptionKey); err != nil {
+			logger.Logger.Error().Err(err).Str("key", userConfig.Key).Msg("Failed to re-wrap secret with hardened KEK")
+			continue
+		}
+		migrated++
+	}
+
+	if migrated > 0 {
+		logger.Logger.Info().Int("count", migrated).Msg("Re-wrapped at-rest secrets with the hardened Argon2id KEK")
+	}
+}
+
 func (cfg *config) SetupCompleted() bool {
 	nodeLastStartTime, _ := cfg.Get("NodeLastStartTime", "")
 
@@ -251,6 +297,12 @@ func (cfg *config) Unlock(encryptionKey string) error {
 	if err := cfg.ensureMacaroonEncrypted(encryptionKey); err != nil {
 		return err
 	}
+
+	// Transparently upgrade any at-rest secret still wrapped with the legacy
+	// Argon2i KEK to the hardened Argon2id params (LOKIHUB-0035). Best-effort:
+	// a re-wrap failure is logged but must not block unlock, and the old blob
+	// still decrypts until the next attempt.
+	cfg.rewrapLegacySecrets(encryptionKey)
 
 	if err := cfg.loadJWTSecret(encryptionKey); err != nil {
 		return err
