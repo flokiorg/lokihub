@@ -55,7 +55,19 @@ LSP sells nothing new, and a closed one disappears from the list (existing chann
 purchase the live LSPS answers decide: when they are worse than announced, Lokihub shows both and asks
 again.
 
-`services.json` still provides the rates, currencies, info and FAQ, but no LSPs.
+The currencies, info, FAQ and the explorer/relay suggestions ship as a built-in seed embedded in the
+binary — there is no remote `services.json` fetch any more. The explorer and relay entries are suggested
+defaults only; an operator's own choice always wins. Set `LOKIHUB_SEED_FILE` to a YAML path to override
+the embedded seed at runtime.
+
+## Where the fiat rate comes from
+
+The Flokicoin fiat rate is published as a NIP-78 (kind 30078) parameterized-replaceable event, tagged
+`#d = flokicoin-fiat-rate`, by the oracle pubkey carried in the seed. Lokihub subscribes to the oracle's
+relays, fetches the newest such event, verifies its signature and that the author matches the oracle
+pubkey, and reads `event.content` as the rate (the same JSON body the old `rates.json` carried). The
+last-good rate is served until it ages past the staleness TTL, after which the UI degrades to sats/FLC
+until a fresh event arrives.
 
 ## Where the trust actually lives
 

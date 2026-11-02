@@ -2,256 +2,71 @@ package loki
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"sync"
-	"time"
 
+	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/config"
-	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/seed"
 )
 
 type lokiService struct {
-	cfg config.Config
-
-	rateCache      *FlokicoinRate
-	rateCacheTime  time.Time
-	rateCacheMutex sync.RWMutex
-
-	currenciesCache      map[string]LokiCurrency
-	currenciesCacheTime  time.Time
-	currenciesCacheMutex sync.RWMutex
+	cfg    config.Config
+	oracle RateOracle
 }
 
-func NewLokiService(cfg config.Config) *lokiService {
-	lokiSvc := &lokiService{
-		cfg: cfg,
+// NewLokiService builds the loki service. oracle supplies the fiat rate for
+// GetFlokicoinRate and may be nil (rates then report unavailable until one is
+// wired in).
+func NewLokiService(cfg config.Config, oracle RateOracle) *lokiService {
+	return &lokiService{
+		cfg:    cfg,
+		oracle: oracle,
 	}
-	return lokiSvc
 }
 
+// GetFlokicoinRate returns the latest rate from the NIP-78 oracle. Only USD is
+// supported. An unset/empty/stale oracle surfaces a clear error, which the UI
+// degrades to sats/FLC on.
 func (svc *lokiService) GetFlokicoinRate(ctx context.Context) (*FlokicoinRate, error) {
-	currency := svc.cfg.GetCurrency()
-
-	if currency != "USD" {
+	if currency := svc.cfg.GetCurrency(); currency != "USD" {
 		return nil, errors.New("only USD is supported for now")
 	}
-
-	svc.rateCacheMutex.RLock()
-	if svc.rateCache != nil && time.Since(svc.rateCacheTime) < 5*time.Minute {
-		rate := svc.rateCache
-		svc.rateCacheMutex.RUnlock()
-		return rate, nil
+	if svc.oracle == nil {
+		return nil, errors.New("flokicoin rate unavailable")
 	}
-	svc.rateCacheMutex.RUnlock()
-
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	url := fmt.Sprintf("%s/rates.json", svc.cfg.GetLokihubServicesURL())
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		logger.Logger.Error().
-			Str("currency", currency).
-			Err(err).
-			Msg("Error creating request to Flokicoin rate endpoint")
-		return nil, err
-	}
-	setDefaultRequestHeaders(req)
-
-	res, err := client.Do(req)
-	if err != nil {
-		logger.Logger.Error().
-			Str("currency", currency).
-			Err(err).
-			Msg("Failed to fetch Flokicoin rate from API")
-		return nil, err
-	}
-
-	defer func() { _ = res.Body.Close() }()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("url", url).
-			Msg("Failed to read response body")
-		return nil, errors.New("failed to read response body")
-	}
-
-	if res.StatusCode >= 300 {
-		logger.Logger.Error().
-			Str("currency", currency).
-			Str("body", string(body)).
-			Int("status_code", res.StatusCode).
-			Msg("Flokicoin rate endpoint returned non-success code")
-		return nil, fmt.Errorf("flokicoin rate endpoint returned non-success code: %s", string(body))
-	}
-
-	var rate = &FlokicoinRate{}
-	err = json.Unmarshal(body, rate)
-	if err != nil {
-		logger.Logger.Error().
-			Str("currency", currency).
-			Str("body", string(body)).
-			Err(err).
-			Msg("Failed to decode Flokicoin rate API response")
-		return nil, err
-	}
-
-	svc.rateCacheMutex.Lock()
-	svc.rateCache = rate
-	svc.rateCacheTime = time.Now()
-	svc.rateCacheMutex.Unlock()
-
-	return rate, nil
+	return svc.oracle.Latest()
 }
 
+// GetCurrencies returns the embedded currency catalogue, filtered to USD (the
+// only supported currency).
 func (svc *lokiService) GetCurrencies(ctx context.Context) (map[string]LokiCurrency, error) {
-	svc.currenciesCacheMutex.RLock()
-	if svc.currenciesCache != nil && time.Since(svc.currenciesCacheTime) < 24*time.Hour {
-		cache := svc.currenciesCache
-		svc.currenciesCacheMutex.RUnlock()
-		return cache, nil
+	out := make(map[string]LokiCurrency)
+	if usd, ok := seed.Get().Currencies["USD"]; ok {
+		out["USD"] = LokiCurrency{Name: usd.Name, Symbol: usd.Symbol}
 	}
-	svc.currenciesCacheMutex.RUnlock()
-
-	// Create a new context with timeout to avoid issues with parent context (e.g. Wails context)
-	// being cancelled or behaving unexpectedly during the request.
-	reqCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	url := fmt.Sprintf("%s/currencies.json", svc.cfg.GetLokihubServicesURL())
-
-	req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Error creating request to rates endpoint")
-		return nil, err
-	}
-	setDefaultRequestHeaders(req)
-
-	res, err := client.Do(req)
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch rates from API")
-		// Wrap error to help debugging on frontend
-		return nil, fmt.Errorf("backend failed to fetch rates: %w", err)
-	}
-
-	defer func() { _ = res.Body.Close() }()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("url", url).
-			Msg("Failed to read response body")
-		return nil, errors.New("failed to read response body")
-	}
-
-	if res.StatusCode >= 300 {
-		logger.Logger.Error().
-			Str("body", string(body)).
-			Int("status_code", res.StatusCode).
-			Msg("Rates endpoint returned non-success code")
-		return nil, fmt.Errorf("rates endpoint returned non-success code: %s", string(body))
-	}
-
-	var currencies map[string]LokiCurrency
-	err = json.Unmarshal(body, &currencies)
-	if err != nil {
-		logger.Logger.Error().
-			Str("body", string(body)).
-			Err(err).
-			Msg("Failed to decode rates API response")
-		return nil, err
-	}
-
-	// Filter to only allow USD
-	filteredCurrencies := make(map[string]LokiCurrency)
-	if usd, ok := currencies["USD"]; ok {
-		filteredCurrencies["USD"] = usd
-	}
-
-	svc.currenciesCacheMutex.Lock()
-	svc.currenciesCache = filteredCurrencies
-	svc.currenciesCacheTime = time.Now()
-	svc.currenciesCacheMutex.Unlock()
-
-	return filteredCurrencies, nil
+	return out, nil
 }
 
+// GetInfo returns the hub info from the embedded seed. The version comes from
+// the appversion build tag, falling back to the seed's static value.
 func (svc *lokiService) GetInfo(ctx context.Context) (*LokiInfo, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	url := fmt.Sprintf("%s/info.json", svc.cfg.GetLokihubServicesURL())
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
+	info := seed.Get().Info
+	version := appversion.Tag
+	if version == "" {
+		version = info.Version
 	}
-	setDefaultRequestHeaders(req)
-
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = res.Body.Close() }()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if res.StatusCode >= 300 {
-		return nil, fmt.Errorf("info endpoint returned non-success code: %s", string(body))
-	}
-
-	var info LokiInfo
-	err = json.Unmarshal(body, &info)
-	if err != nil {
-		return nil, err
-	}
-
-	return &info, nil
+	return &LokiInfo{
+		Version:      version,
+		ReleaseNotes: info.ReleaseNotes,
+	}, nil
 }
 
+// GetFAQ returns the embedded FAQ.
 func (svc *lokiService) GetFAQ(ctx context.Context) ([]FAQ, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	url := fmt.Sprintf("%s/faq.json", svc.cfg.GetLokihubServicesURL())
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
+	entries := seed.Get().FAQ
+	out := make([]FAQ, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, FAQ{Question: e.Question, Answer: e.Answer})
 	}
-	setDefaultRequestHeaders(req)
-
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = res.Body.Close() }()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if res.StatusCode >= 300 {
-		return nil, fmt.Errorf("faq endpoint returned non-success code: %s", string(body))
-	}
-
-	var faqs []FAQ
-	err = json.Unmarshal(body, &faqs)
-	if err != nil {
-		return nil, err
-	}
-
-	return faqs, nil
-}
-
-func setDefaultRequestHeaders(req *http.Request) {
-	req.Header.Set("User-Agent", "Lokihub")
-	req.Header.Set("Content-Type", "application/json")
+	return out, nil
 }

@@ -99,7 +99,7 @@
     "loading": "Cargando...",
     "continue": "Continuar",
     "fetchError": "Error al obtener la configuración del Hub. Verifique su conexión.",
-    "communityNote": "Estas sugerencias de servicios son proporcionadas por la comunidad. Para sugerir cambios o agregar nuevos servicios, envíe un pull request al repositorio <1>lokihub-services</1>.",
+    "communityNote": "Estas sugerencias de exploradores y relés son valores predeterminados integrados. Puede seleccionar una o introducir el explorador o relé que prefiera.",
     "warning": "Advertencia",
     "warningText": "Usted es responsable de los servicios a los que se conecta. Asegúrese de confiar en los proveedores de estas URLs.",
     "configErrors": "Errores de configuración",

@@ -116,12 +116,12 @@ func TestU26_6_NoPubkeyAtHost(t *testing.T) {
 }
 
 // U-26.11: the removed LSP sources stay removed: no LSP env or setting, no
-// services.json lsps, no pubkey@host parsing, no community flag.
+// seeded lsps, no pubkey@host parsing, no community flag.
 func TestU26_11_RemovalGuards(t *testing.T) {
 	banned := map[string]string{
 		"IsCommunity":        "the community flag",
-		"SyncSystemLSPs":     "services.json LSPs",
-		"CommunityLSPInput":  "services.json LSPs",
+		"SyncSystemLSPs":     "seeded LSPs",
+		"CommunityLSPInput":  "seeded LSPs",
 		"ParseLSPURI":        "pubkey@host input",
 		"saveLSPsToDatabase": "the setup LSPs array",
 	}
@@ -161,5 +161,4 @@ func TestU26_11_RemovalGuards(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(cfgModels), "GetLSP() string", "the single-LSP setting")
 	assert.NotContains(t, string(cfgModels), `envconfig:"LSP"`, "the LSP env")
-	assert.Nil(t, withoutServicesLSPs(map[string]interface{}{"lsps": []any{1}, "rates": 1}).(map[string]interface{})["lsps"])
 }

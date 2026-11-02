@@ -663,29 +663,6 @@ func (cfg *config) SetFlokicoinDisplayFormat(value string) error {
 	return nil
 }
 
-func (cfg *config) GetLokihubServicesURL() string {
-	url, err := cfg.Get("LokihubServicesURL", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch LokihubServicesURL")
-	}
-	if url != "" {
-		return url
-	}
-	return cfg.Env.LokihubServicesURL
-}
-
-func (cfg *config) SetLokihubServicesURL(value string) error {
-	if value == "" {
-		return errors.New("LokihubServicesURL cannot be empty")
-	}
-	err := cfg.SetUpdate("LokihubServicesURL", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update LokihubServicesURL")
-		return err
-	}
-	return nil
-}
-
 func (cfg *config) GetLokihubStoreURL() string {
 	url, err := cfg.Get("LokihubStoreURL", "")
 	if err != nil {
@@ -962,22 +939,4 @@ func (cfg *config) GetDefaultWorkDir() string {
 		return cfg.Env.Workdir
 	}
 	return filepath.Join(xdg.DataHome, "lokihub")
-}
-
-func (cfg *config) GetCachedServicesJSON() string {
-	json, err := cfg.Get("CachedServicesJSON", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch CachedServicesJSON")
-	}
-	return json
-}
-
-func (cfg *config) SetCachedServicesJSON(value string) error {
-	// We use SetUpdate to persist it unencrypted (it's public data)
-	err := cfg.SetUpdate("CachedServicesJSON", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update CachedServicesJSON")
-		return err
-	}
-	return nil
 }
