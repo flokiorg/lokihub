@@ -12,7 +12,6 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
-	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
 
@@ -459,8 +458,6 @@ func (svc *service) StartApp(encryptionKey string) error {
 		cancelFn()
 		return err
 	}
-
-	svc.swapsService = swaps.NewSwapsService(ctx, svc.db, svc.cfg, svc.keys, svc.eventPublisher, svc.lnClient, svc.transactionsService)
 
 	// Initialize and start LiquidityManager (LSPS)
 	// Initialize and start LiquidityManager (LSPS)

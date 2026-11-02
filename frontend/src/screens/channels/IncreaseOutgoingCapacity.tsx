@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { ChannelPublicPrivateAlert } from "src/components/channels/ChannelPublicPrivateAlert";
 import { DuplicateChannelAlert } from "src/components/channels/DuplicateChannelAlert";
-import { SwapAlert } from "src/components/channels/SwapAlert";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import Loading from "src/components/Loading";
 import { MempoolAlert } from "src/components/MempoolAlert";
@@ -75,7 +74,6 @@ function NewChannelInternal({
   network: Network;
   channels: Channel[];
 }) {
-  const { data: info } = useInfo();
   const { data: balances } = useBalances();
   const { t } = useTranslation("channels");
   const { t: tc } = useTranslation("common");
@@ -318,7 +316,6 @@ function NewChannelInternal({
             </div>
           </>
           <MempoolAlert />
-          {info?.enableSwap && <SwapAlert swapType="in" />}
           {channels?.some((channel) => channel.public !== !!order.isPublic) && (
             <ChannelPublicPrivateAlert />
           )}

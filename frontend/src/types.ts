@@ -339,7 +339,6 @@ export interface InfoResponse {
   mempoolUrl: string;
   flokicoinDisplayFormat: FlokicoinDisplayFormat;
   lokihubServicesURL: string;
-  swapServiceUrl: string;
   messageboardNwcUrl: string;
   relay: string;
   trustedNwcRelay: boolean;
@@ -360,7 +359,6 @@ export interface InfoResponse {
   };
   searchRelay: string;
   lsps: LSP[];
-  enableSwap: boolean;
   enableMessageboardNwc: boolean;
   workDir: string;
   enablePolling?: boolean;
@@ -416,57 +414,6 @@ export type AppMetadata = {
   identity_pubkey?: string;
   requester_pubkey?: string;
 } & Record<string, unknown>;
-
-export type AutoSwapConfig = {
-  type: "out";
-  enabled: boolean;
-  balanceThreshold: number;
-  swapAmount: number;
-  destination: string;
-};
-
-export type SwapInfo = {
-  lokiServiceFee: number;
-  boltzServiceFee: number;
-  boltzNetworkFee: number;
-  minAmount: number;
-  maxAmount: number;
-};
-
-export type BaseSwap = {
-  id: string;
-  sendAmount: number;
-  lockupAddress: string;
-  paymentHash: string;
-  invoice: string;
-  autoSwap: boolean;
-  usedXpub: boolean;
-  boltzPubkey: string;
-  createdAt: string;
-  updatedAt: string;
-  lockupTxId?: string;
-  claimTxId?: string;
-  receiveAmount?: number;
-};
-
-export type SwapIn = BaseSwap & {
-  type: "in";
-  state: "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
-  refundAddress?: string;
-};
-
-export type SwapOut = BaseSwap & {
-  type: "out";
-  state: "PENDING" | "SUCCESS" | "FAILED";
-  destinationAddress: string;
-};
-
-export type Swap = SwapIn | SwapOut;
-
-export type SwapResponse = {
-  swapId: string;
-  paymentHash: string;
-};
 
 export interface MnemonicResponse {
   mnemonic: string;
@@ -786,11 +733,9 @@ export type SetupNodeInfo = Partial<{
   // customConfig removed
 
   lokihubServicesURL?: string;
-  swapServiceUrl?: string;
   relay?: string;
   messageboardNwcUrl?: string;
   mempoolApi?: string;
-  enableSwap?: boolean;
   enableMessageboardNwc?: boolean;
 }>;
 
@@ -904,8 +849,6 @@ export type TransactionMetadata = {
     pubkey: string;
     tags: string[][];
   }; // NIP-57
-
-  swap_id?: string;
 } & Record<string, unknown>;
 
 export type Boostagram = {

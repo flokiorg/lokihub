@@ -1,8 +1,6 @@
 import dayjs from "dayjs";
 import {
   AlertTriangleIcon,
-  ArrowDownUpIcon,
-  ArrowRightIcon,
   CopyIcon,
   ExternalLinkIcon,
   HeartIcon,
@@ -85,7 +83,7 @@ export default function Channels() {
   const { data: channels } = useChannels(true);
   const { data: nodeConnectionInfo } = useNodeConnectionInfo();
   const nodeIdentity = useNodeIdentity();
-  const { data: info, hasChannelManagement } = useInfo();
+  const { hasChannelManagement } = useInfo();
   const { data: balances } = useBalances(true);
   const navigate = useNavigate();
   const { t } = useTranslation("channels");
@@ -245,42 +243,6 @@ export default function Channels() {
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuGroup>
-                  {hasChannelManagement && info?.enableSwap && (
-                    <DropdownMenuSeparator />
-                  )}
-                  {hasChannelManagement && info?.enableSwap && (
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel>{t("menu.swaps")}</DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={() => navigate("/wallet/swap?type=in")}
-                        className="cursor-pointer"
-                      >
-                        <div
-                          dir="ltr"
-                          className="me-2 text-muted-foreground flex flex-row items-center"
-                        >
-                          <LinkIcon className="size-4" />
-                          <ArrowRightIcon className="size-4" />
-                          <ZapIcon className="size-4" />
-                        </div>
-                        {t("menu.swapIn")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => navigate("/wallet/swap?type=out")}
-                        className="cursor-pointer"
-                      >
-                        <div
-                          dir="ltr"
-                          className="me-2 text-muted-foreground flex flex-row items-center"
-                        >
-                          <ZapIcon className="size-4" />
-                          <ArrowRightIcon className="size-4" />
-                          <LinkIcon className="size-4" />
-                        </div>
-                        {t("menu.swapOut")}
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
                     <DropdownMenuLabel>{t("menu.history")}</DropdownMenuLabel>
@@ -318,16 +280,6 @@ export default function Channels() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {info?.enableSwap && (
-                <LinkButton
-                  to="/wallet/swap"
-                  variant="secondary"
-                  className="hidden sm:flex"
-                >
-                  <ArrowDownUpIcon />
-                  Swap
-                </LinkButton>
-              )}
               <LinkButton to="/channels/outgoing">
                 {t("channels.open")}
               </LinkButton>
