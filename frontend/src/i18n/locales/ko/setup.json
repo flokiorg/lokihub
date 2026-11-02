@@ -99,7 +99,7 @@
     "loading": "불러오는 중...",
     "continue": "계속",
     "fetchError": "허브 구성을 가져오지 못했습니다. 연결을 확인하세요.",
-    "communityNote": "이 서비스 제안은 커뮤니티에서 제공됩니다. 변경 제안이나 새 서비스 추가를 위해 <1>lokihub-services</1> 저장소에 pull request를 제출해 주세요.",
+    "communityNote": "이 탐색기 및 릴레이 제안은 내장된 기본값입니다. 하나를 선택하거나 원하는 탐색기 또는 릴레이를 입력할 수 있습니다.",
     "warning": "경고",
     "warningText": "연결하는 서비스에 대한 책임은 귀하에게 있습니다. 이 URL의 제공업체를 신뢰하는지 확인하세요.",
     "configErrors": "구성 오류",

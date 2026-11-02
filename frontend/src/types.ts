@@ -338,7 +338,6 @@ export interface InfoResponse {
   nodeAlias: string;
   mempoolUrl: string;
   flokicoinDisplayFormat: FlokicoinDisplayFormat;
-  lokihubServicesURL: string;
   relay: string;
   trustedNwcRelay: boolean;
   generalRelay: string;
@@ -730,7 +729,6 @@ export type SetupNodeInfo = Partial<{
   autoConnect?: boolean;
   // customConfig removed
 
-  lokihubServicesURL?: string;
   relay?: string;
   mempoolApi?: string;
 }>;
