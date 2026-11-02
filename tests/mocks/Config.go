@@ -875,23 +875,6 @@ func (_c *MockConfig_GetDefaultWorkDir_Call) RunAndReturn(run func() string) *Mo
 	return _c
 }
 
-// SetMessageboardNwcUrl provides a mock function for the type MockConfig
-func (_mock *MockConfig) SetMessageboardNwcUrl(value string) error {
-	ret := _mock.Called(value)
-
-	if len(ret) == 0 {
-		panic("no return value specified for SetMessageboardNwcUrl")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(string) error); ok {
-		r0 = returnFunc(value)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
 // GetRelay provides a mock function for the type MockConfig
 func (_mock *MockConfig) GetRelay() string {
 	ret := _mock.Called()
@@ -1096,18 +1079,6 @@ func (_mock *MockConfig) SetLokihubServicesURL(value string) error {
 		r0 = returnFunc(value)
 	} else {
 		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// GetMessageboardNwcUrl provides a mock function for the type MockConfig
-func (_mock *MockConfig) GetMessageboardNwcUrl() string {
-	ret := _mock.Called()
-	var r0 string
-	if returnFunc, ok := ret.Get(0).(func() string); ok {
-		r0 = returnFunc()
-	} else {
-		r0 = ret.Get(0).(string)
 	}
 	return r0
 }
@@ -1428,88 +1399,6 @@ func (_c *MockConfig_SetMempoolApi_Call) Return(err error) *MockConfig_SetMempoo
 }
 
 func (_c *MockConfig_SetMempoolApi_Call) RunAndReturn(run func(value string) error) *MockConfig_SetMempoolApi_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// EnableMessageboardNwc provides a mock function for the type MockConfig
-func (_mock *MockConfig) EnableMessageboardNwc() bool {
-	ret := _mock.Called()
-
-	var r0 bool
-	if rf, ok := ret.Get(0).(func() bool); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
-}
-
-// MockConfig_EnableMessageboardNwc_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EnableMessageboardNwc'
-type MockConfig_EnableMessageboardNwc_Call struct {
-	*mock.Call
-}
-
-// EnableMessageboardNwc is a helper method to define mock.On call
-func (_e *MockConfig_Expecter) EnableMessageboardNwc() *MockConfig_EnableMessageboardNwc_Call {
-	return &MockConfig_EnableMessageboardNwc_Call{Call: _e.mock.On("EnableMessageboardNwc")}
-}
-
-func (_c *MockConfig_EnableMessageboardNwc_Call) Run(run func()) *MockConfig_EnableMessageboardNwc_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockConfig_EnableMessageboardNwc_Call) Return(_a0 bool) *MockConfig_EnableMessageboardNwc_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockConfig_EnableMessageboardNwc_Call) RunAndReturn(run func() bool) *MockConfig_EnableMessageboardNwc_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// SetEnableMessageboardNwc provides a mock function for the type MockConfig
-func (_mock *MockConfig) SetEnableMessageboardNwc(enable bool) error {
-	ret := _mock.Called(enable)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(bool) error); ok {
-		r0 = rf(enable)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// MockConfig_SetEnableMessageboardNwc_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetEnableMessageboardNwc'
-type MockConfig_SetEnableMessageboardNwc_Call struct {
-	*mock.Call
-}
-
-// SetEnableMessageboardNwc is a helper method to define mock.On call
-func (_e *MockConfig_Expecter) SetEnableMessageboardNwc(enable interface{}) *MockConfig_SetEnableMessageboardNwc_Call {
-	return &MockConfig_SetEnableMessageboardNwc_Call{Call: _e.mock.On("SetEnableMessageboardNwc", enable)}
-}
-
-func (_c *MockConfig_SetEnableMessageboardNwc_Call) Run(run func(enable bool)) *MockConfig_SetEnableMessageboardNwc_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(bool))
-	})
-	return _c
-}
-
-func (_c *MockConfig_SetEnableMessageboardNwc_Call) Return(_a0 error) *MockConfig_SetEnableMessageboardNwc_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockConfig_SetEnableMessageboardNwc_Call) RunAndReturn(run func(bool) error) *MockConfig_SetEnableMessageboardNwc_Call {
 	_c.Call.Return(run)
 	return _c
 }

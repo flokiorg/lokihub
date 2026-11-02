@@ -157,16 +157,10 @@
         "description": "تبادل Lightning به آن‌چین (و بالعکس) را فعال می‌کند.",
         "custom": "سرویس تبادل سفارشی"
       },
-      "messageboard": {
-        "title": "تابلوی پیام",
-        "description": "به یک سرویس تابلوی پیام با NWC متصل می‌شود.",
-        "custom": "تابلوی پیام سفارشی"
-      },
       "validation": {
         "relayRequired": "حداقل یک رله الزامی است",
         "explorerRequired": "URL کاوشگر Flokicoin الزامی است",
         "swapRequired": "URL سرویس تبادل هنگام فعال‌سازی الزامی است",
-        "messageboardRequired": "URL تابلوی پیام هنگام فعال‌سازی الزامی است",
         "invalidUrl": "{{field}}: فرمت URL نامعتبر است"
       }
     }

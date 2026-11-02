@@ -339,7 +339,6 @@ export interface InfoResponse {
   mempoolUrl: string;
   flokicoinDisplayFormat: FlokicoinDisplayFormat;
   lokihubServicesURL: string;
-  messageboardNwcUrl: string;
   relay: string;
   trustedNwcRelay: boolean;
   generalRelay: string;
@@ -359,7 +358,6 @@ export interface InfoResponse {
   };
   searchRelay: string;
   lsps: LSP[];
-  enableMessageboardNwc: boolean;
   workDir: string;
   enablePolling?: boolean;
   // lspService is the attached-lspd status (plan §3.4), present only when an
@@ -734,9 +732,7 @@ export type SetupNodeInfo = Partial<{
 
   lokihubServicesURL?: string;
   relay?: string;
-  messageboardNwcUrl?: string;
   mempoolApi?: string;
-  enableMessageboardNwc?: boolean;
 }>;
 
 export type LSPType = "LSPS1";

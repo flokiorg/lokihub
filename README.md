@@ -154,7 +154,6 @@ The following configuration options can be set as environment variables or in a 
 - `LOKIHUB_SERVICES_URL`: The URL for Lokihub's backend services API.
 - `LOKIHUB_STORE_URL`: The URL for Lokihub's App Store.
 - `ESPLORA_SERVER`: The Flokicoin Esplora server URL.
-- `MESSAGEBOARD_NWC_URL`: The Nostr Wallet Connect URL for the messageboard.
 - `MEMPOOL_API`: The Flokicoin Explorer API URL.
 - `LOG_TO_FILE`: Whether to log to a file.
 - `ENABLE_ADVANCED_SETUP`: Enable advanced setup options.

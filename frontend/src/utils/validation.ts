@@ -1,4 +1,3 @@
-import { nip47 } from "nostr-tools";
 import { toast } from "sonner";
 
 /**
@@ -49,31 +48,6 @@ export const validateHTTPURL = (url: string, name: string): string | null => {
     return `${name} must start with https:// or http://`;
   }
   return null;
-};
-
-export const validateMessageBoardURL = (url: string): string | null => {
-  if (!url) return null;
-  if (!url.startsWith("nostr+walletconnect://")) {
-    return "Messageboard NWC URL must start with nostr+walletconnect://";
-  }
-  try {
-    nip47.parseConnectionString(url);
-    return null;
-  } catch (e) {
-    return "Invalid Messageboard NWC URL. Must be valid nostr+walletconnect://";
-  }
-};
-
-/**
- * @deprecated Use validateMessageBoardURL instead
- */
-export const validateNwc = (url: string): boolean => {
-  const error = validateMessageBoardURL(url);
-  if (error) {
-    toast.error(error);
-    return false;
-  }
-  return true;
 };
 
 export const validateLSPURI = (uri: string): string | null => {

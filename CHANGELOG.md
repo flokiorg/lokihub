@@ -499,6 +499,10 @@ audits of both.
   on-chain send toggle, the `/api/swaps` and `/api/autoswap` routes, the swap
   seed derivation, the `swaps` table, and the `SWAP_SERVICE_URL` / `ENABLE_SWAP`
   settings are all gone. (#189)
+- Removes the message-board feature entirely: the `LightningMessageboardWidget`
+  and its Services/setup configuration, the `messageboardNwcUrl` /
+  `enableMessageboardNwc` settings and info fields, and the
+  `MESSAGEBOARD_NWC_URL` / `ENABLE_MESSAGEBOARD_NWC` settings are all gone. (#191)
 
 ### Fixed
 
