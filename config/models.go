@@ -7,11 +7,7 @@ const (
 )
 
 const (
-	OnchainAddressKey           = "OnchainAddress"
-	AutoSwapBalanceThresholdKey = "AutoSwapBalanceThreshold"
-	AutoSwapAmountKey           = "AutoSwapAmount"
-	AutoSwapDestinationKey      = "AutoSwapDestination"
-	AutoSwapXpubIndexStart      = "AutoSwapXpubIndexStart"
+	OnchainAddressKey = "OnchainAddress"
 )
 
 type AppConfig struct {
@@ -37,12 +33,10 @@ type AppConfig struct {
 	EnableAdvancedSetup bool   `envconfig:"ENABLE_ADVANCED_SETUP" default:"true"`
 	AutoUnlockPassword  string `envconfig:"AUTO_UNLOCK_PASSWORD"`
 	LogDBQueries        bool   `envconfig:"LOG_DB_QUERIES" default:"false"`
-	SwapServiceUrl      string `envconfig:"SWAP_SERVICE_URL"`
 	LokihubServicesURL  string `envconfig:"LOKIHUB_SERVICES_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-services/refs/heads/main"`
 	LokihubStoreURL     string `envconfig:"LOKIHUB_STORE_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"`
 	MessageboardNwcUrl  string `envconfig:"MESSAGEBOARD_NWC_URL"`
 
-	EnableSwap            bool `envconfig:"ENABLE_SWAP" default:"false"`
 	EnableMessageboardNwc bool `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
 
 	// LSP service attach (lspservice, plan §3.2). The Hub becomes the single
@@ -207,8 +201,6 @@ type Config interface {
 	SetLokihubServicesURL(value string) error
 	GetLokihubStoreURL() string
 	SetLokihubStoreURL(value string) error
-	GetSwapServiceURL() string
-	SetSwapServiceURL(value string) error
 	GetMessageboardNwcUrl() string
 	SetMessageboardNwcUrl(value string) error
 	GetRelay() string
@@ -220,8 +212,6 @@ type Config interface {
 	GetSearchRelay() string
 	SetSearchRelay(value string) error
 
-	EnableSwap() bool
-	SetEnableSwap(value bool) error
 	EnableMessageboardNwc() bool
 	SetEnableMessageboardNwc(value bool) error
 	GetDefaultWorkDir() string

@@ -1100,18 +1100,6 @@ func (_mock *MockConfig) SetLokihubServicesURL(value string) error {
 	return r0
 }
 
-// GetSwapServiceURL provides a mock function for the type MockConfig
-func (_mock *MockConfig) GetSwapServiceURL() string {
-	ret := _mock.Called()
-	var r0 string
-	if returnFunc, ok := ret.Get(0).(func() string); ok {
-		r0 = returnFunc()
-	} else {
-		r0 = ret.Get(0).(string)
-	}
-	return r0
-}
-
 // GetMessageboardNwcUrl provides a mock function for the type MockConfig
 func (_mock *MockConfig) GetMessageboardNwcUrl() string {
 	ret := _mock.Called()
@@ -1120,18 +1108,6 @@ func (_mock *MockConfig) GetMessageboardNwcUrl() string {
 		r0 = returnFunc()
 	} else {
 		r0 = ret.Get(0).(string)
-	}
-	return r0
-}
-
-// SetSwapServiceURL provides a mock function for the type MockConfig
-func (_mock *MockConfig) SetSwapServiceURL(value string) error {
-	ret := _mock.Called(value)
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(string) error); ok {
-		r0 = returnFunc(value)
-	} else {
-		r0 = ret.Error(0)
 	}
 	return r0
 }
@@ -1177,50 +1153,6 @@ func (_c *MockConfig_Unlock_Call) Return(err error) *MockConfig_Unlock_Call {
 }
 
 func (_c *MockConfig_Unlock_Call) RunAndReturn(run func(encryptionKey string) error) *MockConfig_Unlock_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// EnableSwap provides a mock function for the type MockConfig
-func (_mock *MockConfig) EnableSwap() bool {
-	ret := _mock.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for EnableSwap")
-	}
-
-	var r0 bool
-	if returnFunc, ok := ret.Get(0).(func() bool); ok {
-		r0 = returnFunc()
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-	return r0
-}
-
-// MockConfig_EnableSwap_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EnableSwap'
-type MockConfig_EnableSwap_Call struct {
-	*mock.Call
-}
-
-// EnableSwap is a helper method to define mock.On call
-func (_e *MockConfig_Expecter) EnableSwap() *MockConfig_EnableSwap_Call {
-	return &MockConfig_EnableSwap_Call{Call: _e.mock.On("EnableSwap")}
-}
-
-func (_c *MockConfig_EnableSwap_Call) Run(run func()) *MockConfig_EnableSwap_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockConfig_EnableSwap_Call) Return(b bool) *MockConfig_EnableSwap_Call {
-	_c.Call.Return(b)
-	return _c
-}
-
-func (_c *MockConfig_EnableSwap_Call) RunAndReturn(run func() bool) *MockConfig_EnableSwap_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1496,51 +1428,6 @@ func (_c *MockConfig_SetMempoolApi_Call) Return(err error) *MockConfig_SetMempoo
 }
 
 func (_c *MockConfig_SetMempoolApi_Call) RunAndReturn(run func(value string) error) *MockConfig_SetMempoolApi_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// SetEnableSwap provides a mock function for the type MockConfig
-func (_mock *MockConfig) SetEnableSwap(value bool) error {
-	ret := _mock.Called(value)
-
-	if len(ret) == 0 {
-		panic("no return value specified for SetEnableSwap")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(bool) error); ok {
-		r0 = returnFunc(value)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockConfig_SetEnableSwap_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetEnableSwap'
-type MockConfig_SetEnableSwap_Call struct {
-	*mock.Call
-}
-
-// SetEnableSwap is a helper method to define mock.On call
-//   - value
-func (_e *MockConfig_Expecter) SetEnableSwap(value interface{}) *MockConfig_SetEnableSwap_Call {
-	return &MockConfig_SetEnableSwap_Call{Call: _e.mock.On("SetEnableSwap", value)}
-}
-
-func (_c *MockConfig_SetEnableSwap_Call) Run(run func(value bool)) *MockConfig_SetEnableSwap_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(bool))
-	})
-	return _c
-}
-
-func (_c *MockConfig_SetEnableSwap_Call) Return(err error) *MockConfig_SetEnableSwap_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockConfig_SetEnableSwap_Call) RunAndReturn(run func(value bool) error) *MockConfig_SetEnableSwap_Call {
 	_c.Call.Return(run)
 	return _c
 }

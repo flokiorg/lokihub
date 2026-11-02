@@ -14,7 +14,6 @@ import (
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/lsps/manager"
-	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 )
 
@@ -34,8 +33,6 @@ type Service interface {
 	GetEventPublisher() events.EventPublisher
 	GetLNClient() lnclient.LNClient
 	GetTransactionsService() transactions.TransactionsService
-	GetSwapsService() swaps.SwapsService
-	InitSwapsService()
 	GetDB() *gorm.DB
 	GetConfig() config.Config
 	GetKeys() keys.Keys

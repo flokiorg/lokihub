@@ -27,7 +27,6 @@ var expectedTables = []string{
 	"request_events",
 	"response_events",
 	"transactions",
-	"swaps",
 	"user_configs",
 	"forwards",
 	"circle_identities",
@@ -308,11 +307,6 @@ func migrateDB(from, to *gorm.DB) error {
 
 	if err := migrateWithdrawTables(from, tx); err != nil {
 		return err
-	}
-
-	logger.Logger.Info().Msg("migrating swaps...")
-	if err := migrateTable[db.Swap](from, tx); err != nil {
-		return fmt.Errorf("failed to migrate swaps: %w", err)
 	}
 
 	logger.Logger.Info().Msg("migrating forwards...")
