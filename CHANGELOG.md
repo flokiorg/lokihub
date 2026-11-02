@@ -1001,6 +1001,10 @@ audits of both.
 
 ### Security
 
+- Rejects stale or replayed LSPS5 webhook notifications: a validly-signed
+  notification is now honoured only inside a freshness window and once per
+  (LSP, signature), so a captured notification can no longer be replayed to
+  re-trigger a wallet sync and UI broadcast. (LOKIHUB-0020)
 - Authenticates the migration backup archive. New backups use a chunked
   AES-256-GCM (AEAD) format keyed by argon2id, so a tampered or bit-flipped
   archive and a wrong password now fail with a clean, detectable error instead
