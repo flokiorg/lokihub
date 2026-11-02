@@ -1008,6 +1008,13 @@ audits of both.
 
 ### Security
 
+- Routes an LNURL `successAction.url` (set by the payee's LNURL-pay server,
+  untrusted) through the same scheme guard (`safeReturnUrl`) as every other
+  externally-supplied navigation before it becomes a link or `window.open`
+  target, so a `javascript:`/`data:` URL is shown as plain text instead of
+  being navigated; also corrects a misspelled `rel="noreferer noopener"` on
+  external links so `noreferrer` actually applies. Defense-in-depth: the prod
+  CSP already blocked the `javascript:` vector. (LOKIHUB-0040)
 - Rejects stale or replayed LSPS5 webhook notifications: a validly-signed
   notification is now honoured only inside a freshness window and once per
   (LSP, signature), so a captured notification can no longer be replayed to

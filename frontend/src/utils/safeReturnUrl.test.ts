@@ -11,6 +11,19 @@ describe("safeReturnUrl", () => {
     );
   });
 
+  // PaymentSuccess routes an LNURL successAction.url (set by the payee's
+  // LNURL-pay server, untrusted) through this guard before it can become an
+  // ExternalLink / window.open target (LOKIHUB-0040).
+  it("rejects a javascript: LNURL successAction url and keeps an https one", () => {
+    expect(safeReturnUrl("javascript:alert(document.cookie)")).toBeUndefined();
+    expect(
+      safeReturnUrl("data:text/html,<script>alert(1)</script>")
+    ).toBeUndefined();
+    expect(safeReturnUrl("https://payee.example/receipt?x=1")).toBe(
+      "https://payee.example/receipt?x=1"
+    );
+  });
+
   it("refuses anything that runs in this app's page", () => {
     for (const bad of [
       "javascript:alert(1)",
