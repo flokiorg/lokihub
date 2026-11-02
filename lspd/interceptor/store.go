@@ -12,6 +12,19 @@ type InterceptStore interface {
 	GetLsps2Order(scid uint64) (*core.Lsps2BuyRegistration, error)
 	GetPaidLsps1Order(clientNodeId string) (*core.Lsps1Order, error)
 
+	// UpdateLsps1OrderFunding records a channel point as an LSPS1 order's
+	// funding and UpdateLsps1OrderState compare-and-set transitions its
+	// state. FLSPD-0015: after the interceptor opens a JIT channel for a PAID
+	// LSPS1 order (the GetPaidLsps1Order reconnect-fallback path), it must
+	// mark the lsps1.orders row funded + COMPLETED -- the LSPS1 analogue of
+	// the LSPS2 ClaimLsps2Registration/ConsumeLsps2Registration gate -- so
+	// GetPaidLsps1Order stops returning it and a later HTLC or recovery pass
+	// cannot open a second channel for the same paid order. UpdateLsps1Order-
+	// Funding is a guarded first-write (FLSPD-0021): claimed=false means the
+	// order was already funded or the point is claimed by another order.
+	UpdateLsps1OrderFunding(orderId string, fundingTxid string, fundingOutpoint int) (bool, error)
+	UpdateLsps1OrderState(orderId, newState, newPaymentState, expectedCurrentState string) (bool, error)
+
 	// The four methods below implement Phase 7's fix for F-15/F-22 (a
 	// single LSPS2 buy registration could otherwise JIT-open more than one
 	// real channel): a 3-state lifecycle (ACTIVE->OPENING->CONSUMED),

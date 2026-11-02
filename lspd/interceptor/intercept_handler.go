@@ -14,6 +14,7 @@ import (
 	"github.com/flokiorg/lokihub/lspd/core"
 	"github.com/flokiorg/lokihub/lspd/history"
 	"github.com/flokiorg/lokihub/lspd/lightning"
+	"github.com/flokiorg/lokihub/lspd/lsps"
 	"github.com/flokiorg/lokihub/lspd/notifications"
 	"github.com/flokiorg/lokihub/lspd/platform/config"
 	"github.com/flokiorg/lokihub/lspd/ports"
@@ -395,6 +396,31 @@ func (i *Interceptor) Intercept(req core.InterceptRequest) core.InterceptResult 
 				}
 				if _, consumeErr := i.store.ConsumeLsps2Registration(data.lsps2Scid, channelPoint, uint64(incomingAmountMloki), feeMloki); consumeErr != nil {
 					log.Error().Err(consumeErr).Msgf("Intercept: paymentHash=%s failed to consume LSPS2 registration scid=%d after successful channel open", reqPaymentHashStr, data.lsps2Scid)
+				}
+			}
+
+			// FLSPD-0015: the LSPS1 analogue of the LSPS2 Consume gate above.
+			// For a JIT channel opened against a PAID LSPS1 order (the
+			// GetPaidLsps1Order reconnect-fallback path in resolvePayment),
+			// SetFundingTx inside openChannel recorded the funding only on the
+			// payments row -- the lsps1.orders row stays PAID/PAID with
+			// funding_txid NULL, so GetPaidLsps1Order keeps returning it and a
+			// later HTLC or recoverStuckOrders pass would open ANOTHER channel
+			// for the same single fee. Mark the order funded + COMPLETED so it
+			// can't be re-opened. Non-fatal on error: the channel already
+			// opened and capital is committed, so failing the HTLC now would
+			// be strictly worse; UpdateLsps1OrderFunding's own first-write
+			// guard (FLSPD-0021) keeps a retry idempotent.
+			if data.tag != nil && *data.tag == lsps1JitTag && data.orderId != "" {
+				claimed, fundErr := i.store.UpdateLsps1OrderFunding(data.orderId, channelPoint.Hash.String(), int(channelPoint.Index))
+				if fundErr != nil {
+					log.Error().Err(fundErr).Msgf("Intercept: paymentHash=%s failed to record LSPS1 order %s funding after successful channel open", reqPaymentHashStr, data.orderId)
+				} else if claimed {
+					if _, stateErr := i.store.UpdateLsps1OrderState(data.orderId, string(lsps.Lsps1OrderStateCompleted), string(lsps.Lsps1PaymentStatePaid), string(lsps.Lsps1OrderStatePaid)); stateErr != nil {
+						log.Error().Err(stateErr).Msgf("Intercept: paymentHash=%s failed to mark LSPS1 order %s COMPLETED after recording funding", reqPaymentHashStr, data.orderId)
+					}
+				} else {
+					log.Warn().Msgf("Intercept: paymentHash=%s LSPS1 order %s funding already recorded or channel point claimed by another order, not re-opening", reqPaymentHashStr, data.orderId)
 				}
 			}
 		}
@@ -806,28 +832,31 @@ func routingPolicyFor(cfg *config.NodeConfig, isJit bool) *lightning.RoutingPoli
 }
 
 // computeJitOutgoingAmount derives the amount to forward for an LSPS2 JIT
-// payment, given the gross amount the sender paid (paymentSizeMloki) and
-// the opening-fee params. Lightning fees are charged on the forwarded
-// (outgoing) amount, so given input = outgoing + outgoing*rate, solving
-// for outgoing yields outgoing = input / (1 + rate). minFeeMloki acts as
-// a floor: if the proportional fee implied by that formula falls below
-// it, the floor is charged instead and outgoing is reduced accordingly.
-func computeJitOutgoingAmount(paymentSizeMloki, minFeeMloki int64, proportional uint32) (outgoing int64, fee int64) {
-	rate := float64(proportional) / 1_000_000.0
-
-	outgoing = int64(float64(paymentSizeMloki) / (1.0 + rate))
-	fee = paymentSizeMloki - outgoing
-
-	if fee < minFeeMloki {
-		fee = minFeeMloki
-		outgoing = paymentSizeMloki - fee
+// payment: the BLIP-52 opening_fee is computed on the GROSS payment size via
+// lsps.ComputeOpeningFee -- the exact same function (and therefore the exact
+// same fee) the buy-time quote, capacity sizing and liquidity reservation
+// already use -- and the LSP forwards payment_size - opening_fee.
+//
+// FLSPD-0013: this previously used a gross-up formula
+// (outgoing = payment_size / (1 + rate); fee = payment_size - outgoing),
+// which treats `proportional` as a fee on the OUTGOING amount and yields
+// fee = size*p/(1e6+p) instead of BLIP-52's mandated size*p/1e6 floored at
+// min_fee. The LSP then collected LESS than the fee it quoted and reserved at
+// buy time -- a silent, deterministic per-open revenue shortfall. Computing
+// the fee with ComputeOpeningFee makes the JIT fee identical to the
+// quoted/reserved fee by construction, so the two can never drift again.
+func computeJitOutgoingAmount(paymentSizeMloki, minFeeMloki int64, proportional uint32) (outgoing int64, fee int64, err error) {
+	feeU, err := lsps.ComputeOpeningFee(uint64(paymentSizeMloki), uint64(minFeeMloki), uint64(proportional))
+	if err != nil {
+		return 0, 0, err
 	}
-
+	fee = int64(feeU)
+	outgoing = paymentSizeMloki - fee
 	if outgoing < 0 {
 		outgoing = 0
 	}
 
-	return outgoing, fee
+	return outgoing, fee, nil
 }
 
 type interceptData struct {
@@ -889,6 +918,21 @@ func (i *Interceptor) resolvePayment(req core.InterceptRequest) (*interceptData,
 			paymentSize := int64(req.IncomingAmountMloki)
 			if lsps2Order.PaymentSizeMloki != nil {
 				paymentSize = int64(*lsps2Order.PaymentSizeMloki)
+				// FLSPD-0014: fixed-size mode reserved capacity sized against
+				// exactly this payment_size at buy time (ReserveLsps2Buy).
+				// BLIP-52 treats payment_size_msat as the exact amount the
+				// payer sends, so an incoming HTLC larger than it would open
+				// a channel sized on the actual (larger) incoming amount
+				// while the reserved-liquidity ledger (F-16/F-20) still only
+				// counts payment_size for this registration -- under-counting
+				// real committed capital and letting concurrent orders
+				// over-commit the wallet. Reject the over-payment, mirroring
+				// the variable-mode worst-case upper cap below (the
+				// underpayment floor is enforced separately a few lines on).
+				if req.IncomingAmountMloki > *lsps2Order.PaymentSizeMloki {
+					log.Warn().Msgf("LSPS2 JIT: incoming amount %d exceeds fixed payment size %d", req.IncomingAmountMloki, *lsps2Order.PaymentSizeMloki)
+					return nil, fmt.Errorf("incoming amount %d exceeds fixed payment size %d", req.IncomingAmountMloki, *lsps2Order.PaymentSizeMloki)
+				}
 			} else if lsps2Order.MaxPaymentSizeMloki != nil && req.IncomingAmountMloki > *lsps2Order.MaxPaymentSizeMloki {
 				// F-22 (redemption-time half): in variable-size mode, the
 				// real incoming HTLC amount was only ever bounded by an
@@ -906,7 +950,11 @@ func (i *Interceptor) resolvePayment(req core.InterceptRequest) (*interceptData,
 			minFee := int64(lsps2Order.ParamsMinFeeMloki)
 
 			var fee int64
-			outgoingAmountMloki, fee = computeJitOutgoingAmount(paymentSize, minFee, lsps2Order.ParamsProportional)
+			outgoingAmountMloki, fee, err = computeJitOutgoingAmount(paymentSize, minFee, lsps2Order.ParamsProportional)
+			if err != nil {
+				log.Error().Err(err).Msgf("LSPS2 JIT: failed to compute opening fee for payment size %d", paymentSize)
+				return nil, err
+			}
 
 			log.Info().Msgf("LSPS2 JIT: PaymentSize=%d, Fee=%d, Outgoing=%d", paymentSize, fee, outgoingAmountMloki)
 

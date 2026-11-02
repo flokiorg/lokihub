@@ -244,13 +244,18 @@ func CreateJitInvoice(ctx context.Context, clientRaw lnrpc.LightningClient, buyR
 		return "", nil, fmt.Errorf("parsing min_fee_mloki: %w", err)
 	}
 
-	rate := float64(feeParams.Proportional) / 1_000_000.0
-	netMloki := uint64(float64(paymentSizeMloki) / (1.0 + rate))
-	fee := paymentSizeMloki - netMloki
-	if fee < minFeeMloki {
-		fee = minFeeMloki
-		netMloki = paymentSizeMloki - fee
+	// FLSPD-0013: the LSP computes the opening fee on the GROSS payment size
+	// via lsps.ComputeOpeningFee (BLIP-52's ((size*proportional)+999999)/1e6,
+	// floored at min_fee) and forwards payment_size - opening_fee. Derive the
+	// invoice's net amount and the route hint's fee from the exact same
+	// function so this wallet simulation matches the LSP's split -- using the
+	// old gross-up formula here would make the client expect a slightly larger
+	// forwarded amount than the (now spec-correct) LSP actually forwards.
+	fee, err := lsps.ComputeOpeningFee(paymentSizeMloki, minFeeMloki, uint64(feeParams.Proportional))
+	if err != nil {
+		return "", nil, fmt.Errorf("computing opening fee: %w", err)
 	}
+	netMloki := paymentSizeMloki - fee
 
 	inv := &lnrpc.Invoice{
 		Memo:      memo,
