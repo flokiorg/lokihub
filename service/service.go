@@ -24,10 +24,10 @@ import (
 	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -50,7 +50,7 @@ type service struct {
 	db                  *gorm.DB
 	lnClient            lnclient.LNClient
 	transactionsService transactions.TransactionsService
-	hubInfoSvc             hubinfo.HubInfoService
+	hubInfoSvc          hubinfo.HubInfoService
 	rateOracle          *ratesoracle.Oracle
 	appStoreSvc         appstore.Service
 	eventPublisher      events.EventPublisher
@@ -190,7 +190,11 @@ func NewService(ctx context.Context) (*service, error) {
 
 	keys := keys.NewKeys()
 
-	rateOracle := ratesoracle.FromSeed(seed.Get())
+	// The fiat-rate oracle subscribes ONLY over the relays the user selected
+	// under Settings > Services (GetGeneralRelayUrls) — never the seed's own
+	// relay list. With no selected relays it is effectively disabled and the UI
+	// degrades to sats/FLC. Its npub/kind/d-tag still come from the seed.
+	rateOracle := ratesoracle.FromSeed(seed.Get(), cfg.GetGeneralRelayUrls)
 	hubInfoSvc := hubinfo.NewHubInfoService(cfg, rateOracle)
 
 	transactionsSvc := transactions.NewTransactionsService(gormDB, eventPublisher)
@@ -212,7 +216,7 @@ func NewService(ctx context.Context) (*service, error) {
 		cfg:            cfg,
 		ctx:            ctx,
 		eventPublisher: eventPublisher,
-		hubInfoSvc:        hubInfoSvc,
+		hubInfoSvc:     hubInfoSvc,
 		rateOracle:     rateOracle,
 
 		nip47Service:        nip47.NewNip47Service(gormDB, cfg, keys, eventPublisher, socialCache),

@@ -519,8 +519,10 @@ func (s *nostrSocialCache) queryAndStore(ctx context.Context, pool *nostr.Simple
 	selected, resolved := s.resolve(events, provider, d)
 
 	if !resolved {
-		// A caller-side cancellation is not a confirmed miss: no warning.
-		if ctx.Err() == nil {
+		// A caller-side cancellation is not a confirmed miss: no warning. Nor is
+		// an empty relay set — with no user-selected General relays there was
+		// nowhere to look, which is an expected opt-in state, not a failure.
+		if ctx.Err() == nil && len(relayUrls) > 0 {
 			logger.Logger.Warn().Str("address", followSetKey(provider, d)).Strs("relays", relayUrls).
 				Msg("No follow set version this hub may adopt was found")
 		}
@@ -851,6 +853,16 @@ func StartNostrSocialCacheRefresher(ctx context.Context, gormDB *gorm.DB, cache 
 // resume from on the next tick, wrapping to 0 at the end of the table (or on
 // a query error). Identities sharing one set address are refreshed once.
 func runSocialCacheRefresh(ctx context.Context, gormDB *gorm.DB, cache *nostrSocialCache, pool *nostr.SimplePool, startOffset int) int {
+	// Strictly opt-in: with no user-selected General relays there is nowhere to
+	// read follow sets from, so the whole sweep is skipped (no DB scan, no
+	// relay round-trips, no "no follow set found" noise). The refresher keeps
+	// running on its ticker, so a relay selected later resumes the sweep. Note
+	// cache.ready is still flipped by the caller after this returns, so
+	// IsAuthorized's startup gate never hangs on a hub with no relays.
+	if len(cache.cfg.GetGeneralRelayUrls()) == 0 {
+		return 0
+	}
+
 	offset := startOffset
 	for batchNum := 0; batchNum < maxRefresherBatchesPerTick; batchNum++ {
 		identities, err := queries.GetFollowSetCircleIdentities(gormDB, refresherBatchSize, offset)
