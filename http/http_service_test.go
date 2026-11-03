@@ -38,7 +38,7 @@ func TestUnlock_IncorrectPassword(t *testing.T) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -72,7 +72,7 @@ func TestUnlock_UnknownPermission(t *testing.T) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -105,7 +105,7 @@ func TestGetApps_NoToken(t *testing.T) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -136,7 +136,7 @@ func TestGetApps_ReadonlyPermission(t *testing.T) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -189,7 +189,7 @@ func TestGetApps_FullPermission(t *testing.T) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -240,7 +240,7 @@ func TestCreateApp_NoToken(t *testing.T) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -279,7 +279,7 @@ func TestCreateApp_FullPermission(t *testing.T) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mockKeys)
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -334,7 +334,7 @@ func TestEventRoute_RegisteredAtApiEvent(t *testing.T) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -376,7 +376,7 @@ func TestCreateApp_ReadonlyPermission(t *testing.T) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mockKeys)
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)

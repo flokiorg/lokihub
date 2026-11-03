@@ -979,7 +979,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
-	case "/api/loki/info":
+	case "/api/hub/info":
 		info, err := app.svc.GetLokiSvc().GetInfo(ctx)
 		if err != nil {
 			logger.Logger.Error().Err(err).
@@ -991,7 +991,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 		return WailsRequestRouterResponse{Body: info, Error: ""}
 
-	case "/api/loki/faq":
+	case "/api/hub/faq":
 		faq, err := app.svc.GetLokiSvc().GetFAQ(ctx)
 		if err != nil {
 			logger.Logger.Error().Err(err).
@@ -1003,8 +1003,8 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 		return WailsRequestRouterResponse{Body: faq, Error: ""}
 
-	case "/api/loki/rates":
-		rate, err := app.svc.GetLokiSvc().GetFlokicoinRate(ctx)
+	case "/api/rates":
+		rate, err := app.svc.GetLokiSvc().GetFiatRate(ctx)
 		if err != nil {
 			logger.Logger.Error().Err(err).
 				Str("route", route).
