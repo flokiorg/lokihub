@@ -308,20 +308,13 @@ func (cfg *config) Unlock(encryptionKey string) error {
 		return err
 	}
 
-	// Seed the default General relay list on first run only. SetIgnore is a
-	// no-op if "GeneralRelay" already exists, even if the user has since
-	// cleared it to empty, so this never overwrites an explicit user choice.
-	if err := cfg.SetIgnore("GeneralRelay", strings.Join(constants.DefaultGeneralRelays, ","), ""); err != nil {
-		logger.Logger.Error().Err(err).Msg("failed to seed default GeneralRelay")
-		return err
-	}
-
-	// Seed the default Search relay list on first run only, same as GeneralRelay.
-	if err := cfg.SetIgnore("SearchRelay", strings.Join(constants.DefaultSearchRelays, ","), ""); err != nil {
-		logger.Logger.Error().Err(err).Msg("failed to seed default SearchRelay")
-		return err
-	}
-
+	// No relays are seeded on first run. lokihub makes no outbound nostr-relay
+	// connection to a relay the user has not explicitly selected under
+	// Settings > Services: a fresh hub starts with empty GeneralRelay/SearchRelay
+	// config and connects to nothing for general social data until the user
+	// activates a relay from the seed's suggestion catalogue. The common public
+	// relays remain available as one-click suggestions (seed.yaml nostr_relay,
+	// served by api.GetServices), but suggesting is not selecting.
 	return nil
 }
 

@@ -134,7 +134,13 @@ func (s *Service) readRelays() []string {
 func (s *Service) Discover(ctx context.Context) error {
 	relays := s.readRelays()
 	if len(relays) == 0 {
-		return errors.New("no relays to read LSP announcements from")
+		// Strictly opt-in: with no user-selected relays there is nowhere to read
+		// announcements from, so there is no discovery pass and the catalogue
+		// stays empty. A quiet no-op, not an error — the refresher (Run) calls
+		// this on a ticker and an error here would log a warning every cycle on
+		// a hub the user simply has not pointed at any relay yet.
+		logger.Logger.Debug().Msg("LSP catalogue: no user-selected relays; skipping discovery")
+		return nil
 	}
 	evs, err := s.d.Fetcher.Fetch(ctx, relays, nip01.SubscriptionFilter{Kinds: []int{niplsp.Kind}, Limit: MaxAnnouncements})
 	if err != nil {

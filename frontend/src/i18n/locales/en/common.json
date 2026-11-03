@@ -77,6 +77,9 @@
     "failedToSave": "Failed to save",
     "tryAgain": "Please try again"
   },
+  "relayHint": {
+    "none": "No Nostr relay is selected. Choose a relay under Settings → Services to load profiles, notes and circles."
+  },
   "loading": "Loading...",
   "appName": "Lokihub",
   "criticalError": {

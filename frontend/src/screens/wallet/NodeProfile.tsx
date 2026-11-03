@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { IdentityRow, NodeIdentityRows } from "src/components/NodeIdentityRows";
 import { NostrAvatar } from "src/components/NostrAvatar";
+import { RelayHint } from "src/components/RelayHint";
 import {
   Accordion,
   AccordionContent,
@@ -172,6 +173,8 @@ export default function NodeProfile() {
         title="Profile"
         description="Your node's Nostr identity and published profile"
       />
+
+      <RelayHint />
 
       {!isEditing ? (
         <>
