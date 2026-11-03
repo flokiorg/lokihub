@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { IdentityRow, NodeIdentityRows } from "src/components/NodeIdentityRows";
 import { NostrAvatar } from "src/components/NostrAvatar";
+import { RelayHint } from "src/components/RelayHint";
 import {
   Accordion,
   AccordionContent,
@@ -19,6 +20,7 @@ import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { Skeleton } from "src/components/ui/skeleton";
 import { Textarea } from "src/components/ui/textarea";
+import { useImageProxySrc } from "src/hooks/useImageProxySrc";
 import { useNodeConnectionInfo } from "src/hooks/useNodeConnectionInfo";
 import { useNodeIdentity } from "src/hooks/useNodeIdentity";
 import { useNostrNotes } from "src/hooks/useNostrNotes";
@@ -63,6 +65,13 @@ export default function NodeProfile() {
     loadMore: loadMoreNotes,
     addNote,
   } = useNostrNotes(nodeIdentity.nostrHex);
+
+  // The banner is a remote image URL like an avatar, so it goes through the
+  // same image-proxy gating (P0-B): "off" (default) shows no banner, "direct"
+  // loads the source, "proxy" routes it through the user's template. This
+  // closes the one path that used to load profile.banner straight from its
+  // host.
+  const bannerSrc = useImageProxySrc(profile?.banner);
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -173,6 +182,8 @@ export default function NodeProfile() {
         description="Your node's Nostr identity and published profile"
       />
 
+      <RelayHint />
+
       {!isEditing ? (
         <>
           {/* Banner, with the avatar pulled up over its bottom edge — same
@@ -183,8 +194,8 @@ export default function NodeProfile() {
             <div
               className="h-40 w-full rounded-t-md bg-cover bg-center"
               style={{
-                backgroundImage: profile?.banner
-                  ? `url(${profile.banner})`
+                backgroundImage: bannerSrc
+                  ? `url(${bannerSrc})`
                   : "linear-gradient(135deg, var(--muted) 0%, transparent 100%)",
               }}
             />

@@ -35,9 +35,15 @@ func NewAppStoreService(cfg config.Config) Service {
 
 func (s *appStoreService) Start() {
 	go func() {
-		// Initial sync
+		// Initial sync. Sync() is a guaranteed no-op (no outbound request)
+		// while no store URL is configured, so this is safe to call out of the
+		// box — nothing leaves the host until the operator selects a store
+		// under Settings → Services.
 		s.Sync()
 
+		// The periodic tick keeps running so that an operator who enables the
+		// app store at runtime gets a sync without restarting the hub; each
+		// tick is likewise a no-op while the store URL is empty.
 		ticker := time.NewTicker(constants.APP_STORE_SYNC_INTERVAL)
 		defer ticker.Stop()
 
@@ -62,6 +68,14 @@ func (s *appStoreService) GetLogoPath(appId string) (string, error) {
 }
 
 func (s *appStoreService) Sync() {
+	// The app store is OFF until the operator selects a store URL under
+	// Settings → Services. With none configured, no request is ever made —
+	// same shape as the fiat rate degrading when no oracle is reachable.
+	if s.cfg.GetLokihubStoreURL() == "" {
+		logger.Logger.Debug().Msg("App Store sync skipped: no store URL configured (configure one under Settings → Services)")
+		return
+	}
+
 	logger.Logger.Info().Msg("App Store Sync started")
 
 	// 1. Fetch remote apps

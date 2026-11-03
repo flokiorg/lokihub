@@ -281,7 +281,11 @@ audits of both.
   `LokiService` → `HubInfoService`. The native currency unit (`loki`/`mloki`,
   sats/FLC) and the external "Loki Account" link feature (`/api/loki/unlink-account`)
   keep their chain-specific names — they are not branding. Frontend + backend
-  change together; the only client is the bundled UI.
+  change together; the only client is the bundled UI. A follow-up also renamed
+  the internal `GetLokiSvc()` accessor to `GetHubInfoSvc()` and genericised the
+  service's own log messages (no functional change).
+
+- Breaking: a Circle Wallet's membership is decided by resolutions, no longer
   re-checked on every call (NIP-CW §Membership): each successful resolution of
   the circle's follow set (nmilat's `ResolveFollowSet`: the newest signed
   version, one dated more than 15 minutes ahead ignored, one older than the
@@ -1034,6 +1038,22 @@ audits of both.
   that period; it counted against neither, so it escaped the budget. (#148)
 
 ### Security
+
+- Breaking: lokihub no longer makes any outbound connection to an external URL
+  unless the user selected it under Settings → Services — nothing is hardcoded,
+  not even relays. The seed is only a suggestion catalogue; a fresh hub connects
+  to nothing until the user picks services, degrading gracefully (empty states,
+  not errors). Specifically: (a) removed the hardcoded default relay lists and
+  their first-run seeding — relays, and the NIP-78 fiat-rate oracle, connect only
+  over user-selected relays (`enableOutboxModel` off, so the browser never dials a
+  pubkey's NIP-65 relays either); (b) profile images (avatars and the node banner)
+  are off by default and show 2-letter initials — the user chooses, under
+  Settings → Services → Image proxy, between `off` / `direct` / a `proxy` URL
+  template (`{url}` or `{b64url}`); (c) NIP-05 is verified on an explicit user
+  action instead of auto-fetching `.well-known/nostr.json` for every visible
+  profile; (d) the app store syncs only a user-selected store URL (no hardcoded
+  default, no startup/periodic fetch while unset); (e) the channel-closed event's
+  explorer link is built from the user-selected explorer, omitted if none.
 
 - Posts the app-connection success message to the opener at the explicit web
   origin derived from the validated `return_to`, never a wildcard `"*"`. A

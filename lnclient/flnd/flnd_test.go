@@ -59,7 +59,10 @@ func TestFLNDConnection(t *testing.T) {
 	t.Logf("Connecting to FLND at %s", flndAddress)
 
 	t.Log("Skipping cert check and using insecure connection due to cert parsing issues in test env")
-	flndService, err := NewFLNDService(ctx, eventPublisher, flndAddress, "", lndMacaroon)
+	// cfg is nil here: this integration test doesn't exercise explorer
+	// deep-link building (the channel-closed path), and counterpartyNodeURL
+	// nil-guards cfg.
+	flndService, err := NewFLNDService(ctx, nil, eventPublisher, flndAddress, "", lndMacaroon)
 	require.NoError(t, err, "NewFLNDService should not error")
 	require.NotNil(t, flndService, "FLNDService should not be nil")
 

@@ -4,10 +4,10 @@ import { compareVersions } from "src/utils/compareVersions";
 
 export function useBanner() {
   const { data: info } = useInfo();
-  const { data: lokiInfo } = useHubInfo();
+  const { data: hubInfo } = useHubInfo();
 
   const currentVersion = info?.version;
-  const latestVersion = lokiInfo?.version;
+  const latestVersion = hubInfo?.version;
 
   // Check if user has dismissed this specific version
   const dismissedVersion =

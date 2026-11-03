@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -308,20 +309,13 @@ func (cfg *config) Unlock(encryptionKey string) error {
 		return err
 	}
 
-	// Seed the default General relay list on first run only. SetIgnore is a
-	// no-op if "GeneralRelay" already exists, even if the user has since
-	// cleared it to empty, so this never overwrites an explicit user choice.
-	if err := cfg.SetIgnore("GeneralRelay", strings.Join(constants.DefaultGeneralRelays, ","), ""); err != nil {
-		logger.Logger.Error().Err(err).Msg("failed to seed default GeneralRelay")
-		return err
-	}
-
-	// Seed the default Search relay list on first run only, same as GeneralRelay.
-	if err := cfg.SetIgnore("SearchRelay", strings.Join(constants.DefaultSearchRelays, ","), ""); err != nil {
-		logger.Logger.Error().Err(err).Msg("failed to seed default SearchRelay")
-		return err
-	}
-
+	// No relays are seeded on first run. lokihub makes no outbound nostr-relay
+	// connection to a relay the user has not explicitly selected under
+	// Settings > Services: a fresh hub starts with empty GeneralRelay/SearchRelay
+	// config and connects to nothing for general social data until the user
+	// activates a relay from the seed's suggestion catalogue. The common public
+	// relays remain available as one-click suggestions (seed.yaml nostr_relay,
+	// served by api.GetServices), but suggesting is not selecting.
 	return nil
 }
 
@@ -715,6 +709,113 @@ func (cfg *config) SetFlokicoinDisplayFormat(value string) error {
 	return nil
 }
 
+// Profile-image gating (P0-B). The hub never loads an external profile image
+// unless the user opts in: by default avatars show 2-letter initials and the
+// node banner shows nothing. The image-proxy mode is the user's single choice
+// of how (if at all) to load profile.picture/profile.banner.
+const (
+	ImageProxyModeOff    = "off"
+	ImageProxyModeDirect = "direct"
+	ImageProxyModeProxy  = "proxy"
+)
+
+const defaultImageProxyMode = ImageProxyModeOff
+
+// GetImageProxyMode returns the profile-image loading mode, defaulting to
+// "off" so no external media is ever fetched until the user opts in.
+func (cfg *config) GetImageProxyMode() string {
+	mode, err := cfg.Get("ImageProxyMode", "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch image proxy mode")
+		return defaultImageProxyMode
+	}
+	if mode == "" {
+		return defaultImageProxyMode
+	}
+	return mode
+}
+
+// SetImageProxyMode records the profile-image loading mode. An empty value
+// resets to the "off" default; any other value must be one of off/direct/proxy.
+func (cfg *config) SetImageProxyMode(value string) error {
+	if value == "" {
+		value = defaultImageProxyMode
+	}
+	if value != ImageProxyModeOff && value != ImageProxyModeDirect && value != ImageProxyModeProxy {
+		return fmt.Errorf("image proxy mode must be '%s', '%s' or '%s'", ImageProxyModeOff, ImageProxyModeDirect, ImageProxyModeProxy)
+	}
+	if err := cfg.SetUpdate("ImageProxyMode", value, ""); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to update image proxy mode")
+		return err
+	}
+	return nil
+}
+
+// GetImageProxyTemplate returns the user's image-proxy URL template, used only
+// in "proxy" mode. Empty when unset.
+func (cfg *config) GetImageProxyTemplate() string {
+	tpl, err := cfg.Get("ImageProxyTemplate", "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch image proxy template")
+	}
+	return tpl
+}
+
+// SetImageProxyTemplate records the image-proxy URL template. An empty value
+// clears it; a non-empty value must satisfy ValidateImageProxyTemplate.
+func (cfg *config) SetImageProxyTemplate(value string) error {
+	value = strings.TrimSpace(value)
+	if value != "" {
+		if err := ValidateImageProxyTemplate(value); err != nil {
+			return err
+		}
+	}
+	if err := cfg.SetUpdate("ImageProxyTemplate", value, ""); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to update image proxy template")
+		return err
+	}
+	return nil
+}
+
+// ValidateImageProxyTemplate enforces the image-proxy template contract: it must
+// contain exactly ONE placeholder — either {url} (the source URL,
+// percent-encoded by the client) or {b64url} (the source URL, base64url) — and,
+// with the placeholder filled, resolve to either a valid http(s) URL or a
+// same-origin /api/... path (the built-in hardened proxy). This runs on set so a
+// hub never stores a template that could never produce a usable image URL.
+func ValidateImageProxyTemplate(template string) error {
+	urlCount := strings.Count(template, "{url}")
+	b64Count := strings.Count(template, "{b64url}")
+	if urlCount+b64Count != 1 {
+		return errors.New("image proxy template must contain exactly one of {url} or {b64url}")
+	}
+
+	// Fill the placeholder with a representative encoded value and check the
+	// resulting URL shape. The sample for {url} is percent-encoded and the one
+	// for {b64url} is base64url, matching how the client substitutes them.
+	var sample string
+	if urlCount == 1 {
+		sample = strings.Replace(template, "{url}", "https%3A%2F%2Fexample.com%2Fa.png", 1)
+	} else {
+		sample = strings.Replace(template, "{b64url}", "aHR0cHM6Ly9leGFtcGxlLmNvbS9hLnBuZw", 1)
+	}
+
+	// A same-origin absolute path (the built-in /api/circle/avatar-proxy proxy
+	// is offered as a suggestion) is accepted as long as it parses.
+	if strings.HasPrefix(sample, "/api/") {
+		if _, err := url.Parse(sample); err != nil {
+			return errors.New("image proxy template is not a valid /api/... path")
+		}
+		return nil
+	}
+
+	parsed, err := url.Parse(sample)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return errors.New("image proxy template must be an http(s) URL or a same-origin /api/... path")
+	}
+	return nil
+}
+
 func (cfg *config) GetLokihubStoreURL() string {
 	url, err := cfg.Get("LokihubStoreURL", "")
 	if err != nil {
@@ -726,10 +827,10 @@ func (cfg *config) GetLokihubStoreURL() string {
 	return cfg.Env.LokihubStoreURL
 }
 
+// SetLokihubStoreURL deliberately allows an empty value: an empty app-store URL
+// is a valid, user-chosen state that turns the app store OFF (no sync, no
+// fetch), mirroring SetGeneralRelay/SetSearchRelay.
 func (cfg *config) SetLokihubStoreURL(value string) error {
-	if value == "" {
-		return errors.New("LokihubStoreURL cannot be empty")
-	}
 	err := cfg.SetUpdate("LokihubStoreURL", value, "")
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to update LokihubStoreURL")

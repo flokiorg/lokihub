@@ -271,23 +271,11 @@ const DEFAULT_CASH_MIN_TRANSFER_MLOKI = 1000
 // the Hub answering for bills nobody is still asking about. 0 disables it.
 const DEFAULT_CASH_SPENT_RETENTION_SECS = 15 * 24 * 60 * 60
 
-// DefaultGeneralRelays seeds the "GeneralRelay" config key on first run.
-// These relays are used to fetch general Nostr social data — profiles,
-// notes, and events, including Circle contact lists (kind:0/kind:1/kind:3) —
-// and are independent of the NWC "Relay" config.
-var DefaultGeneralRelays = []string{
-	"wss://relay.damus.io",
-	"wss://relay.primal.net",
-	"wss://nos.lol",
-	"wss://relay.ohstr.com",
-}
-
-// DefaultSearchRelays seeds the "SearchRelay" config key on first run. These
-// relays are used only for NIP-50 search queries and are independent of both
-// the NWC "Relay" config and "GeneralRelay".
-var DefaultSearchRelays = []string{
-	"wss://relay.ohstr.com",
-}
+// No relay URLs are hardcoded. lokihub connects only to relays the user has
+// explicitly selected under Settings > Services (GeneralRelay/SearchRelay
+// config), seeded from the suggestion catalogue in seed.yaml (nostr_relay) —
+// never auto-seeded on first run. A hub with no selected relays connects to
+// nothing for general social data and degrades gracefully.
 
 // Additional NIP-47 error codes used by new controllers.
 const (

@@ -33,7 +33,12 @@ type AppConfig struct {
 	EnableAdvancedSetup bool   `envconfig:"ENABLE_ADVANCED_SETUP" default:"true"`
 	AutoUnlockPassword  string `envconfig:"AUTO_UNLOCK_PASSWORD"`
 	LogDBQueries        bool   `envconfig:"LOG_DB_QUERIES" default:"false"`
-	LokihubStoreURL     string `envconfig:"LOKIHUB_STORE_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"`
+	// LokihubStoreURL is the app-store base URL. Empty by default — the app
+	// store is OFF (no startup sync, no periodic sync, no fetch) until the
+	// operator selects a store under Settings → Services. The former hardcoded
+	// raw.githubusercontent default now lives only as a *suggested* value in the
+	// service catalogue (seed.yaml), inactive until picked.
+	LokihubStoreURL string `envconfig:"LOKIHUB_STORE_URL"`
 
 	// LSP service attach (lspservice, plan §3.2). The Hub becomes the single
 	// privileged client of a separately-deployed lspd daemon's NIP-98 JSON-RPC
@@ -193,6 +198,14 @@ type Config interface {
 	SetCurrency(value string) error
 	GetFlokicoinDisplayFormat() string
 	SetFlokicoinDisplayFormat(value string) error
+	// Profile-image gating (P0-B). GetImageProxyMode is one of "off"
+	// (default), "direct" or "proxy"; GetImageProxyTemplate is the user's URL
+	// template used only in "proxy" mode. See config.ValidateImageProxyTemplate
+	// for the template contract.
+	GetImageProxyMode() string
+	SetImageProxyMode(value string) error
+	GetImageProxyTemplate() string
+	SetImageProxyTemplate(value string) error
 	GetLokihubStoreURL() string
 	SetLokihubStoreURL(value string) error
 	GetRelay() string
