@@ -4,13 +4,13 @@ import ExternalLink from "src/components/ExternalLink";
 import { useHubInfo } from "src/hooks/useHubInfo";
 
 export function Banner({ onDismiss }: { onDismiss: () => void }) {
-  const { data: lokiInfo } = useHubInfo();
-  if (!lokiInfo) {
+  const { data: hubInfo } = useHubInfo();
+  if (!hubInfo) {
     return null;
   }
 
   // Strip 'v' prefix from version for the URL
-  const versionForUrl = lokiInfo.version.replace(/^v/, "");
+  const versionForUrl = hubInfo.version.replace(/^v/, "");
   const releaseUrl = `https://docs.flokicoin.org/lokihub/releases/${versionForUrl}`;
 
   return (
@@ -22,9 +22,9 @@ export function Banner({ onDismiss }: { onDismiss: () => void }) {
             →
           </span>
           <span className="font-mono font-medium bg-background/20 px-2 me-2 py-0.5 rounded">
-            {lokiInfo.version}
+            {hubInfo.version}
           </span>
-          <span className="opacity-90">{lokiInfo.releaseNotes}</span>
+          <span className="opacity-90">{hubInfo.releaseNotes}</span>
         </p>
       </ExternalLink>
       <XIcon

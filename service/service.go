@@ -346,7 +346,7 @@ func (svc *service) GetConfig() config.Config {
 	return svc.cfg
 }
 
-func (svc *service) GetLokiSvc() hubinfo.HubInfoService {
+func (svc *service) GetHubInfoSvc() hubinfo.HubInfoService {
 	return svc.hubInfoSvc
 }
 
