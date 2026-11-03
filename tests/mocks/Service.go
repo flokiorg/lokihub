@@ -46,12 +46,12 @@ func (_m *MockService) EXPECT() *MockService_Expecter {
 	return &MockService_Expecter{mock: &_m.Mock}
 }
 
-// GetLokiSvc provides a mock function for the type MockService
-func (_mock *MockService) GetLokiSvc() hubinfo.HubInfoService {
+// GetHubInfoSvc provides a mock function for the type MockService
+func (_mock *MockService) GetHubInfoSvc() hubinfo.HubInfoService {
 	ret := _mock.Called()
 
 	if len(ret) == 0 {
-		panic("no return value specified for GetLokiSvc")
+		panic("no return value specified for GetHubInfoSvc")
 	}
 
 	var r0 hubinfo.HubInfoService
@@ -84,29 +84,29 @@ func (_mock *MockService) GetAppStoreSvc() appstore.Service {
 	return r0
 }
 
-// MockService_GetLokiSvc_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLokiSvc'
-type MockService_GetLokiSvc_Call struct {
+// MockService_GetHubInfoSvc_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetHubInfoSvc'
+type MockService_GetHubInfoSvc_Call struct {
 	*mock.Call
 }
 
-// GetLokiSvc is a helper method to define mock.On call
-func (_e *MockService_Expecter) GetLokiSvc() *MockService_GetLokiSvc_Call {
-	return &MockService_GetLokiSvc_Call{Call: _e.mock.On("GetLokiSvc")}
+// GetHubInfoSvc is a helper method to define mock.On call
+func (_e *MockService_Expecter) GetHubInfoSvc() *MockService_GetHubInfoSvc_Call {
+	return &MockService_GetHubInfoSvc_Call{Call: _e.mock.On("GetHubInfoSvc")}
 }
 
-func (_c *MockService_GetLokiSvc_Call) Run(run func()) *MockService_GetLokiSvc_Call {
+func (_c *MockService_GetHubInfoSvc_Call) Run(run func()) *MockService_GetHubInfoSvc_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run()
 	})
 	return _c
 }
 
-func (_c *MockService_GetLokiSvc_Call) Return(hubInfoService hubinfo.HubInfoService) *MockService_GetLokiSvc_Call {
+func (_c *MockService_GetHubInfoSvc_Call) Return(hubInfoService hubinfo.HubInfoService) *MockService_GetHubInfoSvc_Call {
 	_c.Call.Return(hubInfoService)
 	return _c
 }
 
-func (_c *MockService_GetLokiSvc_Call) RunAndReturn(run func() hubinfo.HubInfoService) *MockService_GetLokiSvc_Call {
+func (_c *MockService_GetHubInfoSvc_Call) RunAndReturn(run func() hubinfo.HubInfoService) *MockService_GetHubInfoSvc_Call {
 	_c.Call.Return(run)
 	return _c
 }

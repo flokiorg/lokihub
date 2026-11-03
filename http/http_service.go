@@ -84,8 +84,8 @@ type HttpService struct {
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
 	return &HttpService{
-		api:             api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetLokiSvc(), eventPublisher),
-		hubInfoHttpSvc:     NewHubInfoHttpService(svc, svc.GetLokiSvc(), svc.GetConfig().GetEnv()),
+		api:             api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetHubInfoSvc(), eventPublisher),
+		hubInfoHttpSvc:     NewHubInfoHttpService(svc, svc.GetHubInfoSvc(), svc.GetConfig().GetEnv()),
 		cfg:             svc.GetConfig(),
 		eventPublisher:  eventPublisher,
 		db:              svc.GetDB(),

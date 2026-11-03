@@ -28,7 +28,7 @@ type Service interface {
 	Shutdown(ctx context.Context)
 
 	// TODO: remove getters (currently used by http / wails services)
-	GetLokiSvc() hubinfo.HubInfoService
+	GetHubInfoSvc() hubinfo.HubInfoService
 
 	GetEventPublisher() events.EventPublisher
 	GetLNClient() lnclient.LNClient
