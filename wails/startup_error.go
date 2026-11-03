@@ -21,9 +21,12 @@ type startupErrorResponse struct {
 	Message string `json:"message"`
 	Code    string `json:"code"`
 	Version string `json:"version"`
+	// WorkDir lets the error screen offer to open the app-data folder, since
+	// /api/info (which normally carries it) is unavailable when startup failed.
+	WorkDir string `json:"workDir"`
 }
 
-func registerStartupErrorRoutes(startupErr error) func(e *echo.Echo) {
+func registerStartupErrorRoutes(startupErr error, workDir string) func(e *echo.Echo) {
 	return func(e *echo.Echo) {
 		e.HideBanner = true
 		e.HidePort = true
@@ -33,6 +36,7 @@ func registerStartupErrorRoutes(startupErr error) func(e *echo.Echo) {
 				Message: startupErr.Error(),
 				Code:    StartupErrorCode,
 				Version: appversion.Tag,
+				WorkDir: workDir,
 			})
 		})
 	}
@@ -42,8 +46,8 @@ func registerStartupErrorRoutes(startupErr error) func(e *echo.Echo) {
 // that reports why the service failed to start. The frontend renders that as
 // a full-page error with a close button, instead of the app exiting silently.
 // It blocks until the user closes the window.
-func LaunchStartupErrorApp(startupErr error, assets embed.FS, appIcon []byte) {
-	register := registerStartupErrorRoutes(startupErr)
+func LaunchStartupErrorApp(startupErr error, workDir string, assets embed.FS, appIcon []byte) {
+	register := registerStartupErrorRoutes(startupErr, workDir)
 
 	// Same as the normal app: lets `wails dev` reach this handler through the
 	// Vite proxy. The real service never started, so there's no config.AppConfig

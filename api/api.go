@@ -1598,7 +1598,8 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 
 	info.MempoolUrl = api.cfg.GetMempoolApi()
 	info.LokihubStoreUrl = api.cfg.GetLokihubStoreURL()
-	info.WorkDir = api.cfg.GetDefaultWorkDir()
+	// WorkDir (a local filesystem path) is desktop-only: it is set by the Wails
+	// transport, never by the HTTP server, which must not reveal it.
 	info.EnablePolling = constants.DEFAULT_ENABLE_POLLING
 
 	return &info, nil
