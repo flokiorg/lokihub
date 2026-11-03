@@ -1,22 +1,22 @@
-package loki
+package hubinfo
 
 import (
 	"context"
 )
 
-type LokiService interface {
-	GetInfo(ctx context.Context) (*LokiInfo, error)
-	GetFlokicoinRate(ctx context.Context) (*FlokicoinRate, error)
-	GetCurrencies(ctx context.Context) (map[string]LokiCurrency, error)
+type HubInfoService interface {
+	GetInfo(ctx context.Context) (*HubInfo, error)
+	GetFiatRate(ctx context.Context) (*FiatRate, error)
+	GetCurrencies(ctx context.Context) (map[string]FiatCurrency, error)
 	GetFAQ(ctx context.Context) ([]FAQ, error)
 }
 
 // RateOracle supplies the latest Flokicoin fiat rate fetched from the NIP-78
-// oracle (see package ratesoracle). GetFlokicoinRate reads through it. Latest
+// oracle (see package ratesoracle). GetFiatRate reads through it. Latest
 // returns an error when no rate has been fetched yet or the last-good one is
 // stale, which the UI degrades to sats/FLC on.
 type RateOracle interface {
-	Latest() (*FlokicoinRate, error)
+	Latest() (*FiatRate, error)
 }
 
 type FAQ struct {
@@ -24,17 +24,17 @@ type FAQ struct {
 	Answer   string `json:"answer"`
 }
 
-type LokiCurrency struct {
+type FiatCurrency struct {
 	Name   string `json:"name"`
 	Symbol string `json:"symbol"`
 }
 
-type LokiInfo struct {
+type HubInfo struct {
 	Version      string `json:"version"`
 	ReleaseNotes string `json:"releaseNotes"` // Markdown format
 }
 
-type FlokicoinRate struct {
+type FiatRate struct {
 	Code      string  `json:"code"`
 	Symbol    string  `json:"symbol"`
 	Rate      string  `json:"rate"`

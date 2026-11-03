@@ -44,7 +44,7 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/seed"
 	"github.com/ohstr/nmilat/nipcash"
@@ -69,7 +69,7 @@ type api struct {
 	svc              service.Service
 	permissionsSvc   permissions.PermissionsService
 	keys             keys.Keys
-	lokiSvc          loki.LokiService
+	hubInfoSvc          hubinfo.HubInfoService
 	startupError     error
 	startupErrorTime time.Time
 	eventPublisher   events.EventPublisher
@@ -77,7 +77,7 @@ type api struct {
 	iaManager        *apps.IdentityAuthorityManager
 }
 
-func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys keys.Keys, lokiSvc loki.LokiService, eventPublisher events.EventPublisher) *api {
+func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys keys.Keys, hubInfoSvc hubinfo.HubInfoService, eventPublisher events.EventPublisher) *api {
 	return &api{
 		db:             gormDB,
 		appsSvc:        apps.NewAppsService(gormDB, eventPublisher, keys, config),
@@ -85,7 +85,7 @@ func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys key
 		svc:            svc,
 		permissionsSvc: permissions.NewPermissionsService(gormDB, eventPublisher),
 		keys:           keys,
-		lokiSvc:        lokiSvc,
+		hubInfoSvc:        hubInfoSvc,
 		eventPublisher: eventPublisher,
 		lspManager:     manager.NewLSPManager(gormDB),
 		iaManager:      apps.NewIdentityAuthorityManager(gormDB),

@@ -56,7 +56,7 @@ type jwtCustomClaims struct {
 
 type HttpService struct {
 	api            api.API
-	lokiHttpSvc    *LokiHttpService
+	hubInfoHttpSvc    *HubInfoHttpService
 	cfg            config.Config
 	eventPublisher events.EventPublisher
 	db             *gorm.DB
@@ -85,7 +85,7 @@ type HttpService struct {
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
 	return &HttpService{
 		api:             api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetLokiSvc(), eventPublisher),
-		lokiHttpSvc:     NewLokiHttpService(svc, svc.GetLokiSvc(), svc.GetConfig().GetEnv()),
+		hubInfoHttpSvc:     NewHubInfoHttpService(svc, svc.GetLokiSvc(), svc.GetConfig().GetEnv()),
 		cfg:             svc.GetConfig(),
 		eventPublisher:  eventPublisher,
 		db:              svc.GetDB(),
@@ -385,7 +385,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessSSEGroup.Use(httpSvc.requireFullAccess)
 	fullAccessSSEGroup.GET("/lsps5/events", httpSvc.lsps5EventsSSEHandler)
 
-	httpSvc.lokiHttpSvc.RegisterSharedRoutes(readOnlyApiGroup, fullAccessApiGroup, e)
+	httpSvc.hubInfoHttpSvc.RegisterSharedRoutes(readOnlyApiGroup, fullAccessApiGroup, e)
 }
 
 func (httpSvc *HttpService) infoHandler(c echo.Context) error {

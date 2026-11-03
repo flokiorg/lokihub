@@ -1,10 +1,10 @@
 import { XIcon } from "lucide-react";
 import ExternalLink from "src/components/ExternalLink";
 
-import { useLokiInfo } from "src/hooks/useLokiInfo";
+import { useHubInfo } from "src/hooks/useHubInfo";
 
 export function Banner({ onDismiss }: { onDismiss: () => void }) {
-  const { data: lokiInfo } = useLokiInfo();
+  const { data: lokiInfo } = useHubInfo();
   if (!lokiInfo) {
     return null;
   }

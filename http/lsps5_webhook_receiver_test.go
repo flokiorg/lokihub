@@ -48,7 +48,7 @@ func createTestHttpService(t *testing.T, needsLNClient bool) (*HttpService, chan
 	mockConfig := mocks.NewMockConfig(t)
 	mockConfig.On("GetEnv").Return(&config.AppConfig{})
 
-	mockLokiSvc := mocks.NewMockLokiService(t)
+	mockLokiSvc := mocks.NewMockHubInfoService(t)
 
 	// If SyncWallet will be called, we need a mock LNClient
 	if needsLNClient {

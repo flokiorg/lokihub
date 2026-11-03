@@ -1,13 +1,13 @@
 // Package ratesoracle subscribes to the NIP-78 (kind 30078) fiat-rate oracle
 // that publishes the Flokicoin fiat rate, verifies it, and caches the latest
-// good value for loki.GetFlokicoinRate to serve.
+// good value for hubinfo.GetFiatRate to serve.
 //
 // It replaces the former rates.json HTTP fetch: the oracle publishes the exact
 // same JSON body as event.content, so it is a drop-in. The oracle pubkey and
 // relays come from the embedded seed (seed.FiatRateOracle). The newest
 // parameterized-replaceable event authored by that pubkey and tagged
 // #d == d_tag is fetched, its signature and author are verified, its content is
-// unmarshalled into loki.FlokicoinRate, and the result is cached and refreshed
+// unmarshalled into hubinfo.FiatRate, and the result is cached and refreshed
 // on an interval. Until a rate is fetched — or once the last-good one is older
 // than the staleness TTL — Latest reports unavailable and the UI degrades to
 // sats/FLC.
@@ -25,7 +25,7 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip19"
 
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/seed"
 )
 
@@ -63,7 +63,7 @@ type Oracle struct {
 	fetch fetchFunc
 
 	mu        sync.RWMutex
-	rate      *loki.FlokicoinRate
+	rate      *hubinfo.FiatRate
 	fetchedAt time.Time
 }
 
@@ -112,7 +112,7 @@ func FromSeed(s *seed.Seed) *Oracle {
 }
 
 // Latest returns the cached rate when present and not stale.
-func (o *Oracle) Latest() (*loki.FlokicoinRate, error) {
+func (o *Oracle) Latest() (*hubinfo.FiatRate, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if o.rate == nil {
@@ -172,7 +172,7 @@ func (o *Oracle) refresh(ctx context.Context) {
 		return
 	}
 
-	var rate loki.FlokicoinRate
+	var rate hubinfo.FiatRate
 	if err := json.Unmarshal([]byte(best.Content), &rate); err != nil {
 		logger.Logger.Error().Err(err).Msg("fiat-rate oracle: event content is not a valid rate")
 		return

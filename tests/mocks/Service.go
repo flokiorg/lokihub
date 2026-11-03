@@ -12,7 +12,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/transactions"
 	mock "github.com/stretchr/testify/mock"
@@ -47,19 +47,19 @@ func (_m *MockService) EXPECT() *MockService_Expecter {
 }
 
 // GetLokiSvc provides a mock function for the type MockService
-func (_mock *MockService) GetLokiSvc() loki.LokiService {
+func (_mock *MockService) GetLokiSvc() hubinfo.HubInfoService {
 	ret := _mock.Called()
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetLokiSvc")
 	}
 
-	var r0 loki.LokiService
-	if returnFunc, ok := ret.Get(0).(func() loki.LokiService); ok {
+	var r0 hubinfo.HubInfoService
+	if returnFunc, ok := ret.Get(0).(func() hubinfo.HubInfoService); ok {
 		r0 = returnFunc()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(loki.LokiService)
+			r0 = ret.Get(0).(hubinfo.HubInfoService)
 		}
 	}
 	return r0
@@ -101,12 +101,12 @@ func (_c *MockService_GetLokiSvc_Call) Run(run func()) *MockService_GetLokiSvc_C
 	return _c
 }
 
-func (_c *MockService_GetLokiSvc_Call) Return(lokiService loki.LokiService) *MockService_GetLokiSvc_Call {
-	_c.Call.Return(lokiService)
+func (_c *MockService_GetLokiSvc_Call) Return(hubInfoService hubinfo.HubInfoService) *MockService_GetLokiSvc_Call {
+	_c.Call.Return(hubInfoService)
 	return _c
 }
 
-func (_c *MockService_GetLokiSvc_Call) RunAndReturn(run func() loki.LokiService) *MockService_GetLokiSvc_Call {
+func (_c *MockService_GetLokiSvc_Call) RunAndReturn(run func() hubinfo.HubInfoService) *MockService_GetLokiSvc_Call {
 	_c.Call.Return(run)
 	return _c
 }

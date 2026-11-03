@@ -1,10 +1,10 @@
 import { useInfo } from "src/hooks/useInfo";
-import { useLokiInfo } from "src/hooks/useLokiInfo";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { compareVersions } from "src/utils/compareVersions";
 
 export function useBanner() {
   const { data: info } = useInfo();
-  const { data: lokiInfo } = useLokiInfo();
+  const { data: lokiInfo } = useHubInfo();
 
   const currentVersion = info?.version;
   const latestVersion = lokiInfo?.version;
