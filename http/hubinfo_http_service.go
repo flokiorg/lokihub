@@ -37,9 +37,9 @@ func (hubInfoHttpSvc *HubInfoHttpService) RegisterSharedRoutes(readOnlyApiGroup 
 func (hubInfoHttpSvc *HubInfoHttpService) hubInfoHandler(c echo.Context) error {
 	info, err := hubInfoHttpSvc.hubInfoSvc.GetInfo(c.Request().Context())
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to request loki info endpoint")
+		logger.Logger.Error().Err(err).Msg("Failed to request hub info endpoint")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: fmt.Sprintf("Failed to request loki info endpoint: %s", err.Error()),
+			Message: fmt.Sprintf("Failed to request hub info endpoint: %s", err.Error()),
 		})
 	}
 
@@ -61,9 +61,9 @@ func (hubInfoHttpSvc *HubInfoHttpService) faqHandler(c echo.Context) error {
 func (hubInfoHttpSvc *HubInfoHttpService) fiatRateHandler(c echo.Context) error {
 	rate, err := hubInfoHttpSvc.hubInfoSvc.GetFiatRate(c.Request().Context())
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to get Flokicoin rate")
+		logger.Logger.Error().Err(err).Msg("Failed to get fiat rate")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: fmt.Sprintf("Failed to get Flokicoin rate: %s", err.Error()),
+			Message: fmt.Sprintf("Failed to get fiat rate: %s", err.Error()),
 		})
 	}
 	return c.JSON(http.StatusOK, rate)

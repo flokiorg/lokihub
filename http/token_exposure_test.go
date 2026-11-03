@@ -38,7 +38,7 @@ func newTokenTestService(t *testing.T) (*echo.Echo, *HttpService) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, events.NewEventPublisher())

@@ -60,7 +60,7 @@ func createTestHttpService(t *testing.T, needsLNClient bool) (*HttpService, chan
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mockLokiSvc)
+	mockSvc.On("GetHubInfoSvc").Return(mockLokiSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
