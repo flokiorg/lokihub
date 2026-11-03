@@ -76,7 +76,6 @@ export function ImageProxyCard({ className }: { className?: string }) {
     setMode(savedMode);
     setTemplate(savedTemplate);
     // Re-sync only when the saved values themselves change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedMode, savedTemplate]);
 
   const tplError = mode === "proxy" ? templateError(template) : null;
