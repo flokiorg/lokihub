@@ -3,8 +3,11 @@
 // good value for hubinfo.GetFiatRate to serve.
 //
 // It replaces the former rates.json HTTP fetch: the oracle publishes the exact
-// same JSON body as event.content, so it is a drop-in. The oracle pubkey and
-// relays come from the embedded seed (seed.FiatRateOracle). The newest
+// same JSON body as event.content, so it is a drop-in. The oracle pubkey, kind
+// and d-tag come from the embedded seed (seed.FiatRateOracle), but the relays
+// it subscribes over do NOT — those are strictly the relays the user selected
+// under Settings > Services (passed in as RelaysFn). With no selected relays
+// the oracle is effectively disabled. The newest
 // parameterized-replaceable event authored by that pubkey and tagged
 // #d == d_tag is fetched, its signature and author are verified, its content is
 // unmarshalled into hubinfo.FiatRate, and the result is cached and refreshed
@@ -24,8 +27,8 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 
-	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/hubinfo"
+	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/seed"
 )
 
@@ -45,10 +48,21 @@ const (
 type Config struct {
 	// AuthorHex is the oracle pubkey (32-byte x-only hex). Empty disables the
 	// oracle: Start is a no-op and Latest always reports unavailable.
-	AuthorHex       string
-	Kind            int
-	DTag            string
-	Relays          []string
+	AuthorHex string
+	Kind      int
+	DTag      string
+	// Relays is a static relay set, used only when RelaysFn is nil (tests).
+	Relays []string
+	// RelaysFn, when set, is the authoritative source of the relays the oracle
+	// subscribes over and takes precedence over Relays. It is read on every
+	// refresh so a runtime change to the user's relay selection is picked up.
+	// The fiat-rate oracle is strictly opt-in: it subscribes ONLY over the
+	// relays the user selected under Settings > Services (GetGeneralRelayUrls),
+	// never over anything hardcoded or seeded. When it returns no relays the
+	// oracle is effectively disabled — refresh is a no-op and Latest reports
+	// unavailable, so the UI degrades to sats/FLC. The oracle npub/kind/d-tag
+	// still come from the seed: they identify the oracle, not a connection.
+	RelaysFn        func() []string
 	RefreshInterval time.Duration
 	StalenessTTL    time.Duration
 }
@@ -83,21 +97,23 @@ func New(cfg Config) *Oracle {
 	return o
 }
 
-// FromSeed resolves the oracle Config from the embedded seed, defaulting the
-// relays to the seed's nostr_relay suggestions when the oracle block lists
-// none, and returns a ready Oracle. A malformed npub yields a disabled oracle
-// (logged) rather than an error, so hub startup is never blocked by it.
-func FromSeed(s *seed.Seed) *Oracle {
+// FromSeed resolves the oracle Config from the embedded seed and returns a
+// ready Oracle. The oracle's identity (npub/kind/d-tag) comes from the seed,
+// but the relays it subscribes over do NOT: they come from relaysFn, the
+// user's selected relays (GetGeneralRelayUrls). The seed's own
+// fiat_rate_oracle.relays list is deliberately ignored — a relay is contacted
+// only because the user selected it, never because the seed named it. When
+// relaysFn yields no relays the oracle is effectively disabled and the UI
+// degrades to sats/FLC. A malformed npub yields a disabled oracle (logged)
+// rather than an error, so hub startup is never blocked by it.
+func FromSeed(s *seed.Seed, relaysFn func() []string) *Oracle {
 	block := s.FiatRateOracle
 	cfg := Config{
 		Kind:            block.Kind,
 		DTag:            block.DTag,
-		Relays:          block.Relays,
+		RelaysFn:        relaysFn,
 		RefreshInterval: parseDuration(block.RefreshInterval, defaultRefreshInterval),
 		StalenessTTL:    parseDuration(block.StalenessTTL, defaultStalenessTTL),
-	}
-	if len(cfg.Relays) == 0 {
-		cfg.Relays = nostrRelayURLs(s)
 	}
 	if block.Npub != "" {
 		hexpk, err := DecodeNpub(block.Npub)
@@ -109,6 +125,16 @@ func FromSeed(s *seed.Seed) *Oracle {
 		}
 	}
 	return New(cfg)
+}
+
+// relays resolves the relay set for this cycle: the user-selected relays from
+// RelaysFn when set (read fresh so a runtime change is honoured), else the
+// static Relays. Empty means the oracle has nothing to subscribe over.
+func (o *Oracle) relays() []string {
+	if o.cfg.RelaysFn != nil {
+		return o.cfg.RelaysFn()
+	}
+	return o.cfg.Relays
 }
 
 // Latest returns the cached rate when present and not stale.
@@ -135,7 +161,7 @@ func (o *Oracle) Start(ctx context.Context) {
 		Str("author", o.cfg.AuthorHex).
 		Int("kind", o.cfg.Kind).
 		Str("d", o.cfg.DTag).
-		Strs("relays", o.cfg.Relays).
+		Strs("relays", o.relays()).
 		Msg("starting fiat-rate oracle subscriber")
 
 	o.refresh(ctx)
@@ -156,6 +182,16 @@ func (o *Oracle) Start(ctx context.Context) {
 // cache. On any failure it keeps the last-good value (which Latest ages out
 // once it passes the staleness TTL).
 func (o *Oracle) refresh(ctx context.Context) {
+	relays := o.relays()
+	if len(relays) == 0 {
+		// Strictly opt-in: with no user-selected relays there is nothing to
+		// subscribe over. Skip quietly — Latest keeps reporting unavailable and
+		// the UI degrades to sats/FLC. A relay selected later is picked up on
+		// the next refresh tick.
+		logger.Logger.Debug().Msg("fiat-rate oracle: no user-selected relays; rate unavailable")
+		return
+	}
+
 	fctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 
@@ -166,7 +202,7 @@ func (o *Oracle) refresh(ctx context.Context) {
 		Limit:   1,
 	}
 
-	best := newestValid(o.fetch(fctx, o.cfg.Relays, filter), o.cfg)
+	best := newestValid(o.fetch(fctx, relays, filter), o.cfg)
 	if best == nil {
 		logger.Logger.Warn().Msg("fiat-rate oracle: no valid event this cycle; keeping last-good")
 		return
@@ -267,17 +303,4 @@ func parseDuration(s string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
-}
-
-// nostrRelayURLs pulls the relay URLs out of the seed's nostr_relay
-// suggestions, used as the oracle's relay fallback.
-func nostrRelayURLs(s *seed.Seed) []string {
-	entries := s.Services["nostr_relay"]
-	urls := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.URL != "" {
-			urls = append(urls, e.URL)
-		}
-	}
-	return urls
 }

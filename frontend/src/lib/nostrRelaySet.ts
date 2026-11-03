@@ -38,16 +38,16 @@ export function selectOutboxUrls(perAuthorRelays: string[][]): string[] {
   ).slice(0, MAX_OUTBOX_TOTAL_RELAYS);
 }
 
-// Merges the configured General relays with a pubkey's own NIP-65 outbox
-// (write) relays, so identity lookups aren't limited to the static relay
-// list. Outbox discovery goes through ndk.outboxTracker (requires
-// enableOutboxModel, see lib/ndk.ts) instead of a standalone lookup, so the
-// result is cached once per pubkey and shared across every caller on this
-// NDK instance rather than re-resolved independently per hook. `directive`
-// relays — e.g. an Identity Authority's own declared relay_urls, or an
-// nprofile1...'s embedded relay hints — are unioned in uncapped (unlike
-// outbox discovery, this is a small, human-curated list an operator
-// explicitly pointed at, not something that scales with a following list).
+// Builds the relay set for a pubkey lookup, confined to the configured relay
+// set. The outbox model is OFF (see lib/ndk.ts), so ndk.outboxTracker is
+// absent and the outbox widening below is a no-op: lokihub does NOT auto-dial
+// a pubkey's own NIP-65 write relays — that would reach relays the user never
+// selected under Settings > Services. The set is therefore the configured
+// base relays plus any `directive` relays — e.g. an Identity Authority's own
+// declared relay_urls, or an nprofile1...'s embedded relay hints — which are a
+// small, human-curated list the operator/data explicitly pointed at, not
+// relays discovered behind the user's back. The optional-chained outbox code
+// is kept so re-enabling the model is a one-line change in lib/ndk.ts.
 export async function getRelaySetForPubkey(
   ndk: NDK,
   pubkey: string,
