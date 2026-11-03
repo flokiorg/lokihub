@@ -1,4 +1,4 @@
-package loki
+package hubinfo
 
 import (
 	"context"
@@ -9,25 +9,25 @@ import (
 	"github.com/flokiorg/lokihub/seed"
 )
 
-type lokiService struct {
+type hubInfoService struct {
 	cfg    config.Config
 	oracle RateOracle
 }
 
-// NewLokiService builds the loki service. oracle supplies the fiat rate for
-// GetFlokicoinRate and may be nil (rates then report unavailable until one is
+// NewHubInfoService builds the loki service. oracle supplies the fiat rate for
+// GetFiatRate and may be nil (rates then report unavailable until one is
 // wired in).
-func NewLokiService(cfg config.Config, oracle RateOracle) *lokiService {
-	return &lokiService{
+func NewHubInfoService(cfg config.Config, oracle RateOracle) *hubInfoService {
+	return &hubInfoService{
 		cfg:    cfg,
 		oracle: oracle,
 	}
 }
 
-// GetFlokicoinRate returns the latest rate from the NIP-78 oracle. Only USD is
+// GetFiatRate returns the latest rate from the NIP-78 oracle. Only USD is
 // supported. An unset/empty/stale oracle surfaces a clear error, which the UI
 // degrades to sats/FLC on.
-func (svc *lokiService) GetFlokicoinRate(ctx context.Context) (*FlokicoinRate, error) {
+func (svc *hubInfoService) GetFiatRate(ctx context.Context) (*FiatRate, error) {
 	if currency := svc.cfg.GetCurrency(); currency != "USD" {
 		return nil, errors.New("only USD is supported for now")
 	}
@@ -39,30 +39,30 @@ func (svc *lokiService) GetFlokicoinRate(ctx context.Context) (*FlokicoinRate, e
 
 // GetCurrencies returns the embedded currency catalogue, filtered to USD (the
 // only supported currency).
-func (svc *lokiService) GetCurrencies(ctx context.Context) (map[string]LokiCurrency, error) {
-	out := make(map[string]LokiCurrency)
+func (svc *hubInfoService) GetCurrencies(ctx context.Context) (map[string]FiatCurrency, error) {
+	out := make(map[string]FiatCurrency)
 	if usd, ok := seed.Get().Currencies["USD"]; ok {
-		out["USD"] = LokiCurrency{Name: usd.Name, Symbol: usd.Symbol}
+		out["USD"] = FiatCurrency{Name: usd.Name, Symbol: usd.Symbol}
 	}
 	return out, nil
 }
 
 // GetInfo returns the hub info from the embedded seed. The version comes from
 // the appversion build tag, falling back to the seed's static value.
-func (svc *lokiService) GetInfo(ctx context.Context) (*LokiInfo, error) {
+func (svc *hubInfoService) GetInfo(ctx context.Context) (*HubInfo, error) {
 	info := seed.Get().Info
 	version := appversion.Tag
 	if version == "" {
 		version = info.Version
 	}
-	return &LokiInfo{
+	return &HubInfo{
 		Version:      version,
 		ReleaseNotes: info.ReleaseNotes,
 	}, nil
 }
 
 // GetFAQ returns the embedded FAQ.
-func (svc *lokiService) GetFAQ(ctx context.Context) ([]FAQ, error) {
+func (svc *hubInfoService) GetFAQ(ctx context.Context) ([]FAQ, error) {
 	entries := seed.Get().FAQ
 	out := make([]FAQ, 0, len(entries))
 	for _, e := range entries {
