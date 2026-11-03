@@ -416,8 +416,10 @@ func (httpSvc *HttpService) infoHandler(c echo.Context) error {
 		})
 	}
 
+	// The work dir is a local filesystem path and a desktop-only affordance;
+	// the HTTP server must never reveal it, even to an authenticated caller.
+	responseBody.WorkDir = ""
 	if !unlocked {
-		responseBody.WorkDir = "" // Don't expose workdir if not unlocked
 		responseBody.RedactForUnauthenticated()
 	}
 	responseBody.Unlocked = unlocked

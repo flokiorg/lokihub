@@ -131,6 +131,8 @@ export interface ErrorResponse {
   // Set only by the startup-error handler (see STARTUP_ERROR_CODE).
   code?: string;
   version?: string;
+  // The app-data folder, so the startup-error screen can offer to open it.
+  workDir?: string;
   // Set on a purchase refused (409) for live terms worse than announced.
   terms?: LSPTerms;
 }

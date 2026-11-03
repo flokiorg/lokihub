@@ -52,6 +52,9 @@ hub to services the user has explicitly selected.
   Wallets need to refuse a keysend over a member's cap. (#170)
 - Runs the Windows desktop app frameless with its own window controls, and hides
   the macOS title bar. (8a3e6e7b)
+- Adds an "Open data folder" button to the desktop app's startup-error and
+  critical-error screens, so the app-data folder (database, config, logs) can
+  be opened when something goes wrong. (#215)
 
 ### Changed
 
@@ -90,6 +93,10 @@ hub to services the user has explicitly selected.
 - Connects to a node that reports its network as `main` or `test` (the short
   names lokid and Bitcoin Core use); such a node was refused at startup with a
   spurious "the node is on another chain" error. (#213)
+- Surfaces a hint and an escape (open the data folder, reload) on the desktop
+  "Starting…" screen after a couple of minutes, so a backend that stays
+  reachable but never reports started or failed — e.g. a node connection that
+  hangs — no longer leaves the screen spinning with no feedback. (#215)
 - Fixes upgrading from 0.3.0-alpha failing at startup with "no such column:
   parent_kind". (#98)
 - Shows a desktop error screen when the backend fails to start instead of
