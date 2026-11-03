@@ -31,6 +31,13 @@ services:
     - name: "nos.lol"
       url: "wss://nos.lol"
       description: "General-purpose public relay"
+  # App store suggestions. These are inactive until an operator picks one under
+  # Settings → Services — nothing is fetched out of the box. This is the former
+  # hardcoded LOKIHUB_STORE_URL default, demoted to a mere suggestion.
+  lokihub_store:
+    - name: "Lokihub Store"
+      url: "https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"
+      description: "Community app store for Lokihub"
 
 currencies:
   USD:

@@ -827,10 +827,10 @@ func (cfg *config) GetLokihubStoreURL() string {
 	return cfg.Env.LokihubStoreURL
 }
 
+// SetLokihubStoreURL deliberately allows an empty value: an empty app-store URL
+// is a valid, user-chosen state that turns the app store OFF (no sync, no
+// fetch), mirroring SetGeneralRelay/SetSearchRelay.
 func (cfg *config) SetLokihubStoreURL(value string) error {
-	if value == "" {
-		return errors.New("LokihubStoreURL cannot be empty")
-	}
 	err := cfg.SetUpdate("LokihubStoreURL", value, "")
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to update LokihubStoreURL")

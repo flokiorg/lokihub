@@ -337,6 +337,11 @@ export interface InfoResponse {
   currency: string;
   nodeAlias: string;
   mempoolUrl: string;
+  // lokihubStoreUrl is the operator-selected app-store base URL, empty when the
+  // app store is OFF. Empty means "configure an app store under Settings →
+  // Services" rather than an error — same degrade-gracefully shape as the fiat
+  // rate falling back to sats/FLC.
+  lokihubStoreUrl: string;
   flokicoinDisplayFormat: FlokicoinDisplayFormat;
   relay: string;
   trustedNwcRelay: boolean;
