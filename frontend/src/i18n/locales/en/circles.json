@@ -41,6 +41,7 @@
   "profileRow": {
     "nip05Verified": "NIP-05 verified",
     "verifyingNip05": "Verifying NIP-05",
+    "verifyNip05": "Verify",
     "lightningAddress": "Has a lightning address"
   },
   "searchDropdown": {

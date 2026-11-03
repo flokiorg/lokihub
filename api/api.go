@@ -1597,6 +1597,7 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	}
 
 	info.MempoolUrl = api.cfg.GetMempoolApi()
+	info.LokihubStoreUrl = api.cfg.GetLokihubStoreURL()
 	info.WorkDir = api.cfg.GetDefaultWorkDir()
 	info.EnablePolling = constants.DEFAULT_ENABLE_POLLING
 
@@ -1741,6 +1742,27 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	if updateSettingsRequest.ImageProxyMode != "" || updateSettingsRequest.ImageProxyTemplate != nil {
 		if err := api.setImageProxy(updateSettingsRequest.ImageProxyMode, updateSettingsRequest.ImageProxyTemplate); err != nil {
 			return err
+		}
+	}
+
+	// App store URL is a pointer: nil leaves it untouched, "" turns the app
+	// store OFF, a non-empty value selects a store (validated, then synced now
+	// so apps appear without waiting for the next periodic tick).
+	if updateSettingsRequest.LokihubStoreURL != nil {
+		storeURL := strings.TrimSpace(*updateSettingsRequest.LokihubStoreURL)
+		if storeURL != "" {
+			if err := utils.ValidateHTTPURL(storeURL); err != nil {
+				return fmt.Errorf("invalid App Store URL: %w", err)
+			}
+		}
+		if err := api.cfg.SetLokihubStoreURL(storeURL); err != nil {
+			return fmt.Errorf("failed to set App Store URL: %w", err)
+		}
+		if storeURL != "" && api.svc != nil {
+			if appStoreSvc := api.svc.GetAppStoreSvc(); appStoreSvc != nil {
+				// Backgrounded: a slow/unreachable store must not block the save.
+				go appStoreSvc.Sync()
+			}
 		}
 	}
 

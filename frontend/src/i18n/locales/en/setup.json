@@ -110,6 +110,11 @@
       "description": "Used for fee estimation and transaction details.",
       "custom": "Custom Explorer"
     },
+    "appStore": {
+      "title": "App Store",
+      "description": "Optional. Pick a store to browse community apps. Leave empty to keep the app store off — nothing is fetched until you select one.",
+      "custom": "Custom App Store"
+    },
     "relayGroup": {
       "title": "Nostr Relays",
       "description": "Each purpose below keeps its own independent relay list — changing one doesn't affect the others."
