@@ -1025,13 +1025,18 @@ type InfoResponse struct {
 	PrivateTransport            PrivateTransportInfo `json:"privateTransport"`
 	// PendingCashRedeems counts cash_redeem payouts whose outcome is not known
 	// yet; each one's slice stays claimed until it settles or fails.
-	PendingCashRedeems int       `json:"pendingCashRedeems"`
-	SearchRelay        string    `json:"searchRelay"`
-	NodeAlias          string    `json:"nodeAlias"`
-	MempoolUrl         string    `json:"mempoolUrl"`
-	LSPs               []LSPInfo `json:"lsps"`
-	WorkDir            string    `json:"workDir"`
-	EnablePolling      bool      `json:"enablePolling"`
+	PendingCashRedeems int    `json:"pendingCashRedeems"`
+	SearchRelay        string `json:"searchRelay"`
+	NodeAlias          string `json:"nodeAlias"`
+	MempoolUrl         string `json:"mempoolUrl"`
+	// LokihubStoreUrl is the operator-selected app-store base URL, empty when
+	// the app store is OFF. The frontend uses it to decide between the app-store
+	// listing and the "configure an app store under Settings → Services" empty
+	// state. Redacted for unauthenticated callers (fingerprinting surface).
+	LokihubStoreUrl string    `json:"lokihubStoreUrl"`
+	LSPs            []LSPInfo `json:"lsps"`
+	WorkDir         string    `json:"workDir"`
+	EnablePolling   bool      `json:"enablePolling"`
 	// LSPService is the attached-lspd status (plan §3.4), populated only for an
 	// authenticated caller and only when an LSP service endpoint is configured;
 	// omitted (nil) otherwise so the frontend can gate its backoffice nav on it.
@@ -1079,6 +1084,7 @@ func (r *InfoResponse) RedactForUnauthenticated() {
 	r.SearchRelay = ""
 	r.NodeAlias = ""
 	r.MempoolUrl = ""
+	r.LokihubStoreUrl = ""
 	r.LSPs = []LSPInfo{}
 	r.EnablePolling = false
 	r.LSPService = nil
@@ -1150,6 +1156,11 @@ type UpdateSettingsRequest struct {
 	// valid template is required.
 	ImageProxyMode     string  `json:"imageProxyMode"`
 	ImageProxyTemplate *string `json:"imageProxyTemplate"`
+	// LokihubStoreURL is a pointer so an explicit empty string can turn the app
+	// store OFF (feature disabled, no sync, no fetch); nil leaves it untouched.
+	// A non-empty value is validated as an HTTP URL and triggers an immediate
+	// catalogue sync.
+	LokihubStoreURL *string `json:"lokihubStoreUrl"`
 }
 
 type SetNodeAliasRequest struct {

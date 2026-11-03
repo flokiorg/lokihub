@@ -20,6 +20,11 @@ type App struct {
 
 type Service interface {
 	Start()
+	// Sync refreshes the local catalogue from the configured store URL. It is a
+	// no-op (no outbound request) when no store URL is configured. Exposed so
+	// enabling the store at runtime (Settings → Services) can trigger an
+	// immediate refresh instead of waiting for the next periodic tick.
+	Sync()
 	ListApps() []App
 	GetLogoPath(appId string) (string, error)
 }

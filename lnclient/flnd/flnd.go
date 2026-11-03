@@ -66,6 +66,10 @@ type FLNDService struct {
 	ctx            context.Context
 	eventPublisher events.EventPublisher
 	logger         zerolog.Logger
+	// cfg is read-only here, used to build explorer deep-links (e.g. the
+	// closed-channel counterparty node URL) from the operator-selected
+	// Flokicoin Explorer. May be nil in tests that don't exercise those paths.
+	cfg config.Config
 
 	txCache      []lnclient.OnchainTransaction
 	txCacheMtx   sync.RWMutex
@@ -76,7 +80,7 @@ type FLNDService struct {
 	invoices invoiceCursor
 }
 
-func NewFLNDService(ctx context.Context, eventPublisher events.EventPublisher, flndAddress, flndCertHex, flndMacaroonHex string) (result lnclient.LNClient, err error) {
+func NewFLNDService(ctx context.Context, cfg config.Config, eventPublisher events.EventPublisher, flndAddress, flndCertHex, flndMacaroonHex string) (result lnclient.LNClient, err error) {
 	if flndAddress == "" || flndMacaroonHex == "" {
 		return nil, errors.New("one or more required FLND configuration are missing")
 	}
@@ -123,6 +127,7 @@ func NewFLNDService(ctx context.Context, eventPublisher events.EventPublisher, f
 		cancel:         cancel,
 		ctx:            flndCtx,
 		eventPublisher: eventPublisher,
+		cfg:            cfg,
 		logger:         logger.Logger.With().Str("component", "flnd").Logger(),
 	}
 
@@ -399,19 +404,44 @@ func (svc *FLNDService) subscribeChannelEvents(ctx context.Context) {
 						Str("reason", closureReason).
 						Msg("Channel closed")
 
+					properties := map[string]interface{}{
+						"counterparty_node_id": counterpartyNodeId,
+						"reason":               closureReason,
+						"node_type":            config.FLNDBackendType,
+					}
+					// Build the explorer deep-link from the operator-selected
+					// Flokicoin Explorer, never a hardcoded host. With no
+					// explorer selected the field is omitted (not a baked-in
+					// default); it is a pure display string, no backend dial.
+					if nodeURL := svc.counterpartyNodeURL(counterpartyNodeId); nodeURL != "" {
+						properties["counterparty_node_url"] = nodeURL
+					}
+
 					svc.eventPublisher.Publish(&events.Event{
-						Event: "nwc_channel_closed",
-						Properties: map[string]interface{}{
-							"counterparty_node_id":  counterpartyNodeId,
-							"counterparty_node_url": "https://flokichain.info/lightning/node/" + counterpartyNodeId,
-							"reason":                closureReason,
-							"node_type":             config.FLNDBackendType,
-						},
+						Event:      "nwc_channel_closed",
+						Properties: properties,
 					})
 				}
 			}
 		}
 	}
+}
+
+// counterpartyNodeURL builds the explorer web page for a node from the
+// operator-selected Flokicoin Explorer (config.GetMempoolApi), e.g.
+// "<explorer>/lightning/node/<id>". It returns "" when no explorer is
+// configured (or no config is wired), so the closed-channel event omits the
+// link rather than pointing at a hardcoded host. Pure string building — no
+// network call.
+func (svc *FLNDService) counterpartyNodeURL(nodeID string) string {
+	if svc.cfg == nil || nodeID == "" {
+		return ""
+	}
+	base := strings.TrimRight(svc.cfg.GetMempoolApi(), "/")
+	if base == "" {
+		return ""
+	}
+	return base + "/lightning/node/" + nodeID
 }
 
 func (svc *FLNDService) subscribeOpenHoldInvoices(ctx context.Context) {

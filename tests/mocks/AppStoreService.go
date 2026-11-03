@@ -13,6 +13,10 @@ func (_m *MockAppStoreService) Start() {
 	_m.Called()
 }
 
+func (_m *MockAppStoreService) Sync() {
+	_m.Called()
+}
+
 func (_m *MockAppStoreService) ListApps() []appstore.App {
 	ret := _m.Called()
 	return ret.Get(0).([]appstore.App)

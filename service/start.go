@@ -542,7 +542,7 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 	FLNDCertHex, _ := svc.cfg.Get("LNDCertHex", encryptionKey)
 	FLNDMacaroonHex, _ := svc.cfg.Get("LNDMacaroonHex", encryptionKey)
 
-	lnClient, err := flnd.NewFLNDService(ctx, svc.eventPublisher, FLNDAddress, FLNDCertHex, FLNDMacaroonHex)
+	lnClient, err := flnd.NewFLNDService(ctx, svc.cfg, svc.eventPublisher, FLNDAddress, FLNDCertHex, FLNDMacaroonHex)
 
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to connect to FLN backend")

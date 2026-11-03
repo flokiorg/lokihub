@@ -1,4 +1,4 @@
-import { AlertCircle, Globe, Search, Users, Zap } from "lucide-react";
+import { AlertCircle, Globe, LayoutGrid, Search, Users, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LSPCatalogue } from "src/components/lsps/LSPCatalogue";
@@ -32,6 +32,9 @@ export interface ServiceConfigState {
   trustedNwcRelay: boolean;
   generalRelay: string;
   searchRelay: string;
+  // App-store base URL. Empty is a valid state: the app store is OFF (no sync,
+  // no fetch) until a store is selected here.
+  lokihubStoreUrl: string;
 }
 
 export interface ServiceConfigFormProps {
@@ -47,6 +50,9 @@ export interface ServiceConfigFormProps {
   showSearchRelay?: boolean;
   // The LSP catalogue needs the running node; setup shows a note instead.
   showLSPCatalogue?: boolean;
+  // The app store is a main-Settings concern (PATCH /api/settings persists it);
+  // the initial setup flow doesn't save it, so it's hidden there.
+  showAppStore?: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -133,6 +139,17 @@ export const validateServiceConfig = (
       );
   }
 
+  // The app store is optional — empty just turns it off, so only the URL format
+  // is checked when a value is present.
+  if (state.lokihubStoreUrl) {
+    const storeErr = validateHTTPURL(state.lokihubStoreUrl, "App Store URL");
+    if (storeErr) {
+      errors.push(
+        t("services.validation.invalidUrl", { field: "App Store URL" })
+      );
+    }
+  }
+
   return errors;
 };
 
@@ -144,6 +161,7 @@ export function ServiceConfigForm({
   showGeneralRelay = true,
   showSearchRelay = true,
   showLSPCatalogue = true,
+  showAppStore = true,
 }: ServiceConfigFormProps) {
   const { t } = useTranslation("setup");
 
@@ -172,9 +190,11 @@ export function ServiceConfigForm({
   const [communityOptions, setCommunityOptions] = useState<{
     relay: ServiceOption[];
     mempool: ServiceOption[];
+    appStore: ServiceOption[];
   }>({
     relay: [],
     mempool: [],
+    appStore: [],
   });
 
   useEffect(() => {
@@ -191,6 +211,7 @@ export function ServiceConfigForm({
           setCommunityOptions({
             relay: (services.nostr_relay || []).map(mapUrlService),
             mempool: (services.flokicoin_explorer || []).map(mapUrlService),
+            appStore: (services.lokihub_store || []).map(mapUrlService),
           });
         }
       } catch (error) {
@@ -318,6 +339,34 @@ export function ServiceConfigForm({
           )}
         </CardContent>
       </Card>
+
+      {/* App Store — optional. Empty means OFF (no sync, no fetch); the
+          raw.githubusercontent suggestion below is inactive until picked. */}
+      {showAppStore && (
+        <Card className="border-border shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <LayoutGrid className="w-5 h-5 text-primary" />
+              {t("services.appStore.title")}
+            </CardTitle>
+            <CardDescription>
+              {t("services.appStore.description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ServiceCardSelector
+              value={state.lokihubStoreUrl}
+              onChange={(val) =>
+                onChange({ ...state, lokihubStoreUrl: val })
+              }
+              options={communityOptions.appStore}
+              placeholder="https://..."
+              customIcon={<LayoutGrid className="w-4 h-4" />}
+              customLabel={t("services.appStore.custom")}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* LSP catalogue (NIP-LSP announcements; WP-26) */}
       <LSPCatalogue

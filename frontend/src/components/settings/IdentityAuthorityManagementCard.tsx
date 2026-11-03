@@ -85,8 +85,11 @@ export function IdentityAuthorityManagementCard({
     }
     return new Map(withNip05.map((a) => [a.pubkey, profiles.get(a.pubkey)!]));
   }, [localAuthorities, profiles]);
-  const { verified: verifiedNip05, pending: pendingNip05 } =
-    useNip05Verification(nip05Profiles);
+  const {
+    verified: verifiedNip05,
+    pending: pendingNip05,
+    verify: verifyNip05,
+  } = useNip05Verification(nip05Profiles);
 
   const [isAdding, setIsAdding] = React.useState(false);
   const [pubkeyValue, setPubkeyValue] = React.useState("");
@@ -187,6 +190,11 @@ export function IdentityAuthorityManagementCard({
                           profile={profile}
                           isVerified={isNip05Verified}
                           isVerifying={isNip05Verifying}
+                          onVerify={
+                            rawProfile?.nip05 && !isNip05Verified
+                              ? () => verifyNip05(a.pubkey)
+                              : undefined
+                          }
                           avatarClassName="h-9 w-9"
                         />
                       </div>

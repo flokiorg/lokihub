@@ -52,8 +52,11 @@ export function MemberPicker({
       new Map<string, NostrProfile>(results.map((r) => [r.pubkey, r.profile])),
     [results]
   );
-  const { verified: verifiedNip05Pubkeys, pending: pendingNip05Pubkeys } =
-    useNip05Verification(searchProfiles);
+  const {
+    verified: verifiedNip05Pubkeys,
+    pending: pendingNip05Pubkeys,
+    verify: verifyNip05,
+  } = useNip05Verification(searchProfiles);
 
   const disabled = !ownerPubkeyHex;
 
@@ -227,6 +230,11 @@ export function MemberPicker({
                             profile={profile}
                             isVerified={isNip05Verified}
                             isVerifying={isNip05Pending}
+                            onVerify={
+                              profile?.nip05
+                                ? () => verifyNip05(pubkey)
+                                : undefined
+                            }
                             showCopy={false}
                           />
                           {isAlreadyMember ? (

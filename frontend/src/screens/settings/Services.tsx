@@ -38,6 +38,7 @@ export function Services() {
     trustedNwcRelay: true,
     generalRelay: "",
     searchRelay: "",
+    lokihubStoreUrl: "",
   });
 
   // Identity Authority Management Hook
@@ -65,6 +66,7 @@ export function Services() {
         generalRelay: info.generalRelay || "",
         searchRelay: info.searchRelay || "",
         mempoolApi: info.mempoolUrl || "",
+        lokihubStoreUrl: info.lokihubStoreUrl || "",
       }));
     }
   }, [info]);
@@ -98,7 +100,8 @@ export function Services() {
       config.trustedNwcRelay !== (info.trustedNwcRelay ?? true) ||
       config.generalRelay !== (info.generalRelay || "") ||
       config.searchRelay !== (info.searchRelay || "") ||
-      config.mempoolApi !== (info.mempoolUrl || "");
+      config.mempoolApi !== (info.mempoolUrl || "") ||
+      config.lokihubStoreUrl !== (info.lokihubStoreUrl || "");
 
     // Check Identity Authorities dirty - compare by pubkey/name/relay_urls, sorted.
     const stripAuthorities = (authorities: IdentityAuthority[]) =>
@@ -166,6 +169,10 @@ export function Services() {
         generalRelay: config.generalRelay,
         searchRelay: config.searchRelay,
         mempoolApi: config.mempoolApi,
+        // Sent as a plain string: "" is a deliberate value that turns the app
+        // store off (the backend field is a pointer, so "" clears it while a
+        // missing key would leave it untouched).
+        lokihubStoreUrl: config.lokihubStoreUrl,
         // Identity Authorities omitted, handled above
       });
 
