@@ -692,6 +692,184 @@ func (_c *MockConfig_SetFlokicoinDisplayFormat_Call) RunAndReturn(run func(value
 	return _c
 }
 
+// GetImageProxyMode provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetImageProxyMode() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetImageProxyMode")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MockConfig_GetImageProxyMode_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetImageProxyMode'
+type MockConfig_GetImageProxyMode_Call struct {
+	*mock.Call
+}
+
+// GetImageProxyMode is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) GetImageProxyMode() *MockConfig_GetImageProxyMode_Call {
+	return &MockConfig_GetImageProxyMode_Call{Call: _e.mock.On("GetImageProxyMode")}
+}
+
+func (_c *MockConfig_GetImageProxyMode_Call) Run(run func()) *MockConfig_GetImageProxyMode_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfig_GetImageProxyMode_Call) Return(s string) *MockConfig_GetImageProxyMode_Call {
+	_c.Call.Return(s)
+	return _c
+}
+
+func (_c *MockConfig_GetImageProxyMode_Call) RunAndReturn(run func() string) *MockConfig_GetImageProxyMode_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetImageProxyMode provides a mock function for the type MockConfig
+func (_mock *MockConfig) SetImageProxyMode(value string) error {
+	ret := _mock.Called(value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetImageProxyMode")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string) error); ok {
+		r0 = returnFunc(value)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockConfig_SetImageProxyMode_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetImageProxyMode'
+type MockConfig_SetImageProxyMode_Call struct {
+	*mock.Call
+}
+
+// SetImageProxyMode is a helper method to define mock.On call
+//   - value
+func (_e *MockConfig_Expecter) SetImageProxyMode(value interface{}) *MockConfig_SetImageProxyMode_Call {
+	return &MockConfig_SetImageProxyMode_Call{Call: _e.mock.On("SetImageProxyMode", value)}
+}
+
+func (_c *MockConfig_SetImageProxyMode_Call) Run(run func(value string)) *MockConfig_SetImageProxyMode_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockConfig_SetImageProxyMode_Call) Return(err error) *MockConfig_SetImageProxyMode_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockConfig_SetImageProxyMode_Call) RunAndReturn(run func(value string) error) *MockConfig_SetImageProxyMode_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetImageProxyTemplate provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetImageProxyTemplate() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetImageProxyTemplate")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MockConfig_GetImageProxyTemplate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetImageProxyTemplate'
+type MockConfig_GetImageProxyTemplate_Call struct {
+	*mock.Call
+}
+
+// GetImageProxyTemplate is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) GetImageProxyTemplate() *MockConfig_GetImageProxyTemplate_Call {
+	return &MockConfig_GetImageProxyTemplate_Call{Call: _e.mock.On("GetImageProxyTemplate")}
+}
+
+func (_c *MockConfig_GetImageProxyTemplate_Call) Run(run func()) *MockConfig_GetImageProxyTemplate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfig_GetImageProxyTemplate_Call) Return(s string) *MockConfig_GetImageProxyTemplate_Call {
+	_c.Call.Return(s)
+	return _c
+}
+
+func (_c *MockConfig_GetImageProxyTemplate_Call) RunAndReturn(run func() string) *MockConfig_GetImageProxyTemplate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetImageProxyTemplate provides a mock function for the type MockConfig
+func (_mock *MockConfig) SetImageProxyTemplate(value string) error {
+	ret := _mock.Called(value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetImageProxyTemplate")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string) error); ok {
+		r0 = returnFunc(value)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockConfig_SetImageProxyTemplate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetImageProxyTemplate'
+type MockConfig_SetImageProxyTemplate_Call struct {
+	*mock.Call
+}
+
+// SetImageProxyTemplate is a helper method to define mock.On call
+//   - value
+func (_e *MockConfig_Expecter) SetImageProxyTemplate(value interface{}) *MockConfig_SetImageProxyTemplate_Call {
+	return &MockConfig_SetImageProxyTemplate_Call{Call: _e.mock.On("SetImageProxyTemplate", value)}
+}
+
+func (_c *MockConfig_SetImageProxyTemplate_Call) Run(run func(value string)) *MockConfig_SetImageProxyTemplate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockConfig_SetImageProxyTemplate_Call) Return(err error) *MockConfig_SetImageProxyTemplate_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockConfig_SetImageProxyTemplate_Call) RunAndReturn(run func(value string) error) *MockConfig_SetImageProxyTemplate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SetCurrency provides a mock function for the type MockConfig
 func (_mock *MockConfig) SetCurrency(value string) error {
 	ret := _mock.Called(value)

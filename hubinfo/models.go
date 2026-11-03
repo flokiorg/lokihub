@@ -32,6 +32,14 @@ type FiatCurrency struct {
 type HubInfo struct {
 	Version      string `json:"version"`
 	ReleaseNotes string `json:"releaseNotes"` // Markdown format
+	// ImageProxyMode / ImageProxyTemplate expose the profile-image gating choice
+	// (P0-B) so the frontend knows whether and how to load external profile
+	// images. Mode is one of "off" (default; show initials, no banner),
+	// "direct" (load source URL directly) or "proxy" (route the source URL
+	// through ImageProxyTemplate). The template contains one {url} or {b64url}
+	// placeholder and is only meaningful in "proxy" mode.
+	ImageProxyMode     string `json:"imageProxyMode"`
+	ImageProxyTemplate string `json:"imageProxyTemplate"`
 }
 
 type FiatRate struct {

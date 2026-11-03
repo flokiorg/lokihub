@@ -56,8 +56,10 @@ func (svc *hubInfoService) GetInfo(ctx context.Context) (*HubInfo, error) {
 		version = info.Version
 	}
 	return &HubInfo{
-		Version:      version,
-		ReleaseNotes: info.ReleaseNotes,
+		Version:            version,
+		ReleaseNotes:       info.ReleaseNotes,
+		ImageProxyMode:     svc.cfg.GetImageProxyMode(),
+		ImageProxyTemplate: svc.cfg.GetImageProxyTemplate(),
 	}, nil
 }
 
