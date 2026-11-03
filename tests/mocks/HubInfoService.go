@@ -196,8 +196,8 @@ func (_c *MockHubInfoService_GetInfo_Call) Run(run func(ctx context.Context)) *M
 	return _c
 }
 
-func (_c *MockHubInfoService_GetInfo_Call) Return(lokiInfo *hubinfo.HubInfo, err error) *MockHubInfoService_GetInfo_Call {
-	_c.Call.Return(lokiInfo, err)
+func (_c *MockHubInfoService_GetInfo_Call) Return(hubInfo *hubinfo.HubInfo, err error) *MockHubInfoService_GetInfo_Call {
+	_c.Call.Return(hubInfo, err)
 	return _c
 }
 

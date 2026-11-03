@@ -281,7 +281,11 @@ audits of both.
   `LokiService` → `HubInfoService`. The native currency unit (`loki`/`mloki`,
   sats/FLC) and the external "Loki Account" link feature (`/api/loki/unlink-account`)
   keep their chain-specific names — they are not branding. Frontend + backend
-  change together; the only client is the bundled UI.
+  change together; the only client is the bundled UI. A follow-up also renamed
+  the internal `GetLokiSvc()` accessor to `GetHubInfoSvc()` and genericised the
+  service's own log messages (no functional change).
+
+- Breaking: a Circle Wallet's membership is decided by resolutions, no longer
   re-checked on every call (NIP-CW §Membership): each successful resolution of
   the circle's follow set (nmilat's `ResolveFollowSet`: the newest signed
   version, one dated more than 15 minutes ahead ignored, one older than the

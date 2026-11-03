@@ -980,7 +980,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
 	case "/api/hub/info":
-		info, err := app.svc.GetLokiSvc().GetInfo(ctx)
+		info, err := app.svc.GetHubInfoSvc().GetInfo(ctx)
 		if err != nil {
 			logger.Logger.Error().Err(err).
 				Str("route", route).
@@ -992,7 +992,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: info, Error: ""}
 
 	case "/api/hub/faq":
-		faq, err := app.svc.GetLokiSvc().GetFAQ(ctx)
+		faq, err := app.svc.GetHubInfoSvc().GetFAQ(ctx)
 		if err != nil {
 			logger.Logger.Error().Err(err).
 				Str("route", route).
@@ -1004,18 +1004,18 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: faq, Error: ""}
 
 	case "/api/rates":
-		rate, err := app.svc.GetLokiSvc().GetFiatRate(ctx)
+		rate, err := app.svc.GetHubInfoSvc().GetFiatRate(ctx)
 		if err != nil {
 			logger.Logger.Error().Err(err).
 				Str("route", route).
 				Str("method", method).
 				Str("body", body).
-				Msg("Failed to get Flokicoin rate")
+				Msg("Failed to get fiat rate")
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: rate, Error: ""}
 	case "/api/currencies":
-		currencies, err := app.svc.GetLokiSvc().GetCurrencies(ctx)
+		currencies, err := app.svc.GetHubInfoSvc().GetCurrencies(ctx)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to get currencies")
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
