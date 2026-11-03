@@ -1039,6 +1039,22 @@ audits of both.
 
 ### Security
 
+- Breaking: lokihub no longer makes any outbound connection to an external URL
+  unless the user selected it under Settings → Services — nothing is hardcoded,
+  not even relays. The seed is only a suggestion catalogue; a fresh hub connects
+  to nothing until the user picks services, degrading gracefully (empty states,
+  not errors). Specifically: (a) removed the hardcoded default relay lists and
+  their first-run seeding — relays, and the NIP-78 fiat-rate oracle, connect only
+  over user-selected relays (`enableOutboxModel` off, so the browser never dials a
+  pubkey's NIP-65 relays either); (b) profile images (avatars and the node banner)
+  are off by default and show 2-letter initials — the user chooses, under
+  Settings → Services → Image proxy, between `off` / `direct` / a `proxy` URL
+  template (`{url}` or `{b64url}`); (c) NIP-05 is verified on an explicit user
+  action instead of auto-fetching `.well-known/nostr.json` for every visible
+  profile; (d) the app store syncs only a user-selected store URL (no hardcoded
+  default, no startup/periodic fetch while unset); (e) the channel-closed event's
+  explorer link is built from the user-selected explorer, omitted if none.
+
 - Posts the app-connection success message to the opener at the explicit web
   origin derived from the validated `return_to`, never a wildcard `"*"`. A
   wildcard target leaked the connection metadata (wallet pubkey, relay URLs,
