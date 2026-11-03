@@ -288,6 +288,7 @@ export function ServiceConfigForm({
                     onChange={(val) =>
                       onChange({ ...state, generalRelay: val })
                     }
+                    options={communityOptions.relay}
                     placeholder="wss://..."
                   />
                 </TabsContent>
@@ -301,6 +302,7 @@ export function ServiceConfigForm({
                   <MultiRelayInput
                     value={state.searchRelay}
                     onChange={(val) => onChange({ ...state, searchRelay: val })}
+                    options={communityOptions.relay}
                     placeholder="wss://..."
                   />
                 </TabsContent>

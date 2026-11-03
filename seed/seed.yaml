@@ -22,6 +22,15 @@ services:
     - name: "Ohstr Relay"
       url: "wss://relay.ohstr.com"
       description: "High availability relay"
+    - name: "Damus"
+      url: "wss://relay.damus.io"
+      description: "Popular general-purpose public relay"
+    - name: "Primal"
+      url: "wss://relay.primal.net"
+      description: "General-purpose public relay"
+    - name: "nos.lol"
+      url: "wss://nos.lol"
+      description: "General-purpose public relay"
 
 currencies:
   USD:

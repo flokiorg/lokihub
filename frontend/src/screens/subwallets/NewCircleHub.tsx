@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import BudgetRenewalSelect from "src/components/BudgetRenewalSelect";
+import { RelayHint } from "src/components/RelayHint";
 import {
   Accordion,
   AccordionContent,
@@ -335,6 +336,7 @@ export function NewCircleHub() {
         title={t("newCircleHub.title")}
         description={t("newCircleHub.description")}
       />
+      <RelayHint className="max-w-lg" />
       <form
         onSubmit={handleSubmit}
         className="flex flex-col items-start gap-6 max-w-lg"

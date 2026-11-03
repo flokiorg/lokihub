@@ -25,14 +25,16 @@ export function getNdk(relayUrls: string[]): NDK {
   }
   ndkInstance = new NDK({
     explicitRelayUrls: relayUrls,
-    // enableOutboxModel gives every caller a shared, NDK-managed cache of
-    // per-pubkey NIP-65 relay lists (ndk.outboxTracker) instead of each
-    // hook re-resolving the same pubkey independently. outboxRelayUrls
-    // scopes that discovery to our own configured relays instead of NDK's
-    // hardcoded external default (purplepag.es/nos.lol) — every relay this
-    // app talks to should trace back to Settings, not a library default.
-    enableOutboxModel: true,
-    outboxRelayUrls: relayUrls,
+    // Outbox model OFF, deliberately. With it on, NDK reads each author's
+    // NIP-65 (kind:10002) relay list and opens WebSockets to whatever write
+    // relays it finds there — relays the user never selected. That violates
+    // the rule that lokihub only ever connects to relays the user picked under
+    // Settings > Services. Every socket this app opens must trace back to
+    // explicitRelayUrls, which come from /api/info (the user's GeneralRelay /
+    // SearchRelay selection). A pubkey's own relay hints are never auto-dialed;
+    // lib/nostrRelaySet.ts stays confined to the configured set (its outbox
+    // widening is a no-op without an outboxTracker).
+    enableOutboxModel: false,
     cacheAdapter: new NDKCacheAdapterDexie({ dbName: "lokihub-ndk-cache" }),
   });
   connectedRelayKey = key;
