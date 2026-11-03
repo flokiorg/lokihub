@@ -193,6 +193,14 @@ type Config interface {
 	SetCurrency(value string) error
 	GetFlokicoinDisplayFormat() string
 	SetFlokicoinDisplayFormat(value string) error
+	// Profile-image gating (P0-B). GetImageProxyMode is one of "off"
+	// (default), "direct" or "proxy"; GetImageProxyTemplate is the user's URL
+	// template used only in "proxy" mode. See config.ValidateImageProxyTemplate
+	// for the template contract.
+	GetImageProxyMode() string
+	SetImageProxyMode(value string) error
+	GetImageProxyTemplate() string
+	SetImageProxyTemplate(value string) error
 	GetLokihubStoreURL() string
 	SetLokihubStoreURL(value string) error
 	GetRelay() string

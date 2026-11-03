@@ -39,12 +39,12 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/getinfocache"
 	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/seed"
 	"github.com/ohstr/nmilat/nipcash"
@@ -69,7 +69,7 @@ type api struct {
 	svc              service.Service
 	permissionsSvc   permissions.PermissionsService
 	keys             keys.Keys
-	hubInfoSvc          hubinfo.HubInfoService
+	hubInfoSvc       hubinfo.HubInfoService
 	startupError     error
 	startupErrorTime time.Time
 	eventPublisher   events.EventPublisher
@@ -85,7 +85,7 @@ func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys key
 		svc:            svc,
 		permissionsSvc: permissions.NewPermissionsService(gormDB, eventPublisher),
 		keys:           keys,
-		hubInfoSvc:        hubInfoSvc,
+		hubInfoSvc:     hubInfoSvc,
 		eventPublisher: eventPublisher,
 		lspManager:     manager.NewLSPManager(gormDB),
 		iaManager:      apps.NewIdentityAuthorityManager(gormDB),
@@ -1738,6 +1738,45 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		}
 	}
 
+	if updateSettingsRequest.ImageProxyMode != "" || updateSettingsRequest.ImageProxyTemplate != nil {
+		if err := api.setImageProxy(updateSettingsRequest.ImageProxyMode, updateSettingsRequest.ImageProxyTemplate); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// setImageProxy applies the profile-image gating choice (P0-B). An empty mode
+// leaves the stored mode unchanged; a nil template leaves it unchanged (an
+// explicit empty string clears it). It rejects the incoherent end state where
+// the effective mode is "proxy" but no template is set, so a hub can never be
+// left in "proxy" mode with nothing to proxy through. The template is written
+// before the mode so a valid template is in place by the time "proxy" takes
+// effect.
+func (api *api) setImageProxy(mode string, template *string) error {
+	effectiveMode := mode
+	if effectiveMode == "" {
+		effectiveMode = api.cfg.GetImageProxyMode()
+	}
+	effectiveTemplate := api.cfg.GetImageProxyTemplate()
+	if template != nil {
+		effectiveTemplate = *template
+	}
+	if effectiveMode == config.ImageProxyModeProxy && strings.TrimSpace(effectiveTemplate) == "" {
+		return errors.New("image proxy mode 'proxy' requires a template")
+	}
+
+	if template != nil {
+		if err := api.cfg.SetImageProxyTemplate(*template); err != nil {
+			return fmt.Errorf("failed to set image proxy template: %w", err)
+		}
+	}
+	if mode != "" {
+		if err := api.cfg.SetImageProxyMode(mode); err != nil {
+			return fmt.Errorf("failed to set image proxy mode: %w", err)
+		}
+	}
 	return nil
 }
 

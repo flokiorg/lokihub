@@ -1143,6 +1143,13 @@ type UpdateSettingsRequest struct {
 	PrivateEnvelope *PrivateEnvelopeInfo `json:"privateEnvelope"`
 	SearchRelay     *string              `json:"searchRelay"`
 	MempoolApi      string               `json:"mempoolApi"`
+	// ImageProxyMode / ImageProxyTemplate set the profile-image gating choice
+	// (P0-B). Mode is one of off/direct/proxy; an empty mode leaves it
+	// unchanged. Template is a pointer so an absent field leaves it unchanged
+	// while an explicit empty string clears it. In "proxy" mode a non-empty,
+	// valid template is required.
+	ImageProxyMode     string  `json:"imageProxyMode"`
+	ImageProxyTemplate *string `json:"imageProxyTemplate"`
 }
 
 type SetNodeAliasRequest struct {

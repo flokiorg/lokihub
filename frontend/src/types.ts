@@ -735,9 +735,18 @@ export type SetupNodeInfo = Partial<{
 
 export type LSPType = "LSPS1";
 
+export type ImageProxyMode = "off" | "direct" | "proxy";
+
 export type HubInfo = {
   version: string;
   releaseNotes: string; // Markdown format
+  // Profile-image gating (P0-B). imageProxyMode decides whether/how external
+  // profile images (avatars, node banner) are loaded: "off" (default) shows
+  // initials and no banner, "direct" loads the source URL, "proxy" routes it
+  // through imageProxyTemplate. The template carries one {url} or {b64url}
+  // placeholder and is only used in "proxy" mode.
+  imageProxyMode?: ImageProxyMode;
+  imageProxyTemplate?: string;
 };
 
 export type FiatRate = {
