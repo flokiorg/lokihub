@@ -11,7 +11,7 @@ import (
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/transactions"
@@ -28,7 +28,7 @@ type Service interface {
 	Shutdown(ctx context.Context)
 
 	// TODO: remove getters (currently used by http / wails services)
-	GetLokiSvc() loki.LokiService
+	GetLokiSvc() hubinfo.HubInfoService
 
 	GetEventPublisher() events.EventPublisher
 	GetLNClient() lnclient.LNClient

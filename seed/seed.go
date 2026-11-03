@@ -28,20 +28,20 @@ type ServiceEntry struct {
 	Description string `yaml:"description" json:"description"`
 }
 
-// Currency mirrors loki.LokiCurrency. loki converts into its own type to keep
+// Currency mirrors hubinfo.FiatCurrency. loki converts into its own type to keep
 // this package a leaf.
 type Currency struct {
 	Name   string `yaml:"name" json:"name"`
 	Symbol string `yaml:"symbol" json:"symbol"`
 }
 
-// FAQ mirrors loki.FAQ.
+// FAQ mirrors hubinfo.FAQ.
 type FAQ struct {
 	Question string `yaml:"question" json:"question"`
 	Answer   string `yaml:"answer" json:"answer"`
 }
 
-// Info mirrors loki.LokiInfo. Version is a fallback only — loki prefers the
+// Info mirrors hubinfo.HubInfo. Version is a fallback only — loki prefers the
 // appversion build tag.
 type Info struct {
 	Version      string `yaml:"version" json:"version"`

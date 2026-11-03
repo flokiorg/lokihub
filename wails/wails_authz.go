@@ -91,9 +91,9 @@ var publicDesktopRoutes = map[string]map[string]bool{
 		"/api/info":         true,
 		"/api/setup/config": true,
 		"/api/setup/status": true,
-		"/api/loki/info":    true,
-		"/api/loki/rates":   true,
-		"/api/loki/faq":     true,
+		"/api/hub/info":    true,
+		"/api/rates":   true,
+		"/api/hub/faq":     true,
 		"/api/currencies":   true,
 	},
 	"POST": {

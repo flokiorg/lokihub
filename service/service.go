@@ -27,7 +27,7 @@ import (
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -50,7 +50,7 @@ type service struct {
 	db                  *gorm.DB
 	lnClient            lnclient.LNClient
 	transactionsService transactions.TransactionsService
-	lokiSvc             loki.LokiService
+	hubInfoSvc             hubinfo.HubInfoService
 	rateOracle          *ratesoracle.Oracle
 	appStoreSvc         appstore.Service
 	eventPublisher      events.EventPublisher
@@ -196,7 +196,7 @@ func NewService(ctx context.Context) (*service, error) {
 	keys := keys.NewKeys()
 
 	rateOracle := ratesoracle.FromSeed(seed.Get())
-	lokiSvc := loki.NewLokiService(cfg, rateOracle)
+	hubInfoSvc := hubinfo.NewHubInfoService(cfg, rateOracle)
 
 	transactionsSvc := transactions.NewTransactionsService(gormDB, eventPublisher)
 
@@ -217,7 +217,7 @@ func NewService(ctx context.Context) (*service, error) {
 		cfg:            cfg,
 		ctx:            ctx,
 		eventPublisher: eventPublisher,
-		lokiSvc:        lokiSvc,
+		hubInfoSvc:        hubInfoSvc,
 		rateOracle:     rateOracle,
 
 		nip47Service:        nip47.NewNip47Service(gormDB, cfg, keys, eventPublisher, socialCache),
@@ -351,8 +351,8 @@ func (svc *service) GetConfig() config.Config {
 	return svc.cfg
 }
 
-func (svc *service) GetLokiSvc() loki.LokiService {
-	return svc.lokiSvc
+func (svc *service) GetLokiSvc() hubinfo.HubInfoService {
+	return svc.hubInfoSvc
 }
 
 func (svc *service) GetNip47Service() nip47.Nip47Service {
