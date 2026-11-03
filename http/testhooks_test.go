@@ -41,7 +41,7 @@ func hooksServer(t *testing.T, network string) (*echo.Echo, string) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 	if network == "" {
 		mockSvc.On("GetLNClient").Return(nil).Maybe()
