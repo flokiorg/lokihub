@@ -70,6 +70,8 @@ hub to services the user has explicitly selected.
   redeemable with the secret their holder already has. (#102)
 - Breaking: moves the NIP-CASH and NIP-CW per-call proofs onto their own event
   kinds (23198 and 23199), off the shared kind 35521. (#90)
+- Renames the built-in "Ohstr Relay" relay suggestion to "Ohstr" and lists it
+  last in the setup relay picker. (#215)
 
 ### Removed
 
