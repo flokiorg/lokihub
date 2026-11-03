@@ -18,12 +18,14 @@ var networkNames = map[string]string{
 	"simnet":    "simnet",
 }
 
-// nodeChain is the chain a node's reported network names.
+// nodeChain is the chain a node's reported network names. It takes both the
+// long names flnd reports (mainnet, testnet3) and the short names lokid and
+// Bitcoin Core report through getblockchaininfo (main, test).
 func nodeChain(nodeNetwork string) string {
 	switch n := strings.ToLower(nodeNetwork); n {
-	case "bitcoin", "mainnet", "flokicoin":
+	case "bitcoin", "mainnet", "main", "flokicoin":
 		return "mainnet"
-	case "testnet", "testnet3", "testnet4":
+	case "testnet", "testnet3", "testnet4", "test":
 		return "testnet"
 	default:
 		return n
