@@ -15,7 +15,7 @@ import (
 
 func TestStartupErrorRoutes(t *testing.T) {
 	e := echo.New()
-	registerStartupErrorRoutes(errors.New("SQL logic error: no such column: parent_kind (1)"))(e)
+	registerStartupErrorRoutes(errors.New("SQL logic error: no such column: parent_kind (1)"), "/data/lokihub")(e)
 
 	for _, route := range []string{"/api/info", "/api/apps", "/api/setup/status"} {
 		rec := httptest.NewRecorder()
@@ -28,5 +28,6 @@ func TestStartupErrorRoutes(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), route)
 		assert.Equal(t, StartupErrorCode, body.Code, route)
 		assert.Equal(t, "SQL logic error: no such column: parent_kind (1)", body.Message, route)
+		assert.Equal(t, "/data/lokihub", body.WorkDir, route)
 	}
 }
