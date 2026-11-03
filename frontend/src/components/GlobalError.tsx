@@ -1,4 +1,4 @@
-import { RotateCw } from "lucide-react";
+import { FolderOpenIcon, RotateCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
@@ -9,6 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "src/components/ui/card";
+import { useInfo } from "src/hooks/useInfo";
+import { canOpenFolder, openFolder } from "src/utils/openFolder";
 import { AppError } from "src/utils/request";
 
 type GlobalErrorProps = {
@@ -17,6 +19,7 @@ type GlobalErrorProps = {
 
 export function GlobalError({ error }: GlobalErrorProps) {
   const { t } = useTranslation("common");
+  const { data: info } = useInfo();
 
   const isAppError = error instanceof AppError;
   const status = isAppError ? (error as AppError).status : undefined;
@@ -59,6 +62,15 @@ export function GlobalError({ error }: GlobalErrorProps) {
           </div>
         </CardContent>
         <CardFooter className="flex justify-end gap-2">
+          {canOpenFolder(info?.workDir) && (
+            <Button
+              variant="outline"
+              onClick={() => openFolder(info!.workDir)}
+            >
+              <FolderOpenIcon className="w-4 h-4 me-2" />
+              {t("criticalError.openDataFolder")}
+            </Button>
+          )}
           <Button onClick={() => window.location.reload()}>
             <RotateCw className="w-4 h-4 me-2" />
             {t("criticalError.reloadApp")}

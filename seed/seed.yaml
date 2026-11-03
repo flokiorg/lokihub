@@ -19,9 +19,6 @@ services:
       url: "https://flokichain.info"
       description: "Flokicoin block explorer"
   nostr_relay:
-    - name: "Ohstr Relay"
-      url: "wss://relay.ohstr.com"
-      description: "High availability relay"
     - name: "Damus"
       url: "wss://relay.damus.io"
       description: "Popular general-purpose public relay"
@@ -31,6 +28,9 @@ services:
     - name: "nos.lol"
       url: "wss://nos.lol"
       description: "General-purpose public relay"
+    - name: "Ohstr"
+      url: "wss://relay.ohstr.com"
+      description: "High availability relay"
   # App store suggestions. These are inactive until an operator picks one under
   # Settings → Services — nothing is fetched out of the box. This is the former
   # hardcoded LOKIHUB_STORE_URL default, demoted to a mere suggestion.

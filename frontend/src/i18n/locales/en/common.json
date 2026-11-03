@@ -85,11 +85,13 @@
   "criticalError": {
     "title": "Critical Error",
     "description": "Something went wrong and Lokihub cannot continue.",
-    "reloadApp": "Reload App"
+    "reloadApp": "Reload App",
+    "openDataFolder": "Open data folder"
   },
   "startupError": {
     "title": "Lokihub couldn't start",
     "description": "Something went wrong while starting up. Close Lokihub and try again. If this keeps happening, share the error below with support.",
-    "close": "Close"
+    "close": "Close",
+    "openDataFolder": "Open data folder"
   }
 }

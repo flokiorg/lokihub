@@ -1091,5 +1091,15 @@ func (cfg *config) GetDefaultWorkDir() string {
 	if cfg.Env.Workdir != "" {
 		return cfg.Env.Workdir
 	}
+	return DefaultWorkDir()
+}
+
+// DefaultWorkDir is the work directory lokihub uses before any AppConfig is
+// built (e.g. the startup-error window, which runs when service creation
+// failed): the WORK_DIR override, else <XDG data home>/lokihub.
+func DefaultWorkDir() string {
+	if w := os.Getenv("WORK_DIR"); w != "" {
+		return w
+	}
 	return filepath.Join(xdg.DataHome, "lokihub")
 }
