@@ -27,6 +27,8 @@ export function SetupServices() {
     trustedNwcRelay: true,
     generalRelay: "",
     searchRelay: "",
+    // App store is configured later under Settings → Services, not during setup.
+    lokihubStoreUrl: "",
   });
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -108,6 +110,7 @@ export function SetupServices() {
               showGeneralRelay={false}
               showSearchRelay={false}
               showLSPCatalogue={false}
+              showAppStore={false}
             />
           )}
         </div>

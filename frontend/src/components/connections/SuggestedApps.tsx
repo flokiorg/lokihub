@@ -12,6 +12,7 @@ import {
 } from "src/components/ui/card";
 import { useAppLogo } from "src/hooks/useAppLogo";
 import { useAppStore } from "src/hooks/useAppStore";
+import { useInfo } from "src/hooks/useInfo";
 import { cn } from "src/lib/utils";
 import { AppStoreApp, sortedAppStoreCategories } from "./SuggestedAppData";
 
@@ -62,9 +63,27 @@ function InternalAppCard({ id, title, description, logo }: AppStoreApp) {
 
 export default function SuggestedApps() {
   const { apps: appStoreApps, loading, error } = useAppStore();
+  const { data: info } = useInfo();
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>(
     []
   );
+
+  // The app store is OFF until the operator selects a store URL under
+  // Settings → Services. With none selected nothing is ever fetched, so show a
+  // configure hint (not an error) — same degrade-gracefully shape as the fiat
+  // rate falling back to sats/FLC. Wait for info before deciding so we don't
+  // flash this state while it loads.
+  if (info && !info.lokihubStoreUrl) {
+    return (
+      <EmptyState
+        icon={LayoutGrid}
+        title="App store not configured"
+        description="Choose an app store under Settings → Services to browse community apps."
+        buttonText="Open Settings"
+        buttonLink="/settings/services"
+      />
+    );
+  }
 
   if (loading) {
     return <Loading />;

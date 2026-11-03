@@ -20,6 +20,7 @@ export function NostrProfileRow({
   profile,
   isVerified,
   isVerifying,
+  onVerify,
   avatarClassName = "h-9 w-9",
   showCopy = true,
 }: {
@@ -27,6 +28,11 @@ export function NostrProfileRow({
   profile?: NostrProfile;
   isVerified?: boolean;
   isVerifying?: boolean;
+  // When set, the row shows a user-initiated "verify" button next to the name
+  // for an as-yet-unverified nip05 claim. NIP-05 verification fetches the
+  // claimed domain directly, so it is never run automatically — the operator
+  // opts in per profile by clicking this.
+  onVerify?: () => void;
   avatarClassName?: string;
   // Search-result rows (e.g. MemberPicker) sit inside an already-clickable
   // item, so a nested copy button there just competes with the row's own
@@ -53,12 +59,27 @@ export function NostrProfileRow({
               className="h-1.5 w-1.5 shrink-0 rounded-full bg-positive-foreground"
               aria-label={t("profileRow.nip05Verified")}
             />
+          ) : isVerifying ? (
+            <Skeleton
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              aria-label={t("profileRow.verifyingNip05")}
+            />
           ) : (
-            isVerifying && (
-              <Skeleton
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                aria-label={t("profileRow.verifyingNip05")}
-              />
+            onVerify && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  // Rows can sit inside a clickable item (MemberPicker); a
+                  // verify click must not also toggle/select the row.
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onVerify();
+                }}
+                className="shrink-0 rounded px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+                aria-label={t("profileRow.verifyNip05")}
+              >
+                {t("profileRow.verifyNip05")}
+              </button>
             )
           )}
         </span>
