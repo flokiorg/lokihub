@@ -1,5 +1,5 @@
 import { Skeleton } from "src/components/ui/skeleton";
-import { useFlokicoinRate } from "src/hooks/useFlokicoinRate";
+import { useFiatRate } from "src/hooks/useFiatRate";
 import { useInfo } from "src/hooks/useInfo";
 import { cn } from "src/lib/utils";
 
@@ -15,22 +15,22 @@ export default function FormattedFiatAmount({
   showApprox,
 }: FormattedFiatAmountProps) {
   const { data: info } = useInfo();
-  const { data: flokicoinRate, error: flokicoinRateError } = useFlokicoinRate();
+  const { data: fiatRate, error: fiatRateError } = useFiatRate();
 
-  if (info?.currency === "LOKI" || flokicoinRateError) {
+  if (info?.currency === "LOKI" || fiatRateError) {
     return null;
   }
 
   return (
     <div className={cn("text-sm text-muted-foreground", className)}>
-      {showApprox && flokicoinRate && "~"}
-      {!flokicoinRate ? (
+      {showApprox && fiatRate && "~"}
+      {!fiatRate ? (
         <Skeleton className="w-20">&nbsp;</Skeleton>
       ) : (
         new Intl.NumberFormat("en-US", {
           style: "currency",
           currency: info?.currency || "usd",
-        }).format((amount / 100_000_000) * flokicoinRate.rate_float)
+        }).format((amount / 100_000_000) * fiatRate.rate_float)
       )}
     </div>
   );

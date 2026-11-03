@@ -735,19 +735,19 @@ export type SetupNodeInfo = Partial<{
 
 export type LSPType = "LSPS1";
 
-export type LokiInfo = {
+export type HubInfo = {
   version: string;
   releaseNotes: string; // Markdown format
 };
 
-export type FlokicoinRate = {
+export type FiatRate = {
   code: string;
   symbol: string;
   rate: string;
   rate_float: number;
 };
 
-// TODO: use camel case (needs mapping in the Loki OAuth Service - see how LokiInfo is done above)
+// TODO: use camel case (needs mapping in the Loki OAuth Service - see how HubInfo is done above)
 export type LokiMe = {
   identifier: string;
   nostr_pubkey: string;

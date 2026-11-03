@@ -273,7 +273,15 @@ audits of both.
 
 ### Changed
 
-- Breaking: a Circle Wallet's membership is decided by resolutions, no longer
+- Breaking: renamed the chain-branded hub-info/rate API surface to chain-neutral
+  names, so lokihub reads generically across chains. Routes `GET /api/loki/rates`
+  → `GET /api/rates`, `/api/loki/info` → `/api/hub/info`, `/api/loki/faq` →
+  `/api/hub/faq`; the `loki` Go package is now `hubinfo` with `FlokicoinRate` →
+  `FiatRate`, `LokiInfo` → `HubInfo`, `LokiCurrency` → `FiatCurrency`,
+  `LokiService` → `HubInfoService`. The native currency unit (`loki`/`mloki`,
+  sats/FLC) and the external "Loki Account" link feature (`/api/loki/unlink-account`)
+  keep their chain-specific names — they are not branding. Frontend + backend
+  change together; the only client is the bundled UI.
   re-checked on every call (NIP-CW §Membership): each successful resolution of
   the circle's follow set (nmilat's `ResolveFollowSet`: the newest signed
   version, one dated more than 15 minutes ahead ignored, one older than the
