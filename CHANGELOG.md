@@ -85,6 +85,9 @@ hub to services the user has explicitly selected.
 
 ### Fixed
 
+- Connects to a node that reports its network as `main` or `test` (the short
+  names lokid and Bitcoin Core use); such a node was refused at startup with a
+  spurious "the node is on another chain" error. (#213)
 - Fixes upgrading from 0.3.0-alpha failing at startup with "no such column:
   parent_kind". (#98)
 - Shows a desktop error screen when the backend fails to start instead of
