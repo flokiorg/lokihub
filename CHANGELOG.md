@@ -79,7 +79,7 @@ hub to services the user has explicitly selected.
   face, dropping the sunburst so it reads bigger and stays legible on both light
   and dark menu bars. (#216)
 - Updates `flnd` to v0.2.6-rc.1, `flndecodepay` to v1.0.6-rc.1 and `go-flokicoin`
-  to v0.26.4-rc.1, and pins `google.golang.org/grpc` to v1.83.2.
+  to v0.26.4-rc.1, and pins `google.golang.org/grpc` to v1.83.2. (#217)
 
 ### Removed
 
