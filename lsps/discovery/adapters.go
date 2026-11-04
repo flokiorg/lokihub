@@ -11,7 +11,7 @@ import (
 
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
-	"github.com/flokiorg/lokihub/utils"
+	"github.com/flokiorg/lokihub/netutil"
 )
 
 // NostrFetcher is Fetcher over go-nostr, one short-lived pool per call.
@@ -99,7 +99,7 @@ type ManagerLSPS struct {
 
 // Connect connects the node to nodeID at addr; an existing connection is fine.
 func (m ManagerLSPS) Connect(ctx context.Context, nodeID, addr string) error {
-	host, port, err := utils.ParseHostPort(addr)
+	host, port, err := netutil.ParseHostPort(addr)
 	if err != nil {
 		return err
 	}

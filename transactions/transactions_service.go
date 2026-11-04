@@ -24,8 +24,8 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/numeric"
 	"github.com/flokiorg/lokihub/testknobs"
-	"github.com/flokiorg/lokihub/utils"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -1039,10 +1039,10 @@ func (svc *transactionsService) ListTransactions(ctx context.Context, from, unti
 	}
 
 	if from > 0 {
-		tx = tx.Where("updated_at >= ?", time.Unix(utils.ClampUint64ToInt64(from), 0))
+		tx = tx.Where("updated_at >= ?", time.Unix(numeric.ClampUint64ToInt64(from), 0))
 	}
 	if until > 0 {
-		tx = tx.Where("updated_at <= ?", time.Unix(utils.ClampUint64ToInt64(until), 0))
+		tx = tx.Where("updated_at <= ?", time.Unix(numeric.ClampUint64ToInt64(until), 0))
 	}
 
 	var totalCount64 int64
@@ -1056,10 +1056,10 @@ func (svc *transactionsService) ListTransactions(ctx context.Context, from, unti
 	tx = tx.Order("updated_at desc")
 
 	if limit > 0 {
-		tx = tx.Limit(utils.ClampUint64ToInt(limit))
+		tx = tx.Limit(numeric.ClampUint64ToInt(limit))
 	}
 	if offset > 0 {
-		tx = tx.Offset(utils.ClampUint64ToInt(offset))
+		tx = tx.Offset(numeric.ClampUint64ToInt(offset))
 	}
 
 	result = tx.Find(&transactions)

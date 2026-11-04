@@ -51,7 +51,7 @@ import (
 // builds a cash_wallet app funded with a deliberately NON-round-loki total
 // (21999 mloki -- not a multiple of 1000) and a CASH_REDEEM_SCOPE
 // AppPermission stamped with MaxAmountLoki = 21 -- EXACTLY what
-// apps_service.go's saveAppTx (`utils.ClampUint64ToInt(maxAmountLoki)`, fed
+// apps_service.go's saveAppTx (`numeric.ClampUint64ToInt(maxAmountLoki)`, fed
 // `sum/1000` by cashwallet.Commit/Split/Consolidate) would store for a real
 // wallet funded with this same 21999-mloki total. Setup is built directly
 // (mirroring transactions/cash_redeem_fee_reconciliation_test.go's own

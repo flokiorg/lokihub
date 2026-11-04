@@ -50,7 +50,7 @@ type Info struct {
 
 // FiatRateOracle points at the NIP-78 (kind 30078) event that publishes the
 // Flokicoin fiat rate. RefreshInterval and StalenessTTL are Go duration
-// strings ("300s", "1h"); ratesoracle parses them with sensible fallbacks.
+// strings ("300s", "1h"); the rates oracle (hubinfo) parses them with sensible fallbacks.
 type FiatRateOracle struct {
 	Npub            string   `yaml:"npub"`
 	Kind            int      `yaml:"kind"`

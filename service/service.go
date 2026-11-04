@@ -40,7 +40,6 @@ import (
 	"github.com/flokiorg/lokihub/lsps/manager"
 	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
 	"github.com/flokiorg/lokihub/nip47"
-	"github.com/flokiorg/lokihub/ratesoracle"
 	"github.com/flokiorg/lokihub/seed"
 )
 
@@ -51,7 +50,7 @@ type service struct {
 	lnClient            lnclient.LNClient
 	transactionsService transactions.TransactionsService
 	hubInfoSvc          hubinfo.HubInfoService
-	rateOracle          *ratesoracle.Oracle
+	rateOracle          *hubinfo.Oracle
 	appStoreSvc         appstore.Service
 	eventPublisher      events.EventPublisher
 	ctx                 context.Context
@@ -194,7 +193,7 @@ func NewService(ctx context.Context) (*service, error) {
 	// under Settings > Services (GetGeneralRelayUrls) — never the seed's own
 	// relay list. With no selected relays it is effectively disabled and the UI
 	// degrades to sats/FLC. Its npub/kind/d-tag still come from the seed.
-	rateOracle := ratesoracle.FromSeed(seed.Get(), cfg.GetGeneralRelayUrls)
+	rateOracle := hubinfo.FromSeed(seed.Get(), cfg.GetGeneralRelayUrls)
 	hubInfoSvc := hubinfo.NewHubInfoService(cfg, rateOracle)
 
 	transactionsSvc := transactions.NewTransactionsService(gormDB, eventPublisher)

@@ -53,9 +53,10 @@ import (
 
 	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/keys"
+	"github.com/flokiorg/lokihub/netutil"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
+	"github.com/flokiorg/lokihub/numeric"
 	"github.com/flokiorg/lokihub/service"
-	"github.com/flokiorg/lokihub/utils"
 )
 
 const (
@@ -1027,7 +1028,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 		logger.Logger.Error().Err(result.Error).Msg("Failed to count DB apps")
 		return nil, result.Error
 	}
-	query = query.Offset(utils.ClampUint64ToInt(offset)).Limit(utils.ClampUint64ToInt(limit))
+	query = query.Offset(numeric.ClampUint64ToInt(offset)).Limit(numeric.ClampUint64ToInt(limit))
 
 	err := query.Find(&dbApps).Error
 
@@ -1685,7 +1686,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	if updateSettingsRequest.Relay != "" {
-		if err := utils.ValidateWebSocketURL(updateSettingsRequest.Relay); err != nil {
+		if err := netutil.ValidateWebSocketURL(updateSettingsRequest.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		err := api.cfg.SetRelay(updateSettingsRequest.Relay)
@@ -1703,7 +1704,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 			if u == "" {
 				continue
 			}
-			if err := utils.ValidateWebSocketURL(u); err != nil {
+			if err := netutil.ValidateWebSocketURL(u); err != nil {
 				return fmt.Errorf("invalid General Relay URL: %w", err)
 			}
 		}
@@ -1721,7 +1722,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 			if u == "" {
 				continue
 			}
-			if err := utils.ValidateWebSocketURL(u); err != nil {
+			if err := netutil.ValidateWebSocketURL(u); err != nil {
 				return fmt.Errorf("invalid Search Relay URL: %w", err)
 			}
 		}
@@ -1731,7 +1732,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	if updateSettingsRequest.MempoolApi != "" {
-		if err := utils.ValidateHTTPURL(updateSettingsRequest.MempoolApi); err != nil {
+		if err := netutil.ValidateHTTPURL(updateSettingsRequest.MempoolApi); err != nil {
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		err := api.cfg.SetMempoolApi(updateSettingsRequest.MempoolApi)
@@ -1752,7 +1753,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	if updateSettingsRequest.LokihubStoreURL != nil {
 		storeURL := strings.TrimSpace(*updateSettingsRequest.LokihubStoreURL)
 		if storeURL != "" {
-			if err := utils.ValidateHTTPURL(storeURL); err != nil {
+			if err := netutil.ValidateHTTPURL(storeURL); err != nil {
 				return fmt.Errorf("invalid App Store URL: %w", err)
 			}
 		}
@@ -2232,7 +2233,7 @@ func (api *api) GetLogOutput(ctx context.Context, logType string, getLogRequest 
 		if logFileName == "" {
 			logData = []byte("file log is disabled")
 		} else {
-			logData, err = utils.ReadFileTail(logFileName, getLogRequest.MaxLen)
+			logData, err = readFileTail(logFileName, getLogRequest.MaxLen)
 			if err != nil {
 				return nil, err
 			}
@@ -2326,7 +2327,7 @@ func (api *api) ExecuteCustomNodeCommand(ctx context.Context, command string) (i
 	}
 
 	// Split command line into arguments. Command name must be the first argument.
-	parsedArgs, err := utils.ParseCommandLine(command)
+	parsedArgs, err := parseCommandLine(command)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse node command: %w", err)
 	} else if len(parsedArgs) == 0 {
@@ -2480,7 +2481,7 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	if req.Relay != "" {
-		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
+		if err := netutil.ValidateWebSocketURL(req.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		if err := api.cfg.SetRelay(req.Relay); err != nil {
@@ -2489,7 +2490,7 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	if req.MempoolApi != "" {
-		if err := utils.ValidateHTTPURL(req.MempoolApi); err != nil {
+		if err := netutil.ValidateHTTPURL(req.MempoolApi); err != nil {
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
@@ -2547,7 +2548,7 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	if req.Relay != "" {
-		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
+		if err := netutil.ValidateWebSocketURL(req.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		if err := api.cfg.SetRelay(req.Relay); err != nil {
@@ -2556,7 +2557,7 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	if req.MempoolApi != "" {
-		if err := utils.ValidateHTTPURL(req.MempoolApi); err != nil {
+		if err := netutil.ValidateHTTPURL(req.MempoolApi); err != nil {
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {

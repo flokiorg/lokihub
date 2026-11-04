@@ -1,6 +1,6 @@
-// Package ratesoracle subscribes to the NIP-78 (kind 30078) fiat-rate oracle
+// The rates oracle subscribes to the NIP-78 (kind 30078) fiat-rate oracle
 // that publishes the Flokicoin fiat rate, verifies it, and caches the latest
-// good value for hubinfo.GetFiatRate to serve.
+// good value for GetFiatRate to serve.
 //
 // It replaces the former rates.json HTTP fetch: the oracle publishes the exact
 // same JSON body as event.content, so it is a drop-in. The oracle pubkey, kind
@@ -10,11 +10,12 @@
 // the oracle is effectively disabled. The newest
 // parameterized-replaceable event authored by that pubkey and tagged
 // #d == d_tag is fetched, its signature and author are verified, its content is
-// unmarshalled into hubinfo.FiatRate, and the result is cached and refreshed
+// unmarshalled into FiatRate, and the result is cached and refreshed
 // on an interval. Until a rate is fetched — or once the last-good one is older
 // than the staleness TTL — Latest reports unavailable and the UI degrades to
 // sats/FLC.
-package ratesoracle
+
+package hubinfo
 
 import (
 	"context"
@@ -27,7 +28,6 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 
-	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/seed"
 )
@@ -77,7 +77,7 @@ type Oracle struct {
 	fetch fetchFunc
 
 	mu        sync.RWMutex
-	rate      *hubinfo.FiatRate
+	rate      *FiatRate
 	fetchedAt time.Time
 }
 
@@ -138,7 +138,7 @@ func (o *Oracle) relays() []string {
 }
 
 // Latest returns the cached rate when present and not stale.
-func (o *Oracle) Latest() (*hubinfo.FiatRate, error) {
+func (o *Oracle) Latest() (*FiatRate, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if o.rate == nil {
@@ -208,7 +208,7 @@ func (o *Oracle) refresh(ctx context.Context) {
 		return
 	}
 
-	var rate hubinfo.FiatRate
+	var rate FiatRate
 	if err := json.Unmarshal([]byte(best.Content), &rate); err != nil {
 		logger.Logger.Error().Err(err).Msg("fiat-rate oracle: event content is not a valid rate")
 		return

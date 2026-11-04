@@ -16,7 +16,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/utils"
+	"github.com/flokiorg/lokihub/numeric"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -476,7 +476,7 @@ func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, max
 			App:           *app,
 			Scope:         scope,
 			ExpiresAt:     expiresAt,
-			MaxAmountLoki: utils.ClampUint64ToInt(maxAmountLoki),
+			MaxAmountLoki: numeric.ClampUint64ToInt(maxAmountLoki),
 			BudgetRenewal: budgetRenewal,
 		}
 		if err := tx.Create(&appPermission).Error; err != nil {

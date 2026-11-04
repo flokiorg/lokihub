@@ -1,4 +1,4 @@
-package ratesoracle
+package hubinfo
 
 import (
 	"context"

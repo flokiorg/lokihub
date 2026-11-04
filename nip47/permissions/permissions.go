@@ -12,7 +12,7 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
-	"github.com/flokiorg/lokihub/utils"
+	"github.com/flokiorg/lokihub/sliceutil"
 	"gorm.io/gorm"
 )
 
@@ -115,13 +115,13 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 	// the private transport (RequestMethodToScope + HasPermission per item) — this filter
 	// changes what a bill ADVERTISES, never what it permits. Removing the scopes instead
 	// would have refused every real call.
-	requestMethods = utils.Filter(requestMethods, func(requestMethod string) bool {
+	requestMethods = sliceutil.Filter(requestMethods, func(requestMethod string) bool {
 		return !privateOnlyMethods[requestMethod]
 	})
 
 	// only return methods supported by the lnClient
 	lnClientSupportedMethods := lnClient.GetSupportedNIP47Methods()
-	requestMethods = utils.Filter(requestMethods, func(requestMethod string) bool {
+	requestMethods = sliceutil.Filter(requestMethods, func(requestMethod string) bool {
 		// TODO: better way to exclude methods unrelated to the lnclient
 		if requestMethod == models.CREATE_CONNECTION_METHOD ||
 			requestMethod == constants.NIP47MethodMintCash ||
