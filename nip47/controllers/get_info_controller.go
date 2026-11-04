@@ -78,7 +78,7 @@ type getInfoResponse struct {
 
 func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
 	// An Order connection is public (its string may be listed): its get_info is
-	// answered from a result at most listedGetInfoTTL old, dropped at once when
+	// answered from a result at most the service's get_info cache TTL old, dropped at once when
 	// its terms or retirement change (NIP-CASH §Hub Rules MAY, OQ-47; U-25.10).
 	if app != nil && app.Kind == db.AppKindCashOrder && app.AppPubkey != "" {
 		if result, ok := controller.orderInfo.Get(app.AppPubkey); ok {

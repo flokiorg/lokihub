@@ -51,9 +51,11 @@ func publishToFirst(ctx context.Context, pool *nostr.SimplePool, preferred strin
 		}
 		relay, err := pool.EnsureRelay(relayURL)
 		if err != nil {
+			logger.Logger.Debug().Err(err).Str("relay", relayURL).Msgf("Could not reach relay to publish %s", what)
 			continue
 		}
 		if err := relay.Publish(ctx, ev); err != nil {
+			logger.Logger.Debug().Err(err).Str("relay", relayURL).Msgf("Relay refused %s", what)
 			continue
 		}
 		return nil

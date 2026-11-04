@@ -14,7 +14,7 @@ const cashHorizonRowID = 1
 // retires: an order's record follows NIP-CO retention, a withdrawal's follows
 // its payout. Named here until nmilat exports MethodCashOrder and
 // MethodCashWithdraw.
-var CashOwnedElsewhere = []string{"cash_order", "cash_withdraw"}
+func CashOwnedElsewhere() []string { return []string{"cash_order", "cash_withdraw"} }
 
 // HorizonTx is the stored horizon H, or 0 when none was stored yet.
 func HorizonTx(tx *gorm.DB) (int64, error) {
@@ -49,7 +49,7 @@ func RaiseHorizon(gormDB *gorm.DB, configured int64, now time.Time) (int64, erro
 		// deadline + H: otherwise a committed call could be answered unknown
 		// (NIP-CASH §The Record, Retention).
 		return tx.Model(&CashRequestRecord{}).
-			Where("drop_after IS NOT NULL AND drop_after < deadline + ? + 1 AND method NOT IN ?", h, CashOwnedElsewhere).
+			Where("drop_after IS NOT NULL AND drop_after < deadline + ? + 1 AND method NOT IN ?", h, CashOwnedElsewhere()).
 			Update("drop_after", gorm.Expr("deadline + ? + 1", h)).Error
 	})
 	return h, err

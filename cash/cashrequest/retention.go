@@ -8,10 +8,6 @@ import (
 	"github.com/flokiorg/lokihub/db"
 )
 
-// ownedElsewhere is the methods whose records another component retires (see
-// db.CashOwnedElsewhere).
-var ownedElsewhere = db.CashOwnedElsewhere
-
 // OnBillArchivedTx runs when a bill is archived, inside the archiving
 // transaction and after its app row is deleted: every record that created it and has no live bill left gets
 // drop_after = max(deadline + H + 1, latest retained_until + 1), so the record
@@ -70,7 +66,7 @@ func OnBillArchivedTx(tx *gorm.DB, walletAppID uint) error {
 func (s Store) PruneRecords(limit int) (int64, error) {
 	now := s.now().Unix()
 	ids := s.DB.Model(&db.CashRequestRecord{}).Select("id").
-		Where("drop_after IS NOT NULL AND drop_after <= ? AND method NOT IN ?", now, ownedElsewhere).
+		Where("drop_after IS NOT NULL AND drop_after <= ? AND method NOT IN ?", now, db.CashOwnedElsewhere()).
 		Limit(limit)
 	res := s.DB.Where("id IN (?)", ids).Delete(&db.CashRequestRecord{})
 	return res.RowsAffected, res.Error
