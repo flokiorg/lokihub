@@ -14,7 +14,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/transactions"
-	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
+	nostrlsps5 "github.com/ohstr/nostr-lsps5"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
@@ -476,8 +476,8 @@ func (svc *service) StartApp(encryptionKey string) error {
 					return "", ""
 				}
 
-				lsps5 := nostrlsps5.NewLSPS5(privKey)
-				uri, err := lsps5.GenerateLsp5Uri(svc.cfg.GetRelayUrls())
+				lsps5 := nostrlsps5.New(privKey)
+				uri, err := lsps5.URI(svc.cfg.GetRelayUrls())
 				if err == nil {
 					return uri, "nostr"
 				}

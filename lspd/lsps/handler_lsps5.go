@@ -10,7 +10,7 @@ import (
 	"github.com/flokiorg/lokihub/lspd/common"
 	"github.com/flokiorg/lokihub/lspd/core"
 	"github.com/flokiorg/lokihub/lspd/platform/logging"
-	lsps5 "github.com/flowgate-lsp/nostr-lsps5"
+	lsps5 "github.com/ohstr/nostr-lsps5"
 	"github.com/rs/zerolog/log"
 )
 
@@ -126,7 +126,7 @@ func (s *Handlers) handleLsps5SetWebhook(req *JsonRpcRequest, peer []byte) *Json
 			return NewJsonRpcErrorResponse(req.Id, Lsps5ErrorUnsupportedProtocol, "nostr_transport_disabled", nil)
 		}
 		// Use library validation for URI
-		_, relays, err := lsps5.ParseLsp5Uri(params.Webhook)
+		_, relays, err := lsps5.ParseURI(params.Webhook)
 		if err != nil {
 			log.Debug().
 				Err(err).
@@ -137,7 +137,7 @@ func (s *Handlers) handleLsps5SetWebhook(req *JsonRpcRequest, peer []byte) *Json
 			return NewJsonRpcErrorResponse(req.Id, Lsps5ErrorUrlParseError, fmt.Sprintf("invalid_nostr_uri: %v", err), nil)
 		}
 		// SSRF: the nostr transport dials these client-supplied relays, so
-		// apply the same address policy as the push branch. ParseLsp5Uri
+		// apply the same address policy as the push branch. ParseURI
 		// alone does no host/IP validation, which let a peer point the LSP's
 		// outbound websocket at an internal relay (FLSPD-0011 / R-LSP-6).
 		for _, relay := range relays {

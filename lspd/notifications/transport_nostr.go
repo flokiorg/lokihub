@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/lspd/common"
-	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
+	nostrlsps5 "github.com/ohstr/nostr-lsps5"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
@@ -17,7 +17,7 @@ import (
 // NostrTransport implements NotificationTransport for Nostr encrypted LSPS5 delivery.
 type NostrTransport struct {
 	lspPrivKey string // hex private key
-	lsps5      *nostrlsps5.LSPS5
+	lsps5      *nostrlsps5.Client
 	relayPool  *RelayPool
 	// allowLoopback admits loopback relays for local development and tests
 	// (LSPS5_ALLOW_LOOPBACK_WEBHOOKS); every other non-public range stays
@@ -31,7 +31,7 @@ type NostrTransport struct {
 func NewNostrTransport(lspPrivKey string, allowLoopback bool) *NostrTransport {
 	return &NostrTransport{
 		lspPrivKey:    lspPrivKey,
-		lsps5:         nostrlsps5.NewLSPS5(lspPrivKey),
+		lsps5:         nostrlsps5.New(lspPrivKey),
 		relayPool:     NewRelayPool(),
 		allowLoopback: allowLoopback,
 	}
@@ -50,7 +50,7 @@ func (t *NostrTransport) Send(ctx context.Context, targetUri string, method stri
 	}
 
 	// 1. Parse URI
-	targetPubkey, relays, err := nostrlsps5.ParseLsp5Uri(targetUri)
+	targetPubkey, relays, err := nostrlsps5.ParseURI(targetUri)
 	if err != nil {
 		return fmt.Errorf("invalid nostr URI: %v", err)
 	}
@@ -66,7 +66,7 @@ func (t *NostrTransport) Send(ctx context.Context, targetUri string, method stri
 		Msg("NostrTransport: preparing event")
 
 	// 2. Create Event (Pure Logic - returns unsigned)
-	ev, err := t.lsps5.CreateNotificationEvent(targetPubkey, method, params)
+	ev, err := t.lsps5.CreateEvent(targetPubkey, method, params)
 	if err != nil {
 		return fmt.Errorf("failed to create notification event: %v", err)
 	}

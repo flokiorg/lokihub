@@ -41,7 +41,6 @@ require (
 	github.com/ecies/go/v2 v2.0.8
 	github.com/flokiorg/flnd v0.2.6-rc.1
 	github.com/flokiorg/flndecodepay v1.0.6-rc.1
-	github.com/flowgate-lsp/nostr-lsps5 v1.0.2
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/golang-migrate/migrate/v4 v4.20.1
 	github.com/google/uuid v1.6.0
@@ -257,6 +256,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/labstack/echo-jwt/v4 v4.3.1
+	github.com/ohstr/nostr-lsps5 v1.1.1
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/tyler-smith/go-bip32 v1.0.0
 	golang.org/x/exp v0.0.0-20250811191247-51f88131bc50 // indirect

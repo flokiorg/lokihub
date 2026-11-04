@@ -198,7 +198,7 @@ func (s *ackingRelayServer) url() string {
 
 // nostrLsps5Uri builds a nostr+lsps5:// URI for the given (already-hex,
 // 64-char) recipient pubkey and relay URLs, matching what
-// nostrlsps5.ParseLsp5Uri expects.
+// nostrlsps5.ParseURI expects.
 func nostrLsps5Uri(pubkey string, relays ...string) string {
 	q := make([]string, len(relays))
 	for i, r := range relays {
@@ -244,7 +244,7 @@ func TestNostrTransport_Send_NoRelaysInUri(t *testing.T) {
 func TestNostrTransport_Send_EventCreationFailure(t *testing.T) {
 	transport := NewNostrTransport(nostr.GeneratePrivateKey(), true)
 	// 64 chars but not valid hex, so ComputeSharedSecret's hex.DecodeString
-	// fails inside CreateNotificationEvent, before any network I/O.
+	// fails inside CreateEvent, before any network I/O.
 	invalidPubkey := strings.Repeat("z", 64)
 
 	err := transport.Send(context.Background(), nostrLsps5Uri(invalidPubkey, "wss://relay.example"), "lsps5.payment_incoming", nil)

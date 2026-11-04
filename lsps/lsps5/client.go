@@ -11,7 +11,7 @@ import (
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps0"
 	"github.com/flokiorg/lokihub/lsps/transport"
-	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
+	nostrlsps5 "github.com/ohstr/nostr-lsps5"
 )
 
 // ClientHandler handles LSPS5 client-side operations
@@ -267,7 +267,7 @@ func validateWebhookURL(rawURL string) error {
 	}
 
 	if parsed.Scheme == "nostr+lsps5" {
-		if _, _, err := nostrlsps5.ParseLsp5Uri(rawURL); err != nil {
+		if _, _, err := nostrlsps5.ParseURI(rawURL); err != nil {
 			return fmt.Errorf("invalid nostr+lsps5 URI: %w", err)
 		}
 		return nil
