@@ -650,8 +650,8 @@ func (svc *FLNDService) SendKeysendWithFeeLimit(amount uint64, destination strin
 			Msg("Failed to decode payee pubkey")
 		return nil, err
 	}
-	preImageBytes, err := hex.DecodeString(preimage)
-	if err != nil || len(preImageBytes) != 32 {
+	preImageBytes, err := lnclient.DecodeHash32("preimage", preimage)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payee_pubkey", destination).
 			Str("preimage", preimage).
@@ -832,11 +832,8 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 	var descriptionHashBytes []byte
 
 	if descriptionHash != "" {
-		descriptionHashBytes, err = hex.DecodeString(descriptionHash)
-		if err != nil || len(descriptionHashBytes) != 32 {
-			if err == nil {
-				err = errors.New("description hash must be 32 bytes hex")
-			}
+		descriptionHashBytes, err = lnclient.DecodeHash32("description hash", descriptionHash)
+		if err != nil {
 			logger.Logger.Error().Err(err).
 				Str("descriptionHash", descriptionHash).
 				Msg("Invalid description hash")
@@ -1059,11 +1056,8 @@ func (svc *FLNDService) MakeHoldInvoice(ctx context.Context, amount int64, descr
 	var paymentHashBytes []byte
 
 	if descriptionHash != "" {
-		descriptionHashBytes, err = hex.DecodeString(descriptionHash)
-		if err != nil || len(descriptionHashBytes) != 32 {
-			if err == nil {
-				err = errors.New("description hash must be 32 bytes hex")
-			}
+		descriptionHashBytes, err = lnclient.DecodeHash32("description hash", descriptionHash)
+		if err != nil {
 			logger.Logger.Error().Err(err).
 				Str("descriptionHash", descriptionHash).
 				Msg("Invalid description hash")
@@ -1071,11 +1065,8 @@ func (svc *FLNDService) MakeHoldInvoice(ctx context.Context, amount int64, descr
 		}
 	}
 
-	paymentHashBytes, err = hex.DecodeString(paymentHash)
-	if err != nil || len(paymentHashBytes) != 32 {
-		if err == nil {
-			err = errors.New("payment hash must be 32 bytes hex")
-		}
+	paymentHashBytes, err = lnclient.DecodeHash32("payment hash", paymentHash)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
 			Msg("Invalid payment hash")
@@ -1128,11 +1119,8 @@ func (svc *FLNDService) MakeHoldInvoice(ctx context.Context, amount int64, descr
 }
 
 func (svc *FLNDService) SettleHoldInvoice(ctx context.Context, preimage string) (err error) {
-	preimageBytes, err := hex.DecodeString(preimage)
-	if err != nil || len(preimageBytes) != 32 {
-		if err == nil {
-			err = errors.New("preimage must be 32 bytes hex")
-		}
+	preimageBytes, err := lnclient.DecodeHash32("preimage", preimage)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("preimage", preimage).
 			Msg("Invalid preimage")
@@ -1152,11 +1140,8 @@ func (svc *FLNDService) SettleHoldInvoice(ctx context.Context, preimage string) 
 }
 
 func (svc *FLNDService) CancelHoldInvoice(ctx context.Context, paymentHash string) (err error) {
-	paymentHashBytes, err := hex.DecodeString(paymentHash)
-	if err != nil || len(paymentHashBytes) != 32 {
-		if err == nil {
-			err = errors.New("payment hash must be 32 bytes hex")
-		}
+	paymentHashBytes, err := lnclient.DecodeHash32("payment hash", paymentHash)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
 			Msg("Invalid payment hash")
@@ -1182,11 +1167,8 @@ func (svc *FLNDService) CancelHoldInvoice(ctx context.Context, paymentHash strin
 }
 
 func (svc *FLNDService) LookupInvoice(ctx context.Context, paymentHash string) (transaction *lnclient.Transaction, err error) {
-	paymentHashBytes, err := hex.DecodeString(paymentHash)
-	if err != nil || len(paymentHashBytes) != 32 {
-		if err == nil {
-			err = errors.New("payment hash must be 32 bytes hex")
-		}
+	paymentHashBytes, err := lnclient.DecodeHash32("payment hash", paymentHash)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
 			Msg("Invalid payment hash")

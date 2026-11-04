@@ -717,8 +717,8 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 		preimage = hex.EncodeToString(preImageBytes)
 	}
 
-	preImageBytes, err := hex.DecodeString(preimage)
-	if err != nil || len(preImageBytes) != 32 {
+	preImageBytes, err := lnclient.DecodeHash32("preimage", preimage)
+	if err != nil {
 		svc.logger.Error().Err(err).
 			Str("preimage", preimage).
 			Msg("Invalid preimage")
