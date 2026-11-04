@@ -15,20 +15,20 @@ import (
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nip47/permissions"
-	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
+	nostrpool "github.com/flokiorg/lokihub/nostr/pool"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/gorm"
 )
 
 type Nip47Notifier struct {
-	pool           nostrmodels.SimplePool
+	pool           nostrpool.SimplePool
 	cfg            config.Config
 	keys           keys.Keys
 	db             *gorm.DB
 	permissionsSvc permissions.PermissionsService
 }
 
-func NewNip47Notifier(pool nostrmodels.SimplePool, db *gorm.DB, cfg config.Config, keys keys.Keys, permissionsSvc permissions.PermissionsService) *Nip47Notifier {
+func NewNip47Notifier(pool nostrpool.SimplePool, db *gorm.DB, cfg config.Config, keys keys.Keys, permissionsSvc permissions.PermissionsService) *Nip47Notifier {
 	return &Nip47Notifier{
 		pool:           pool,
 		cfg:            cfg,

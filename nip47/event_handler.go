@@ -19,14 +19,14 @@ import (
 	"github.com/flokiorg/lokihub/nip47/controllers"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nip47/permissions"
-	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
+	nostrpool "github.com/flokiorg/lokihub/nostr/pool"
 	"github.com/nbd-wtf/go-nostr"
 	nmilatnip01 "github.com/ohstr/nmilat/nip01"
 	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"github.com/ohstr/nmilat/nipcw"
 )
 
-func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
+func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrpool.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
 	// Arrival is taken before any decryption (NIP-CASH §Deadlines).
 	meta := standardCallMeta(event, time.Now())
 	var nip47Response *models.Response
@@ -648,7 +648,7 @@ func (svc *nip47Service) CreateResponse(initialEvent *nostr.Event, content inter
 	return resp, nil
 }
 
-func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrmodels.SimplePool, requestEvent *db.RequestEvent, resp *nostr.Event, app *db.App) error {
+func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrpool.SimplePool, requestEvent *db.RequestEvent, resp *nostr.Event, app *db.App) error {
 	var appId *uint
 	if app != nil {
 		appId = &app.ID

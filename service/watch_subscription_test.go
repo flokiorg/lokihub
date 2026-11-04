@@ -19,7 +19,7 @@ import (
 
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47"
-	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
+	nostrpool "github.com/flokiorg/lokihub/nostr/pool"
 )
 
 // slowHandleEventNip47Service is a minimal Nip47Service fake whose HandleEvent
@@ -34,7 +34,7 @@ type slowHandleEventNip47Service struct {
 	ran     chan struct{}
 }
 
-func (f *slowHandleEventNip47Service) HandleEvent(ctx context.Context, pool nostrmodels.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
+func (f *slowHandleEventNip47Service) HandleEvent(ctx context.Context, pool nostrpool.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
 	close(f.started)
 	<-f.unblock
 	close(f.ran)

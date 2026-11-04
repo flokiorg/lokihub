@@ -16,7 +16,7 @@ import (
 	"github.com/flokiorg/lokihub/nip47/controllers"
 	"github.com/flokiorg/lokihub/nip47/notifications"
 	"github.com/flokiorg/lokihub/nip47/permissions"
-	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
+	nostrpool "github.com/flokiorg/lokihub/nostr/pool"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
 	transportpkg "github.com/ohstr/nmilat/nipcash/transport"
@@ -54,10 +54,10 @@ type Nip47Service interface {
 	events.EventSubscriber
 	StartNotifier(ctx context.Context, pool *nostr.SimplePool)
 	StartNip47InfoPublisher(ctx context.Context, pool *nostr.SimplePool, lnClient lnclient.LNClient)
-	HandleEvent(ctx context.Context, pool nostrmodels.SimplePool, event *nostr.Event, lnClient lnclient.LNClient)
-	GetNip47Info(ctx context.Context, pool nostrmodels.SimplePool, appWalletPubKey string) (*nostr.Event, error)
-	PublishNip47Info(ctx context.Context, pool nostrmodels.SimplePool, appId uint, appWalletPubKey string, appWalletPrivKey string, relayUrl string, lnClient lnclient.LNClient) (*nostr.Event, error)
-	PublishNip47InfoDeletion(ctx context.Context, pool nostrmodels.SimplePool, appWalletPubKey string, appWalletPrivKey string, infoEventId string) error
+	HandleEvent(ctx context.Context, pool nostrpool.SimplePool, event *nostr.Event, lnClient lnclient.LNClient)
+	GetNip47Info(ctx context.Context, pool nostrpool.SimplePool, appWalletPubKey string) (*nostr.Event, error)
+	PublishNip47Info(ctx context.Context, pool nostrpool.SimplePool, appId uint, appWalletPubKey string, appWalletPrivKey string, relayUrl string, lnClient lnclient.LNClient) (*nostr.Event, error)
+	PublishNip47InfoDeletion(ctx context.Context, pool nostrpool.SimplePool, appWalletPubKey string, appWalletPrivKey string, infoEventId string) error
 	CreateResponse(initialEvent *nostr.Event, content interface{}, tags nostr.Tags, cipher *cipher.Nip47Cipher, walletPrivKey string) (result *nostr.Event, err error)
 	EnqueueNip47InfoPublishRequest(appId uint, appWalletPubKey, appWalletPrivKey, relayUrl string)
 	// ServePrivateItem runs one item from a private-transport envelope. A false second
