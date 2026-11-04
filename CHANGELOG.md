@@ -80,6 +80,12 @@ hub to services the user has explicitly selected.
   and dark menu bars. (#216)
 - Updates `flnd` to v0.2.6-rc.1, `flndecodepay` to v1.0.6-rc.1 and `go-flokicoin`
   to v0.26.4-rc.1, and pins `google.golang.org/grpc` to v1.83.2. (#217)
+- Reorganises the Go packages for reuse as a library: `config` no longer
+  imports the cash domain, the cash and circle packages move under `cash/` and
+  `circle/`, and `hubclock`, `appversion`, `ratesoracle`, `utils`, `lspservice`
+  and `nostr/models` are renamed, merged or split. An architecture test now
+  guards the layering. **Packagers:** the release-version linker flag is now
+  `-X 'github.com/flokiorg/lokihub/buildinfo.Tag=<version>'`.
 
 ### Removed
 
