@@ -10,7 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/logger"
 )

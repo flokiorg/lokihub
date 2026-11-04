@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"

@@ -19,7 +19,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/flokiorg/lokihub/api"
-	"github.com/flokiorg/lokihub/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/http"
 	"github.com/flokiorg/lokihub/logger"

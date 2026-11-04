@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/nbd-wtf/go-nostr"
 

@@ -40,7 +40,7 @@ type AppConfig struct {
 	// service catalogue (seed.yaml), inactive until picked.
 	LokihubStoreURL string `envconfig:"LOKIHUB_STORE_URL"`
 
-	// LSP service attach (lspservice, plan §3.2). The Hub becomes the single
+	// LSP service attach (daemonclient, plan §3.2). The Hub becomes the single
 	// privileged client of a separately-deployed lspd daemon's NIP-98 JSON-RPC
 	// dashboard. These are read-only wiring: the Hub never imports lspd code,
 	// it only talks to it over the network boundary.

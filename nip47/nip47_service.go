@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"

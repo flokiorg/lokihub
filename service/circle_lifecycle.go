@@ -9,8 +9,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/circlelife"
-	"github.com/flokiorg/lokihub/circlewallet"
+	"github.com/flokiorg/lokihub/circle/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlewallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"

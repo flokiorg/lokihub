@@ -11,8 +11,8 @@ import (
 	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashrequest"
-	"github.com/flokiorg/lokihub/cashwallet"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"

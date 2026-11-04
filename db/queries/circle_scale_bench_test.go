@@ -3,7 +3,7 @@ package queries_test
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"math/rand"
 	"testing"
 	"time"

@@ -8,7 +8,7 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"

@@ -18,9 +18,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashwallet"
-	"github.com/flokiorg/lokihub/cashwithdraw"
-	"github.com/flokiorg/lokihub/cashwithdraw/withdrawtest"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw/withdrawtest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"

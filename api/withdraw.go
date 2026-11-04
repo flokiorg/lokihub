@@ -3,7 +3,7 @@ package api
 import (
 	"errors"
 
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 )
 
 // ErrWithdrawUnavailable: the on-chain withdrawal service is not running.

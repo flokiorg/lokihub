@@ -26,15 +26,15 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	lokidb "github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/daemonclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
-	"github.com/flokiorg/lokihub/lspservice"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -56,7 +56,7 @@ type jwtCustomClaims struct {
 
 type HttpService struct {
 	api            api.API
-	hubInfoHttpSvc    *HubInfoHttpService
+	hubInfoHttpSvc *HubInfoHttpService
 	cfg            config.Config
 	eventPublisher events.EventPublisher
 	db             *gorm.DB
@@ -73,7 +73,7 @@ type HttpService struct {
 
 	// lspClient is the Hub's client to an attached lspd daemon (plan §3), or
 	// nil when no LSP service endpoint is configured (feature off).
-	lspClient *lspservice.Client
+	lspClient *daemonclient.Client
 
 	// lsps5Replay drops stale/replayed LSPS5 webhook notifications (LOKIHUB-0020).
 	lsps5Replay *lsps5ReplayGuard
@@ -85,7 +85,7 @@ type HttpService struct {
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
 	return &HttpService{
 		api:             api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetHubInfoSvc(), eventPublisher),
-		hubInfoHttpSvc:     NewHubInfoHttpService(svc, svc.GetHubInfoSvc(), svc.GetConfig().GetEnv()),
+		hubInfoHttpSvc:  NewHubInfoHttpService(svc, svc.GetHubInfoSvc(), svc.GetConfig().GetEnv()),
 		cfg:             svc.GetConfig(),
 		eventPublisher:  eventPublisher,
 		db:              svc.GetDB(),

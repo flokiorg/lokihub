@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/flokiorg/lokihub/api"
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 )
 
 var errInvalidHubID = errors.New("invalid id")

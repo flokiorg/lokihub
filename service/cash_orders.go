@@ -11,8 +11,8 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"

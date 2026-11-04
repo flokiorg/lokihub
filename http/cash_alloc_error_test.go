@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
 )
 
 // An admin mint that reuses a request_id is a conflict the operator looks up,

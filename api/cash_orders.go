@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/flokiorg/lokihub/clock"
 
-	"github.com/flokiorg/lokihub/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/listing"

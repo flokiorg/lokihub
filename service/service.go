@@ -31,9 +31,9 @@ import (
 	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/transactions"
 
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/cashrequest"
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"

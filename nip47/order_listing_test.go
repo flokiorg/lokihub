@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/db"
 )
 

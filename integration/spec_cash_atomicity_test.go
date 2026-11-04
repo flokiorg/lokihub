@@ -18,7 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/cashwallet"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/ohstr/nmilat/nipcash"

@@ -8,7 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/cashwallet"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/testknobs"

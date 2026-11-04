@@ -10,7 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 )

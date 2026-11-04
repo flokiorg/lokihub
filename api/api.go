@@ -28,9 +28,9 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashwallet"
-	"github.com/flokiorg/lokihub/circlelife"
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
+	"github.com/flokiorg/lokihub/circle/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/connstr"
@@ -49,7 +49,7 @@ import (
 	"github.com/flokiorg/lokihub/seed"
 	"github.com/ohstr/nmilat/nipcash"
 
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
 
 	"github.com/flokiorg/lokihub/buildinfo"
 	"github.com/flokiorg/lokihub/keys"

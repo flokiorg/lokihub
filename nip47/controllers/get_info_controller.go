@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"github.com/flokiorg/lokihub/clock"
 
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/getinfocache"

@@ -15,9 +15,9 @@ import (
 	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/cashrequest"
-	"github.com/flokiorg/lokihub/circlelife"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
+	"github.com/flokiorg/lokihub/circle/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
