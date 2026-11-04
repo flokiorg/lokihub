@@ -40,7 +40,13 @@ func (c *Cache[K]) Get(key K) (any, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[key]
-	if !ok || time.Since(e.at) >= c.ttl {
+	if !ok {
+		return nil, false
+	}
+	if time.Since(e.at) >= c.ttl {
+		// Drop what has expired as it is found, so keys read once and never again
+		// do not stay for the life of the process.
+		delete(c.entries, key)
 		return nil, false
 	}
 	return e.result, true

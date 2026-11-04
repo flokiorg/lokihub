@@ -17,13 +17,13 @@ import (
 // and circle API handlers builds or parses the URI form; ordinary NWC app
 // connections keep it.
 func TestNoURIFormInCashOrCircleCode(t *testing.T) {
-	root, err := filepath.Abs("..")
+	root, err := filepath.Abs("../..")
 	require.NoError(t, err)
 	banned := map[string]bool{"Build" + "PairingURI": true, "Parse" + "PairingURI": true}
 
 	// whole files
 	var files []string
-	for _, pattern := range []string{"cashwallet/*.go", "nip47/controllers/*cash*.go", "nip47/controllers/*circle*.go"} {
+	for _, pattern := range []string{"cash/cashwallet/*.go", "nip47/controllers/*cash*.go", "nip47/controllers/*circle*.go"} {
 		m, err := filepath.Glob(filepath.Join(root, pattern))
 		require.NoError(t, err)
 		files = append(files, m...)

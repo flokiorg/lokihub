@@ -15,7 +15,7 @@ import (
 // and no compatibility path reads the old ones. U-2.R2a: nothing imports the
 // deleted lokicash package.
 func TestU_2_10_NoLegacyProvenanceLabels(t *testing.T) {
-	root, err := filepath.Abs("..")
+	root, err := filepath.Abs("../..")
 	require.NoError(t, err)
 	banned := []string{"lokicash" + "-mint", "satscash" + "-mint", "satscash" + "-zap", "lokihub/" + "lokicash\""}
 	var hits []string

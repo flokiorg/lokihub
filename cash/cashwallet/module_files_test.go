@@ -14,7 +14,7 @@ import (
 // trees.
 func goFilesOfModule(t *testing.T) []string {
 	t.Helper()
-	root, err := filepath.Abs("..")
+	root, err := filepath.Abs("../..")
 	require.NoError(t, err)
 	var out []string
 	require.NoError(t, filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

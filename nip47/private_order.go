@@ -41,7 +41,7 @@ func (svc *nip47Service) servePrivateOrder(ctx context.Context, lnClient lnclien
 		return refuse(constants.ERROR_INTERNAL, "the hub could not record this order, please retry")
 	}
 
-	deps := cashorder.PlaceDeps{Deps: cashorder.Deps{DB: svc.db, Keys: svc.keys, Apps: svc.appsService, LN: lnClient,
+	deps := cashorder.PlaceDeps{Deps: cashorder.Deps{InfoCache: svc.getInfoOrders, DB: svc.db, Keys: svc.keys, Apps: svc.appsService, LN: lnClient,
 		Relays: svc.cfg.GetRelayUrls()}}
 	if svc.identityAuthorityMgr != nil {
 		deps.IA = svc.identityAuthorityMgr

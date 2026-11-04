@@ -47,6 +47,16 @@ func TestCache_ResultExpiresAfterTTL(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// An expired entry is dropped when it is found, not kept until invalidated.
+func TestCache_ExpiredEntryIsEvictedOnGet(t *testing.T) {
+	c := New[string](10 * time.Millisecond)
+	assert.True(t, c.Put("k", c.Begin(), "v"))
+	time.Sleep(25 * time.Millisecond)
+	_, ok := c.Get("k")
+	assert.False(t, ok)
+	assert.Empty(t, c.entries)
+}
+
 // A nil cache holds nothing and needs no nil checks at its call sites.
 func TestCache_NilCacheHoldsNothing(t *testing.T) {
 	var c *Cache[string]
