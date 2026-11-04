@@ -21,7 +21,7 @@ type pkg struct {
 // built on the default tags.
 func load(t *testing.T) map[string][]string {
 	t.Helper()
-	out, err := exec.Command("go", "list", "-json", mod+"/...").Output()
+	out, err := exec.Command("go", "list", "-e", "-json", mod+"/...").Output()
 	if err != nil {
 		t.Fatalf("go list: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestFoundationDoesNotImportDomain(t *testing.T) {
 	above := []string{
 		"cash", "circle", "transactions", "apps", "ledger", "listing", "keys",
 		"nip47", "service", "api", "http", "wails", "lsps", "lspd", "hubinfo",
-		"appstore",
+		"appstore", "nodesign", "connstr", "testknobs",
 	}
 	deps := load(t)
 	for _, f := range foundation {

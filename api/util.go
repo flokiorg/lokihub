@@ -16,9 +16,9 @@ func readFileTail(filePath string, maxLen int) (data []byte, err error) {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer func() {
-		err = f.Close()
-		if err != nil {
-			err = fmt.Errorf("failed to close file: %w", err)
+		// Keep an earlier error: a successful Close must not overwrite it.
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("failed to close file: %w", cerr)
 			data = nil
 		}
 	}()
