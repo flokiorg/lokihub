@@ -81,6 +81,19 @@ _If you get a blank screen, try running in your normal terminal (outside of vsco
     $ cd tmp
     $ ./main
 
+### Dev stack (regtest)
+
+The docker dev stack runs on a regtest chain only, with two flnd nodes, the dev
+relay and a hot-reloading backend and frontend:
+
+    $ just dev up       # build, start, fund both nodes, open channels, set lokihub up
+    $ just dev status
+    $ just test integration
+
+`just dev help` lists every recipe. The stack never runs on mainnet: it refuses a
+config that names another network, and the backend exits if its node is not on
+regtest.
+
 ### Run dockerfile locally (HTTP mode)
 
     $ docker build . -t nwc-local --progress=plain

@@ -10,155 +10,185 @@
 
 set shell := ["bash", "-c"]
 set positional-arguments
-# Makes .env visible to both `just` recipes (via env_var_or_default below,
-# and directly in bash recipe bodies) and docker compose's own interpolation
-# (which already reads .env from the compose file's directory natively) —
-# one file, one place to set DEV_DATA_DIR (see DATA_DIR below) per checkout.
+# Makes .env visible to `just` recipes and to the tools they run; docker
+# compose reads the same .env for its own interpolation.
 set dotenv-load := true
 
 VERSION := shell('cat VERSION 2>/dev/null || echo "v0.0.1"')
 DOCKER_COMPOSE_DEV := "docker compose -f docker-compose.dev.yml"
-# flnd stores its network directory as "main" (chaincfg.Params.Name), but
-# flncli's --network flag only accepts "mainnet" and assumes the directory
-# is named to match — so it looks in .../mainnet/ and never finds the
-# macaroon there. All authenticated flncli calls need this explicit path.
-FLND_MACAROON_PATH := "/root/.flnd/data/chain/flokicoin/main/admin.macaroon"
-# Where flnd's chain/wallet state and the hub's own data live. Defaults to
-# ./data (this checkout's own, gitignored, uninitialized in a fresh clone or
-# worktree). Set DEV_DATA_DIR in .env to an absolute path — e.g. another
-# checkout's own data/ — to reuse its already-synced flnd wallet and hub DB
-# instead of syncing/setting up a second one from scratch. Only one dev
-# stack should ever be pointed at a given data dir at a time (see `just dev
-# down`/`up` — container names are fixed, so only one stack runs at once
-# anyway).
-DATA_DIR := env_var_or_default("DEV_DATA_DIR", "data")
+# The regtest stack's data (git-ignored). `just dev wipe` deletes it.
+DATA_DIR := "data/regtest"
+# The stack's tool (integration/cmd/regtest). GOWORK=off so it builds in a
+# worktree too, which the org go.work does not list.
+REGTEST := "GOWORK=off go run ./integration/cmd/regtest"
 
 default:
     @just --list
 
-# docker-compose dev environment (flnd + hot-reloading backend/frontend) - run `just dev help` for subcommands
+# the regtest docker dev stack (chain, two flnd, relay, hot-reloading backend/frontend) - run `just dev help` for subcommands
 [group('dev')]
 dev subcommand="" *args:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Refuses anything but regtest: a tracked node config or .env naming another
+    # network, or the old mainnet data dir, which may hold a funded wallet.
+    guard() {
+        if grep -HniE 'mainnet|testnet|neutrino' dev/regtest/*.conf; then
+            echo "refusing: a dev/regtest config names a network other than regtest" >&2; exit 1
+        fi
+        if [ -f .env ]; then
+            settings=$(grep -v '^[[:space:]]*#' .env || true)
+            if grep -iE '(^|[^a-z0-9_/.-])(mainnet|testnet[0-9]*|signet)([^a-z0-9_/.-]|$)|flokicoin\.(mainnet|testnet|signet)|node=neutrino' <<<"$settings" \
+                || grep -E '^[[:space:]]*NETWORK=' <<<"$settings" | grep -vqE '^[[:space:]]*NETWORK=["]?regtest["]?[[:space:]]*$'; then
+                echo "refusing: .env names a network other than regtest" >&2; exit 1
+            fi
+        fi
+        if [ -d data/flnd ]; then
+            echo "refusing: data/flnd/ exists. It is the old mainnet dev node's data and may hold a funded wallet." >&2
+            echo "Sweep its funds and remove it by hand; the regtest stack never reads, moves or deletes it." >&2
+            exit 1
+        fi
+    }
+    # frontend.go embeds frontend/dist, so the backend cannot compile without at
+    # least one file there; a real `yarn build:http` overwrites this placeholder.
+    dist_placeholder() {
+        mkdir -p frontend/dist
+        [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
+    }
+    # flspd, the test LSP, runs in the compose "lsp" profile, on when its image
+    # exists (built in an flspd checkout: `just image-regtest <nmilat checkout>`).
+    lsp_image() {
+        local img="${FLSPD_IMAGE:-}"
+        [ -n "$img" ] || img=$(grep -E '^FLSPD_IMAGE=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)
+        echo "${img:-flspd:regtest}"
+    }
+    lsp_profile() {
+        if docker image inspect "$(lsp_image)" >/dev/null 2>&1; then
+            export COMPOSE_PROFILES=lsp
+        elif [ "${1:-}" = "warn" ]; then
+            echo "note: no $(lsp_image) image, so the stack runs without flspd (the LSP catalogue tests skip)" >&2
+        fi
+    }
+    wait_backend() {
+        for i in $(seq 1 90); do
+            {{DOCKER_COMPOSE_DEV}} logs backend --since "$1" 2>&1 | grep -q "http server started" && return 0
+            sleep 2
+        done
+        echo "backend did not start" >&2; return 1
+    }
     case "$1" in
         setup)
-            mkdir -p "{{DATA_DIR}}/flnd" "{{DATA_DIR}}/hub"
-            [ -f "{{DATA_DIR}}/flnd/flnd.conf" ] || cp "{{DATA_DIR}}/flnd/flnd.conf.sample" "{{DATA_DIR}}/flnd/flnd.conf"
-            sed -i 's/^; flokicoin.mainnet=true/flokicoin.mainnet=true/' "{{DATA_DIR}}/flnd/flnd.conf"
-            sed -i 's/^; flokicoin.node=neutrino/flokicoin.node=neutrino/' "{{DATA_DIR}}/flnd/flnd.conf"
+            mkdir -p "{{DATA_DIR}}"/{chain,flnd,payer,hub,relay,relay-ctl,flnd-lsp,flspd-creds,flspd-config,flspd-db,flspd-admin}
             [ -f .env ] || cp .env.example .env
-            ;;
-        setup-wallet)
-            if [ -f "{{DATA_DIR}}/flnd/data/chain/flokicoin/main/wallet.db" ]; then
-                echo "✅ Existing wallet detected. Skipping creation."
-            else
-                echo "🔐 Setting up FLND Wallet..."
-                {{DOCKER_COMPOSE_DEV}} rm -f flnd &> /dev/null || true
-                {{DOCKER_COMPOSE_DEV}} build flnd
-                {{DOCKER_COMPOSE_DEV}} run -d --name lokihub-flnd-setup flnd
-                echo "⏳ Waiting for FLND to initialize..."
-                MAX_RETRIES=30; COUNT=0
-                until docker exec lokihub-flnd-setup ls /root/.flnd/tls.cert &> /dev/null || [ $COUNT -eq $MAX_RETRIES ]; do
-                    sleep 1; ((COUNT++))
-                done
-                if docker exec -it lokihub-flnd-setup flncli --network=mainnet create; then
-                    echo "✅ Wallet initialized. Cleaning up..."
-                    docker stop lokihub-flnd-setup > /dev/null && docker rm lokihub-flnd-setup > /dev/null
-                else
-                    echo "❌ Wallet creation failed or was cancelled. Container lokihub-flnd-setup left running for you to retry:"
-                    echo "   docker exec -it lokihub-flnd-setup flncli --network=mainnet create"
-                    exit 1
-                fi
+            if [ ! -f "{{DATA_DIR}}/flspd.env" ]; then
+                # flspd's own key (not the node key): any 32 random bytes in hex.
+                key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+                sed "s/^FLSPD_PRIVATE_KEY=.*/FLSPD_PRIVATE_KEY=$key/" dev/regtest/flspd/flspd.env.example > "{{DATA_DIR}}/flspd.env"
             fi
-            ;;
-        unlock)
-            if [ "$(docker inspect -f '{{ "{{" }}.State.Running{{ "}}" }}' lokihub-dev-flnd 2>/dev/null)" != "true" ]; then
-                echo "❌ Error: flnd container is not running. Try 'just dev up' first."
-                exit 1
+            # The dashboard admin the backend's flspd test hooks log in as.
+            if grep -q '^DASHBOARD_ADMIN_PUBKEY=$' "{{DATA_DIR}}/flspd.env"; then
+                admin=$({{REGTEST}} flspd-admin-key)
+                sed -i "s/^DASHBOARD_ADMIN_PUBKEY=$/DASHBOARD_ADMIN_PUBKEY=$admin/" "{{DATA_DIR}}/flspd.env"
             fi
-            if docker exec lokihub-dev-flnd flncli --network=mainnet --macaroonpath={{FLND_MACAROON_PATH}} getinfo &> /dev/null; then
-                echo "✅ Wallet is already unlocked."
-                exit 0
+            if [ ! -f "{{DATA_DIR}}/relay/relay.yaml" ]; then
+                key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+                sed "s/__RELAY_PRIVKEY__/$key/" dev/regtest/relay.yaml.tmpl > "{{DATA_DIR}}/relay/relay.yaml"
             fi
-            if [ ! -f "{{DATA_DIR}}/flnd/wallet-password.txt" ]; then
-                python3 -c 'import getpass, os; p = getpass.getpass("Enter wallet password: "); f = open("{{DATA_DIR}}/flnd/wallet-password.txt", "w"); f.write(p); f.close(); os.chmod("{{DATA_DIR}}/flnd/wallet-password.txt", 0o600)'
-                if grep -q "^wallet-unlock-password-file=" "{{DATA_DIR}}/flnd/flnd.conf"; then
-                    sed -i "s|^wallet-unlock-password-file=.*|wallet-unlock-password-file=/root/.flnd/wallet-password.txt|" "{{DATA_DIR}}/flnd/flnd.conf"
-                else
-                    awk -v line="wallet-unlock-password-file=/root/.flnd/wallet-password.txt" '!done && /^\[/ { print line; done=1 } { print }' "{{DATA_DIR}}/flnd/flnd.conf" > "{{DATA_DIR}}/flnd/flnd.conf.tmp" && mv "{{DATA_DIR}}/flnd/flnd.conf.tmp" "{{DATA_DIR}}/flnd/flnd.conf"
-                fi
-                {{DOCKER_COMPOSE_DEV}} restart flnd
-            else
-                echo "🔐 Auto-unlock is configured but wallet is still locked. Check {{DATA_DIR}}/flnd/wallet-password.txt."
-            fi
+            {{REGTEST}} certs
             ;;
         up)
-            # frontend.go does //go:embed dist, so `air` can't compile the
-            # backend at all unless frontend/dist has at least one file —
-            # even though dev mode never actually serves from it (the
-            # frontend container's own Vite server does, via FRONTEND_URL).
-            # frontend/dist is git- and docker-ignored (it's a build
-            # artifact), so a fresh clone, or one where it's been deleted,
-            # has none. This placeholder exists purely to satisfy the embed;
-            # a real `frontend && yarn build:http` output overwrites it
-            # harmlessly if one's ever produced in this tree.
-            mkdir -p frontend/dist
-            [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
+            guard
+            just -f "{{justfile()}}" dev setup
+            dist_placeholder
+            lsp_profile warn
             {{DOCKER_COMPOSE_DEV}} up -d --build
+            just -f "{{justfile()}}" dev bootstrap
+            ;;
+        bootstrap)
+            guard
+            {{REGTEST}} bootstrap
+            just -f "{{justfile()}}" dev seed-relay
             ;;
         down)
-            {{DOCKER_COMPOSE_DEV}} down
+            COMPOSE_PROFILES=lsp {{DOCKER_COMPOSE_DEV}} down
+            ;;
+        wipe)
+            if [ "${2:-}" != "--yes" ]; then
+                read -r -p "Delete {{DATA_DIR}}/ (chain, both nodes, the hub and the relay)? [y/N] " answer
+                [ "$answer" = "y" ] || [ "$answer" = "Y" ] || exit 1
+            fi
+            COMPOSE_PROFILES=lsp {{DOCKER_COMPOSE_DEV}} down
+            # The containers write as root, so remove through one if a plain rm cannot.
+            rm -rf "{{DATA_DIR}}" 2>/dev/null || docker run --rm -v "$PWD/data:/d" alpine rm -rf /d/regtest
+            ;;
+        mine)
+            shift
+            {{REGTEST}} mine "$@"
+            ;;
+        fund)
+            shift
+            {{REGTEST}} fund "$@"
+            ;;
+        channels)
+            {{REGTEST}} channels
             ;;
         restart)
             shift
-            # Same frontend/dist placeholder as `up` above — the backend
-            # container bind-mounts the live host tree, so restarting it
-            # re-runs air's build against whatever's on disk right now, not
-            # whatever existed at image-build time.
-            mkdir -p frontend/dist
-            [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
+            lsp_profile
+            dist_placeholder
             {{DOCKER_COMPOSE_DEV}} restart "$@"
             ;;
         logs)
             shift
+            lsp_profile
             {{DOCKER_COMPOSE_DEV}} logs -f "${1:-}"
             ;;
         status)
+            lsp_profile
             {{DOCKER_COMPOSE_DEV}} ps
+            {{REGTEST}} status
             ;;
         reset)
-            # Restarts relay + backend (in that order - backend's own Nostr
-            # pool reconnects fresh against a relay with zero prior
-            # subscription state) so a run starts from the same server-side
-            # baseline every time, instead of whatever session/subscription
-            # state a previous run's own load left behind. `just test
-            # integration` already runs this before every invocation - this
-            # subcommand exists for manually forcing the same reset on
-            # demand (e.g. mid-investigation, without running the suite).
-            # Doesn't touch flnd/frontend/caddy or any volume - flnd's chain
-            # sync and the hub's own DB are untouched.
+            # Restarts relay then backend so a run starts from a fresh relay and
+            # backend session, then reseeds the relay. Chain and nodes are untouched,
+            # apart from one new block: flnd counts itself synced only while the tip
+            # is under two hours old.
+            {{REGTEST}} mine 1
             {{DOCKER_COMPOSE_DEV}} restart relay
+            since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             {{DOCKER_COMPOSE_DEV}} restart backend
             echo "waiting for backend to come back up..."
-            for i in $(seq 1 30); do
-                docker logs lokihub-dev-backend --since 20s 2>&1 | grep -q "http server started" && break
-                sleep 1
-            done
+            wait_backend "$since"
             just -f "{{justfile()}}" dev seed-relay
             ;;
+        restart-empty-relay)
+            # For INTEGRATION_RESTART_CMD: stops the backend, empties the relay and
+            # starts both again, returning once the backend is up.
+            {{DOCKER_COMPOSE_DEV}} stop backend relay
+            rm -rf "{{DATA_DIR}}/relay/db" 2>/dev/null || docker run --rm -v "$PWD/data:/d" alpine rm -rf /d/regtest/relay/db
+            since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            {{DOCKER_COMPOSE_DEV}} start relay backend
+            wait_backend "$since"
+            ;;
         seed-relay)
-            # Publishes integration/testdata/social_graph.json's fixed
-            # "provider"/"members" identities' follow set to the dev relay
-            # (see integration/cmd/seedrelay) - idempotent (a follow set is
-            # addressable), so this is safe to run on every `dev reset`, not
-            # just once. Keeps circle "follow_set"-policy integration tests
-            # off any real third-party relay - see integration/README.md.
-            go run ./integration/cmd/seedrelay "${RELAY:-ws://relay:5500}"
+            # Publishes integration/testdata/social_graph.json's follow set to the dev
+            # relay (integration/cmd/seedrelay). A follow set is addressable, so this
+            # is safe to rerun.
+            GOWORK=off go run ./integration/cmd/seedrelay "${RELAY:-ws://relay:5500}"
             ;;
         flncli)
             shift
-            docker exec -it lokihub-dev-flnd flncli --network=mainnet --macaroonpath={{FLND_MACAROON_PATH}} "$@"
+            node=flnd; port=10005
+            if [ "${1:-}" = "payer" ]; then node=payer; port=10006; shift
+            elif [ "${1:-}" = "lsp" ]; then node=flnd-lsp; port=10007; lsp_profile; shift
+            elif [ "${1:-}" = "hub" ]; then shift; fi
+            {{DOCKER_COMPOSE_DEV}} exec "$node" flncli --network=regtest --rpcserver=localhost:$port "$@"
+            ;;
+        lokid-cli)
+            shift
+            GOWORK=off go run github.com/flokiorg/go-flokicoin/cmd/lokid-cli --regtest \
+                -s "${DEV_HOST:-localhost}:${CHAIN_RPC_PORT:-25213}" -u dev -P dev \
+                --rpccert "{{DATA_DIR}}/chain/rpc.cert" "$@"
             ;;
         wails)
             exec wails dev -tags wails,dev -ldflags "-X 'github.com/flokiorg/lokihub/buildinfo.Tag={{VERSION}}'"
@@ -167,32 +197,35 @@ dev subcommand="" *args:
             cat <<'USAGE'
     usage: just dev <subcommand> [args...]
 
+    The dev and test stack runs on a regtest chain only: lokid (`chain`), the
+    Hub's flnd (`flnd`), a second flnd that tests pay from and to (`payer`), the
+    dev relay, the hot-reloading backend and frontend, and Caddy; with the
+    flspd:regtest image present, also flspd, the test LSP, on its own flnd
+    (`flnd-lsp`, compose profile "lsp").
+
     subcommands:
-      setup                onboard the docker dev environment: create data dirs/config from samples
-      setup-wallet          initialize the FLND wallet (run once, after setup, before up)
-      unlock                ensure the FLND wallet is unlocked (sets up auto-unlock if needed)
-      up                    start the docker dev environment (flnd, backend, frontend w/ hot-reload)
-      down                  stop the docker dev environment
-      restart [service...]  restart everything, or just the service(s) named (in place - keeps volumes)
-      logs [service]        follow logs for the docker dev environment or a specific service
-      status                show status of the docker dev environment
-      reset                  restart relay + backend for a clean server-side session/subscription baseline, then reseed (`just test integration` already does this)
-      seed-relay             publish the fixed integration test identities' follow set to the dev relay (`dev reset` already does this)
-      flncli <args...>      run flncli commands against the dev flnd (e.g. `just dev flncli getinfo`)
-      wails                 run the Wails desktop app locally (native alternative to the docker dev stack)
+      setup                    create data/regtest/, .env from .env.example, the relay config and the chain RPC cert
+      up                       setup, start the stack, then bootstrap
+      bootstrap                fund the nodes, open a channel each way (and flnd-lsp -> payer), set lokihub up, write
+                               integration/config.local.yaml, seed the relay (idempotent; `up` runs it)
+      down                     stop the stack (data kept)
+      wipe [--yes]             stop the stack and delete data/regtest/ - the only way to a fresh chain
+      mine [N] [address]       mine N blocks (default 1) to the payer, or to address
+      fund <hub|payer|address> <loki>   pay from the payer's wallet, then mine 1
+      channels                 reopen either channel if it is missing (after wiping one node)
+      restart [service...]     restart everything, or the named services
+      logs [service]           follow logs
+      status                   containers, tip height, wallet and channel balances, lokihub state
+      reset                    mine 1, restart relay and backend, reseed the relay (`just test integration` runs it)
+      restart-empty-relay      restart the backend on an emptied relay (INTEGRATION_RESTART_CMD)
+      seed-relay               publish the integration suite's fixed follow set to the dev relay
+      flncli [hub|payer|lsp] <args...>   flncli --network=regtest against a node
+      lokid-cli <args...>      lokid-cli --regtest against the chain node
+      wails                    run the Wails desktop app locally (not the docker stack)
 
-    set DEV_DATA_DIR in .env to an absolute path to point this stack's
-    flnd/hub data at another checkout's already-synced data/ (e.g. from a
-    worktree, to reuse the main checkout's wallet instead of syncing a
-    second one from scratch) — defaults to ./data. Only one dev stack can
-    be up at a time regardless (container names are fixed), so switching
-    checkouts is `just dev down` then `up` from the other one.
-
-    `restart` just restarts the existing container(s) in place - it won't
-    fix a service whose own container state is broken (e.g. an anonymous
-    volume like frontend's node_modules gone missing mid-run). For that,
-    force a clean recreation instead:
-        docker compose -f docker-compose.dev.yml up -d --force-recreate --renew-anon-volumes <service>
+    Never point this stack or the integration suite at a mainnet node. To run a
+    second stack from a worktree, set COMPOSE_PROJECT_NAME, the *_PORT values and
+    the DEV_*_DIR checkout paths in its .env.
     USAGE
             ;;
         *)
@@ -215,13 +248,11 @@ test subcommand="unit" *args:
             go test -race -count=1 ./...
             ;;
         integration)
-            # Runs against dev's default config. Skips 4 tests: the 3 that
-            # need real (nonzero) NWC rate limits (dev's .env disables them
-            # by default - see integration-ratelimits below), and the opt-in
-            # TestZZZZ_SweepLeakedEphemeralFixtures. Requires: dev stack
-            # up (`just dev up`) with a real LN backend, and
-            # integration/config.local.yaml pointing at an admin API token
-            # (see integration/README.md).
+            # Runs against the regtest dev stack (`just dev up`, which writes
+            # integration/config.local.yaml). Skips 4 tests: the 3 that need
+            # real (nonzero) NWC rate limits (.env disables them - see
+            # integration-ratelimits below), and the opt-in
+            # TestZZZZ_SweepLeakedEphemeralFixtures.
             #
             # `dev reset` first so every run starts from the same server-side
             # baseline (fresh relay/backend session and subscription state)
@@ -277,7 +308,7 @@ test subcommand="unit" *args:
             {{DOCKER_COMPOSE_DEV}} restart backend >/dev/null
             echo "waiting for backend to come back up with real rate limits..."
             for i in $(seq 1 60); do
-                docker logs lokihub-dev-backend --since "$restarted_at" 2>&1 | grep -q "http server started" && break
+                {{DOCKER_COMPOSE_DEV}} logs backend --since "$restarted_at" 2>&1 | grep -q "http server started" && break
                 sleep 2
             done
 

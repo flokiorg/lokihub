@@ -1,58 +1,250 @@
 # Every published port binds to DEV_BIND, the loopback by default: the dev
 # stack's node RPC, relay and Hub are for this machine, not its network.
+# The dev and test stack: regtest only. It has no mainnet option, port or fee
+# estimator; `just dev up` refuses to start if a config names another network, and
+# the backend exits if its node is not on regtest (LOKIHUB_DEV_STACK=1).
+#
+# Tracked configs live in dev/regtest/, data in data/regtest/ (git-ignored).
+# `just dev wipe` deletes data/regtest/ for a fresh chain. The project name keeps
+# containers per checkout, so a worktree can run its own stack: set
+# COMPOSE_PROJECT_NAME and the *_PORT values in its .env.
+name: lokihub-dev
+
 services:
+  chain:
+    build:
+      context: ${DEV_FLOKICOIN_DIR:-../go-flokicoin}
+      dockerfile: docker/Dockerfile
+    hostname: chain
+    restart: unless-stopped
+    # No --notls: flnd's btcd backend always uses TLS. The RPC cert is written by
+    # `just dev setup` (valid for `chain` and DEV_HOST) and shared with both flnd.
+    # TODO: add --keepregtestdb once go-flokicoin 0.26.4 is released; until then
+    # lokid deletes its regtest chain on every start, so a restarted chain needs
+    # `just dev wipe` (bootstrap detects it).
+    command:
+      - /bin/lokid
+      - --regtest
+      - --txindex
+      - --rejectnonstd
+      - --rpcuser=dev
+      - --rpcpass=dev
+      - --rpclisten=0.0.0.0:25213
+      - --listen=0.0.0.0:25212
+      - --rpcmaxwebsockets=50
+    volumes:
+      - ./data/regtest/chain:/root/.lokid
+    ports:
+      - "${DEV_BIND:-127.0.0.1}:${CHAIN_RPC_PORT:-25213}:25213"
+    networks:
+      - lokihub-dev
+
+  # A fixed fee estimate (25 loki/vB, in loki/kvB) for both flnd, served on the
+  # compose network only. flnd's btcd backend would ask lokid instead, but lokid's
+  # estimatefee handler panics (go-flokicoin rpcserver.go handleEstimateFee).
+  # TODO: drop this service and both fee.url lines once go-flokicoin 0.26.4 (which
+  # fixes it) is released, so flnd estimates from lokid.
+  fees:
+    image: busybox:1.36
+    restart: unless-stopped
+    command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
+    volumes:
+      - ./dev/regtest/fees.json:/www/fees.json:ro
+    networks:
+      - lokihub-dev
+
   relay:
     image: ghcr.io/ohstr/ncli:rc
-    container_name: lokihub-dev-relay
     hostname: relay
     restart: unless-stopped
-    command: ["relay", "--config", "/config/relay.yaml"]
+    # A small supervisor around `ncli relay`, for the test hook POST
+    # /api/test/relay/min-pow: the relay reads its proof-of-work minimum from
+    # its config at start only, so when relay-ctl/min-pow changes the relay
+    # process is restarted on relay.yaml plus a strict `pow` block (none for 0).
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ctl=/ctl/min-pow; cfg=/tmp/relay.yaml; pid=; last=unset
+        trap 'kill $$pid 2>/dev/null; wait $$pid; exit 0' TERM INT
+        while :; do
+          cur=$$(cat $$ctl 2>/dev/null || true)
+          if [ "$$cur" != "$$last" ] || ! kill -0 "$$pid" 2>/dev/null; then
+            if [ -n "$$pid" ]; then kill $$pid 2>/dev/null; wait $$pid 2>/dev/null; fi
+            cp /config/relay.yaml $$cfg
+            case "$$cur" in ''|0|*[!0-9]*) ;; *) printf 'pow:\n  strict: true\n  min: %s\n' "$$cur" >> $$cfg ;; esac
+            /bin/ncli relay --config $$cfg &
+            pid=$$!; last=$$cur
+          fi
+          sleep 1
+        done
     volumes:
-      - ${DEV_DATA_DIR:-./data}/relay/relay.yaml:/config/relay.yaml:ro
-      - ${DEV_DATA_DIR:-./data}/relay:/data
+      - ./data/regtest/relay/relay.yaml:/config/relay.yaml:ro
+      - ./data/regtest/relay:/data
+      - ./data/regtest/relay-ctl:/ctl:ro
     ports:
-      # Published to the host too so `go test -tags integration` (which runs
-      # outside the compose network) can reach the same relay the backend
-      # container talks to over Docker DNS as `relay:5500`. Requires a host
-      # /etc/hosts entry "127.0.0.1 relay" so both sides resolve the same
-      # hostname to this one relay.
+      # Published so the host-run integration suite reaches the same relay the
+      # backend uses (see RELAY in .env.example).
       - "${DEV_BIND:-127.0.0.1}:${RELAY_PORT:-5500}:5500"
     networks:
       - lokihub-dev
 
+  # The Hub's node.
   flnd:
-    build:
-      # ../flnd etc. only resolve from the main checkout — a worktree lives
-      # several directories deeper (.claude/worktrees/<name>/), so the same
-      # relative path no longer reaches the real sibling repos. Override
-      # DEV_FLND_DIR/DEV_WALLETD_DIR/DEV_FLOKICOIN_NEUTRINO_DIR (absolute
-      # paths) in a worktree's .env — same pattern as DEV_DATA_DIR below.
+    build: &flnd-build
+      # A worktree sits deeper than the main checkout, so set DEV_FLND_DIR,
+      # DEV_WALLETD_DIR and DEV_FLOKICOIN_NEUTRINO_DIR (absolute) in its .env.
       context: ${DEV_FLND_DIR:-../flnd}
       dockerfile: dev.Dockerfile
       additional_contexts:
-        # flnd, walletd, and flokicoin-neutrino evolve in lockstep on this
-        # fork; this builds flnd against whatever's on disk in these sibling
-        # checkouts instead of their go.mod/go.sum-pinned versions (see
-        # flnd/dev.Dockerfile).
         walletd: ${DEV_WALLETD_DIR:-../walletd}
         flokicoin-neutrino: ${DEV_FLOKICOIN_NEUTRINO_DIR:-../flokicoin-neutrino}
-    container_name: lokihub-dev-flnd
+    hostname: flnd
     restart: unless-stopped
+    command:
+      - --configfile=/config/flnd.conf
+      - --tlsextradomain=${DEV_HOST:-localhost}
     volumes:
-      # DEV_DATA_DIR (set in .env) points this at another checkout's
-      # already-synced data/ instead of this one's own — see Justfile's
-      # `just dev help`.
-      - ${DEV_DATA_DIR:-./data}/flnd:/root/.flnd
-    # dev.Dockerfile's ENTRYPOINT is already ["flnd"] -- only pass flags here.
-    command: --configfile=/root/.flnd/flnd.conf
-    healthcheck:
-      test: ["CMD", "ls", "/root/.flnd/tls.cert"]
-      interval: 10s
+      - ./dev/regtest/flnd-hub.conf:/config/flnd.conf:ro
+      - ./data/regtest/flnd:/root/.flnd
+      - ./data/regtest/chain/rpc.cert:/chain/rpc.cert:ro
+    healthcheck: &flnd-health
+      test: ["CMD", "sh", "-c", "ls /root/.flnd/data/chain/flokicoin/regtest/admin.macaroon"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 30
+      start_period: 10s
     ports:
       - "${DEV_BIND:-127.0.0.1}:${FLND_RPC_PORT:-10005}:10005"
+    depends_on:
+      - chain
+      - fees
+    networks:
+      - lokihub-dev
+
+  # The external node and on-chain wallet the tests pay from and to.
+  payer:
+    build: *flnd-build
+    hostname: payer
+    restart: unless-stopped
+    command:
+      - --configfile=/config/flnd.conf
+      - --tlsextradomain=${DEV_HOST:-localhost}
+    volumes:
+      - ./dev/regtest/flnd-payer.conf:/config/flnd.conf:ro
+      - ./data/regtest/payer:/root/.flnd
+      - ./data/regtest/chain/rpc.cert:/chain/rpc.cert:ro
+    healthcheck: *flnd-health
+    ports:
+      - "${DEV_BIND:-127.0.0.1}:${PAYER_RPC_PORT:-10006}:10006"
+    depends_on:
+      - chain
+      - fees
+    networks:
+      - lokihub-dev
+
+  # flspd, the stack's test LSP (WP-26, LP-13), in the "lsp" profile: its own
+  # flnd node, its postgres, a one-shot that prepares its credentials and
+  # config, and flspd announcing a NIP-LSP kind 10735 on the stack's relay,
+  # which lokihub builds its LSP catalogue from. `just dev up` turns the
+  # profile on when the flspd image exists (build it in an flspd checkout with
+  # `just image-regtest <nmilat checkout>`; FLSPD_IMAGE picks another tag).
+  # From flspd's deploy/regtest (README.md, compose.lokihub.sample.yml).
+  flnd-lsp:
+    profiles: ["lsp"]
+    build: *flnd-build
+    hostname: flnd-lsp
+    restart: unless-stopped
+    command:
+      - --configfile=/config/flnd.conf
+      - --tlsextradomain=${DEV_HOST:-localhost}
+    volumes:
+      - ./dev/regtest/flspd/flnd-lsp.conf:/config/flnd.conf:ro
+      - ./data/regtest/flnd-lsp:/root/.flnd
+      - ./data/regtest/chain/rpc.cert:/chain/rpc.cert:ro
+    healthcheck: *flnd-health
+    ports:
+      - "${DEV_BIND:-127.0.0.1}:${LSP_RPC_PORT:-10007}:10007"
+    depends_on:
+      - chain
+      - fees
+    networks:
+      lokihub-dev:
+        # Announced as the NIP-LSP addr, which takes an IP, not a hostname.
+        ipv4_address: 172.29.40.40
+
+  flspd-db:
+    profiles: ["lsp"]
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=flspd
+      - POSTGRES_PASSWORD=flspd
+      - POSTGRES_DB=flspd
+    volumes:
+      - ./data/regtest/flspd-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "flspd"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - lokihub-dev
+
+  # One-shot, before flspd: bakes flspd's macaroon (what flspd uses plus
+  # signrpc SignMessage, no signer:generate), copies flnd-lsp's TLS cert next
+  # to it, and puts a writable copy of the nodes config where the dashboard
+  # saves its edits; all for flspd's uid 10001. A nodes.yaml already there is
+  # kept.
+  flspd-init:
+    profiles: ["lsp"]
+    build: *flnd-build
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        flncli --rpcserver=flnd-lsp:10007 \
+          --tlscertpath=/flnd-lsp/tls.cert \
+          --macaroonpath=/flnd-lsp/data/chain/flokicoin/regtest/admin.macaroon \
+          bakemacaroon --save_to=/creds/flspd.macaroon \
+          info:read onchain:read onchain:write offchain:read offchain:write \
+          address:read address:write message:read message:write \
+          peers:read peers:write invoices:read invoices:write \
+          uri:/signrpc.Signer/SignMessage
+        cp /flnd-lsp/tls.cert /creds/tls.cert
+        [ -f /config/nodes.yaml ] || cp /sample/nodes.yaml /config/nodes.yaml
+        chown 10001:10001 /creds /creds/flspd.macaroon /creds/tls.cert /config /config/nodes.yaml
+        chmod 0400 /creds/flspd.macaroon
+    volumes:
+      - ./data/regtest/flnd-lsp:/flnd-lsp:ro
+      - ./data/regtest/flspd-creds:/creds
+      - ./data/regtest/flspd-config:/config
+      - ./dev/regtest/flspd/nodes.yaml:/sample/nodes.yaml:ro
+    restart: "no"
+    depends_on:
+      flnd-lsp:
+        condition: service_healthy
+    networks:
+      - lokihub-dev
+
+  flspd:
+    profiles: ["lsp"]
+    image: ${FLSPD_IMAGE:-flspd:regtest}
+    restart: unless-stopped
+    env_file:
+      - ./data/regtest/flspd.env # from dev/regtest/flspd/flspd.env.example (`just dev setup`)
+    volumes:
+      # Writable: the dashboard saves nodes.yaml by replacing it here.
+      - ./data/regtest/flspd-config:/flspd
+      # Only the cert and the narrow macaroon, not flnd-lsp's data.
+      - ./data/regtest/flspd-creds:/flnd-creds:ro
+    ports:
+      - "${DEV_BIND:-127.0.0.1}:${FLSPD_DASHBOARD_PORT:-8090}:8080"
+    depends_on:
+      flspd-init:
+        condition: service_completed_successfully
+      flspd-db:
+        condition: service_healthy
+      relay:
+        condition: service_started
     networks:
       - lokihub-dev
 
@@ -60,61 +252,72 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: lokihub-dev-backend
     restart: unless-stopped
     # ports:
     #   - "${DEV_BIND:-127.0.0.1}:${PORT:-1610}:1610"
+    # air polls the tree instead of using inotify: the host's inotify instance
+    # limit (fs.inotify.max_user_instances, often 128) is shared by every
+    # container and runs out on a busy host ("too many open files").
+    # Built with the testhooks tag: the chain and payer hooks under /api/test
+    # (http/testhooks.go), which release builds never contain.
+    # rerun: a backend that exits is run again, which is how the test hook
+    # POST /api/test/restart reloads the Hub from its store.
+    command: ["--build.poll", "true", "--build.poll_interval", "1000",
+              "--build.rerun", "true", "--build.rerun_delay", "500",
+              "--build.cmd", "go build -tags testhooks -o ./tmp/main ./cmd/http"]
     environment:
       - WORK_DIR=/data
       - PORT=1610
-      - NETWORK=flokicoin
-      # No BASE_URL/FRONTEND_URL: both only feed the /logout redirect
-      # (config.GetBaseFrontendUrl), and neither localhost:1610 nor
-      # localhost:5173 is reachable from the browser - this stack is only
-      # ever reached through Caddy's reverse proxy (see Caddyfile.dev),
-      # on whatever host/port/tunnel fronts it. Leaving both unset makes
-      # the handler fall back to a same-origin relative "/" redirect,
-      # which works through the proxy regardless of how it's accessed.
+      - NETWORK=regtest
+      - LOKIHUB_DEV_STACK=1
+      - LOKIHUB_TEST_HOOKS=1
+      - LOKIHUB_TEST_CHAIN_RPC=chain:25213
+      - LOKIHUB_TEST_CHAIN_RPC_CERT=/chain/rpc.cert
+      - LOKIHUB_TEST_PAYER_GRPC=payer:10006
+      - LOKIHUB_TEST_PAYER_DIR=/payer-data
+      # The relay's supervisor reads min-pow here (POST /api/test/relay/min-pow).
+      - LOKIHUB_TEST_RELAY_CTL_DIR=/relay-ctl
+      # flspd's dashboard and its admin key (POST /api/test/flspd/...), when the
+      # lsp profile runs.
+      - LOKIHUB_TEST_FLSPD_DASHBOARD=http://flspd:8080
+      - LOKIHUB_TEST_FLSPD_ADMIN_KEY_FILE=/flspd-admin/admin.key
+      # No BASE_URL/FRONTEND_URL: the stack is reached only through Caddy, and an
+      # unset value makes /logout redirect to a same-origin "/".
       - LN_BACKEND_TYPE=FLND
       - FLND_ADDRESS=flnd:10005
-      # No FLND_CERT_FILE: flnd's flnd/wrapper falls back to
-      # InsecureSkipVerify when it's unset, so we don't need to distribute
-      # tls.cert into this container at all.
-      - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/main/admin.macaroon
+      # rc.24 (#174) refuses the admin macaroon over a non-loopback flnd address
+      # without a pinned TLS cert, so pin flnd's tls.cert (mounted read-only at
+      # /flnd-data) rather than skipping verification.
+      - FLND_CERT_FILE=/flnd-data/tls.cert
+      - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/regtest/admin.macaroon
       - RELAY=${RELAY:-ws://relay:5500}
+      - AUTO_UNLOCK_PASSWORD=${DEV_UNLOCK_PASSWORD:?set DEV_UNLOCK_PASSWORD in .env (see .env.example)}
+      - ENABLE_SWAP=false
+      # Payouts are built 20 s after the first of a batch is committed rather
+      # than 10 minutes, so the regtest suite sees them broadcast in time.
+      - CASH_WITHDRAW_BATCH_WINDOW_SECS=20
+      # The *_RATE_LIMIT_PER_HOUR values are not set here: the backend reads them
+      # from .env at each start, so `just test integration-ratelimits` can change them.
       - LOG_LEVEL=${LOG_LEVEL:-4}
-    # Docker's default nofile limit in this environment is only 1024 (vs.
-    # the host's own 524288) - air's own watcher easily exceeds that, which
-    # caused a "too many open files" crash-loop. Root-caused: raise the
-    # limit rather than working around it elsewhere.
+    # Docker's default nofile limit here is 1024, which air's watcher exceeds.
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
     volumes:
       - .:/app
-      # nmilat, at the SAME absolute path inside the container as outside.
-      #
-      # go.mod carries a TEMPORARY `replace` for nmilat pointing at an absolute
-      # host path (see go.mod), and a replace is resolved by the compiler inside
-      # this container — so without this mount `air` cannot build at all. That
-      # fails in the worst available way: a crash-loop whose last SUCCESSFUL
-      # binary keeps serving, so the stack looks healthy while running stale code.
-      # It did exactly that for three days.
-      #
-      # Source and target are the same variable on purpose: the replace names one
-      # absolute path, so any other mount point would not satisfy it. Read-only,
-      # because a replace only ever reads the module.
-      #
-      # This mount and the `replace` are one unit — drop both together at release
-      # time, along with DEV_NMILAT_DIR in .env.
-      - ${DEV_NMILAT_DIR:?set DEV_NMILAT_DIR in .env to your nmilat checkout — go.mod replaces nmilat with an absolute path the backend container must also see}:${DEV_NMILAT_DIR}:ro
-      - ${DEV_DATA_DIR:-./data}/hub:/data
-      - ${DEV_DATA_DIR:-./data}/flnd:/flnd-data:ro
+      - ./data/regtest/hub:/data
+      - ./data/regtest/flnd:/flnd-data:ro
+      - ./data/regtest/payer:/payer-data:ro
+      - ./data/regtest/chain/rpc.cert:/chain/rpc.cert:ro
+      - ./data/regtest/relay-ctl:/relay-ctl
+      - ./data/regtest/flspd-admin:/flspd-admin:ro
       - lokihub-go-mod-cache:/go/pkg/mod
       - lokihub-go-build-cache:/root/.cache/go-build
     depends_on:
       flnd:
+        condition: service_healthy
+      payer:
         condition: service_healthy
       relay:
         condition: service_started
@@ -125,15 +328,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    container_name: lokihub-dev-frontend
     restart: unless-stopped
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
       - VITE_API_URL=http://backend:1610
-      # Bind mounts frequently don't propagate inotify events into the
-      # container, silently breaking HMR — see vite.config.ts.
+      # Bind mounts often drop inotify events, which breaks HMR (vite.config.ts).
       - VITE_USE_POLLING=true
     depends_on:
       - backend
@@ -142,7 +343,6 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: lokihub-dev-caddy
     restart: unless-stopped
     ports:
       - "${DEV_BIND:-127.0.0.1}:${CADDY_PORT:-5610}:80"
@@ -158,6 +358,11 @@ services:
 networks:
   lokihub-dev:
     driver: bridge
+    # A fixed subnet for flnd-lsp's ipv4_address (the announced NIP-LSP addr,
+    # also in dev/regtest/flspd/nodes.yaml), so one stack runs per host.
+    ipam:
+      config:
+        - subnet: 172.29.40.0/24
 
 volumes:
   lokihub-go-mod-cache:

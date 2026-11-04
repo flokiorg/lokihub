@@ -386,6 +386,10 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessSSEGroup.GET("/lsps5/events", httpSvc.lsps5EventsSSEHandler)
 
 	httpSvc.hubInfoHttpSvc.RegisterSharedRoutes(readOnlyApiGroup, fullAccessApiGroup, e)
+
+	// Chain and payer hooks for the regtest dev stack; compiled in only with the
+	// testhooks build tag (testhooks.go).
+	httpSvc.registerTestHooks(fullAccessApiGroup)
 }
 
 func (httpSvc *HttpService) infoHandler(c echo.Context) error {
