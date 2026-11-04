@@ -75,16 +75,11 @@ func (h *ClientHandler) RequestOpeningParams(ctx context.Context, lspPubkey stri
 		ID:      requestID,
 	}
 
-	data, err := json.Marshal(request)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	if err := h.transport.SendCustomMessage(ctx, lspPubkey, lsps0.LSPS_MESSAGE_TYPE_ID, data); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingGetInfoRequests, requestID)
 		peerState.mu.Unlock()
-		return "", fmt.Errorf("failed to send custom message: %w", err)
+		return "", err
 	}
 
 	return requestID, nil
@@ -122,22 +117,14 @@ func (h *ClientHandler) SelectOpeningParams(ctx context.Context, lspPubkey strin
 		ID: requestID,
 	}
 
-	data, err := json.Marshal(request)
-	if err != nil {
-		peerState.mu.Lock()
-		delete(peerState.PendingBuyRequests, requestID)
-		peerState.mu.Unlock()
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
 	// Debug log
 	logger.Logger.Info().Str("peer", lspPubkey).Msg("Sending BuyRequest")
 
-	if err := h.transport.SendCustomMessage(ctx, lspPubkey, lsps0.LSPS_MESSAGE_TYPE_ID, data); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingBuyRequests, requestID)
 		peerState.mu.Unlock()
-		return "", fmt.Errorf("failed to send custom message: %w", err)
+		return "", err
 	}
 
 	return requestID, nil

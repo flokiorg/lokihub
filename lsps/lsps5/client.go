@@ -86,7 +86,7 @@ func (h *ClientHandler) SetWebhook(ctx context.Context, lspPubkey string, appNam
 		ID: requestID,
 	}
 
-	if err := h.sendRequest(ctx, lspPubkey, request); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingSetWebhookRequests, requestID)
 		peerState.mu.Unlock()
@@ -111,7 +111,7 @@ func (h *ClientHandler) ListWebhooks(ctx context.Context, lspPubkey string) (str
 		ID:      requestID,
 	}
 
-	if err := h.sendRequest(ctx, lspPubkey, request); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingListWebhooksRequests, requestID)
 		peerState.mu.Unlock()
@@ -140,7 +140,7 @@ func (h *ClientHandler) RemoveWebhook(ctx context.Context, lspPubkey string, app
 		ID: requestID,
 	}
 
-	if err := h.sendRequest(ctx, lspPubkey, request); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingRemoveWebhookRequests, requestID)
 		peerState.mu.Unlock()
@@ -148,18 +148,6 @@ func (h *ClientHandler) RemoveWebhook(ctx context.Context, lspPubkey string, app
 	}
 
 	return requestID, nil
-}
-
-func (h *ClientHandler) sendRequest(ctx context.Context, peerPubkey string, request *lsps0.JsonRpcRequest) error {
-	data, err := json.Marshal(request)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	if err := h.transport.SendCustomMessage(ctx, peerPubkey, lsps0.LSPS_MESSAGE_TYPE_ID, data); err != nil {
-		return fmt.Errorf("failed to send custom message: %w", err)
-	}
-	return nil
 }
 
 func (h *ClientHandler) HandleMessage(peerPubkey string, data []byte) error {
