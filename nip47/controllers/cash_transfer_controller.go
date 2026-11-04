@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flokiorg/lokihub/clock"
-	"github.com/flokiorg/lokihub/testknobs"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"strconv"
 	"time"
 

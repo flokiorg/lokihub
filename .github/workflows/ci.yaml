@@ -89,7 +89,7 @@ jobs:
       # that check every hook refuses without the admin token or off regtest
       # never ran in the race step above.
       - name: Test (testhooks build)
-        run: go test -tags testhooks -count=1 ./http/ ./service/ ./testknobs/
+        run: go test -tags testhooks -count=1 ./http/ ./service/ ./internal/testknobs/
 
       # The connection-drop resubscription test skips under -race: a server-side
       # drop trips go-nostr's own data race on Relay.Connection (still in the

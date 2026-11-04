@@ -17,9 +17,9 @@ import (
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/testknobs"
 	"github.com/flokiorg/lokihub/tests/db"
 	"github.com/flokiorg/lokihub/tests/mocks"
 )

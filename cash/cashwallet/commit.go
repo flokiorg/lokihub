@@ -19,9 +19,9 @@ import (
 	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/testknobs"
 )
 
 // Stages of the commit at which TestHooks.Before runs. A source claim, transfer

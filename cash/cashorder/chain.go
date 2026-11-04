@@ -14,10 +14,10 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/testknobs"
 )
 
 // ScanChain is the on-chain intake (NIP-CO §On-chain), run every 30 s: every

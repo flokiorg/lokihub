@@ -7,7 +7,7 @@ import (
 	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/testknobs"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"github.com/ohstr/nmilat/nipcash"
 	"math/big"
 	"time"

@@ -70,12 +70,12 @@ func TestFoundationDoesNotImportDomain(t *testing.T) {
 	foundation := []string{
 		"config", "db", "db/queries", "db/migrations", "logger", "events",
 		"clock", "seal", "buildinfo", "constants", "lnclient", "decodepay",
-		"seed", "numeric", "netutil", "sliceutil", "nostr/pool", "atrest",
+		"seed", "numeric", "netutil", "nostr/pool", "atrest",
 	}
 	above := []string{
 		"cash", "circle", "transactions", "apps", "ledger", "listing", "keys",
 		"nip47", "service", "api", "http", "wails", "lsps", "lspd", "hubinfo",
-		"appstore", "nodesign", "connstr", "testknobs",
+		"appstore", "nodesign", "connstr", "internal/testknobs",
 	}
 	deps := load(t)
 	for _, f := range foundation {
@@ -91,7 +91,7 @@ func TestFoundationDoesNotImportDomain(t *testing.T) {
 func TestLeavesImportNothingFromLokihub(t *testing.T) {
 	leaves := []string{
 		"clock", "seal", "buildinfo", "constants", "seed", "decodepay",
-		"lnclient", "numeric", "netutil", "sliceutil", "nostr/pool",
+		"lnclient", "numeric", "netutil", "nostr/pool",
 		"logger/crashlog", "getinfocache",
 	}
 	deps := load(t)

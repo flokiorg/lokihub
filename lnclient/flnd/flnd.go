@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/testknobs"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"math"
 	"slices"
 	"sort"

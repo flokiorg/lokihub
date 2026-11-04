@@ -22,10 +22,10 @@ import (
 	"github.com/flokiorg/lokihub/db/queries"
 	decodepay "github.com/flokiorg/lokihub/decodepay"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/numeric"
-	"github.com/flokiorg/lokihub/testknobs"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"

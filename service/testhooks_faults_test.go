@@ -14,7 +14,7 @@ import (
 
 	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/testknobs"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 )
 
 func TestStallCommitFault(t *testing.T) {
