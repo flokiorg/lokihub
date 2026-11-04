@@ -33,6 +33,7 @@ import (
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/ohstr/nmilat/nipcash"
 	"gorm.io/gorm"
@@ -358,7 +359,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 // validateIdentityForm checks a pubkey or connection_key identity's shape:
 // 64-hex identity_value, and for connection_key a 64-hex ia_pubkey.
 func validateIdentityForm(identityType, identityValue, iaPubkey string) error {
-	if !isLowerHex64(identityValue) {
+	if !pubkeyhex.Valid(identityValue) {
 		return fmt.Errorf("%w: identity_value must be a 64-character lowercase hex string", constants.ErrInvalidParams)
 	}
 	switch identityType {
@@ -368,7 +369,7 @@ func validateIdentityForm(identityType, identityValue, iaPubkey string) error {
 		if iaPubkey == "" {
 			return fmt.Errorf("%w: ia_pubkey is required when identity_type is connection_key", constants.ErrInvalidParams)
 		}
-		if !isLowerHex64(iaPubkey) {
+		if !pubkeyhex.Valid(iaPubkey) {
 			return fmt.Errorf("%w: ia_pubkey must be a 64-character lowercase hex nostr pubkey", constants.ErrInvalidParams)
 		}
 		return nil
@@ -376,20 +377,6 @@ func validateIdentityForm(identityType, identityValue, iaPubkey string) error {
 		return fmt.Errorf("%w: identity_type must be %q or %q", constants.ErrInvalidParams,
 			db.CashIdentityPubkey, db.CashIdentityConnectionKey)
 	}
-}
-
-// isLowerHex64 reports whether s is 64 lowercase hex digits, the only form a
-// claim proof's signer or an attestation's d can match byte for byte.
-func isLowerHex64(s string) bool {
-	if len(s) != 64 {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return false
-		}
-	}
-	return true
 }
 
 // checkIATrusted refuses an Identity Authority not on the allowlist right now

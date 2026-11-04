@@ -92,12 +92,30 @@ func TestLeavesImportNothingFromLokihub(t *testing.T) {
 	leaves := []string{
 		"clock", "seal", "buildinfo", "constants", "seed", "decodepay",
 		"lnclient", "numeric", "netutil", "nostr/pool",
-		"logger/crashlog", "ttlcache",
+		"logger/crashlog", "ttlcache", "nostr/pubkeyhex",
 	}
 	deps := load(t)
 	for _, l := range leaves {
 		if imps := deps[l]; len(imps) > 0 {
 			t.Errorf("%s must be a leaf but imports %v", l, imps)
+		}
+	}
+}
+
+// lspd is a separately deployed daemon: it imports no Hub package, so it can be
+// rebuilt, re-versioned and run remotely on its own. Where it needs something
+// the Hub also has (a pubkey check, an npub decode) it keeps its own copy on
+// purpose; that is the price of the boundary.
+func TestLspdImportsNoHubPackage(t *testing.T) {
+	deps := load(t)
+	for pk, imps := range deps {
+		if !under(pk, "lspd", "cmd/lspd", "cmd/lspd_revenue_cli") {
+			continue
+		}
+		for _, imp := range imps {
+			if !under(imp, "lspd", "cmd/lspd", "cmd/lspd_revenue_cli") {
+				t.Errorf("%s imports %s: lspd must not import a Hub package", pk, imp)
+			}
 		}
 	}
 }

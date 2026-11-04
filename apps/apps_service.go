@@ -1,7 +1,6 @@
 package apps
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 	"github.com/flokiorg/lokihub/numeric"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/datatypes"
@@ -392,9 +392,10 @@ func (svc *appsService) prepareApp(queryDB *gorm.DB, name string, pubkey string,
 			return nil, "", err
 		}
 	} else {
-		pairingPublicKey = pubkey
-		decoded, err := hex.DecodeString(pairingPublicKey)
-		if err != nil || len(decoded) != 32 {
+		// Stored lower-cased: a key is matched byte for byte against the pubkey on
+		// incoming events, which are always lowercase hex.
+		pairingPublicKey = pubkeyhex.Normalize(pubkey)
+		if !pubkeyhex.Valid(pairingPublicKey) {
 			logger.Logger.Error().Interface("pairingPublicKey", pairingPublicKey).Msg("Invalid public key format")
 			return nil, "", fmt.Errorf("invalid public key format: %s", pairingPublicKey)
 		}

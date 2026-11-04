@@ -21,14 +21,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/nbd-wtf/go-nostr/nip19"
 
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 	"github.com/flokiorg/lokihub/seed"
 )
 
@@ -116,7 +115,7 @@ func FromSeed(s *seed.Seed, relaysFn func() []string) *Oracle {
 		StalenessTTL:    parseDuration(block.StalenessTTL, defaultStalenessTTL),
 	}
 	if block.Npub != "" {
-		hexpk, err := DecodeNpub(block.Npub)
+		hexpk, err := pubkeyhex.FromNpub(block.Npub)
 		if err != nil {
 			logger.Logger.Error().Err(err).Str("npub", block.Npub).
 				Msg("fiat-rate oracle: invalid npub in seed; rates will be unavailable")
@@ -276,22 +275,6 @@ func (o *Oracle) fetchFromRelays(ctx context.Context, relays []string, filter no
 		out = append(out, ie.Event)
 	}
 	return out
-}
-
-// DecodeNpub decodes a bech32 npub to its 32-byte x-only hex pubkey.
-func DecodeNpub(npub string) (string, error) {
-	prefix, value, err := nip19.Decode(npub)
-	if err != nil {
-		return "", err
-	}
-	if prefix != "npub" {
-		return "", fmt.Errorf("expected an npub, got %q", prefix)
-	}
-	hexpk, ok := value.(string)
-	if !ok {
-		return "", errors.New("npub did not decode to a hex pubkey")
-	}
-	return hexpk, nil
 }
 
 func parseDuration(s string, def time.Duration) time.Duration {

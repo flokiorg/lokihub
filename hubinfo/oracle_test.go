@@ -165,22 +165,6 @@ func TestLatest_NoEventIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestDecodeNpub(t *testing.T) {
-	// The owner-published oracle npub decodes to this hex (the confirmed
-	// addressable 30078:<hex>:flokicoin-fiat-rate author).
-	const (
-		npub    = "npub1eywl4czqunqp69mal68as5mhy4jfzjwxwztrd63pgycelr3jhzgs0nlnt8"
-		wantHex = "c91dfae040e4c01d177dfe8fd8537725649149c6709636ea2141319f8e32b891"
-	)
-	got, err := DecodeNpub(npub)
-	if err != nil {
-		t.Fatalf("DecodeNpub: %v", err)
-	}
-	if got != wantHex {
-		t.Fatalf("DecodeNpub = %q, want %q", got, wantHex)
-	}
-}
-
 func TestFromSeed_DisabledWithoutNpub(t *testing.T) {
 	// An oracle with no author is disabled: Latest is always unavailable and
 	// Start returns promptly.

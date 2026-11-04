@@ -27,6 +27,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/persist"
 	"github.com/flokiorg/lokihub/nodesign"
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 )
 
 // MaxAnnouncements bounds how many announcements are read per pass and how many
@@ -171,7 +172,7 @@ func (s *Service) Discover(ctx context.Context) error {
 // nothing.
 func (s *Service) Add(ctx context.Context, key string) (*persist.LSP, error) {
 	nodeKey := NodeKeyOf(key)
-	if len(nodeKey) != 64 {
+	if !pubkeyhex.Valid(nodeKey) {
 		return nil, fmt.Errorf("%w: a node key is 64 hex characters, or a 66-character node id", ErrRefused)
 	}
 	evs, err := s.d.Fetcher.Fetch(ctx, s.readRelays(), nip01.SubscriptionFilter{Kinds: []int{niplsp.Kind}, Authors: []string{nodeKey}, Limit: 10})

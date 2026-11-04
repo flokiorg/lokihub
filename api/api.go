@@ -55,6 +55,7 @@ import (
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/netutil"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 	"github.com/flokiorg/lokihub/numeric"
 	"github.com/flokiorg/lokihub/service"
 )
@@ -2640,10 +2641,7 @@ func (api *api) ReplaceCircleAllowlist(app *db.App, pubkeys []string) error {
 				continue
 			}
 			// Validate: must be a 64-char lowercase-hex 32-byte Nostr pubkey.
-			if len(pk) != 64 || pk != strings.ToLower(pk) {
-				return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pk)
-			}
-			if _, decErr := hex.DecodeString(pk); decErr != nil {
+			if !pubkeyhex.Valid(pk) {
 				return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pk)
 			}
 			if err := tx.Create(&db.CircleIdentityAllowedPubkey{CircleIdentityID: identityID, Pubkey: pk}).Error; err != nil {
@@ -2696,10 +2694,7 @@ func (api *api) RemoveCircleAllowedPubkey(app *db.App, pubkey string) error {
 	// Same format check as ReplaceCircleAllowlist: a malformed pubkey can never
 	// match a stored row (a no-op delete either way), but validating up front
 	// gives the caller a clear error instead of a silent no-op.
-	if len(pubkey) != 64 || pubkey != strings.ToLower(pubkey) {
-		return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pubkey)
-	}
-	if _, err := hex.DecodeString(pubkey); err != nil {
+	if !pubkeyhex.Valid(pubkey) {
 		return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pubkey)
 	}
 	cfg, err := api.appsSvc.GetCircleHubConfig(app.ID)
