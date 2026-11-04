@@ -109,7 +109,7 @@ func TestU_3_4_CommitOnlyBeforeTheDeadline(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, got)
 
-	_, err = cashrequest.RaiseHorizon(svc.DB, 300, *now)
+	_, err = db.RaiseHorizon(svc.DB, 300, *now)
 	require.NoError(t, err)
 	bills := []db.CashRequestRecordBill{
 		{Role: db.CashRecordBillCarved, WalletAppID: 7, WalletPubkey: strings.Repeat("cc", 32), RelayHints: `["wss://r"]`, AmountMillis: 1000, Scheme: 1, Signature: strings.Repeat("dd", 65)},
@@ -158,16 +158,16 @@ func TestU_3_6_RecordsHoldNoSecret(t *testing.T) {
 // U-3.7: the horizon is stored and never decreases.
 func TestU_3_7_HorizonNeverDecreases(t *testing.T) {
 	svc, _, now := newStore(t)
-	h, err := cashrequest.RaiseHorizon(svc.DB, 300, *now)
+	h, err := db.RaiseHorizon(svc.DB, 300, *now)
 	require.NoError(t, err)
 	assert.EqualValues(t, 300, h)
-	h, err = cashrequest.RaiseHorizon(svc.DB, 600, *now)
+	h, err = db.RaiseHorizon(svc.DB, 600, *now)
 	require.NoError(t, err)
 	assert.EqualValues(t, 600, h)
-	h, err = cashrequest.RaiseHorizon(svc.DB, 120, *now)
+	h, err = db.RaiseHorizon(svc.DB, 120, *now)
 	require.NoError(t, err)
 	assert.EqualValues(t, 600, h, "a lower H is ignored")
-	stored, err := cashrequest.HorizonTx(svc.DB)
+	stored, err := db.HorizonTx(svc.DB)
 	require.NoError(t, err)
 	assert.EqualValues(t, 600, stored)
 
@@ -180,7 +180,7 @@ func TestU_3_7_HorizonNeverDecreases(t *testing.T) {
 // answer unknown for a call that committed.
 func TestRaisingTheHorizonDelaysRecordDrops(t *testing.T) {
 	svc, s, now := newStore(t)
-	_, err := cashrequest.RaiseHorizon(svc.DB, 300, *now)
+	_, err := db.RaiseHorizon(svc.DB, 300, *now)
 	require.NoError(t, err)
 	require.NoError(t, svc.DB.Transaction(func(tx *gorm.DB) error {
 		return s.CommitTx(tx, record(rid(1), now.Unix()+30), nil)
@@ -189,7 +189,7 @@ func TestRaisingTheHorizonDelaysRecordDrops(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, now.Unix()+30+300+1, *got.DropAfter)
 
-	_, err = cashrequest.RaiseHorizon(svc.DB, 900, *now)
+	_, err = db.RaiseHorizon(svc.DB, 900, *now)
 	require.NoError(t, err)
 	got, err = s.Get(rid(1))
 	require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestU_3_8_ConsumedProofs(t *testing.T) {
 // stays forever, and records another component owns are left alone.
 func TestU_3_9_RecordRetentionFollowsItsBills(t *testing.T) {
 	svc, s, now := newStore(t)
-	_, err := cashrequest.RaiseHorizon(svc.DB, 300, *now)
+	_, err := db.RaiseHorizon(svc.DB, 300, *now)
 	require.NoError(t, err)
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)

@@ -12,8 +12,8 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cash/cashorder"
-	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/logger"
@@ -32,7 +32,7 @@ func (svc *service) newOrderEngine(gormDB *gorm.DB, k keys.Keys, cfg config.Conf
 		DB: gormDB, Keys: k, Apps: apps.NewAppsService(gormDB, eventPublisher, k, cfg),
 		Transactions: svc.transactionsService, LN: svc.GetLNClient, Relays: cfg.GetRelayUrls,
 		Horizon: func() int64 {
-			h, _ := cashrequest.HorizonTx(gormDB)
+			h, _ := db.HorizonTx(gormDB)
 			return max(h, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
 		},
 	}

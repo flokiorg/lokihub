@@ -18,7 +18,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/cash/cashwallet"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/keys"
@@ -81,7 +80,7 @@ func (e *Engine) horizon() int64 {
 	if e.Horizon != nil {
 		return e.Horizon()
 	}
-	h, _ := cashrequest.HorizonTx(e.DB)
+	h, _ := db.HorizonTx(e.DB)
 	return h
 }
 

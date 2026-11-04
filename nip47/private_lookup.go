@@ -205,7 +205,7 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 			return refuse(constants.ERROR_UNAUTHORIZED, "this cash secret does not match this target")
 		}
 	}
-	h, err := cashrequest.HorizonTx(svc.db)
+	h, err := db.HorizonTx(svc.db)
 	if err != nil {
 		return refuse(constants.ERROR_INTERNAL, "the hub could not read its horizon, please retry")
 	}

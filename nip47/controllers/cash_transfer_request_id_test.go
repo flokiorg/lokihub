@@ -128,7 +128,7 @@ func TestCashTransfer_InPlaceRecord(t *testing.T) {
 	assert.Equal(t, f.ownerPub, *rec.DeliveryPubkey)
 	assert.Equal(t, call.Meta.Deadline, rec.Deadline)
 	require.NotNil(t, rec.DropAfter, "an in-place transfer creates no bill")
-	h, err := cashrequest.HorizonTx(f.svc.DB)
+	h, err := db.HorizonTx(f.svc.DB)
 	require.NoError(t, err)
 	assert.Equal(t, call.Meta.Deadline+h+1, *rec.DropAfter)
 	bills, err := cashrequest.New(f.svc.DB).Bills(rec.ID)

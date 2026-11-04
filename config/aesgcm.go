@@ -61,7 +61,7 @@ func AesGcmEncryptWithPassword(plaintext string, password string) (string, error
 		return "", err
 	}
 
-	ciphertext, err := AesGcmEncryptWithKey(plaintext, secretKey)
+	ciphertext, err := seal.EncryptWithKey(plaintext, secretKey)
 	if err != nil {
 		return "", err
 	}
@@ -84,7 +84,7 @@ func AesGcmDecryptWithPassword(ciphertext string, password string) (string, erro
 		return "", err
 	}
 
-	return AesGcmDecryptWithKey(arr[1]+"-"+arr[2], secretKey)
+	return seal.DecryptWithKey(arr[1]+"-"+arr[2], secretKey)
 }
 
 // deriveKEKForBlob derives the KEK for an encrypted blob from its salt field.
@@ -130,14 +130,4 @@ func deriveKEKForBlob(saltField string, password string) ([]byte, error) {
 // is a candidate for re-wrapping on unlock.
 func isLegacyWrappedSecret(storedValue string) bool {
 	return storedValue != "" && !strings.HasPrefix(storedValue, kekArgon2idTag+"$")
-}
-
-// AesGcmEncryptWithKey seals plaintext under a 32-byte key (see package seal).
-func AesGcmEncryptWithKey(plaintext string, key []byte) (string, error) {
-	return seal.EncryptWithKey(plaintext, key)
-}
-
-// AesGcmDecryptWithKey opens a value AesGcmEncryptWithKey made.
-func AesGcmDecryptWithKey(ciphertext string, key []byte) (string, error) {
-	return seal.DecryptWithKey(ciphertext, key)
 }

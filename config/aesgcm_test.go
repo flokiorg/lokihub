@@ -12,6 +12,8 @@ import (
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/crypto/argon2"
+
+	"github.com/flokiorg/lokihub/seal"
 )
 
 func TestDecryptExistingCiphertextWithPassword(t *testing.T) {
@@ -60,7 +62,7 @@ func legacyArgon2iWrap(t *testing.T, plaintext, password string) string {
 	_, err := rand.Read(salt)
 	require.NoError(t, err)
 	key := argon2.Key([]byte(password), salt, kekLegacyArgon2iTime, kekLegacyArgon2iMemory, kekLegacyArgon2iThreads, 32)
-	ciphertext, err := AesGcmEncryptWithKey(plaintext, key)
+	ciphertext, err := seal.EncryptWithKey(plaintext, key)
 	require.NoError(t, err)
 	return hex.EncodeToString(salt) + "-" + ciphertext
 }
@@ -84,7 +86,7 @@ func TestDecryptExistingCiphertextWithKey(t *testing.T) {
 	mnemonic := "connect maximum march lava ignore resist visa kind kiwi kidney develop animal"
 	masterKey, err := bip32.NewMasterKey(bip39.NewSeed(mnemonic, ""))
 	assert.NoError(t, err)
-	value, err := AesGcmDecryptWithKey("22ad485dea4f49696594c7c4-afe35ce65fc5a45249bf1b9078472fb28395fc88c30a79c76c7d8d37cf", masterKey.Key)
+	value, err := seal.DecryptWithKey("22ad485dea4f49696594c7c4-afe35ce65fc5a45249bf1b9078472fb28395fc88c30a79c76c7d8d37cf", masterKey.Key)
 	assert.NoError(t, err)
 	assert.Equal(t, "Hello, world!", value)
 }
@@ -97,9 +99,9 @@ func TestEncryptDecryptWithKey(t *testing.T) {
 
 	assert.Equal(t, "409e902eafba273b21dff921f0eb4bec6cbb0b657fdce8d245ca78d2920f8b73", hex.EncodeToString(masterKey.Key))
 
-	encrypted, err := AesGcmEncryptWithKey(plaintext, masterKey.Key)
+	encrypted, err := seal.EncryptWithKey(plaintext, masterKey.Key)
 	assert.NoError(t, err)
-	value, err := AesGcmDecryptWithKey(encrypted, masterKey.Key)
+	value, err := seal.DecryptWithKey(encrypted, masterKey.Key)
 	assert.NoError(t, err)
 	assert.Equal(t, plaintext, value)
 }

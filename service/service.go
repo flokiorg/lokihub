@@ -32,7 +32,6 @@ import (
 	"github.com/flokiorg/lokihub/transactions"
 
 	"github.com/flokiorg/lokihub/cash/cashorder"
-	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
@@ -162,7 +161,7 @@ func NewService(ctx context.Context) (*service, error) {
 
 	// The horizon H only ever increases (NIP-CASH §Deadlines): the stored H is
 	// raised to the configured one, and a lower configured H is ignored.
-	horizon, err := cashrequest.RaiseHorizon(gormDB, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds, time.Now())
+	horizon, err := db.RaiseHorizon(gormDB, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("failed to store the horizon: %w", err)
 	}

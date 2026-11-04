@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 )
@@ -20,7 +19,7 @@ type VersionDropper interface {
 
 // retention is a payout's retention facts.
 func (s *Service) retention(tx *gorm.DB, w *db.CashWithdrawal, rec *db.CashRequestRecord) (nipcash.WithdrawRetention, error) {
-	h, err := cashrequest.HorizonTx(tx)
+	h, err := db.HorizonTx(tx)
 	if err != nil {
 		return nipcash.WithdrawRetention{}, err
 	}

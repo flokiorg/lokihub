@@ -86,7 +86,7 @@ func (s Store) CommitTx(tx *gorm.DB, rec *db.CashRequestRecord, bills []db.CashR
 	}
 	rec.CommittedAt = now
 	if len(bills) == 0 {
-		h, err := HorizonTx(tx)
+		h, err := db.HorizonTx(tx)
 		if err != nil {
 			return err
 		}

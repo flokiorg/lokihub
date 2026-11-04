@@ -10,7 +10,6 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 )
@@ -152,7 +151,7 @@ func CashHubDeleteCheckTx(tx *gorm.DB, hubID uint, now time.Time) (CashHubDelete
 		}
 		check.Blockers = append(check.Blockers, blocker)
 	}
-	h, err := cashrequest.HorizonTx(tx)
+	h, err := db.HorizonTx(tx)
 	if err != nil {
 		return check, err
 	}

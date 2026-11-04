@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/flokiorg/lokihub/seal"
 )
 
 // The auto-unlock password is the KEK that decrypts the mnemonic and every
@@ -80,7 +82,7 @@ func (cfg *config) encryptAutoUnlock(plaintext string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ciphertext, err := AesGcmEncryptWithKey(plaintext, key)
+	ciphertext, err := seal.EncryptWithKey(plaintext, key)
 	if err != nil {
 		return "", err
 	}
@@ -98,5 +100,5 @@ func (cfg *config) decryptAutoUnlock(stored string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return AesGcmDecryptWithKey(strings.TrimPrefix(stored, autoUnlockEncPrefix), key)
+	return seal.DecryptWithKey(strings.TrimPrefix(stored, autoUnlockEncPrefix), key)
 }

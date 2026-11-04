@@ -25,7 +25,7 @@ func OnBillArchivedTx(tx *gorm.DB, walletAppID uint) error {
 	if len(recs) == 0 {
 		return nil
 	}
-	h, err := HorizonTx(tx)
+	h, err := db.HorizonTx(tx)
 	if err != nil {
 		return err
 	}
