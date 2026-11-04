@@ -18,6 +18,7 @@ import (
 	"github.com/flokiorg/lokihub/nip47/permissions"
 	nostrpool "github.com/flokiorg/lokihub/nostr/pool"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/flokiorg/lokihub/ttlcache"
 	"github.com/nbd-wtf/go-nostr"
 	transportpkg "github.com/ohstr/nmilat/nipcash/transport"
 	"github.com/rs/zerolog"
@@ -44,6 +45,10 @@ type nip47Service struct {
 	lookupLimiter          controllers.RateLimiter
 	identityAuthorityMgr   *apps.IdentityAuthorityManager
 	privateIdentity        func() string
+	// getInfoOrders and getInfoListed are the caches get_info answers public
+	// connections from; set by SetGetInfoCaches, nil caches nothing.
+	getInfoOrders *ttlcache.Cache[string]
+	getInfoListed *ttlcache.Cache[uint]
 	// withdraw serves on-chain withdrawals (private_withdraw.go); nil offers none.
 	withdraw *cashwithdraw.Service
 	// orderPayBy ends a read order's payment window when its pay_by passed.
@@ -67,6 +72,9 @@ type Nip47Service interface {
 	// SetPrivateIdentity sets the source of get_info's circle_wallet.identity. Call it
 	// before any event is handled; it returns "" while the private transport is down.
 	SetPrivateIdentity(privateIdentity func() string)
+	// SetGetInfoCaches sets the caches get_info answers public connections from.
+	// The code that changes what get_info shows must invalidate the same instances.
+	SetGetInfoCaches(orders *ttlcache.Cache[string], listed *ttlcache.Cache[uint])
 	// SetOrderIntake routes this service's own payments of an order invoice
 	// (a same-node payment) to the order intake, as the node's settlements are.
 	SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
@@ -100,6 +108,11 @@ func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublis
 
 func (svc *nip47Service) SetPrivateIdentity(privateIdentity func() string) {
 	svc.privateIdentity = privateIdentity
+}
+
+func (svc *nip47Service) SetGetInfoCaches(orders *ttlcache.Cache[string], listed *ttlcache.Cache[uint]) {
+	svc.getInfoOrders = orders
+	svc.getInfoListed = listed
 }
 
 func (svc *nip47Service) ConsumeEvent(ctx context.Context, event *events.Event, globalProperties map[string]interface{}) {

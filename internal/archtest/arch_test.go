@@ -92,7 +92,7 @@ func TestLeavesImportNothingFromLokihub(t *testing.T) {
 	leaves := []string{
 		"clock", "seal", "buildinfo", "constants", "seed", "decodepay",
 		"lnclient", "numeric", "netutil", "nostr/pool",
-		"logger/crashlog", "getinfocache",
+		"logger/crashlog", "ttlcache",
 	}
 	deps := load(t)
 	for _, l := range leaves {

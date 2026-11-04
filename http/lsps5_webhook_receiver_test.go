@@ -61,6 +61,7 @@ func createTestHttpService(t *testing.T, needsLNClient bool) (*HttpService, chan
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetHubInfoSvc").Return(mockLokiSvc)
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)

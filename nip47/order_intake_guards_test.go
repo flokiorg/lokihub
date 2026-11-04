@@ -134,7 +134,7 @@ func TestCashOrder_CeilingHoldsUnderConcurrentPlacements(t *testing.T) {
 	f := newOrderFixture(t)
 	s := orderTermsFixture()
 	s.OpenOnchainMax = 0 // only the amount ceiling (2,000,000) bounds them
-	require.NoError(t, cashorder.PutSettings(f.svc.DB, f.hub.ID, s, time.Now()))
+	require.NoError(t, cashorder.PutSettings(cashorder.Deps{DB: f.svc.DB}, f.hub.ID, s, time.Now()))
 	const n = 5
 	items := make([]func(nipcash.ItemBinding) (transport.Item, error), n)
 	for i := range n {

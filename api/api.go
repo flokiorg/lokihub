@@ -38,7 +38,6 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/getinfocache"
 	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/listing"
@@ -47,6 +46,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/seed"
+	"github.com/flokiorg/lokihub/ttlcache"
 	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/cash/cashrequest"
@@ -76,6 +76,10 @@ type api struct {
 	eventPublisher   events.EventPublisher
 	lspManager       *manager.LSPManager
 	iaManager        *apps.IdentityAuthorityManager
+	// orderInfo and listedInfo are the service's get_info caches; the API drops
+	// the entries its changes make stale. Nil caches nothing.
+	orderInfo  *ttlcache.Cache[string]
+	listedInfo *ttlcache.Cache[uint]
 }
 
 func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys keys.Keys, hubInfoSvc hubinfo.HubInfoService, eventPublisher events.EventPublisher) *api {
@@ -90,6 +94,8 @@ func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys key
 		eventPublisher: eventPublisher,
 		lspManager:     manager.NewLSPManager(gormDB),
 		iaManager:      apps.NewIdentityAuthorityManager(gormDB),
+		orderInfo:      svc.GetOrderInfoCache(),
+		listedInfo:     svc.GetListedInfoCache(),
 	}
 }
 
@@ -3025,7 +3031,7 @@ func (api *api) invalidateCircleConnInfo(hubID uint) {
 		logger.Logger.Error().Err(err).Uint("app_id", hubID).Msg("Failed to list a circle's listed connections; their get_info may stay cached for its TTL")
 		return
 	}
-	getinfocache.Listed.Invalidate(ids...)
+	api.listedInfo.Invalidate(ids...)
 }
 
 // closeListings runs a listing retirement after the commit that ended an offer;

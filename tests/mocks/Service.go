@@ -10,11 +10,12 @@ import (
 	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/flokiorg/lokihub/ttlcache"
 	mock "github.com/stretchr/testify/mock"
 	"gorm.io/gorm"
 )
@@ -107,6 +108,98 @@ func (_c *MockService_GetHubInfoSvc_Call) Return(hubInfoService hubinfo.HubInfoS
 }
 
 func (_c *MockService_GetHubInfoSvc_Call) RunAndReturn(run func() hubinfo.HubInfoService) *MockService_GetHubInfoSvc_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetOrderInfoCache provides a mock function for the type MockService
+func (_mock *MockService) GetOrderInfoCache() *ttlcache.Cache[string] {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetOrderInfoCache")
+	}
+
+	var r0 *ttlcache.Cache[string]
+	if returnFunc, ok := ret.Get(0).(func() *ttlcache.Cache[string]); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*ttlcache.Cache[string])
+		}
+	}
+	return r0
+}
+
+// MockService_GetOrderInfoCache_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetOrderInfoCache'
+type MockService_GetOrderInfoCache_Call struct {
+	*mock.Call
+}
+
+// GetOrderInfoCache is a helper method to define mock.On call
+func (_e *MockService_Expecter) GetOrderInfoCache() *MockService_GetOrderInfoCache_Call {
+	return &MockService_GetOrderInfoCache_Call{Call: _e.mock.On("GetOrderInfoCache")}
+}
+
+func (_c *MockService_GetOrderInfoCache_Call) Run(run func()) *MockService_GetOrderInfoCache_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockService_GetOrderInfoCache_Call) Return(cache *ttlcache.Cache[string]) *MockService_GetOrderInfoCache_Call {
+	_c.Call.Return(cache)
+	return _c
+}
+
+func (_c *MockService_GetOrderInfoCache_Call) RunAndReturn(run func() *ttlcache.Cache[string]) *MockService_GetOrderInfoCache_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetListedInfoCache provides a mock function for the type MockService
+func (_mock *MockService) GetListedInfoCache() *ttlcache.Cache[uint] {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetListedInfoCache")
+	}
+
+	var r0 *ttlcache.Cache[uint]
+	if returnFunc, ok := ret.Get(0).(func() *ttlcache.Cache[uint]); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*ttlcache.Cache[uint])
+		}
+	}
+	return r0
+}
+
+// MockService_GetListedInfoCache_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetListedInfoCache'
+type MockService_GetListedInfoCache_Call struct {
+	*mock.Call
+}
+
+// GetListedInfoCache is a helper method to define mock.On call
+func (_e *MockService_Expecter) GetListedInfoCache() *MockService_GetListedInfoCache_Call {
+	return &MockService_GetListedInfoCache_Call{Call: _e.mock.On("GetListedInfoCache")}
+}
+
+func (_c *MockService_GetListedInfoCache_Call) Run(run func()) *MockService_GetListedInfoCache_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockService_GetListedInfoCache_Call) Return(cache *ttlcache.Cache[uint]) *MockService_GetListedInfoCache_Call {
+	_c.Call.Return(cache)
+	return _c
+}
+
+func (_c *MockService_GetListedInfoCache_Call) RunAndReturn(run func() *ttlcache.Cache[uint]) *MockService_GetListedInfoCache_Call {
 	_c.Call.Return(run)
 	return _c
 }

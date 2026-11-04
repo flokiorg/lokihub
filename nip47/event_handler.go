@@ -552,7 +552,8 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrpool.SimpleP
 	}
 
 	controller := controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr).
-		WithPrivateIdentity(svc.privateIdentity)
+		WithPrivateIdentity(svc.privateIdentity).
+		WithGetInfoCaches(svc.getInfoOrders, svc.getInfoListed)
 
 	switch nip47Request.Method {
 	case models.MULTI_PAY_INVOICE_METHOD:

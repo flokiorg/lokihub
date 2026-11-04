@@ -55,6 +55,7 @@ func newHookServerSwitch(t *testing.T, network, hooks string) *hookServer {
 	mockSvc.On("GetConfig").Return(mockConfig).Maybe()
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t)).Maybe()
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t)).Maybe()
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{}).Maybe()
 	if network == "" {
 		mockSvc.On("GetLNClient").Return(nil).Maybe()

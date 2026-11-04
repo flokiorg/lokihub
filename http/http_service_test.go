@@ -16,6 +16,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/tests/db"
 	"github.com/flokiorg/lokihub/tests/mocks"
+	"github.com/flokiorg/lokihub/ttlcache"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,6 +40,7 @@ func TestUnlock_IncorrectPassword(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -73,6 +75,7 @@ func TestUnlock_UnknownPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -106,6 +109,7 @@ func TestGetApps_NoToken(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -137,6 +141,7 @@ func TestGetApps_ReadonlyPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -190,6 +195,7 @@ func TestGetApps_FullPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -241,6 +247,7 @@ func TestCreateApp_NoToken(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -280,6 +287,7 @@ func TestCreateApp_FullPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mockKeys)
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -335,6 +343,7 @@ func TestEventRoute_RegisteredAtApiEvent(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -377,6 +386,7 @@ func TestCreateApp_ReadonlyPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mockKeys)
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
@@ -413,4 +423,11 @@ func TestCreateApp_ReadonlyPermission(t *testing.T) {
 	e.ServeHTTP(rec2, req2)
 
 	assert.Equal(t, http.StatusForbidden, rec2.Code)
+}
+
+// stubInfoCaches answers the two get_info cache getters NewAPI reads: the API
+// under test has no caches.
+func stubInfoCaches(svc *mocks.MockService) {
+	svc.On("GetOrderInfoCache").Return((*ttlcache.Cache[string])(nil)).Maybe()
+	svc.On("GetListedInfoCache").Return((*ttlcache.Cache[uint])(nil)).Maybe()
 }

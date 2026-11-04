@@ -30,6 +30,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/flokiorg/lokihub/ttlcache"
 
 	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/cash/cashwithdraw"
@@ -62,6 +63,10 @@ type service struct {
 	// timer rather than logged per event.
 	droppedRequestEvents atomic.Int64
 	nip47Service         nip47.Nip47Service
+	// orderInfo and listedInfo are the caches get_info answers public
+	// connections from (see GetOrderInfoCache, GetListedInfoCache).
+	orderInfo  *ttlcache.Cache[string]
+	listedInfo *ttlcache.Cache[uint]
 	// withdraw serves on-chain withdrawals (service/withdraw.go).
 	withdraw *cashwithdraw.Service
 	// withdrawEngine pays the payouts (service/withdraw.go).
@@ -222,9 +227,12 @@ func NewService(ctx context.Context) (*service, error) {
 		transactionsService: transactionsSvc,
 		db:                  gormDB,
 		keys:                keys,
+		orderInfo:           ttlcache.New[string](getInfoCacheTTL),
+		listedInfo:          ttlcache.New[uint](getInfoCacheTTL),
 	}
 
 	svc.nip47Service.SetPrivateIdentity(svc.privateJoinIdentity)
+	svc.nip47Service.SetGetInfoCaches(svc.orderInfo, svc.listedInfo)
 	// A Circle Wallet payment the node reports accepted is settled by the Hub
 	// once re-checked, which needs the node.
 	svc.transactionsService.SetLNClientProvider(svc.GetLNClient)
@@ -350,6 +358,18 @@ func (svc *service) GetConfig() config.Config {
 
 func (svc *service) GetHubInfoSvc() hubinfo.HubInfoService {
 	return svc.hubInfoSvc
+}
+
+// getInfoCacheTTL is the most a cached get_info result on a public connection is
+// reused (NIP-CASH §Hub Rules MAY, OQ-47); a change drops it at once.
+const getInfoCacheTTL = 5 * time.Second
+
+func (svc *service) GetOrderInfoCache() *ttlcache.Cache[string] {
+	return svc.orderInfo
+}
+
+func (svc *service) GetListedInfoCache() *ttlcache.Cache[uint] {
+	return svc.listedInfo
 }
 
 func (svc *service) GetNip47Service() nip47.Nip47Service {

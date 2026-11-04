@@ -328,7 +328,8 @@ func (svc *nip47Service) servePrivateItem(
 		lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService,
 		svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter,
 		svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr,
-	).WithPrivateIdentity(svc.privateIdentity).WithLineageLimiter(svc.cashLineageLimiter)
+	).WithPrivateIdentity(svc.privateIdentity).WithLineageLimiter(svc.cashLineageLimiter).
+		WithGetInfoCaches(svc.getInfoOrders, svc.getInfoListed)
 
 	switch item.Method {
 	case constants.NIP47MethodCashStatus:

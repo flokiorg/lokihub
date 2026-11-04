@@ -12,6 +12,7 @@ import (
 
 	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/ttlcache"
 )
 
 // The listing service's OrderSource: the signed connection, its Cash Hub, the
@@ -54,7 +55,10 @@ func TestOrderListingSource(t *testing.T) {
 // U-25.10 (Order half): every get_info on an Order connection is answered, from
 // a result at most 5 s old; new terms and the retirement drop it at once.
 func TestOrderGetInfoCached(t *testing.T) {
+	orders := ttlcache.New[string](5 * time.Second)
 	f := newOrderFixture(t)
+	f.nip47svc.SetGetInfoCaches(orders, nil)
+	deps := cashorder.Deps{DB: f.svc.DB, InfoCache: orders}
 	for range 200 {
 		require.NotEmpty(t, f.getInfo(t)["cash_order"])
 	}
@@ -65,10 +69,10 @@ func TestOrderGetInfoCached(t *testing.T) {
 	// ...new terms through the Hub are not.
 	s := orderTermsFixture()
 	s.Terms.Onchain = nil
-	require.NoError(t, cashorder.PutSettings(f.svc.DB, f.hub.ID, s, time.Now()))
+	require.NoError(t, cashorder.PutSettings(deps, f.hub.ID, s, time.Now()))
 	got, err := nipCO.ParseOrderInfo(f.getInfo(t)["cash_order"])
 	require.NoError(t, err)
 	assert.Nil(t, got.Onchain)
-	require.NoError(t, cashorder.RetireConnection(cashorder.Deps{DB: f.svc.DB}, f.hub.ID, f.conn.AppID, time.Now()))
+	require.NoError(t, cashorder.RetireConnection(deps, f.hub.ID, f.conn.AppID, time.Now()))
 	assert.JSONEq(t, `{}`, string(f.getInfo(t)["cash_order"]), "retired: answered at once")
 }

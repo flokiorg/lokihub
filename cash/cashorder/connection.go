@@ -16,9 +16,9 @@ import (
 	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/getinfocache"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/ttlcache"
 )
 
 // ErrSignerUnavailable: the node could not sign the connection string, so no
@@ -37,6 +37,10 @@ type Deps struct {
 	Apps   apps.AppsService
 	LN     lnclient.LNClient
 	Relays []string
+	// InfoCache holds the get_info results served on Order connections, by
+	// client key. A retirement or new terms drop the affected ones. Nil keeps
+	// nothing cached.
+	InfoCache *ttlcache.Cache[string]
 }
 
 // Connection is one Order connection of a Cash Hub, with its cashorder1 string
@@ -144,7 +148,7 @@ func RetireConnection(deps Deps, hubID, connAppID uint, now time.Time) error {
 	if res.Error != nil {
 		return res.Error
 	}
-	invalidateInfo(deps.DB, "app_id = ?", connAppID)
+	invalidateInfo(deps, "app_id = ?", connAppID)
 	if res.RowsAffected == 0 {
 		var n int64
 		if err := deps.DB.Model(&db.CashOrderConnection{}).Where("app_id = ? AND hub_app_id = ?", connAppID, hubID).Count(&n).Error; err != nil {
@@ -172,7 +176,8 @@ func ConnectionOf(gormDB *gorm.DB, appID uint) (*db.CashOrderConnection, error) 
 
 // invalidateInfo drops the cached get_info of the Order connections matching
 // where, so a retirement or new terms are never answered stale.
-func invalidateInfo(gormDB *gorm.DB, where string, args ...any) {
+func invalidateInfo(deps Deps, where string, args ...any) {
+	gormDB := deps.DB
 	var ids []uint
 	if err := gormDB.Model(&db.CashOrderConnection{}).Where(where, args...).Pluck("app_id", &ids).Error; err != nil || len(ids) == 0 {
 		return
@@ -181,5 +186,5 @@ func invalidateInfo(gormDB *gorm.DB, where string, args ...any) {
 	if err := gormDB.Model(&db.App{}).Where("id IN ?", ids).Pluck("app_pubkey", &keys).Error; err != nil {
 		return
 	}
-	getinfocache.Orders.Invalidate(keys...)
+	deps.InfoCache.Invalidate(keys...)
 }

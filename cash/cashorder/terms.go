@@ -109,8 +109,8 @@ func GetSettings(gormDB *gorm.DB, hubID uint) (s Settings, ok bool, err error) {
 
 // PutSettings validates and stores a Cash Hub's settings. New orders take them;
 // each placed order keeps the terms it was placed under.
-func PutSettings(gormDB *gorm.DB, hubID uint, s Settings, now time.Time) error {
-	err := gormDB.Transaction(func(tx *gorm.DB) error {
+func PutSettings(deps Deps, hubID uint, s Settings, now time.Time) error {
+	err := deps.DB.Transaction(func(tx *gorm.DB) error {
 		if err := db.LockApp(tx, hubID); err != nil {
 			return err
 		}
@@ -138,7 +138,7 @@ func PutSettings(gormDB *gorm.DB, hubID uint, s Settings, now time.Time) error {
 		return tx.Save(&row).Error
 	})
 	if err == nil {
-		invalidateInfo(gormDB, "hub_app_id = ?", hubID)
+		invalidateInfo(deps, "hub_app_id = ?", hubID)
 	}
 	return err
 }

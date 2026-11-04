@@ -16,9 +16,9 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/cipher"
-	"github.com/flokiorg/lokihub/nip47/controllers"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/flokiorg/lokihub/ttlcache"
 )
 
 // listedCircle is a funded circle hub and a listing connection of it, as the
@@ -83,10 +83,9 @@ func TestListingConn_GetInfoAsHub(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Remove()
 	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, everyoneIsAMember{})
-	hub, _, conn, connSecret := listedCircle(t, svc)
+	hub, _, _, connSecret := listedCircle(t, svc)
 
 	for _, enc := range []string{constants.ENCRYPTION_TYPE_NIP44_V2, constants.ENCRYPTION_TYPE_NIP04} {
-		controllers.InvalidateListedGetInfo(conn.ID)
 		reply, resp := sendStandard(t, svc, nip47svc, *hub.WalletPubkey, connSecret, enc,
 			map[string]any{"method": models.GET_INFO_METHOD, "params": map[string]any{}})
 		assert.Equal(t, *hub.WalletPubkey, reply.PubKey, "authored by TLV 0 (%s)", enc)
@@ -115,7 +114,9 @@ func TestListingConn_GetInfoCache(t *testing.T) {
 	defer svc.Remove()
 	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, everyoneIsAMember{})
 	hub, _, conn, connSecret := listedCircle(t, svc)
-	controllers.InvalidateListedGetInfo(conn.ID)
+	listed := ttlcache.New[uint](5 * time.Second)
+	nip47svc.SetGetInfoCaches(nil, listed)
+	listed.Invalidate(conn.ID)
 
 	accepting := func() any {
 		_, resp := sendStandard(t, svc, nip47svc, *hub.WalletPubkey, connSecret, constants.ENCRYPTION_TYPE_NIP44_V2,
@@ -134,7 +135,7 @@ func TestListingConn_GetInfoCache(t *testing.T) {
 	no := false
 	require.NoError(t, svc.DB.Model(&db.CircleHubConfig{}).Where("app_id = ?", hub.ID).Update("accepting_joins", &no).Error)
 	assert.Equal(t, true, accepting(), "cached")
-	controllers.InvalidateListedGetInfo(conn.ID)
+	listed.Invalidate(conn.ID)
 	assert.Equal(t, false, accepting(), "invalidated: the closed signal is never stale")
 }
 

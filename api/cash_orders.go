@@ -12,7 +12,7 @@ import (
 )
 
 func (api *api) orderDeps() cashorder.Deps {
-	return cashorder.Deps{DB: api.db, Keys: api.keys, Apps: api.appsSvc, LN: api.lnClient(), Relays: api.cfg.GetRelayUrls()}
+	return cashorder.Deps{DB: api.db, Keys: api.keys, Apps: api.appsSvc, LN: api.lnClient(), Relays: api.cfg.GetRelayUrls(), InfoCache: api.orderInfo}
 }
 
 func requireCashHub(hub *db.App) error {
@@ -74,5 +74,5 @@ func (api *api) PutOrderTerms(hub *db.App, s cashorder.Settings) error {
 	if err := requireCashHub(hub); err != nil {
 		return err
 	}
-	return cashorder.PutSettings(api.db, hub.ID, s, clock.Now())
+	return cashorder.PutSettings(cashorder.Deps{DB: api.db, InfoCache: api.orderInfo}, hub.ID, s, clock.Now())
 }

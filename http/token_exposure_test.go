@@ -39,6 +39,7 @@ func newTokenTestService(t *testing.T) (*echo.Echo, *HttpService) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, events.NewEventPublisher())

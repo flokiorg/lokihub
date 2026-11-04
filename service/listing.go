@@ -9,7 +9,6 @@ import (
 	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/nip47/controllers"
 )
 
 // GetListingService is the offer-listing service (WP-25), nil until the node is
@@ -38,9 +37,9 @@ func (svc *service) startListings(ctx context.Context) {
 		},
 		Relays: listing.NostrRelays{},
 		Orders: cashorder.ListingSource{Deps: func() cashorder.Deps {
-			return cashorder.Deps{DB: svc.db, Keys: svc.keys, LN: svc.lnClient, Relays: svc.cfg.GetRelayUrls()}
+			return cashorder.Deps{DB: svc.db, Keys: svc.keys, LN: svc.lnClient, Relays: svc.cfg.GetRelayUrls(), InfoCache: svc.orderInfo}
 		}},
-		InvalidateGetInfo: controllers.InvalidateListedGetInfo,
+		InvalidateGetInfo: func(appID uint) { svc.listedInfo.Invalidate(appID) },
 		// The listing clock: the Hub's, moved further only by a testhooks
 		// build's clock hook (scope "listing"); 0 otherwise.
 		Now: func() time.Time {
