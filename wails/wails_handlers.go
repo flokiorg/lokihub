@@ -1478,6 +1478,10 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		if !infoResponse.Unlocked {
 			infoResponse.RedactForUnauthenticated()
 		}
+		// Desktop-only: the GUI uses the work dir to open the app-data folder
+		// from its error/startup screens. The HTTP server never exposes it.
+		// Set it in every state so the pre-unlock startup screen has it too.
+		infoResponse.WorkDir = app.svc.GetConfig().GetDefaultWorkDir()
 		res := WailsRequestRouterResponse{Body: *infoResponse, Error: ""}
 		return res
 	case "/api/setup/config":

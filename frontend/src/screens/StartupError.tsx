@@ -1,10 +1,11 @@
-import { TriangleAlertIcon } from "lucide-react";
+import { FolderOpenIcon, TriangleAlertIcon } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "src/components/ui/button";
 import { useTheme } from "src/components/ui/theme-provider";
 import { StarryNight } from "src/screens/Intro";
 import { isHttpMode } from "src/utils/isHttpMode";
+import { canOpenFolder, openFolder } from "src/utils/openFolder";
 import { AppError } from "src/utils/request";
 
 function closeApp() {
@@ -52,9 +53,21 @@ export function StartupError({ error }: { error: AppError }) {
             </div>
           )}
         </div>
-        <Button size="lg" onClick={closeApp}>
-          {t("startupError.close")}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          {canOpenFolder(error.body?.workDir) && (
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={() => openFolder(error.body!.workDir!)}
+            >
+              <FolderOpenIcon className="w-4 h-4 me-2" />
+              {t("startupError.openDataFolder")}
+            </Button>
+          )}
+          <Button size="lg" onClick={closeApp}>
+            {t("startupError.close")}
+          </Button>
+        </div>
       </div>
     </StarryNight>
   );

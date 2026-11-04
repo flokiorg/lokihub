@@ -37,6 +37,9 @@
     "passwordLabel": "Password",
     "pleaseWait": "Please wait...",
     "starting": "Starting Lokihub may take a few minutes.",
+    "takingLong": "This is taking longer than usual. Your node may be slow to reach or unreachable — check that it is running, or open the data folder to review the logs.",
+    "openDataFolder": "Open data folder",
+    "reload": "Reload",
     "failedToStart": "Failed to start",
     "failedToConnect": "Failed to connect"
   },

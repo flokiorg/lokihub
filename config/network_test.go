@@ -10,12 +10,13 @@ import (
 func TestCheckNodeNetwork_RefusesAnUnknownValueAndAnotherChain(t *testing.T) {
 	for _, ok := range [][2]string{
 		{"", "bitcoin"}, {"flokicoin", "bitcoin"}, {"mainnet", "mainnet"}, {"bitcoin", "bitcoin"},
+		{"", "main"}, {"mainnet", "main"}, {"testnet", "test"}, // short names lokid/Bitcoin Core report
 		{"testnet", "testnet"}, {"testnet", "testnet4"}, {"regtest", "regtest"}, {"signet", "signet"}, {"simnet", "simnet"},
 	} {
 		assert.NoError(t, CheckNodeNetwork(ok[0], ok[1]), "%v", ok)
 	}
 	for _, bad := range [][2]string{
-		{"regtest", "bitcoin"}, {"", "regtest"}, {"flokicoin", "testnet"}, {"testnet", "bitcoin"}, {"signet", "regtest"},
+		{"regtest", "bitcoin"}, {"", "regtest"}, {"flokicoin", "testnet"}, {"testnet", "bitcoin"}, {"testnet", "main"}, {"signet", "regtest"},
 	} {
 		assert.ErrorContains(t, CheckNodeNetwork(bad[0], bad[1]), "but the node is on", "%v", bad)
 	}

@@ -4,7 +4,7 @@ go 1.26.10
 
 require (
 	github.com/adrg/xdg v0.5.3
-	github.com/flokiorg/go-flokicoin v0.26.3
+	github.com/flokiorg/go-flokicoin v0.26.4-rc.1
 	github.com/getlantern/systray v1.2.2
 	github.com/labstack/echo/v4 v4.16.2
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
@@ -17,7 +17,7 @@ require (
 	github.com/wailsapp/wails/v2 v2.13.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.45.0
-	google.golang.org/grpc v1.84.0
+	google.golang.org/grpc v1.83.2
 	gopkg.in/macaroon.v2 v2.1.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
@@ -27,7 +27,6 @@ require (
 require (
 	github.com/btcsuite/btcd v0.25.0 // indirect
 	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
-	github.com/btcsuite/btcd/btcutil/psbt v1.1.9 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 )
 
@@ -40,8 +39,8 @@ require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.8.2
 	github.com/ecies/go/v2 v2.0.8
-	github.com/flokiorg/flnd v0.2.5
-	github.com/flokiorg/flndecodepay v1.0.5
+	github.com/flokiorg/flnd v0.2.6-rc.1
+	github.com/flokiorg/flndecodepay v1.0.6-rc.1
 	github.com/flowgate-lsp/nostr-lsps5 v1.0.2
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/golang-migrate/migrate/v4 v4.20.1
@@ -49,7 +48,6 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.9.2
-	github.com/lightzapp/lightz-client v1.0.1-alpha
 	github.com/ohstr/nmilat v0.5.0-rc.45
 	github.com/rivo/uniseg v0.4.7
 	github.com/rs/zerolog v1.35.1
@@ -102,13 +100,12 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ethereum/go-ethereum v1.13.5 // indirect
-	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fergusstrange/embedded-postgres v1.33.0 // indirect
-	github.com/flokiorg/flokicoin-neutrino v0.17.2 // indirect
+	github.com/flokiorg/flokicoin-neutrino v0.17.3-rc.1 // indirect
 	github.com/flokiorg/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
-	github.com/flokiorg/lightning-onion v1.0.4 // indirect
-	github.com/flokiorg/walletd v0.2.2 // indirect
+	github.com/flokiorg/lightning-onion v1.0.5-rc.1 // indirect
+	github.com/flokiorg/walletd v0.2.4-rc.1 // indirect
 	github.com/getlantern/context v0.0.0-20190109183933-c447772a6520 // indirect
 	github.com/getlantern/errors v0.0.0-20190325191628-abdb3e3e36f7 // indirect
 	github.com/getlantern/golog v0.0.0-20190830074920-4ef2e798c2d7 // indirect
@@ -166,7 +163,6 @@ require (
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mholt/acmez/v3 v3.1.7 // indirect
 	github.com/miekg/dns v1.1.73 // indirect
-	github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.56.1 // indirect
 	github.com/moby/moby/client v0.6.1 // indirect
@@ -206,9 +202,6 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
-	github.com/vulpemventures/fastsha256 v0.0.0-20160815193821-637e65642941 // indirect
-	github.com/vulpemventures/go-elements v0.5.5 // indirect
-	github.com/vulpemventures/go-secp256k1-zkp v1.1.6 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/wailsapp/mimetype v1.4.1 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
