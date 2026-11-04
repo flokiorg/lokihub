@@ -412,7 +412,9 @@ func (s *Service) build(ctx context.Context, row *db.OfferListing) (nmlisting.Li
 		if row.Hints {
 			f.Hints = offer.Hints
 		}
-		stringRelays = offer.Conn.Relays
+		// offer.Conn already names the advertised relays a client reads; publish
+		// the listing itself to the relays we dial (reachable from here).
+		stringRelays = cleanRelays(s.d.Settings.GetRelayUrls())
 	case db.ListingTypeCircleWallet:
 		var hub, conn db.App
 		if err := s.d.DB.First(&hub, row.HubAppID).Error; err != nil {
@@ -425,8 +427,10 @@ func (s *Service) build(ctx context.Context, row *db.OfferListing) (nmlisting.Li
 		if err != nil {
 			return f, nil, err
 		}
+		// The connection a client reads names the advertised (client-reachable)
+		// relays; the listing itself is PUBLISHED to the relays we dial.
 		stringRelays = cleanRelays(s.d.Settings.GetRelayUrls())
-		encoded, err := s.d.CircleString(ctx, *hub.WalletPubkey, stringRelays, secret, label(row.Title))
+		encoded, err := s.d.CircleString(ctx, *hub.WalletPubkey, cleanRelays(s.d.Settings.GetAdvertisedRelayUrls()), secret, label(row.Title))
 		if err != nil {
 			return f, nil, fmt.Errorf("%w: %v", ErrCannotSign, err)
 		}

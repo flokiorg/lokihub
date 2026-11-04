@@ -349,6 +349,26 @@ func (cfg *config) GetRelayUrls() []string {
 	return urls
 }
 
+// GetAdvertisedRelayUrls returns the NWC relays the Hub ADVERTISES to clients
+// (pairing URIs, cash/circle connection tokens, minted bills) — distinct from
+// GetRelayUrls, which the Hub DIALS. Read from the NWC_RELAY_ADVERTISED env;
+// empty falls back to the dialed relays, so a single-relay deployment is
+// unaffected. Trimming mirrors GetRelayUrls.
+func (cfg *config) GetAdvertisedRelayUrls() []string {
+	var urls []string
+	if env := cfg.GetEnv(); env != nil {
+		for _, relayUrl := range strings.Split(env.AdvertisedRelay, ",") {
+			if trimmed := strings.TrimSpace(relayUrl); trimmed != "" {
+				urls = append(urls, trimmed)
+			}
+		}
+	}
+	if len(urls) == 0 {
+		return cfg.GetRelayUrls()
+	}
+	return urls
+}
+
 // GetGeneralRelayUrls returns the relays used to fetch general Nostr social
 // data — profiles, notes, and events, including Circle contact lists
 // (kind:0/kind:1/kind:3) — independent of GetRelayUrls, which is used for
@@ -361,6 +381,38 @@ func (cfg *config) GetGeneralRelayUrls() []string {
 		return []string{}
 	}
 	return strings.Split(value, ",")
+}
+
+// GetAdvertisedGeneralRelayUrls are the client-reachable general/social relays
+// advertised to other clients (/api/info, follow-set publishing) — distinct
+// from GetGeneralRelayUrls, which the hub DIALS to read social data. Read from
+// the GENERAL_RELAY_ADVERTISED env; empty falls back to the dialed general
+// relays so an unset (e.g. mainnet) deployment is unaffected.
+func (cfg *config) GetAdvertisedGeneralRelayUrls() []string {
+	var urls []string
+	if env := cfg.GetEnv(); env != nil {
+		for _, relayUrl := range strings.Split(env.AdvertisedGeneralRelay, ",") {
+			if trimmed := strings.TrimSpace(relayUrl); trimmed != "" {
+				urls = append(urls, trimmed)
+			}
+		}
+	}
+	if len(urls) == 0 {
+		return cfg.GetGeneralRelayUrls()
+	}
+	return urls
+}
+
+// GetAdvertisedGeneralRelay is the single value /api/info advertises as the
+// general relay: the GENERAL_RELAY_ADVERTISED env when set, else the stored
+// (dialed) GetGeneralRelay.
+func (cfg *config) GetAdvertisedGeneralRelay() string {
+	if env := cfg.GetEnv(); env != nil {
+		if v := strings.TrimSpace(env.AdvertisedGeneralRelay); v != "" {
+			return v
+		}
+	}
+	return cfg.GetGeneralRelay()
 }
 
 // GetSearchRelayUrls returns the relays used only for NIP-50 search queries —

@@ -121,9 +121,10 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		refuse(constants.ERROR_INTERNAL, "circle hub is not fully initialized")
 		return
 	}
-	// The member reaches the wallet only through the relays sent back, so a Hub
-	// with none must not issue one (NIP-CW §Response).
-	relays := controller.cfg.GetRelayUrls()
+	// The member reaches the wallet only through the relays sent back, so these
+	// are the advertised (client-facing) relays, and a Hub with none must not
+	// issue one (NIP-CW §Response).
+	relays := controller.cfg.GetAdvertisedRelayUrls()
 	if len(relays) == 0 {
 		logger.Logger.Error().Uint("app_id", app.ID).Msg("No relay configured; refusing to issue an unreachable circle wallet")
 		refuse(constants.ERROR_INTERNAL, "this hub has no relay to offer")

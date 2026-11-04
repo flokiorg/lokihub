@@ -82,6 +82,9 @@ type Relays interface {
 // Settings is the part of config.Config listings read.
 type Settings interface {
 	GetRelayUrls() []string
+	// GetAdvertisedRelayUrls are the client-facing relays embedded in a
+	// published listing's connection; the listing is published to GetRelayUrls.
+	GetAdvertisedRelayUrls() []string
 	GetGeneralRelayUrls() []string
 	Get(key string, encryptionKey string) (string, error)
 	SetUpdate(key string, value string, encryptionKey string) error

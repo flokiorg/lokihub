@@ -37,7 +37,7 @@ func (svc *service) startListings(ctx context.Context) {
 		},
 		Relays: listing.NostrRelays{},
 		Orders: cashorder.ListingSource{Deps: func() cashorder.Deps {
-			return cashorder.Deps{DB: svc.db, Keys: svc.keys, LN: svc.lnClient, Relays: svc.cfg.GetRelayUrls(), InfoCache: svc.orderInfo}
+			return cashorder.Deps{DB: svc.db, Keys: svc.keys, LN: svc.lnClient, Relays: svc.cfg.GetAdvertisedRelayUrls(), InfoCache: svc.orderInfo}
 		}},
 		InvalidateGetInfo: func(appID uint) { svc.listedInfo.Invalidate(appID) },
 		// The listing clock: the Hub's, moved further only by a testhooks

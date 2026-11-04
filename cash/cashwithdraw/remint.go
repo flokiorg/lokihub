@@ -28,7 +28,7 @@ func (s *Service) remintDeps(ctx context.Context) (cashwallet.Deps, error) {
 		d.LNClient = s.LN()
 	}
 	if s.Cfg != nil {
-		d.RelayURLs = s.Cfg.GetRelayUrls()
+		d.RelayURLs = s.Cfg.GetAdvertisedRelayUrls()
 	}
 	return d, nil
 }

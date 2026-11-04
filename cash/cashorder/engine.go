@@ -39,7 +39,10 @@ type Engine struct {
 	Apps         apps.AppsService
 	Transactions transactions.TransactionsService
 	LN           func() lnclient.LNClient
-	Relays       func() []string
+	// Relays are the client-facing (advertised) relays embedded into minted
+	// order bills, so a holder can reach the Hub. Order notices are dialed
+	// separately (see service newOrderEngine / startOrderJobs).
+	Relays func() []string
 	// Horizon is the H in force (NIP-CASH §Deadlines).
 	Horizon func() int64
 	Now     func() time.Time

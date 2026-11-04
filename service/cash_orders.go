@@ -29,7 +29,7 @@ const (
 func (svc *service) newOrderEngine(gormDB *gorm.DB, k keys.Keys, cfg config.Config, eventPublisher events.EventPublisher) *cashorder.Engine {
 	e := &cashorder.Engine{
 		DB: gormDB, Keys: k, Apps: apps.NewAppsService(gormDB, eventPublisher, k, cfg),
-		Transactions: svc.transactionsService, LN: svc.GetLNClient, Relays: cfg.GetRelayUrls,
+		Transactions: svc.transactionsService, LN: svc.GetLNClient, Relays: cfg.GetAdvertisedRelayUrls,
 		Horizon: func() int64 {
 			h, _ := db.HorizonTx(gormDB)
 			return max(h, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)

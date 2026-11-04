@@ -254,7 +254,9 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 		}
 	}
 
-	relayUrls := api.cfg.GetRelayUrls()
+	// Advertise the client-facing relay (NWC_RELAY_ADVERTISED), not the dialed
+	// one: this feeds the pairing URI, RelayUrls and the cash/circle tokens.
+	relayUrls := api.cfg.GetAdvertisedRelayUrls()
 
 	lightningAddress, err := api.cfg.Get("LightningAddress", "")
 	if err != nil {
@@ -1550,7 +1552,7 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 		info.NodeAlias = nodeInfo.Alias
 	}
 	info.Relay = api.cfg.GetRelay()
-	info.GeneralRelay = api.cfg.GetGeneralRelay()
+	info.GeneralRelay = api.cfg.GetAdvertisedGeneralRelay()
 	info.TrustedNwcRelay = api.cfg.TrustedNwcRelay()
 	privateEnvelope := api.cfg.PrivateEnvelopeLimits()
 	info.PrivateEnvelope = PrivateEnvelopeInfo{
@@ -3489,7 +3491,7 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 		LNClient:            api.svc.GetLNClient(),
 		Keys:                api.keys,
 		DB:                  api.db,
-		RelayURLs:           api.cfg.GetRelayUrls(),
+		RelayURLs:           api.cfg.GetAdvertisedRelayUrls(),
 		IAChecker:           api.iaManager,
 	}
 	resolved, err := cashwallet.Resolve(context.Background(), deps, cashwallet.Params{

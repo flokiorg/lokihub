@@ -157,7 +157,8 @@ For more information on the Go pprof library, see the [official documentation](h
 
 The following configuration options can be set as environment variables or in a .env file
 
-- `RELAY`: can support multiple separated by commas
+- `NWC_RELAY`: the NWC relay the Hub dials; can support multiple separated by commas
+- `NWC_RELAY_ADVERTISED`: the client-facing NWC relay advertised in pairing URIs, connection tokens and minted bills; defaults to `NWC_RELAY` when unset
 - `DATABASE_URI`: A sqlite filename or postgres URL.
 - `PORT`: The port on which the app should listen on
 - `WORK_DIR`: Directory to store NWC data files.

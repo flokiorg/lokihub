@@ -348,13 +348,17 @@ func (svc *service) startPrivateTransport(ctx context.Context, pool *nostr.Simpl
 // Once per startup. The node signature costs ~1.15 ms, which is why this is not
 // on any per-request path.
 func (svc *service) publishTransportAnnouncement(ctx context.Context, pool *nostr.SimplePool, pt *privateTransport) (err error) {
-	relayURLs := svc.cfg.GetRelayUrls()
+	// The announcement NAMES the relays clients reach us on (advertised), but is
+	// PUBLISHED to the relays we dial. These differ when the dial URL is not
+	// client-reachable (e.g. a docker-internal hostname vs a host/public URL).
+	dialRelays := svc.cfg.GetRelayUrls()
+	advertisedRelays := svc.cfg.GetAdvertisedRelayUrls()
 	var publishedTo int
 	// Named return + defer so every exit path below — including the early
 	// ones that never reach the publish loop — updates the retained status
 	// the same way, instead of needing its own call before each return.
 	defer func() {
-		svc.setPrivateTransportAnnounceResult(publishedTo, len(relayURLs), err)
+		svc.setPrivateTransportAnnounceResult(publishedTo, len(dialRelays), err)
 	}()
 
 	signer, ok := svc.lnClient.(lnclient.TransportSigner)
@@ -364,7 +368,7 @@ func (svc *service) publishTransportAnnouncement(ctx context.Context, pool *nost
 	}
 
 	ev, buildErr := transport.NewAnnouncement(
-		pt.nodeXOnly, pt.inbox(), svc.cfg.PrivateEnvelopeLimits(), relayURLs,
+		pt.nodeXOnly, pt.inbox(), svc.cfg.PrivateEnvelopeLimits(), advertisedRelays,
 	)
 	if buildErr != nil {
 		err = fmt.Errorf("build announcement: %w", buildErr)
@@ -401,7 +405,7 @@ func (svc *service) publishTransportAnnouncement(ctx context.Context, pool *nost
 		return err
 	}
 
-	publishedTo += publishToAll(ctx, pool, relayURLs, *published, "the transport announcement")
+	publishedTo += publishToAll(ctx, pool, dialRelays, *published, "the transport announcement")
 	if publishedTo == 0 {
 		err = errors.New("no relay accepted the transport announcement")
 		return err

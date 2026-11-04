@@ -12,7 +12,7 @@ import (
 )
 
 func (api *api) orderDeps() cashorder.Deps {
-	return cashorder.Deps{DB: api.db, Keys: api.keys, Apps: api.appsSvc, LN: api.lnClient(), Relays: api.cfg.GetRelayUrls(), InfoCache: api.orderInfo}
+	return cashorder.Deps{DB: api.db, Keys: api.keys, Apps: api.appsSvc, LN: api.lnClient(), Relays: api.cfg.GetAdvertisedRelayUrls(), InfoCache: api.orderInfo}
 }
 
 func requireCashHub(hub *db.App) error {

@@ -813,7 +813,7 @@ func (controller *nip47Controller) cashDeps() cashwallet.Deps {
 		LNClient:            controller.lnClient,
 		Keys:                controller.keys,
 		DB:                  controller.db,
-		RelayURLs:           controller.cfg.GetRelayUrls(),
+		RelayURLs:           controller.cfg.GetAdvertisedRelayUrls(),
 		IAChecker:           controller.iaChecker,
 		Hooks:               controller.cashHooks,
 	}

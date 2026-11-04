@@ -11,8 +11,20 @@ const (
 )
 
 type AppConfig struct {
-	Relay         string `envconfig:"RELAY"`
-	LNBackendType string `envconfig:"LN_BACKEND_TYPE"`
+	// Relay is the NWC relay the Hub DIALS (subscribes and publishes on).
+	// Comma-separated for multiple.
+	Relay string `envconfig:"NWC_RELAY"`
+	// AdvertisedRelay is the client-facing NWC relay the Hub ADVERTISES in
+	// pairing URIs, cash/circle connection tokens and minted bills. Empty
+	// advertises whatever Relay dials; set it when the dial URL (e.g. a
+	// docker-internal hostname) is not reachable by clients.
+	AdvertisedRelay string `envconfig:"NWC_RELAY_ADVERTISED"`
+	// AdvertisedGeneralRelay is the client-facing general/social relay the Hub
+	// ADVERTISES (e.g. in /api/info, so a client knows where to publish a
+	// provider follow set). Empty advertises whatever general relay the Hub
+	// dials; set it when that dial URL is not reachable by clients.
+	AdvertisedGeneralRelay string `envconfig:"GENERAL_RELAY_ADVERTISED"`
+	LNBackendType          string `envconfig:"LN_BACKEND_TYPE"`
 
 	// FLND (Flokicoin) Backend
 	FLNDAddress      string `envconfig:"FLND_ADDRESS"`
@@ -173,6 +185,10 @@ type Config interface {
 	SetUpdate(key string, value string, encryptionKey string) error
 	GetJWTSecret() (string, error)
 	GetRelayUrls() []string
+	// GetAdvertisedRelayUrls are the NWC relays advertised to clients (pairing
+	// URIs, connection tokens, minted bills) — distinct from GetRelayUrls, which
+	// the Hub dials. Empty AdvertisedRelay falls back to the dialed relays.
+	GetAdvertisedRelayUrls() []string
 	// TrustedNwcRelay reports whether the NWC relays in GetRelayUrls are run
 	// by this hub. See config.TrustedNwcRelay for what it turns on and why it
 	// must never be set for a relay the operator does not control.
@@ -213,6 +229,12 @@ type Config interface {
 	GetGeneralRelayUrls() []string
 	GetGeneralRelay() string
 	SetGeneralRelay(value string) error
+	// GetAdvertisedGeneralRelayUrls / GetAdvertisedGeneralRelay are the
+	// client-reachable general relays advertised to other clients (/api/info,
+	// follow-set publishing) — distinct from the Get*GeneralRelay* above, which
+	// the hub dials. Empty GENERAL_RELAY_ADVERTISED falls back to the dialed value.
+	GetAdvertisedGeneralRelayUrls() []string
+	GetAdvertisedGeneralRelay() string
 	GetSearchRelayUrls() []string
 	GetSearchRelay() string
 	SetSearchRelay(value string) error

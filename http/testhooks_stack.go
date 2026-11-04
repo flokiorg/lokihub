@@ -86,7 +86,7 @@ func (t *testHooks) registerStackTestHooks(g *echo.Group) {
 		if err := os.Rename(tmp, filepath.Join(dir, "min-pow")); err != nil {
 			return hookError(c, err)
 		}
-		relay := envOr("RELAY", "ws://relay:5500")
+		relay := envOr("NWC_RELAY", "ws://relay:5500")
 		got, err := awaitRelayMinPow(c.Request().Context(), relay, req.Difficulty, 45*time.Second)
 		if err != nil {
 			return c.JSON(http.StatusGatewayTimeout, ErrorResponse{Message: err.Error()})

@@ -557,6 +557,52 @@ func (_c *MockConfig_GetRelayUrls_Call) RunAndReturn(run func() []string) *MockC
 	return _c
 }
 
+// GetAdvertisedRelayUrls provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetAdvertisedRelayUrls() []string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAdvertisedRelayUrls")
+	}
+
+	var r0 []string
+	if returnFunc, ok := ret.Get(0).(func() []string); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	return r0
+}
+
+// MockConfig_GetAdvertisedRelayUrls_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAdvertisedRelayUrls'
+type MockConfig_GetAdvertisedRelayUrls_Call struct {
+	*mock.Call
+}
+
+// GetAdvertisedRelayUrls is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) GetAdvertisedRelayUrls() *MockConfig_GetAdvertisedRelayUrls_Call {
+	return &MockConfig_GetAdvertisedRelayUrls_Call{Call: _e.mock.On("GetAdvertisedRelayUrls")}
+}
+
+func (_c *MockConfig_GetAdvertisedRelayUrls_Call) Run(run func()) *MockConfig_GetAdvertisedRelayUrls_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfig_GetAdvertisedRelayUrls_Call) Return(strings []string) *MockConfig_GetAdvertisedRelayUrls_Call {
+	_c.Call.Return(strings)
+	return _c
+}
+
+func (_c *MockConfig_GetAdvertisedRelayUrls_Call) RunAndReturn(run func() []string) *MockConfig_GetAdvertisedRelayUrls_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SaveUnlockPasswordCheck provides a mock function for the type MockConfig
 func (_mock *MockConfig) SaveUnlockPasswordCheck(encryptionKey string) error {
 	ret := _mock.Called(encryptionKey)
@@ -1119,6 +1165,42 @@ func (_mock *MockConfig) GetGeneralRelay() string {
 		r0 = returnFunc()
 	} else {
 		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// GetAdvertisedGeneralRelay provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetAdvertisedGeneralRelay() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAdvertisedGeneralRelay")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// GetAdvertisedGeneralRelayUrls provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetAdvertisedGeneralRelayUrls() []string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAdvertisedGeneralRelayUrls")
+	}
+
+	var r0 []string
+	if returnFunc, ok := ret.Get(0).(func() []string); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
 	}
 	return r0
 }
