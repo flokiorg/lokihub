@@ -42,7 +42,7 @@ type FAQ struct {
 }
 
 // Info mirrors hubinfo.HubInfo. Version is a fallback only — loki prefers the
-// appversion build tag.
+// buildinfo build tag.
 type Info struct {
 	Version      string `yaml:"version" json:"version"`
 	ReleaseNotes string `yaml:"release_notes" json:"releaseNotes"`

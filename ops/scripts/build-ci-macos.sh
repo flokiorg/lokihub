@@ -57,12 +57,12 @@ build_http() {
     # Force CGO enabled and set CC for cross-compilation
     echo "Building AMD64 slice..."
     CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" \
-        go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'" \
+        go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/buildinfo.Tag=${VERSION_STRING}'" \
         -o "ops/bin/lokihub-amd64" ./cmd/http
 
     echo "Building ARM64 slice..."
     CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CC="clang -arch arm64" \
-        go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'" \
+        go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/buildinfo.Tag=${VERSION_STRING}'" \
         -o "ops/bin/lokihub-arm64" ./cmd/http
     
     echo "Creating Universal Binary..."
@@ -96,7 +96,7 @@ build_macos_desktop() {
     echo "Building Desktop AMD64 slice..."
     CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" \
     wails build -platform "darwin/amd64" -tags wails -trimpath \
-            -ldflags "-s -w -X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'" \
+            -ldflags "-s -w -X 'github.com/flokiorg/lokihub/buildinfo.Tag=${VERSION_STRING}'" \
             -o "${BASENAME}-amd64" -clean
     
     # Wails might output "Lokihub.app" instead of the target name
@@ -107,7 +107,7 @@ build_macos_desktop() {
     echo "Building Desktop ARM64 slice..."
     CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CC="clang -arch arm64" \
     wails build -platform "darwin/arm64" -tags wails -trimpath \
-            -ldflags "-s -w -X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'" \
+            -ldflags "-s -w -X 'github.com/flokiorg/lokihub/buildinfo.Tag=${VERSION_STRING}'" \
             -o "${BASENAME}-arm64"
             
     # Rename again for ARM64

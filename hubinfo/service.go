@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/flokiorg/lokihub/appversion"
+	"github.com/flokiorg/lokihub/buildinfo"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/seed"
 )
@@ -48,10 +48,10 @@ func (svc *hubInfoService) GetCurrencies(ctx context.Context) (map[string]FiatCu
 }
 
 // GetInfo returns the hub info from the embedded seed. The version comes from
-// the appversion build tag, falling back to the seed's static value.
+// the buildinfo build tag, falling back to the seed's static value.
 func (svc *hubInfoService) GetInfo(ctx context.Context) (*HubInfo, error) {
 	info := seed.Get().Info
-	version := appversion.Tag
+	version := buildinfo.Tag
 	if version == "" {
 		version = info.Version
 	}

@@ -51,7 +51,7 @@ import (
 
 	"github.com/flokiorg/lokihub/cashrequest"
 
-	"github.com/flokiorg/lokihub/appversion"
+	"github.com/flokiorg/lokihub/buildinfo"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/netutil"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
@@ -1509,7 +1509,7 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 		info.StartupErrorTime = api.startupErrorTime
 	}
 	info.BackendType = backendType
-	info.Version = appversion.Tag
+	info.Version = buildinfo.Tag
 	info.AutoUnlockPasswordEnabled = autoUnlockPassword != ""
 	info.AutoUnlockPasswordSupported = true
 	info.Relays = []InfoResponseRelay{}

@@ -161,7 +161,7 @@ dev subcommand="" *args:
             docker exec -it lokihub-dev-flnd flncli --network=mainnet --macaroonpath={{FLND_MACAROON_PATH}} "$@"
             ;;
         wails)
-            exec wails dev -tags wails,dev -ldflags "-X 'github.com/flokiorg/lokihub/appversion.Tag={{VERSION}}'"
+            exec wails dev -tags wails,dev -ldflags "-X 'github.com/flokiorg/lokihub/buildinfo.Tag={{VERSION}}'"
             ;;
         ""|help)
             cat <<'USAGE'

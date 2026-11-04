@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/appversion"
+	"github.com/flokiorg/lokihub/buildinfo"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -68,12 +68,12 @@ func (svc *service) startNostr(ctx context.Context) error {
 	logger.Logger.Info().
 		Str("npub", npub).
 		Str("hex", svc.keys.GetNostrPublicKey()).
-		Str("version", appversion.Tag).
+		Str("version", buildinfo.Tag).
 		Interface("relay_urls", relayUrls).
 		Msg("Starting Lokihub")
 
 	// To debug go-nostr, run with -tags "debug dev" (dev tag so FLND build doesn't break with debug tag set)
-	// go run -tags "debug dev" -ldflags="-X 'github.com/flokiorg/lokihub/appversion.Tag=v1.20.0'" cmd/http/main.go
+	// go run -tags "debug dev" -ldflags="-X 'github.com/flokiorg/lokihub/buildinfo.Tag=v1.20.0'" cmd/http/main.go
 	if logger.Logger.GetLevel() >= 4 {
 		nostr.InfoLogger.SetOutput(logger.Writer)
 		nostr.DebugLogger.SetOutput(logger.Writer)
@@ -83,7 +83,7 @@ func (svc *service) startNostr(ctx context.Context) error {
 	pool := nostr.NewSimplePool(ctx, nostr.WithRelayOptions(
 		nostr.WithNoticeHandler(svc.noticeHandler),
 		nostr.WithRequestHeader(http.Header{
-			"User-Agent": {"Lokihub/" + appversion.Tag},
+			"User-Agent": {"Lokihub/" + buildinfo.Tag},
 		}),
 	))
 
