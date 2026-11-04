@@ -9,6 +9,7 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/niplsp"
 
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/persist"
 )
 
@@ -52,7 +53,7 @@ func (s *Service) LiveCheck(ctx context.Context, key string) (*LiveResult, error
 		return nil, errors.New("the liquidity manager is not running")
 	}
 	var row persist.LSP
-	if err := s.d.DB.First(&row, "node_key = ?", NodeKeyOf(key)).Error; err != nil {
+	if err := s.d.DB.First(&row, "node_key = ?", common.NodeKeyOf(key)).Error; err != nil {
 		return nil, err
 	}
 	res := s.liveCheck(ctx, &row)

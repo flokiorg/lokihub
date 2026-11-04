@@ -2,14 +2,12 @@ package lsps5
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"sync"
-	"time"
 
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps0"
 	"github.com/flokiorg/lokihub/lsps/transport"
@@ -48,16 +46,6 @@ func NewClientHandler(transport transport.Transport, eventQueue *events.EventQue
 	}
 }
 
-func generateRequestID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// crypto/rand only fails if the OS entropy source is unavailable;
-		// fall back to a timestamp-derived ID rather than blocking the request.
-		return fmt.Sprintf("%032x", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(b)
-}
-
 func (h *ClientHandler) ensurePeerState(lspPubkey string) *PeerState {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -78,7 +66,7 @@ func (h *ClientHandler) SetWebhook(ctx context.Context, lspPubkey string, appNam
 	}
 
 	peerState := h.ensurePeerState(lspPubkey)
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	peerState.mu.Lock()
 	peerState.PendingSetWebhookRequests[requestID] = SetWebhookReqInfo{
@@ -110,7 +98,7 @@ func (h *ClientHandler) SetWebhook(ctx context.Context, lspPubkey string, appNam
 
 func (h *ClientHandler) ListWebhooks(ctx context.Context, lspPubkey string) (string, error) {
 	peerState := h.ensurePeerState(lspPubkey)
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	peerState.mu.Lock()
 	peerState.PendingListWebhooksRequests[requestID] = true
@@ -135,7 +123,7 @@ func (h *ClientHandler) ListWebhooks(ctx context.Context, lspPubkey string) (str
 
 func (h *ClientHandler) RemoveWebhook(ctx context.Context, lspPubkey string, appName string) (string, error) {
 	peerState := h.ensurePeerState(lspPubkey)
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	peerState.mu.Lock()
 	peerState.PendingRemoveWebhookRequests[requestID] = RemoveWebhookReqInfo{

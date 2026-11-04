@@ -3,14 +3,13 @@ package lsps2
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps0"
 	"github.com/flokiorg/lokihub/lsps/transport"
@@ -51,20 +50,9 @@ func NewClientHandler(transport transport.Transport, eventQueue *events.EventQue
 	}
 }
 
-// generateRequestID generates a random request ID
-func generateRequestID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// crypto/rand only fails if the OS entropy source is unavailable;
-		// fall back to a timestamp-derived ID rather than blocking the request.
-		return fmt.Sprintf("%032x", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(b)
-}
-
 // RequestOpeningParams requests JIT channel opening parameters from the LSP
 func (h *ClientHandler) RequestOpeningParams(ctx context.Context, lspPubkey string, token *string) (string, error) {
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	h.mu.Lock()
 	if _, ok := h.perPeerState[lspPubkey]; !ok {
@@ -104,7 +92,7 @@ func (h *ClientHandler) RequestOpeningParams(ctx context.Context, lspPubkey stri
 
 // SelectOpeningParams confirms selected opening parameters and requests invoice params
 func (h *ClientHandler) SelectOpeningParams(ctx context.Context, lspPubkey string, paymentSizeMloki *uint64, openingFeeParams OpeningFeeParams) (string, error) {
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	h.mu.Lock()
 	if _, ok := h.perPeerState[lspPubkey]; !ok {

@@ -3,8 +3,8 @@ package manager
 import (
 	"errors"
 	"fmt"
-	"strings"
 
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/persist"
 	"gorm.io/gorm"
 )
@@ -51,7 +51,7 @@ func (m *LSPManager) ListTrustedLSPs() ([]persist.LSP, error) {
 
 // GetLSP returns one LSP by node key (x-only) or node id (66 hex).
 func (m *LSPManager) GetLSP(key string) (*persist.LSP, error) {
-	key = NodeKeyOf(key)
+	key = common.NodeKeyOf(key)
 	var lsp persist.LSP
 	if err := m.db.First(&lsp, "node_key = ?", key).Error; err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func (m *LSPManager) GetLSP(key string) (*persist.LSP, error) {
 
 // SetTrusted records the user's choice for an LSP.
 func (m *LSPManager) SetTrusted(key string, trusted bool) error {
-	result := m.db.Model(&persist.LSP{}).Where("node_key = ?", NodeKeyOf(key)).Update("trusted", trusted)
+	result := m.db.Model(&persist.LSP{}).Where("node_key = ?", common.NodeKeyOf(key)).Update("trusted", trusted)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -73,16 +73,7 @@ func (m *LSPManager) SetTrusted(key string, trusted bool) error {
 
 // UpdateLSPNostrPubkey stores the LSPS0 notification pubkey read live (LP-18).
 func (m *LSPManager) UpdateLSPNostrPubkey(key, nostrPubkey string) error {
-	return m.db.Model(&persist.LSP{}).Where("node_key = ?", NodeKeyOf(key)).Update("nostr_pubkey", nostrPubkey).Error
-}
-
-// NodeKeyOf is the x-only node key of a node key or a 66-hex node id.
-func NodeKeyOf(key string) string {
-	key = strings.ToLower(strings.TrimSpace(key))
-	if len(key) == 66 && (strings.HasPrefix(key, "02") || strings.HasPrefix(key, "03")) {
-		return key[2:]
-	}
-	return key
+	return m.db.Model(&persist.LSP{}).Where("node_key = ?", common.NodeKeyOf(key)).Update("nostr_pubkey", nostrPubkey).Error
 }
 
 // LSPS1 Order Persistence

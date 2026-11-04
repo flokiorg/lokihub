@@ -25,6 +25,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/persist"
 	"github.com/flokiorg/lokihub/nodesign"
 	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
@@ -171,7 +172,7 @@ func (s *Service) Discover(ctx context.Context) error {
 // refused when the node has none that passes the checks. It connects to
 // nothing.
 func (s *Service) Add(ctx context.Context, key string) (*persist.LSP, error) {
-	nodeKey := NodeKeyOf(key)
+	nodeKey := common.NodeKeyOf(key)
 	if !pubkeyhex.Valid(nodeKey) {
 		return nil, fmt.Errorf("%w: a node key is 64 hex characters, or a 66-character node id", ErrRefused)
 	}
@@ -468,15 +469,6 @@ func (s *Service) refreshGraph(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-// NodeKeyOf is the x-only node key of a node key or a 66-hex node id.
-func NodeKeyOf(key string) string {
-	key = strings.ToLower(strings.TrimSpace(key))
-	if len(key) == 66 && (strings.HasPrefix(key, "02") || strings.HasPrefix(key, "03")) {
-		return key[2:]
-	}
-	return key
 }
 
 func encode(v any) string {

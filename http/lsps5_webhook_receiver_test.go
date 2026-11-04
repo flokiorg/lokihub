@@ -18,7 +18,7 @@ import (
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/persist"
 	"github.com/flokiorg/lokihub/tests/db"
 	"github.com/flokiorg/lokihub/tests/mocks"
@@ -76,7 +76,7 @@ func createTestHttpService(t *testing.T, needsLNClient bool) (*HttpService, chan
 func registerTestLSP(t *testing.T, httpSvc *HttpService, pubkey string) {
 	t.Helper()
 	require.NoError(t, httpSvc.db.Create(&persist.LSP{
-		NodeKey: manager.NodeKeyOf(pubkey),
+		NodeKey: common.NodeKeyOf(pubkey),
 		Pubkey:  pubkey,
 		Host:    "test.invalid:9735",
 		Name:    "Test LSP",
