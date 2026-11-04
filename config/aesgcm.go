@@ -1,8 +1,6 @@
 package config
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -10,6 +8,8 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/argon2"
+
+	"github.com/flokiorg/lokihub/seal"
 )
 
 // At-rest KEK (key-encryption key) parameters. This KEK wraps the Mnemonic and
@@ -132,59 +132,12 @@ func isLegacyWrappedSecret(storedValue string) bool {
 	return storedValue != "" && !strings.HasPrefix(storedValue, kekArgon2idTag+"$")
 }
 
+// AesGcmEncryptWithKey seals plaintext under a 32-byte key (see package seal).
 func AesGcmEncryptWithKey(plaintext string, key []byte) (string, error) {
-	// require a 32 bytes key (256 bits)
-	if len(key) != 32 {
-		return "", fmt.Errorf("key must be at least 32 bytes, got %d", len(key))
-	}
-
-	plaintextBytes := []byte(plaintext)
-
-	aes, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-
-	aesgcm, err := cipher.NewGCM(aes)
-	if err != nil {
-		return "", err
-	}
-
-	nonce := make([]byte, aesgcm.NonceSize())
-	_, err = rand.Read(nonce)
-	if err != nil {
-		return "", err
-	}
-
-	ciphertext := aesgcm.Seal(nil, nonce, plaintextBytes, nil)
-
-	return hex.EncodeToString(nonce) + "-" + hex.EncodeToString(ciphertext), nil
+	return seal.EncryptWithKey(plaintext, key)
 }
 
+// AesGcmDecryptWithKey opens a value AesGcmEncryptWithKey made.
 func AesGcmDecryptWithKey(ciphertext string, key []byte) (string, error) {
-	// require a 32 bytes key (256 bits)
-	if len(key) != 32 {
-		return "", fmt.Errorf("key must be at least 32 bytes, got %d", len(key))
-	}
-
-	arr := strings.Split(ciphertext, "-")
-	nonce, _ := hex.DecodeString(arr[0])
-	data, _ := hex.DecodeString(arr[1])
-
-	aes, err := aes.NewCipher([]byte(key))
-	if err != nil {
-		return "", err
-	}
-
-	aesgcm, err := cipher.NewGCM(aes)
-	if err != nil {
-		return "", err
-	}
-
-	plaintext, err := aesgcm.Open(nil, nonce, data, nil)
-	if err != nil {
-		return "", err
-	}
-
-	return string(plaintext), nil
+	return seal.DecryptWithKey(ciphertext, key)
 }

@@ -1,7 +1,7 @@
 // Package atrest seals the secrets lokihub keeps in its database for its own
 // later use, such as the preimage of a hold invoice the Hub settles itself. The
 // key is derived from the node's mnemonic when the node unlocks, so the
-// database alone opens nothing; the sealing is config's AES-GCM.
+// database alone opens nothing; the sealing is package seal's AES-GCM.
 package atrest
 
 import (
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/seal"
 )
 
 // prefix marks a sealed value and its format version.
@@ -54,7 +54,7 @@ func Seal(plaintext string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sealed, err := config.AesGcmEncryptWithKey(plaintext, k)
+	sealed, err := seal.EncryptWithKey(plaintext, k)
 	if err != nil {
 		return "", err
 	}
@@ -71,5 +71,5 @@ func Open(sealed string) (string, error) {
 	if !ok || strings.Count(body, "-") != 1 {
 		return "", errors.New("atrest: not a sealed value")
 	}
-	return config.AesGcmDecryptWithKey(body, k)
+	return seal.DecryptWithKey(body, k)
 }
