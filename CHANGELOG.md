@@ -75,6 +75,9 @@ hub to services the user has explicitly selected.
   kinds (23198 and 23199), off the shared kind 35521. (#90)
 - Renames the built-in "Ohstr Relay" relay suggestion to "Ohstr" and lists it
   last in the setup relay picker. (#215)
+- Redesigns the desktop tray/menu-bar icon as a larger black-and-white Loki
+  face, dropping the sunburst so it reads bigger and stays legible on both light
+  and dark menu bars. (#216)
 
 ### Removed
 
