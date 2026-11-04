@@ -401,20 +401,7 @@ func (svc *service) publishTransportAnnouncement(ctx context.Context, pool *nost
 		return err
 	}
 
-	for _, relayURL := range relayURLs {
-		relay, relayErr := pool.EnsureRelay(relayURL)
-		if relayErr != nil {
-			logger.Logger.Warn().Err(relayErr).Str("relay", relayURL).
-				Msg("Could not reach relay to publish the transport announcement")
-			continue
-		}
-		if pubErr := relay.Publish(ctx, *published); pubErr != nil {
-			logger.Logger.Warn().Err(pubErr).Str("relay", relayURL).
-				Msg("Failed to publish the transport announcement")
-			continue
-		}
-		publishedTo++
-	}
+	publishedTo += publishToAll(ctx, pool, relayURLs, *published, "the transport announcement")
 	if publishedTo == 0 {
 		err = errors.New("no relay accepted the transport announcement")
 		return err

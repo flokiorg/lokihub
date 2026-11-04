@@ -232,29 +232,7 @@ func (svc *service) publishReplyEvent(ctx context.Context, pool *nostr.SimplePoo
 		return fmt.Errorf("sign: %w", err)
 	}
 
-	if arrivedOn != "" {
-		if relay, err := pool.EnsureRelay(arrivedOn); err != nil {
-			logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("Could not reach the relay a private request arrived on to reply")
-		} else if err := relay.Publish(ctx, reply); err != nil {
-			logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("The relay a private request arrived on refused its reply")
-		} else {
-			return nil
-		}
-	}
-	for _, relayURL := range svc.cfg.GetRelayUrls() {
-		if relayURL == arrivedOn {
-			continue
-		}
-		relay, err := pool.EnsureRelay(relayURL)
-		if err != nil {
-			continue
-		}
-		if err := relay.Publish(ctx, reply); err != nil {
-			continue
-		}
-		return nil
-	}
-	return fmt.Errorf("no relay accepted the reply")
+	return publishToFirst(ctx, pool, arrivedOn, svc.cfg.GetRelayUrls(), reply, "the reply")
 }
 
 // chunkResults splits results into as few replies as the limits allow.

@@ -157,21 +157,7 @@ func (svc *service) publishToGeneralRelays(ctx context.Context, published *nostr
 	// publishing here is a rare, on-demand HTTP-triggered action with no
 	// existing pool to reuse — svc holds no pool field past startup.
 	pool := nostr.NewSimplePool(ctx)
-	var publishedTo int
-	for _, relayURL := range relayURLs {
-		relay, relayErr := pool.EnsureRelay(relayURL)
-		if relayErr != nil {
-			logger.Logger.Warn().Err(relayErr).Str("relay", relayURL).
-				Msg("Could not reach relay to publish the node event")
-			continue
-		}
-		if pubErr := relay.Publish(ctx, *published); pubErr != nil {
-			logger.Logger.Warn().Err(pubErr).Str("relay", relayURL).
-				Msg("Failed to publish the node event")
-			continue
-		}
-		publishedTo++
-	}
+	publishedTo := publishToAll(ctx, pool, relayURLs, *published, "the node event")
 	if publishedTo == 0 {
 		return 0, errors.New("no relay accepted the node event")
 	}

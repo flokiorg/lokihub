@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"github.com/flokiorg/lokihub/clock"
 	"time"
 
@@ -88,21 +87,9 @@ func (svc *service) publishNotice(ctx context.Context, pool *nostr.SimplePool, a
 	}
 	out := nostr.Event{ID: ev.ID, PubKey: ev.PubKey, CreatedAt: nostr.Timestamp(ev.CreatedAt), Kind: ev.Kind, //nolint:gosec // a unix time
 		Tags: tags, Content: ev.Content, Sig: ev.Sig}
-	try := func(url string) bool {
-		relay, err := pool.EnsureRelay(url)
-		if err != nil {
-			return false
-		}
-		return relay.Publish(ctx, out) == nil
+	err := publishToFirst(ctx, pool, arrivedOn, svc.cfg.GetRelayUrls(), out, "the notice")
+	if err != nil {
+		logger.Logger.Debug().Msg("No relay accepted a notice")
 	}
-	if arrivedOn != "" && try(arrivedOn) {
-		return nil
-	}
-	for _, url := range svc.cfg.GetRelayUrls() {
-		if url != arrivedOn && try(url) {
-			return nil
-		}
-	}
-	logger.Logger.Debug().Msg("No relay accepted a notice")
-	return fmt.Errorf("no relay accepted the notice")
+	return err
 }
