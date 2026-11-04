@@ -16,7 +16,6 @@ import (
 
 	"github.com/adrg/xdg"
 
-	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -997,7 +996,7 @@ func (cfg *config) PrivateEnvelopeLimits() transport.Limits {
 		MaxRequestAgeSeconds:  int64(cfg.privateEnvelopeInt(cashMaxRequestAgeKey, env.CashMaxRequestAgeSecs, int(defaults.MaxRequestAgeSeconds))),
 	}
 	// H never decreases (NIP-CASH §Deadlines): the largest H ever used is stored.
-	if stored, err := cashrequest.HorizonTx(cfg.db); err != nil {
+	if stored, err := db.HorizonTx(cfg.db); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to read the stored horizon")
 	} else if stored > limits.MaxRequestAgeSeconds {
 		limits.MaxRequestAgeSeconds = stored
@@ -1081,7 +1080,7 @@ func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
 			return err
 		}
 	}
-	if _, err := cashrequest.RaiseHorizon(cfg.db, limits.MaxRequestAgeSeconds, time.Now()); err != nil {
+	if _, err := db.RaiseHorizon(cfg.db, limits.MaxRequestAgeSeconds, time.Now()); err != nil {
 		return fmt.Errorf("failed to store the horizon: %w", err)
 	}
 	return nil

@@ -8,10 +8,9 @@ import (
 	"github.com/flokiorg/lokihub/db"
 )
 
-// Methods whose records another component retires: an order's record follows
-// NIP-CO retention, a withdrawal's follows its payout. Named here until nmilat
-// exports MethodCashOrder and MethodCashWithdraw.
-var ownedElsewhere = []string{"cash_order", "cash_withdraw"}
+// ownedElsewhere is the methods whose records another component retires (see
+// db.CashOwnedElsewhere).
+var ownedElsewhere = db.CashOwnedElsewhere
 
 // OnBillArchivedTx runs when a bill is archived, inside the archiving
 // transaction and after its app row is deleted: every record that created it and has no live bill left gets
