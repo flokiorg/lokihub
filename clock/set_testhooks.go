@@ -1,6 +1,6 @@
 //go:build testhooks
 
-package hubclock
+package clock
 
 // SetOffset moves the Hub's clock offsetSecs ahead of the wall clock (0 resets
 // it). Only testhooks builds can call it.

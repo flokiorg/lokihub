@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flokiorg/lokihub/cashwithdraw"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/ohstr/nmilat/nipcash"
 	"time"
 
@@ -83,13 +83,13 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 			select {
 			case <-ctx.Done():
 				return
-			case <-hubclock.Moved():
+			case <-clock.Moved():
 				// The clock was moved (a regtest test hook): expiry and
 				// retention are due now.
 				if lnClient := getLNClient(); lnClient != nil {
 					runCashCleanup(ctx, gormDB, transactionsSvc, lnClient, eventPublisher)
 					pruneCashRequests(gormDB)
-					pruneCircleJoinRecords(gormDB, hubclock.Now())
+					pruneCircleJoinRecords(gormDB, clock.Now())
 				}
 			case <-ticker.C:
 				lnClient := getLNClient()
@@ -104,7 +104,7 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 				transactionsSvc.ResolveAcceptedCircleHolds(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
 				pruneCashRequests(gormDB)
-				pruneCircleJoinRecords(gormDB, hubclock.Now())
+				pruneCircleJoinRecords(gormDB, clock.Now())
 				pruneArchivedSplitLinks(gormDB, splitLinkRetention)
 			}
 		}
@@ -131,7 +131,7 @@ func runCashCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transa
 		// (circle_lifecycle.go).
 		err := gormDB.Where(
 			"parent_app_id IS NOT NULL AND kind <> ? AND expires_at < ? AND cleanup_in_progress = ?",
-			db.AppKindCircleWallet, db.CashExpiryCutoff(hubclock.Now()), false,
+			db.AppKindCircleWallet, db.CashExpiryCutoff(clock.Now()), false,
 		).Limit(cleanupBatchSize).Find(&batch).Error
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to query expired sub-wallets")
@@ -183,7 +183,7 @@ func pruneStaleCircleWalletIdentityProofs(gormDB *gorm.DB) {
 	// Each id is kept until its own retention ends (a join's created_at + 360,
 	// a member request's + 86460); a row without one, for an hour.
 	if err := gormDB.Where("(retain_until > 0 AND retain_until < ?) OR (retain_until = 0 AND created_at < ?)",
-		hubclock.Now().Unix(), hubclock.Now().Add(-circleWalletIdentityProofRetention)).
+		clock.Now().Unix(), clock.Now().Add(-circleWalletIdentityProofRetention)).
 		Delete(&db.CircleWalletIdentityProof{}).Error; err != nil {
 		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune stale circle wallet identity proofs")
 	}
@@ -212,7 +212,7 @@ func pruneArchivedSplitLinks(gormDB *gorm.DB, retention time.Duration) {
 	if retention <= 0 {
 		return
 	}
-	if _, err := db.ClearArchivedSplitLinks(gormDB, hubclock.Now().Add(-retention)); err != nil {
+	if _, err := db.ClearArchivedSplitLinks(gormDB, clock.Now().Add(-retention)); err != nil {
 		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to clear archived split links")
 	}
 }
@@ -264,7 +264,7 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 	}
 	// A cash_redeem that claimed a slice won it, even before its payment
 	// reaches the ledger: reclaiming now would leave that payment unfunded.
-	if starting, err := redeemStarting(gormDB, app.ID, hubclock.Now()); err != nil {
+	if starting, err := redeemStarting(gormDB, app.ID, clock.Now()); err != nil {
 		return err
 	} else if starting {
 		return fmt.Errorf("%w: a redemption from this wallet is starting, try again shortly", constants.ErrInvalidParams)
@@ -365,7 +365,7 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 // bill. A redeem claiming a slice meanwhile either commits first, and this
 // defers, or finds the slice gone; a crash leaves the bill as it was.
 func reclaimAndDeleteCashBill(gormDB *gorm.DB, app db.App, opts SubWalletDeletion) error {
-	now := hubclock.Now()
+	now := clock.Now()
 	writtenOff, deleted := false, false
 	var balance int64
 	err := gormDB.Transaction(func(tx *gorm.DB) error {

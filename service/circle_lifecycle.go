@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"time"
 
 	"gorm.io/gorm"
@@ -53,9 +53,9 @@ func StartCircleLifecycleService(ctx context.Context, gormDB *gorm.DB, transacti
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				RunCircleRotations(gormDB, eventPublisher, hubclock.Now())
-			case <-hubclock.Moved():
-				RunCircleRotations(gormDB, eventPublisher, hubclock.Now())
+				RunCircleRotations(gormDB, eventPublisher, clock.Now())
+			case <-clock.Moved():
+				RunCircleRotations(gormDB, eventPublisher, clock.Now())
 			}
 		}
 	}()
@@ -67,9 +67,9 @@ func StartCircleLifecycleService(ctx context.Context, gormDB *gorm.DB, transacti
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				RunCircleLifecycle(ctx, gormDB, transactionsSvc, getLNClient(), eventPublisher, hubclock.Now())
-			case <-hubclock.Moved():
-				RunCircleLifecycle(ctx, gormDB, transactionsSvc, getLNClient(), eventPublisher, hubclock.Now())
+				RunCircleLifecycle(ctx, gormDB, transactionsSvc, getLNClient(), eventPublisher, clock.Now())
+			case <-clock.Moved():
+				RunCircleLifecycle(ctx, gormDB, transactionsSvc, getLNClient(), eventPublisher, clock.Now())
 			}
 		}
 	}()

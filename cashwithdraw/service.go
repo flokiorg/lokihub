@@ -10,7 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -97,7 +97,7 @@ type Service struct {
 
 // proofNow is the clock a claim proof's freshness is held to: the wall clock,
 // as cash_redeem and the private transport's item proofs use, never the test
-// hooks' Hub clock offset (hubclock), which moves the Hub's protocol state
+// hooks' Hub clock offset (clock), which moves the Hub's protocol state
 // (expiry, retention, payouts) but not the time a caller signs at.
 func (s *Service) proofNow() time.Time {
 	if s.Now != nil {
@@ -110,7 +110,7 @@ func (s *Service) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
 	}
-	return hubclock.Now()
+	return clock.Now()
 }
 
 // cancelNow is the withdraw-scoped clock: the clock CancelDue,

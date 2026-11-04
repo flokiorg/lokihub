@@ -2,7 +2,7 @@ package apps
 
 import (
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"sort"
 	"strings"
 	"sync"
@@ -234,5 +234,5 @@ func earliestDelete(blockers []CashHubDeleteBlocker, now time.Time) *int64 {
 // CashHubDeleteCheck is CashHubDeleteCheckTx outside a transaction, for the
 // delete-check endpoint.
 func (svc *appsService) CashHubDeleteCheck(hubID uint) (CashHubDeleteCheck, error) {
-	return CashHubDeleteCheckTx(svc.db, hubID, hubclock.Now())
+	return CashHubDeleteCheckTx(svc.db, hubID, clock.Now())
 }

@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"slices"
 	"strings"
 	"time"
@@ -408,7 +408,7 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 	// wrote the comparison itself.
 	// The record was read by the caller, for every cash_status item (see ServePrivateItem).
 	retainedUntil := tombstone.RetainedUntil
-	if !ok || !db.RetentionWindowOpen(retainedUntil, hubclock.Now()) {
+	if !ok || !db.RetentionWindowOpen(retainedUntil, clock.Now()) {
 		return transport.Result{}, false
 	}
 

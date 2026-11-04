@@ -21,9 +21,9 @@ import (
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/appversion"
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/listing"
@@ -208,7 +208,7 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 	socialCache.retiredInboxKeys = func() []string { return retiredInboxKeys(gormDB, keys) }
 	socialCache.onResolved = func(provider, d string, set *FollowSet) {
-		ApplyFollowSetResolution(gormDB, eventPublisher, provider, d, set.IsMember, hubclock.Now())
+		ApplyFollowSetResolution(gormDB, eventPublisher, provider, d, set.IsMember, clock.Now())
 	}
 
 	svc := &service{

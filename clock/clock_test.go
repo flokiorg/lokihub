@@ -1,4 +1,4 @@
-package hubclock
+package clock
 
 import (
 	"testing"

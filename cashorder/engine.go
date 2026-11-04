@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"math"
 	"strings"
 	"sync"
@@ -45,7 +45,7 @@ type Engine struct {
 	Horizon func() int64
 	Now     func() time.Time
 	// Wall maps an instant of Now back to the wall clock, the clock a
-	// client's deadline is judged on (hubclock.Wall when nil).
+	// client's deadline is judged on (clock.Wall when nil).
 	Wall func(time.Time) time.Time
 
 	mu       sync.Mutex
@@ -67,14 +67,14 @@ func (e *Engine) now() time.Time {
 	if e.Now != nil {
 		return e.Now()
 	}
-	return hubclock.Now()
+	return clock.Now()
 }
 
 func (e *Engine) wall(t time.Time) time.Time {
 	if e.Wall != nil {
 		return e.Wall(t)
 	}
-	return hubclock.Wall(t)
+	return clock.Wall(t)
 }
 
 func (e *Engine) horizon() int64 {

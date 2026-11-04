@@ -9,7 +9,7 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashwithdraw"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 )
@@ -56,7 +56,7 @@ func (svc *service) setupWithdraw() {
 			case <-svc.ctx.Done():
 				return
 			case <-ticker.C:
-			case <-hubclock.Moved():
+			case <-clock.Moved():
 				// The clock was moved (a regtest test hook): retention is due now.
 			}
 			if _, err := svc.withdraw.PruneRecords(withdrawPruneBatch); err != nil {

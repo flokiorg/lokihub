@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"math"
 	"time"
 
@@ -36,7 +36,7 @@ func (d PlaceDeps) now() time.Time {
 	if d.Now != nil {
 		return d.Now()
 	}
-	return hubclock.Now()
+	return clock.Now()
 }
 
 // PlaceInput is one cash_order item: the Order connection it targets, its params,
@@ -222,7 +222,7 @@ func Place(ctx context.Context, deps PlaceDeps, in PlaceInput) (*nipCO.Order, er
 		if err := tx.Model(record).Update("drop_after", nil).Error; err != nil {
 			return err
 		}
-		if !nipcash.CommitAllowed(in.Deadline, hubclock.Wall(deps.now()).Unix()) {
+		if !nipcash.CommitAllowed(in.Deadline, clock.Wall(deps.now()).Unix()) {
 			return cashrequest.ErrDeadlinePassed
 		}
 		return nil

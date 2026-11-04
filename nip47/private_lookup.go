@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -82,7 +82,7 @@ func (svc *nip47Service) lookupTargetKeys(target string) ([]string, error) {
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	if tomb, ok := db.SpentBillTombstoneFor(svc.db, target); ok && db.RetentionWindowOpen(tomb.RetainedUntil, hubclock.Now()) {
+	if tomb, ok := db.SpentBillTombstoneFor(svc.db, target); ok && db.RetentionWindowOpen(tomb.RetainedUntil, clock.Now()) {
 		return []string{tomb.ConnectionPubkey}, nil
 	}
 	return nil, nil
@@ -184,7 +184,7 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 				return refuse(constants.ERROR_UNAUTHORIZED, "this lookup does not match the call's record")
 			}
 		}
-		result, err := svc.rebuildResult(rec, hubclock.Now())
+		result, err := svc.rebuildResult(rec, clock.Now())
 		if errors.Is(err, cashorder.ErrWindowNotEnded) {
 			return refuse(constants.ERROR_INTERNAL, "this order's payment window could not be ended yet, please retry")
 		}
@@ -212,7 +212,7 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 	// The H in force: the configured one, raised at start, never below the stored.
 	h = max(h, svc.cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
 	// The deadline is the client's, judged on the wall clock as every commit judges it.
-	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: hubclock.Wall(hubclock.Now()).Unix(), Deadline: params.Deadline, Horizon: h})
+	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: clock.Wall(clock.Now()).Unix(), Deadline: params.Deadline, Horizon: h})
 	if decision.Status == nipcash.LookupUnknown {
 		// "unknown" is final, so it is read again after any commit of this id in flight.
 		rec, err := store.GetSettled(params.RequestID)
@@ -477,7 +477,7 @@ func (svc *nip47Service) serveJoinLookup(item transport.Item, params nipcash.Cas
 	var rec db.CircleJoinRecord
 	err := svc.db.Where("hub_wallet_pubkey = ? AND authorizer_pubkey = ? AND connection_pubkey = ?",
 		item.Target, signer, params.ConnectionPubkey).First(&rec).Error
-	if err == nil && rec.Deadline < hubclock.Now().Unix()-nipcash.JoinLookupWindow && !svc.appExists(rec.WalletAppID) {
+	if err == nil && rec.Deadline < clock.Now().Unix()-nipcash.JoinLookupWindow && !svc.appExists(rec.WalletAppID) {
 		// A record the Hub may drop already (its wallet deleted, the lookup
 		// window over) is answered as dropped, whenever the sweep gets to it:
 		// the lookup then answers expired (NIP-CW §Lost Join Reply).
@@ -497,7 +497,7 @@ func (svc *nip47Service) serveJoinLookup(item transport.Item, params nipcash.Cas
 	// No join to this key: the rotation that installed it, or will, answers
 	// (NIP-CW §Recovering a Lost Connection), read from its row and the clock
 	// alone; the lookup writes nothing.
-	now := hubclock.Now()
+	now := clock.Now()
 	outcome, rotation, err := circlelife.LookupRotation(svc.db, signer, params.ConnectionPubkey, now)
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to read a rotation")

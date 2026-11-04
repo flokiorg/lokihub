@@ -5,10 +5,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -49,7 +49,7 @@ func (svc *permissionsService) HasPermission(app *db.App, scope string) (result 
 		return false, constants.ERROR_RESTRICTED, fmt.Sprintf("This app does not have the %s scope", scope)
 	}
 	expiresAt := appPermission.ExpiresAt
-	if db.ExpiredAt(expiresAt, hubclock.Now()) {
+	if db.ExpiredAt(expiresAt, clock.Now()) {
 		logger.Logger.Info().
 			Str("scope", scope).
 			Int64("expiresAt", expiresAt.Unix()).

@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/testknobs"
 	"github.com/ohstr/nmilat/nipcash"
 	"math/big"
@@ -121,7 +121,7 @@ func stallCommitFault(ctx context.Context, item transport.Item, notAfter int64) 
 	if err := testknobs.WaitCommit(ctx); err != nil {
 		return transport.Result{}, false
 	}
-	if nipcash.CommitAllowed(notAfter, hubclock.Now().Unix()) {
+	if nipcash.CommitAllowed(notAfter, clock.Now().Unix()) {
 		return transport.Result{}, false
 	}
 	return transport.Result{ID: item.ID, ResultType: item.Method, Error: &transport.ResultError{

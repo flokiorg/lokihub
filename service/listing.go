@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"time"
 
 	"github.com/flokiorg/lokihub/cashorder"
@@ -44,7 +44,7 @@ func (svc *service) startListings(ctx context.Context) {
 		// The listing clock: the Hub's, moved further only by a testhooks
 		// build's clock hook (scope "listing"); 0 otherwise.
 		Now: func() time.Time {
-			return hubclock.Now().Add(time.Duration(svc.listingClockOffset.Load()) * time.Second)
+			return clock.Now().Add(time.Duration(svc.listingClockOffset.Load()) * time.Second)
 		},
 	})
 	svc.shutdownGroup.Go(func() error {

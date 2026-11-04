@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/gorm"
@@ -73,7 +73,7 @@ func (controller *nip47Controller) HandleDeleteCircleWalletEvent(ctx context.Con
 			return err
 		}
 		var err error
-		openHolds, err = circlewallet.DeleteWallet(tx, &current, hubclock.Now())
+		openHolds, err = circlewallet.DeleteWallet(tx, &current, clock.Now())
 		return err
 	})
 	switch {

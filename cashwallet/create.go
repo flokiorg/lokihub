@@ -21,7 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"math"
 	"sync"
 	"time"
@@ -324,7 +324,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 	if hubConfig.MaxExpSecs == 0 {
 		if params.ExpirySecs > 0 {
 			// Whole seconds, as the bill announces it.
-			t := hubclock.Now().Add(time.Duration(params.ExpirySecs) * time.Second).Truncate(time.Second)
+			t := clock.Now().Add(time.Duration(params.ExpirySecs) * time.Second).Truncate(time.Second)
 			expiresAt = &t
 		}
 	} else {
@@ -334,7 +334,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		} else if expirySecs > hubConfig.MaxExpSecs {
 			return nil, fmt.Errorf("%w: expiry %d exceeds max_exp_secs %d", ErrRestricted, params.ExpirySecs, hubConfig.MaxExpSecs)
 		}
-		t := hubclock.Now().Add(time.Duration(expirySecs) * time.Second).Truncate(time.Second)
+		t := clock.Now().Add(time.Duration(expirySecs) * time.Second).Truncate(time.Second)
 		expiresAt = &t
 	}
 

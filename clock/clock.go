@@ -1,4 +1,4 @@
-// Package hubclock is the clock the Hub's protocol state runs on: slice and
+// Package clock is the clock the Hub's protocol state runs on: slice and
 // wallet expiry, order windows, lookups and their windows, records and
 // tombstone retention, join freshness at commit, rotations, payouts and
 // listings.
@@ -11,7 +11,7 @@
 // envelope's not_after and created_at, item, bill and claim proofs, and a
 // call's deadline at its commit (Wall). A client signs with its own wall clock,
 // so moving the Hub forward must not make every later request look stale.
-package hubclock
+package clock
 
 import (
 	"sync"

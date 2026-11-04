@@ -11,9 +11,9 @@ import (
 
 	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/lnclient"
 )
 
@@ -107,7 +107,7 @@ func checkHeldKeysend(tx *gorm.DB, svc *transactionsService, held *lnclient.Tran
 		if err != nil {
 			return err
 		}
-		if err := circlemoney.CheckHoldings(tx, hubID, cfg, amount+forHub, hubclock.Now()); err != nil {
+		if err := circlemoney.CheckHoldings(tx, hubID, cfg, amount+forHub, clock.Now()); err != nil {
 			return refused(err)
 		}
 	}

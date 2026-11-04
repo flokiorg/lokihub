@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"time"
 
 	"github.com/ohstr/nmilat/nipCO"
@@ -86,7 +86,7 @@ func (svc *nip47Service) orderView(rec *db.CashRequestRecord) (json.RawMessage, 
 		return nil, err
 	}
 	// Never "open" past pay_by, whether or not a window-ending hook is set.
-	if cashorder.WindowNotEnded(&order, hubclock.Now().Unix()) {
+	if cashorder.WindowNotEnded(&order, clock.Now().Unix()) {
 		return nil, cashorder.ErrWindowNotEnded
 	}
 	bills, err := svc.orderBills(rec)
@@ -105,7 +105,7 @@ func (svc *nip47Service) orderBills(rec *db.CashRequestRecord) ([]nipCO.OrderBil
 	if err != nil {
 		return nil, err
 	}
-	now := hubclock.Now()
+	now := clock.Now()
 	out := make([]nipCO.OrderBill, 0, len(rows))
 	for i := range rows {
 		b := &rows[i]

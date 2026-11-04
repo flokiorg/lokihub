@@ -9,7 +9,7 @@ import (
 	"hash/fnv"
 	"time"
 
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 
 	"github.com/ohstr/nmilat/nipcash"
 	"gorm.io/gorm"
@@ -34,11 +34,11 @@ type Store struct {
 }
 
 // New is a Store on gormDB with the real clock.
-func New(gormDB *gorm.DB) Store { return Store{DB: gormDB, Now: hubclock.Now} }
+func New(gormDB *gorm.DB) Store { return Store{DB: gormDB, Now: clock.Now} }
 
 func (s Store) now() time.Time {
 	if s.Now == nil {
-		return hubclock.Now()
+		return clock.Now()
 	}
 	return s.Now()
 }
@@ -81,7 +81,7 @@ func (s Store) CommitTx(tx *gorm.DB, rec *db.CashRequestRecord, bills []db.CashR
 	}
 	now := s.now().Unix()
 	// The deadline is the client's, so it is judged on the wall clock.
-	if !nipcash.CommitAllowed(rec.Deadline, hubclock.Wall(time.Unix(now, 0)).Unix()) {
+	if !nipcash.CommitAllowed(rec.Deadline, clock.Wall(time.Unix(now, 0)).Unix()) {
 		return ErrDeadlinePassed
 	}
 	rec.CommittedAt = now

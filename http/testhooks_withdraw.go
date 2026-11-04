@@ -11,7 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/flokiorg/lokihub/cashwithdraw"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/logger"
 )
 
@@ -108,10 +108,10 @@ func (httpSvc *HttpService) registerWithdrawTestHooks(full *echo.Group) {
 		}
 		switch req.Scope {
 		case "all":
-			// Every clock the Hub's protocol state reads (hubclock): expiry,
+			// Every clock the Hub's protocol state reads (clock): expiry,
 			// order windows, lookups, retention, joins, rotations, payouts and
 			// listings. The periodic jobs run at once.
-			hubclock.SetOffset(req.OffsetSecs)
+			clock.SetOffset(req.OffsetSecs)
 			if e := engine(); e != nil {
 				e.Signal()
 			}

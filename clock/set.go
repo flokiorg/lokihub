@@ -1,4 +1,4 @@
-package hubclock
+package clock
 
 func setOffset(secs int64) {
 	offsetSecs.Store(secs)
