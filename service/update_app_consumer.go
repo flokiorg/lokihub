@@ -6,7 +6,6 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/nbd-wtf/go-nostr"
 )
 
 type updateAppConsumer struct {
@@ -30,14 +29,9 @@ func (s *updateAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 		logger.Logger.Error().Interface("event", event).Msg("Failed to get app id")
 		return
 	}
-	walletPrivKey, err := s.svc.keys.GetAppWalletKey(id)
+	walletPrivKey, walletPubKey, err := s.svc.appWalletKeys(id)
 	if err != nil {
-		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet priv key")
-		return
-	}
-	walletPubKey, err := nostr.GetPublicKey(walletPrivKey)
-	if err != nil {
-		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet pub key")
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to derive app wallet keys")
 		return
 	}
 

@@ -38,14 +38,9 @@ func (s *deleteAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 		return
 	}
 
-	walletPrivKey, err := s.svc.keys.GetAppWalletKey(id)
+	walletPrivKey, walletPubKey, err := s.svc.appWalletKeys(id)
 	if err != nil {
-		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet priv key")
-		return
-	}
-	walletPubKey, err := nostr.GetPublicKey(walletPrivKey)
-	if err != nil {
-		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet pub key")
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to derive app wallet keys")
 		return
 	}
 	// Note: for legacy apps this check will always return false as the wallet pubkey
