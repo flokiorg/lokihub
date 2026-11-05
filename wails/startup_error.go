@@ -6,7 +6,7 @@ import (
 	nethttp "net/http"
 	"os"
 
-	"github.com/flokiorg/lokihub/buildinfo"
+	"github.com/flokiorg/lokihub/internal/buildinfo"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/labstack/echo/v4"
 	"github.com/wailsapp/wails/v2"

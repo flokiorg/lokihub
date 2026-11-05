@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
-	"github.com/flokiorg/lokihub/seal"
+	"github.com/flokiorg/lokihub/internal/seal"
 )
 
 // At-rest KEK (key-encryption key) parameters. This KEK wraps the Mnemonic and

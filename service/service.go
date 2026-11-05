@@ -20,11 +20,11 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
-	"github.com/flokiorg/lokihub/buildinfo"
 	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/hubinfo"
+	"github.com/flokiorg/lokihub/internal/buildinfo"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/logger"
@@ -36,11 +36,11 @@ import (
 	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/seed"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
 	"github.com/flokiorg/lokihub/nip47"
-	"github.com/flokiorg/lokihub/seed"
 )
 
 type service struct {

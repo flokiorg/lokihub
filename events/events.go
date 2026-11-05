@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/flokiorg/lokihub/buildinfo"
+	"github.com/flokiorg/lokihub/internal/buildinfo"
 	"github.com/flokiorg/lokihub/logger"
 )
 

@@ -10,9 +10,9 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/internal/connstr"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/logger"
 )

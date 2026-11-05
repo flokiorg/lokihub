@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flokiorg/lokihub/internal/netutil"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/netutil"
 )
 
 // ConnectionManager maintains connections to active LSPs

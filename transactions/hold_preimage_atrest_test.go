@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/atrest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/atrest"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/tests"
 )

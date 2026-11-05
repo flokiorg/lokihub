@@ -9,9 +9,9 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nip01"
 
+	"github.com/flokiorg/lokihub/internal/netutil"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
-	"github.com/flokiorg/lokihub/netutil"
 )
 
 // NostrFetcher is Fetcher over go-nostr, one short-lived pool per call.

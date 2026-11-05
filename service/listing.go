@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/cash/cashorder"
-	"github.com/flokiorg/lokihub/connstr"
+	"github.com/flokiorg/lokihub/internal/connstr"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 )

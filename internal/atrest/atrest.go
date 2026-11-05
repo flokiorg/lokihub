@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/flokiorg/lokihub/seal"
+	"github.com/flokiorg/lokihub/internal/seal"
 )
 
 // prefix marks a sealed value and its format version.

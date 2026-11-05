@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/flokiorg/lokihub/decodepay"
+	"github.com/flokiorg/lokihub/internal/decodepay"
 	"strings"
 	"testing"
 	"time"

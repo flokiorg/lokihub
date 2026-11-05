@@ -13,9 +13,9 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/connstr"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/ttlcache"

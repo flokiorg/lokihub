@@ -69,13 +69,13 @@ func under(path string, roots ...string) bool {
 func TestFoundationDoesNotImportDomain(t *testing.T) {
 	foundation := []string{
 		"config", "db", "db/queries", "db/migrations", "logger", "events",
-		"clock", "seal", "buildinfo", "constants", "lnclient", "decodepay",
-		"seed", "numeric", "netutil", "nostr/pool", "atrest",
+		"clock", "internal/seal", "internal/buildinfo", "constants", "lnclient", "internal/decodepay",
+		"internal/seed", "internal/numeric", "internal/netutil", "nostr/pool", "internal/atrest",
 	}
 	above := []string{
 		"cash", "circle", "transactions", "apps", "ledger", "listing", "keys",
 		"nip47", "service", "api", "http", "wails", "lsps", "lspd", "hubinfo",
-		"appstore", "nodesign", "connstr", "internal/testknobs",
+		"appstore", "nodesign", "internal/connstr", "internal/testknobs",
 	}
 	deps := load(t)
 	for _, f := range foundation {
@@ -90,8 +90,8 @@ func TestFoundationDoesNotImportDomain(t *testing.T) {
 // These packages are leaves on purpose and must stay importable on their own.
 func TestLeavesImportNothingFromLokihub(t *testing.T) {
 	leaves := []string{
-		"clock", "seal", "buildinfo", "constants", "seed", "decodepay",
-		"lnclient", "numeric", "netutil", "nostr/pool",
+		"clock", "internal/seal", "internal/buildinfo", "constants", "internal/seed", "internal/decodepay",
+		"lnclient", "internal/numeric", "internal/netutil", "nostr/pool",
 		"logger/crashlog", "ttlcache", "nostr/pubkeyhex",
 	}
 	deps := load(t)

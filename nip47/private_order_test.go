@@ -17,7 +17,7 @@ import (
 	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/decodepay"
+	"github.com/flokiorg/lokihub/internal/decodepay"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"

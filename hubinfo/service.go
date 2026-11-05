@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/flokiorg/lokihub/buildinfo"
 	"github.com/flokiorg/lokihub/config"
-	"github.com/flokiorg/lokihub/seed"
+	"github.com/flokiorg/lokihub/internal/buildinfo"
+	"github.com/flokiorg/lokihub/internal/seed"
 )
 
 type hubInfoService struct {

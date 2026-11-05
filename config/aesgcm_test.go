@@ -13,7 +13,7 @@ import (
 	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/crypto/argon2"
 
-	"github.com/flokiorg/lokihub/seal"
+	"github.com/flokiorg/lokihub/internal/seal"
 )
 
 func TestDecryptExistingCiphertextWithPassword(t *testing.T) {

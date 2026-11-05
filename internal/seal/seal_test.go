@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/seal"
+	"github.com/flokiorg/lokihub/internal/seal"
 )
 
 func TestRoundTrip(t *testing.T) {

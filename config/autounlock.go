@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/flokiorg/lokihub/seal"
+	"github.com/flokiorg/lokihub/internal/seal"
 )
 
 // The auto-unlock password is the KEK that decrypts the mnemonic and every

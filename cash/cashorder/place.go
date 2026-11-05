@@ -15,7 +15,7 @@ import (
 
 	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/decodepay"
+	"github.com/flokiorg/lokihub/internal/decodepay"
 	"github.com/flokiorg/lokihub/logger"
 )
 

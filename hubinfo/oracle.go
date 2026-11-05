@@ -26,9 +26,9 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 
+	"github.com/flokiorg/lokihub/internal/seed"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
-	"github.com/flokiorg/lokihub/seed"
 )
 
 // ErrUnavailable is returned by Latest when no rate has been fetched yet or the
