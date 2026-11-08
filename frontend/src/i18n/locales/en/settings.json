@@ -157,16 +157,16 @@
       "nodeOff": "Turn on-chain withdrawals on for the node in Settings first.",
       "notCapable": "This node's backend cannot pay on-chain withdrawals."
     },
-    "feeBase": "Withdraw fee base (loki)",
+    "feeBase": "Withdraw fee base ({{unit}})",
     "feePpm": "Withdraw fee (ppm)",
-    "min": "Minimum (loki)",
-    "max": "Maximum (loki)",
+    "min": "Minimum ({{unit}})",
+    "max": "Maximum ({{unit}})",
     "none": "none",
     "errors": {
-      "feeBase": "The fee base is a loki amount of at most three decimals.",
+      "feeBase": "The fee base is a {{unit}} amount of at most three decimals.",
       "feePpm": "The fee rate is a whole number from 0 to {{max}} ppm.",
-      "min": "The minimum is a loki amount of at most three decimals.",
-      "max": "The maximum is a loki amount of at most three decimals.",
+      "min": "The minimum is a {{unit}} amount of at most three decimals.",
+      "max": "The maximum is a {{unit}} amount of at most three decimals.",
       "minAboveMax": "The minimum is above the maximum."
     },
     "scriptTypes": "Script types paid",

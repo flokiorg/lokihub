@@ -128,16 +128,16 @@
       "nodeOff": "Activa primero los retiros on-chain del nodo en Ajustes.",
       "notCapable": "El backend de este nodo no puede pagar retiros on-chain."
     },
-    "feeBase": "Comisión base de retiro (loki)",
+    "feeBase": "Comisión base de retiro ({{unit}})",
     "feePpm": "Comisión de retiro (ppm)",
-    "min": "Mínimo (loki)",
-    "max": "Máximo (loki)",
+    "min": "Mínimo ({{unit}})",
+    "max": "Máximo ({{unit}})",
     "none": "ninguno",
     "errors": {
-      "feeBase": "La comisión base es un importe en loki con tres decimales como máximo.",
+      "feeBase": "La comisión base es un importe en {{unit}} con tres decimales como máximo.",
       "feePpm": "La tasa es un número entero de 0 a {{max}} ppm.",
-      "min": "El mínimo es un importe en loki con tres decimales como máximo.",
-      "max": "El máximo es un importe en loki con tres decimales como máximo.",
+      "min": "El mínimo es un importe en {{unit}} con tres decimales como máximo.",
+      "max": "El máximo es un importe en {{unit}} con tres decimales como máximo.",
       "minAboveMax": "El mínimo supera el máximo."
     },
     "scriptTypes": "Tipos de script pagados",

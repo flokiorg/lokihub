@@ -9,6 +9,7 @@ import { Toaster } from "src/components/ui/sonner";
 import { ThemeProvider } from "src/components/ui/theme-provider";
 import { TouchProvider } from "src/components/ui/tooltip";
 import { useInfo } from "src/hooks/useInfo";
+import { useNativeAssetI18n } from "src/hooks/useNativeAssetI18n";
 import routes from "src/routes.tsx";
 import { StartupError } from "src/screens/StartupError";
 import { isHttpMode } from "src/utils/isHttpMode";
@@ -26,6 +27,7 @@ import { LSPEventProvider } from "src/context/LSPEventContext";
 
 function App() {
   const { data: info, error, isLoading } = useInfo();
+  useNativeAssetI18n();
 
   return (
     <>

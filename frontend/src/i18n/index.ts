@@ -57,6 +57,14 @@ i18n
     },
     interpolation: {
       escapeValue: false, // React already escapes
+      // Native-asset unit tokens, resolved globally so locale strings can use
+      // {{unit}}/{{ticker}}/{{subunit}} without every call site passing them.
+      // Updated at runtime from the hub's nativeAsset (see useNativeAssetI18n).
+      defaultVariables: {
+        unit: "loki",
+        ticker: "FLC",
+        subunit: "mloki",
+      },
     },
     react: {
       useSuspense: true,
