@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/flokiorg/lokihub/lspd/core"
@@ -201,6 +202,9 @@ func (s *PostgresOpeningStore) GetLsps1Order(orderId string) (*core.Lsps1Order, 
 		&order.RefundOnchainAddress, &order.OrderTotalLoki, &order.FeeTotalLoki,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, core.ErrOrderNotFound
+		}
 		return nil, err
 	}
 	return &order, nil

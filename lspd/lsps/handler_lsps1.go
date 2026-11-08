@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -603,13 +604,22 @@ func (s *Handlers) handleLsps1GetOrder(req *JsonRpcRequest) *JsonRpcResponse {
 
 	order, err := s.openingService.GetLsps1Order(params.OrderId)
 	if err != nil {
-		// Assume error means not found for now, or distinguish DB error?
-		// Spec says 101 for Not found
-		return NewJsonRpcErrorResponse(req.Id, 101, "Order not found", nil)
+		if errors.Is(err, core.ErrOrderNotFound) {
+			// blip-0051: error code 101 for an unknown order_id.
+			return NewJsonRpcErrorResponse(req.Id, 101, "Order not found", nil)
+		}
+		log.Error().
+			Str("component", string(logging.LogComponentLSPS1)).
+			Str("action", string(logging.LogActionRequest)).
+			Err(err).
+			Str("order_id", params.OrderId).
+			Msg("LSPS1: get_order store lookup failed")
+		return NewJsonRpcErrorResponse(req.Id, -32603, "Internal error", nil)
 	}
 
-	// TODO: Check if payment is actually paid by querying LND if state is EXPECT_PAYMENT?
-	// For now, trust DB state.
+	// The persisted order state is authoritative here: payment, funding and
+	// completion transitions are written by the settlement path, so get_order
+	// reports the stored state directly rather than re-querying the node.
 
 	// The order's own persisted expiry (F-19/Phase 7) -- not recomputed
 	// from live config, so this stays consistent with the DB sweep and

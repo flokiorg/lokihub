@@ -106,7 +106,7 @@ func TestHandleLsps1GetOrder_InvalidParams(t *testing.T) {
 
 func TestHandleLsps1GetOrder_NotFound(t *testing.T) {
 	mockOS := new(MockOpeningService)
-	mockOS.On("GetLsps1Order", "missing-order").Return(nil, assert.AnError)
+	mockOS.On("GetLsps1Order", "missing-order").Return(nil, core.ErrOrderNotFound)
 	server := newGetOrderTestServer(t, mockOS, 3600)
 
 	req := &JsonRpcRequest{Id: json.RawMessage(`"id"`), Params: json.RawMessage(`{"order_id":"missing-order"}`)}
@@ -114,6 +114,19 @@ func TestHandleLsps1GetOrder_NotFound(t *testing.T) {
 
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, 101, resp.Error.Code)
+}
+
+func TestHandleLsps1GetOrder_StoreError(t *testing.T) {
+	mockOS := new(MockOpeningService)
+	mockOS.On("GetLsps1Order", "broken-order").Return(nil, assert.AnError)
+	server := newGetOrderTestServer(t, mockOS, 3600)
+
+	req := &JsonRpcRequest{Id: json.RawMessage(`"id"`), Params: json.RawMessage(`{"order_id":"broken-order"}`)}
+	resp := server.handleLsps1GetOrder(req)
+
+	require.NotNil(t, resp.Error)
+	// A store error that is not a genuine not-found must not masquerade as 101.
+	assert.Equal(t, -32603, resp.Error.Code)
 }
 
 func TestHandleLsps1GetOrder_ActiveCreatedOrder(t *testing.T) {

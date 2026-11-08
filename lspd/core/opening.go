@@ -1,6 +1,14 @@
 package core
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// ErrOrderNotFound is returned by the opening store/service when no LSPS1
+// order matches the given order id, so callers can tell a genuine not-found
+// from an internal/DB error.
+var ErrOrderNotFound = errors.New("lsps1 order not found")
 
 type OpeningFeeParamsSetting struct {
 	Validity time.Duration
