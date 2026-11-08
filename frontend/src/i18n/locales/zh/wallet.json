@@ -33,7 +33,7 @@
       "waiting": "等待付款...",
       "newAddress": "新地址",
       "waitingConfirm": "等待链上确认...",
-      "viewExplorer": "在 Flokicoin 浏览器上查看",
+      "viewExplorer": "在 {{chain}} 浏览器上查看",
       "received": "已收到交易！",
       "receiveAnother": "接收另一笔付款",
       "backToWallet": "返回钱包"

@@ -39,7 +39,7 @@
   "intro": {
     "slide1": {
       "title": "مرحبًا بك في Lokihub",
-      "subtitle": "محفظة Flokicoin Lightning قوية وشاملة تدعم شبكة التفاعل القادمة.",
+      "subtitle": "محفظة {{chain}} Lightning قوية وشاملة تدعم شبكة التفاعل القادمة.",
       "next": "التالي"
     },
     "slide2": {
@@ -101,7 +101,7 @@
       "saving": "جارٍ الحفظ..."
     },
     "explorer": {
-      "title": "مستكشف Flokicoin",
+      "title": "مستكشف {{chain}}",
       "description": "يُستخدم لتقدير الرسوم وتفاصيل المعاملات.",
       "custom": "مستكشف مخصص"
     },
@@ -157,7 +157,7 @@
     },
     "validation": {
       "relayRequired": "مطلوب ترحيل واحد على الأقل",
-      "explorerRequired": "رابط مستكشف Flokicoin مطلوب",
+      "explorerRequired": "رابط مستكشف {{chain}} مطلوب",
       "swapRequired": "رابط خدمة التبادل مطلوب عند التفعيل",
       "invalidUrl": "{{field}}: تنسيق الرابط غير صالح"
     },

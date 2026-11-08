@@ -72,7 +72,7 @@
   "onchain": {
     "title": "オンチェーン",
     "addressLabel": "オンチェーンアドレス",
-    "depositTitle": "Flokicoinを入金",
+    "depositTitle": "{{chain}}を入金",
     "generateNew": "新しいアドレスを生成",
     "transactions": "オンチェーントランザクション",
     "sent": "送信済み",
@@ -150,7 +150,7 @@
     "recommendDeposit": "入金を推奨します",
     "return": "ノードに戻る",
     "scanQr": "QRコードをスキャンして入金",
-    "sendFloki": "Flokicoinを送る",
+    "sendFloki": "{{chain}}を送る",
     "successMsg": "チャンネルの注文が成功しました",
     "toOpen": "チャンネルを開くために",
     "waitingChannel": "チャンネルが開くのを待っています...",

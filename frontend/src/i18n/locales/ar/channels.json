@@ -193,7 +193,7 @@
     "recommendDeposit": "نوصي بإيداع",
     "return": "العودة إلى العقدة",
     "scanQr": "امسح الرمز الشريطي للإيداع",
-    "sendFloki": "إرسال Flokicoin",
+    "sendFloki": "إرسال {{chain}}",
     "successMsg": "تم طلب القناة بنجاح",
     "toOpen": "لفتح قناة بـ",
     "waitingChannel": "في انتظار فتح القناة...",

@@ -112,7 +112,7 @@
       "saving": "保存中..."
     },
     "explorer": {
-      "title": "Flokicoinエクスプローラー",
+      "title": "{{chain}}エクスプローラー",
       "description": "手数料の見積もりとトランザクション詳細に使用します。",
       "custom": "カスタムエクスプローラー"
     },
@@ -168,7 +168,7 @@
     },
     "validation": {
       "relayRequired": "少なくとも1つのリレーが必要です",
-      "explorerRequired": "FlokicoinエクスプローラーのURLは必須です",
+      "explorerRequired": "{{chain}}エクスプローラーのURLは必須です",
       "swapRequired": "有効時はスワップサービスのURLが必須です",
       "invalidUrl": "{{field}}：URLフォーマットが無効です"
     },

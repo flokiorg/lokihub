@@ -33,7 +33,7 @@
       "waiting": "Esperando pago...",
       "newAddress": "Nueva dirección",
       "waitingConfirm": "Esperando confirmación On-chain...",
-      "viewExplorer": "Ver en el Explorador de Flokicoin",
+      "viewExplorer": "Ver en el Explorador de {{chain}}",
       "received": "¡Transacción recibida!",
       "receiveAnother": "Recibir otro pago",
       "backToWallet": "Volver a la billetera"

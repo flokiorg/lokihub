@@ -37,7 +37,7 @@
     "themeUpdated": "主题已更新。",
     "appearanceUpdated": "外观已更新。",
     "currencyUpdated": "货币已设置为 {{currency}}",
-    "formatUpdated": "Flokicoin 显示格式已更新",
+    "formatUpdated": "{{chain}} 显示格式已更新",
     "currencyFetchFailed": "获取货币失败：{{error}}",
     "updateFailed": "更新设置失败"
   },

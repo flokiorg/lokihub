@@ -18,10 +18,10 @@
     "viewAll": "View all",
     "emptyDescription": "Your most recent incoming and outgoing payments will show up here.",
     "receiveFirst": "Receive Your First Payment",
-    "receivedPayment": "Received Flokicoin Payment",
-    "sentPayment": "Sent Flokicoin Payment",
-    "sendingPayment": "Sending Flokicoin Payment",
-    "failedPayment": "Failed Flokicoin Payment",
+    "receivedPayment": "Received {{chain}} Payment",
+    "sentPayment": "Sent {{chain}} Payment",
+    "sendingPayment": "Sending {{chain}} Payment",
+    "failedPayment": "Failed {{chain}} Payment",
     "app": "App",
     "swapId": "Swap ID",
     "to": "To",
@@ -68,7 +68,7 @@
     "items": {
       "openChannel": {
         "title": "Open your first channel",
-        "description": "Establish a new Lightning channel to enable fast and low-fee Flokicoin transactions."
+        "description": "Establish a new Lightning channel to enable fast and low-fee {{chain}} transactions."
       },
       "firstPayment": {
         "title": "Send or receive your first payment",
@@ -204,7 +204,7 @@
     "about": {
       "title": "About Sub-wallets",
       "close": "Close",
-      "desc1": "Sub-wallets are separate balances within your wallet. You can use them to budget your spending for specific apps, or to onboard friends and family to Flokicoin by giving them their own wallet.",
+      "desc1": "Sub-wallets are separate balances within your wallet. You can use them to budget your spending for specific apps, or to onboard friends and family to {{chain}} by giving them their own wallet.",
       "desc2": "Each sub-wallet has its own credentials and can be connected to apps independently."
     },
     "intro": {

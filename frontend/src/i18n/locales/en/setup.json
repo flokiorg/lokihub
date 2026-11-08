@@ -9,7 +9,7 @@
   "intro": {
     "slide1": {
       "title": "Welcome to Lokihub",
-      "subtitle": "A powerful, all-in-one Flokicoin Lightning wallet powering the next web of engagement.",
+      "subtitle": "A powerful, all-in-one {{chain}} Lightning wallet powering the next web of engagement.",
       "next": "Next"
     },
     "slide2": {
@@ -28,7 +28,7 @@
   },
   "welcome": {
     "title": "Welcome to Lokihub",
-    "subtitle": "A powerful, all-in-one Flokicoin Lightning wallet powering the next web of engagement.",
+    "subtitle": "A powerful, all-in-one {{chain}} Lightning wallet powering the next web of engagement.",
     "getStarted": "Get Started"
   },
   "start": {

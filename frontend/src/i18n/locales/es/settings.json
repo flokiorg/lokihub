@@ -37,7 +37,7 @@
     "themeUpdated": "Tema actualizado.",
     "appearanceUpdated": "Apariencia actualizada.",
     "currencyUpdated": "Moneda configurada a {{currency}}",
-    "formatUpdated": "Formato de visualización de Flokicoin actualizado",
+    "formatUpdated": "Formato de visualización de {{chain}} actualizado",
     "currencyFetchFailed": "Error al obtener monedas: {{error}}",
     "updateFailed": "Error al actualizar los ajustes"
   },

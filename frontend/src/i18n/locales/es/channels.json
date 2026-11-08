@@ -72,7 +72,7 @@
   "onchain": {
     "title": "On-chain",
     "addressLabel": "Dirección On-chain",
-    "depositTitle": "Depositar Flokicoin",
+    "depositTitle": "Depositar {{chain}}",
     "generateNew": "Generar una nueva dirección",
     "transactions": "Transacciones en cadena",
     "sent": "Enviado",
@@ -150,7 +150,7 @@
     "recommendDeposit": "Recomendamos depositar",
     "return": "Volver al nodo",
     "scanQr": "Escanear código de barras para depositar",
-    "sendFloki": "Enviar Flokicoin",
+    "sendFloki": "Enviar {{chain}}",
     "successMsg": "Canal ordenado con éxito",
     "toOpen": "Para abrir un canal con",
     "waitingChannel": "Esperando que se abra el canal...",

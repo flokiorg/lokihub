@@ -72,7 +72,7 @@
   "onchain": {
     "title": "온체인",
     "addressLabel": "온체인 주소",
-    "depositTitle": "Flokicoin 입금",
+    "depositTitle": "{{chain}} 입금",
     "generateNew": "새 주소 생성",
     "transactions": "온체인 거래",
     "sent": "전송됨",
@@ -150,7 +150,7 @@
     "recommendDeposit": "입금을 권장합니다",
     "return": "노드로 돌아가기",
     "scanQr": "QR 코드 스캔하여 입금",
-    "sendFloki": "Flokicoin 보내기",
+    "sendFloki": "{{chain}} 보내기",
     "successMsg": "채널 주문에 성공했습니다",
     "toOpen": "채널을 열기 위해",
     "waitingChannel": "채널이 열리기를 기다리는 중...",

@@ -123,7 +123,7 @@
     "themeUpdated": "Theme updated.",
     "appearanceUpdated": "Appearance updated.",
     "currencyUpdated": "Currency set to {{currency}}",
-    "formatUpdated": "Flokicoin display format updated",
+    "formatUpdated": "{{chain}} display format updated",
     "currencyFetchFailed": "Failed to fetch currencies: {{error}}",
     "updateFailed": "Failed to update settings"
   },

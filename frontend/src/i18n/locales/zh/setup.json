@@ -39,7 +39,7 @@
   "intro": {
     "slide1": {
       "title": "欢迎使用 Lokihub",
-      "subtitle": "一个强大的、一体化的 Flokicoin Lightning 网络钱包，为下一代互动网络提供动力。",
+      "subtitle": "一个强大的、一体化的 {{chain}} Lightning 网络钱包，为下一代互动网络提供动力。",
       "next": "下一步"
     },
     "slide2": {
@@ -112,7 +112,7 @@
       "saving": "保存中..."
     },
     "explorer": {
-      "title": "Flokicoin 浏览器",
+      "title": "{{chain}} 浏览器",
       "description": "用于费用估算和交易详情。",
       "custom": "自定义浏览器"
     },
@@ -168,7 +168,7 @@
     },
     "validation": {
       "relayRequired": "至少需要一个中继",
-      "explorerRequired": "Flokicoin 浏览器 URL 为必填项",
+      "explorerRequired": "{{chain}} 浏览器 URL 为必填项",
       "swapRequired": "启用时兑换服务 URL 为必填项",
       "invalidUrl": "{{field}}：URL 格式无效"
     },

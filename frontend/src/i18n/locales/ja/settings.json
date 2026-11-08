@@ -37,7 +37,7 @@
     "themeUpdated": "テーマを更新しました。",
     "appearanceUpdated": "外観を更新しました。",
     "currencyUpdated": "通貨を {{currency}} に設定しました",
-    "formatUpdated": "Flokicoin の表示形式を更新しました",
+    "formatUpdated": "{{chain}} の表示形式を更新しました",
     "currencyFetchFailed": "通貨の取得に失敗しました：{{error}}",
     "updateFailed": "設定の更新に失敗しました"
   },

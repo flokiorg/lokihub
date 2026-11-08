@@ -37,7 +37,7 @@
     "themeUpdated": "테마가 업데이트되었습니다.",
     "appearanceUpdated": "외관이 업데이트되었습니다.",
     "currencyUpdated": "통화가 {{currency}}로 설정되었습니다",
-    "formatUpdated": "Flokicoin 표시 형식이 업데이트되었습니다",
+    "formatUpdated": "{{chain}} 표시 형식이 업데이트되었습니다",
     "currencyFetchFailed": "통화를 가져오지 못했습니다: {{error}}",
     "updateFailed": "설정 업데이트에 실패했습니다"
   },

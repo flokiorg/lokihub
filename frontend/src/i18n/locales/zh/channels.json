@@ -72,7 +72,7 @@
   "onchain": {
     "title": "链上",
     "addressLabel": "链上地址",
-    "depositTitle": "存入 Flokicoin",
+    "depositTitle": "存入 {{chain}}",
     "generateNew": "生成新地址",
     "transactions": "链上交易",
     "sent": "已发送",
@@ -150,7 +150,7 @@
     "recommendDeposit": "我们建议存入",
     "return": "返回节点",
     "scanQr": "扫描条形码以存入",
-    "sendFloki": "发送 Flokicoin",
+    "sendFloki": "发送 {{chain}}",
     "successMsg": "成功订购通道",
     "toOpen": "以开通一个容量为",
     "waitingChannel": "等待通道开启...",
