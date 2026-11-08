@@ -56,19 +56,10 @@ func (api *api) LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsR
 }
 
 // LSPS1GetInfo gets channel ordering info
-func (api *api) LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (interface{}, error) {
+func (api *api) LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (*LSPS1GetInfoResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
-	// Use synchronous manager method
-	// Note: manager returns []lsps1.LSPS1Option or similar?
-	// The manager method signature I added in manager.go checks `GetLSPS1InfoList` returns `[]lsps1.LSPS1Option`?
-	// Wait, in manager.go I used `lsps1.LSPS1Option` which was UNDEFINED.
-	// I need to fix manager.go imports or type names FIRST.
-	// In msgs.go it is called `Options`.
-	// So let's assume I fix manager.go to use `lsps1.Options`.
-
-	// Assuming manager is fixed:
 	lm, err := api.contactLSP(req.LSPPubkey)
 	if err != nil {
 		return nil, err
