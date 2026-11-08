@@ -588,5 +588,15 @@
   "cashLock": {
     "ordered": "مطلوبة: لا تنتهي، لا يمكن إزالتها",
     "reminted": "أعيد سكّها: لا يمكن إزالتها"
+  },
+  "membershipPreview": {
+    "title": "معاينة العضوية",
+    "publishedBy": "ينشره",
+    "publishedByHub": "ينشره هذا المحور",
+    "publisherPending": "اختر من ينشر المجموعة",
+    "members": "الأعضاء",
+    "hiddenCount": "{{count}} مخفي",
+    "externalNote": "الأعضاء يأتون من المجموعة الخارجية",
+    "empty": "لم تتم إضافة أعضاء بعد"
   }
 }

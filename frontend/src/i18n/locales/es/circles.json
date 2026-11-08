@@ -461,5 +461,15 @@
   "cashLock": {
     "ordered": "pedido: nunca caduca, no se puede quitar",
     "reminted": "re-acuñado: no se puede quitar"
+  },
+  "membershipPreview": {
+    "title": "Vista previa de membresía",
+    "publishedBy": "Publicado por",
+    "publishedByHub": "Publicado por este hub",
+    "publisherPending": "Elige quién publica el conjunto",
+    "members": "Miembros",
+    "hiddenCount": "{{count}} ocultos",
+    "externalNote": "Los miembros provienen del conjunto externo",
+    "empty": "Aún no se han añadido miembros"
   }
 }

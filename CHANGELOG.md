@@ -65,6 +65,8 @@ hub to services the user has explicitly selected.
 - Reorganizes the Circle Wallet creation form so the wallet budget, renewal,
   expiry and fee limits move out of the collapsed Advanced section into a
   visible Wallet limits panel, leaving only the hub-wide caps as advanced.
+- Adds a live membership preview beside the Circle Wallet creation form that
+  summarizes who publishes the follow set and lists its members as you edit.
 - Breaking: renames the chain-branded hub-info/rate API to chain-neutral names
   (`/api/loki/rates` → `/api/rates`, `/api/loki/info` → `/api/hub/info`,
   `/api/loki/faq` → `/api/hub/faq`) so lokihub reads generically across

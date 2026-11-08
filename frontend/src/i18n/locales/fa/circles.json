@@ -461,5 +461,15 @@
   "cashLock": {
     "ordered": "سفارشی: منقضی نمی‌شود، قابل حذف نیست",
     "reminted": "بازضرب‌شده: قابل حذف نیست"
+  },
+  "membershipPreview": {
+    "title": "پیش‌نمایش عضویت",
+    "publishedBy": "منتشرشده توسط",
+    "publishedByHub": "منتشرشده توسط این هاب",
+    "publisherPending": "انتخاب کنید چه کسی مجموعه را منتشر می‌کند",
+    "members": "اعضا",
+    "hiddenCount": "{{count}} پنهان",
+    "externalNote": "اعضا از مجموعهٔ خارجی گرفته می‌شوند",
+    "empty": "هنوز عضوی اضافه نشده است"
   }
 }

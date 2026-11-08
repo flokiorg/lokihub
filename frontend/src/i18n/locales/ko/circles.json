@@ -461,5 +461,15 @@
   "cashLock": {
     "ordered": "주문분: 만료 없음, 제거 불가",
     "reminted": "재발행: 제거 불가"
+  },
+  "membershipPreview": {
+    "title": "멤버십 미리보기",
+    "publishedBy": "게시자",
+    "publishedByHub": "이 허브가 게시",
+    "publisherPending": "세트를 게시할 주체를 선택하세요",
+    "members": "멤버",
+    "hiddenCount": "숨김 {{count}}명",
+    "externalNote": "멤버는 외부 세트에서 가져옵니다",
+    "empty": "아직 추가된 멤버가 없습니다"
   }
 }

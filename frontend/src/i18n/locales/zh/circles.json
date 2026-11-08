@@ -461,5 +461,15 @@
   "cashLock": {
     "ordered": "订单票据：永不过期，不可移除",
     "reminted": "已重铸：不可移除"
+  },
+  "membershipPreview": {
+    "title": "成员预览",
+    "publishedBy": "发布者",
+    "publishedByHub": "由本中心发布",
+    "publisherPending": "选择由谁发布该集合",
+    "members": "成员",
+    "hiddenCount": "{{count}} 个隐藏",
+    "externalNote": "成员来自外部集合",
+    "empty": "尚未添加成员"
   }
 }

@@ -44,6 +44,14 @@ import { useCircleIdentities } from "src/hooks/useCircleIdentities";
 import { useInfo } from "src/hooks/useInfo";
 import { useNodeIdentity } from "src/hooks/useNodeIdentity";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
+import { useNostrProfiles, NostrProfile } from "src/hooks/useNostrProfiles";
+import { NostrProfileRow } from "src/components/circles/NostrProfileRow";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "src/components/ui/card";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import { createApp } from "src/requests/createApp";
@@ -120,6 +128,152 @@ function OptionCards<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+// Read-only echo of the membership decision — the multi-field follow-set /
+// pinned choice rendered as a single readable summary that updates as the
+// form is edited. Mirrors state; never edits.
+function MembershipPreviewRow({
+  pubkey,
+  profile,
+}: {
+  pubkey: string;
+  profile?: NostrProfile;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <NostrProfileRow
+        pubkey={pubkey}
+        profile={profile}
+        showCopy={false}
+        avatarClassName="h-7 w-7"
+      />
+    </div>
+  );
+}
+
+function MembershipPreview({
+  memberMode,
+  followSetD,
+  followSet,
+  selectedMemberPubkeys,
+  nodePubkeyHex,
+  providerPubkeyHex,
+  isManagedFollowSet,
+}: {
+  memberMode: MemberMode;
+  followSetD: string;
+  followSet: FollowSetRequest;
+  selectedMemberPubkeys: string[];
+  nodePubkeyHex?: string;
+  providerPubkeyHex?: string;
+  isManagedFollowSet: boolean;
+}) {
+  const { t } = useTranslation("circles");
+  const memberPubkeys =
+    memberMode === "pinned"
+      ? selectedMemberPubkeys
+      : isManagedFollowSet
+        ? followSet.publicMembers
+        : [];
+  const { profiles } = useNostrProfiles(memberPubkeys);
+  const publisherPubkey =
+    memberMode === "followSet"
+      ? isManagedFollowSet
+        ? nodePubkeyHex
+        : providerPubkeyHex
+      : undefined;
+  const { profile: publisherProfile } = useNostrProfile(publisherPubkey);
+
+  return (
+    <Card className="w-full md:sticky md:top-4">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">
+          {t("membershipPreview.title")}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 text-sm">
+        {memberMode === "followSet" ? (
+          <>
+            <div className="grid gap-1">
+              <span className="text-xs text-muted-foreground">
+                {isManagedFollowSet
+                  ? t("membershipPreview.publishedByHub")
+                  : t("membershipPreview.publishedBy")}
+              </span>
+              {publisherPubkey ? (
+                <MembershipPreviewRow
+                  pubkey={publisherPubkey}
+                  profile={publisherProfile}
+                />
+              ) : (
+                <span className="text-muted-foreground">
+                  {t("membershipPreview.publisherPending")}
+                </span>
+              )}
+            </div>
+            {(followSetD || (isManagedFollowSet && followSet.title)) && (
+              <div className="grid gap-0.5">
+                {followSetD && (
+                  <span className="truncate font-mono text-xs text-muted-foreground">
+                    {followSetD}
+                  </span>
+                )}
+                {isManagedFollowSet && followSet.title && (
+                  <span className="font-medium">{followSet.title}</span>
+                )}
+              </div>
+            )}
+            {isManagedFollowSet ? (
+              <div className="grid gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {t("membershipPreview.members")} (
+                  {followSet.publicMembers.length})
+                </span>
+                {followSet.publicMembers.map((pk) => (
+                  <MembershipPreviewRow
+                    key={pk}
+                    pubkey={pk}
+                    profile={profiles.get(pk)}
+                  />
+                ))}
+                {followSet.hiddenMembers.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {t("membershipPreview.hiddenCount", {
+                      count: followSet.hiddenMembers.length,
+                    })}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {t("membershipPreview.externalNote")}
+              </span>
+            )}
+          </>
+        ) : (
+          <div className="grid gap-2">
+            <span className="text-xs text-muted-foreground">
+              {t("membershipPreview.members")} ({selectedMemberPubkeys.length})
+            </span>
+            {selectedMemberPubkeys.length > 0 ? (
+              selectedMemberPubkeys.map((pk) => (
+                <MembershipPreviewRow
+                  key={pk}
+                  pubkey={pk}
+                  profile={profiles.get(pk)}
+                />
+              ))
+            ) : (
+              <span className="text-muted-foreground">
+                {t("membershipPreview.empty")}
+              </span>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -414,116 +568,127 @@ export function NewCircleHub() {
         )}
 
         {isNewIdentity ? (
-          <div className="w-full grid gap-4 rounded-lg border p-4">
-            <div className="w-full grid gap-1.5">
-              <Label>{t("newCircleHub.memberModeLabel")}</Label>
-              <OptionCards
-                options={memberModeOptions}
-                value={memberMode}
-                onChange={setMemberMode}
-              />
-            </div>
-
-            {memberMode === "followSet" && (
+          <div className="grid w-full gap-4 md:grid-cols-[minmax(0,1fr)_15rem] md:items-start">
+            <div className="w-full grid gap-4 rounded-lg border p-4 min-w-0">
               <div className="w-full grid gap-1.5">
-                <Label>{t("followSet.sourceLabel")}</Label>
+                <Label>{t("newCircleHub.memberModeLabel")}</Label>
                 <OptionCards
-                  options={followSetSourceOptions}
-                  value={followSetSource}
-                  onChange={setFollowSetSource}
+                  options={memberModeOptions}
+                  value={memberMode}
+                  onChange={setMemberMode}
                 />
               </div>
-            )}
-
-            {needsProviderInput && (
-              <NostrPubkeyInput
-                id="providerPubkey"
-                value={providerPubkeyInput}
-                onChange={setProviderPubkeyInput}
-                onResolved={setResolvedPubkeyHex}
-                {...(memberMode === "followSet" && {
-                  label: t("followSet.externalProviderLabel"),
-                  helperText: t("followSet.externalProviderHelper"),
-                })}
-              />
-            )}
-
-            <div
-              className={cn(
-                "w-full grid gap-4",
-                isFormLocked && "opacity-50 pointer-events-none"
-              )}
-            >
-              {isFormLocked && (
-                <p className="text-sm text-muted-foreground -mt-2">
-                  {t("newCircleHub.enterIdentityHelper")}
-                </p>
-              )}
 
               {memberMode === "followSet" && (
                 <div className="w-full grid gap-1.5">
-                  <Label htmlFor="followSetD">{t("followSet.dLabel")}</Label>
-                  <Input
-                    id="followSetD"
-                    value={followSetD}
-                    maxLength={64}
-                    onChange={(e) => setFollowSetD(e.target.value)}
-                    placeholder={t("followSet.dPlaceholder")}
-                    autoComplete="off"
+                  <Label>{t("followSet.sourceLabel")}</Label>
+                  <OptionCards
+                    options={followSetSourceOptions}
+                    value={followSetSource}
+                    onChange={setFollowSetSource}
                   />
-                  <p className="text-sm text-muted-foreground">
-                    {isManagedFollowSet
-                      ? t("followSet.dHelper")
-                      : t("followSet.dExternalHelper")}
-                  </p>
                 </div>
               )}
 
-              {isManagedFollowSet && (
-                <FollowSetFields
-                  value={followSet}
-                  onChange={setFollowSet}
-                  authorPubkeyHex={nodePubkeyHex}
-                  hiddenMembersAvailable={hiddenMembersAvailable}
+              {needsProviderInput && (
+                <NostrPubkeyInput
+                  id="providerPubkey"
+                  value={providerPubkeyInput}
+                  onChange={setProviderPubkeyInput}
+                  onResolved={setResolvedPubkeyHex}
+                  {...(memberMode === "followSet" && {
+                    label: t("followSet.externalProviderLabel"),
+                    helperText: t("followSet.externalProviderHelper"),
+                  })}
                 />
               )}
 
-              {memberMode === "followSet" && !isManagedFollowSet && (
-                <WarningAlert>{t("followSet.externalWarning")}</WarningAlert>
-              )}
+              <div
+                className={cn(
+                  "w-full grid gap-4",
+                  isFormLocked && "opacity-50 pointer-events-none"
+                )}
+              >
+                {isFormLocked && (
+                  <p className="text-sm text-muted-foreground -mt-2">
+                    {t("newCircleHub.enterIdentityHelper")}
+                  </p>
+                )}
 
-              {memberMode === "pinned" && (
-                <>
-                  <MemberPicker
-                    ownerPubkeyHex={resolvedPubkeyHex}
-                    selected={selectedMemberPubkeys}
-                    onChange={setSelectedMemberPubkeys}
-                  />
-                  {selectedMemberPubkeys.length === 0 && (
+                {memberMode === "followSet" && (
+                  <div className="w-full grid gap-1.5">
+                    <Label htmlFor="followSetD">{t("followSet.dLabel")}</Label>
+                    <Input
+                      id="followSetD"
+                      value={followSetD}
+                      maxLength={64}
+                      onChange={(e) => setFollowSetD(e.target.value)}
+                      placeholder={t("followSet.dPlaceholder")}
+                      autoComplete="off"
+                    />
                     <p className="text-sm text-muted-foreground">
-                      {t("newCircleHub.pinMemberHelper")}
+                      {isManagedFollowSet
+                        ? t("followSet.dHelper")
+                        : t("followSet.dExternalHelper")}
                     </p>
-                  )}
-                </>
-              )}
+                  </div>
+                )}
 
-              <div className="w-full grid gap-1.5">
-                <Label htmlFor="identityName">
-                  {t("newCircleHub.identityNameLabel")}
-                </Label>
-                <Input
-                  id="identityName"
-                  type="text"
-                  value={identityName}
-                  onChange={(e) => setIdentityName(e.target.value)}
-                  placeholder={identityNamePlaceholder}
-                  autoComplete="off"
-                />
-                <p className="text-muted-foreground text-sm">
-                  {t("newCircleHub.identityNameHelper")}
-                </p>
+                {isManagedFollowSet && (
+                  <FollowSetFields
+                    value={followSet}
+                    onChange={setFollowSet}
+                    authorPubkeyHex={nodePubkeyHex}
+                    hiddenMembersAvailable={hiddenMembersAvailable}
+                  />
+                )}
+
+                {memberMode === "followSet" && !isManagedFollowSet && (
+                  <WarningAlert>{t("followSet.externalWarning")}</WarningAlert>
+                )}
+
+                {memberMode === "pinned" && (
+                  <>
+                    <MemberPicker
+                      ownerPubkeyHex={resolvedPubkeyHex}
+                      selected={selectedMemberPubkeys}
+                      onChange={setSelectedMemberPubkeys}
+                    />
+                    {selectedMemberPubkeys.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        {t("newCircleHub.pinMemberHelper")}
+                      </p>
+                    )}
+                  </>
+                )}
+
+                <div className="w-full grid gap-1.5">
+                  <Label htmlFor="identityName">
+                    {t("newCircleHub.identityNameLabel")}
+                  </Label>
+                  <Input
+                    id="identityName"
+                    type="text"
+                    value={identityName}
+                    onChange={(e) => setIdentityName(e.target.value)}
+                    placeholder={identityNamePlaceholder}
+                    autoComplete="off"
+                  />
+                  <p className="text-muted-foreground text-sm">
+                    {t("newCircleHub.identityNameHelper")}
+                  </p>
+                </div>
               </div>
             </div>
+            <MembershipPreview
+              memberMode={memberMode}
+              followSetD={followSetD}
+              followSet={followSet}
+              selectedMemberPubkeys={selectedMemberPubkeys}
+              nodePubkeyHex={nodePubkeyHex}
+              providerPubkeyHex={resolvedPubkeyHex}
+              isManagedFollowSet={isManagedFollowSet}
+            />
           </div>
         ) : null}
 

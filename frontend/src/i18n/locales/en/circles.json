@@ -574,5 +574,15 @@
   "cashLock": {
     "ordered": "ordered: never expires, cannot be removed",
     "reminted": "re-minted: cannot be removed"
+  },
+  "membershipPreview": {
+    "title": "Membership preview",
+    "publishedBy": "Published by",
+    "publishedByHub": "Published by this hub",
+    "publisherPending": "Choose who publishes the set",
+    "members": "Members",
+    "hiddenCount": "{{count}} hidden",
+    "externalNote": "Members come from the external set",
+    "empty": "No members added yet"
   }
 }

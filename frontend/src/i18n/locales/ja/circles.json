@@ -461,5 +461,15 @@
   "cashLock": {
     "ordered": "注文分: 期限なし、削除不可",
     "reminted": "再発行: 削除不可"
+  },
+  "membershipPreview": {
+    "title": "メンバーシップのプレビュー",
+    "publishedBy": "公開者",
+    "publishedByHub": "このハブが公開",
+    "publisherPending": "セットを公開する主体を選択してください",
+    "members": "メンバー",
+    "hiddenCount": "非表示 {{count}} 件",
+    "externalNote": "メンバーは外部セットから取得されます",
+    "empty": "メンバーはまだ追加されていません"
   }
 }
