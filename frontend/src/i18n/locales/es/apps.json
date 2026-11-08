@@ -143,7 +143,11 @@
     "hubExpiryBeforeBillsWarning": "La conexión de este {{kind}} caduca antes que el billete de mayor duración que puede acuñar. Los billetes ya emitidos conservan su propio plazo, pero no podrás acuñar nuevos una vez que caduque la conexión.",
     "advancedTitle": "Avanzado",
     "spentRetentionLabel": "Responder sobre billetes gastados durante",
-    "spentRetentionHelper": "Cuánto tiempo sigue el hub informando a un titular de que su billete se gastó, antes de callar. Sin esto, un billete gastado y un hub inaccesible se ven igual. Desactivado significa callar de inmediato."
+    "spentRetentionHelper": "Cuánto tiempo sigue el hub informando a un titular de que su billete se gastó, antes de callar. Sin esto, un billete gastado y un hub inaccesible se ven igual. Desactivado significa callar de inmediato.",
+    "cashMinTransferLabel": "Importe mínimo de transferencia",
+    "cashMinTransferHelper": "Cantidad más pequeña en la que se puede dividir un Lokicash, o dejar como cambio — 0 significa sin mínimo.",
+    "cashRedeemFeeLabel": "Comisión de canje (ppm)",
+    "cashRedeemFeeHelper": "Comisión por millón cobrada cuando un destinatario canjea un Lokicash a una billetera externa (0 = gratis). Nunca se cobra en una transferencia/división, ni en un canje a otra billetera de este mismo nodo."
   },
   "newApp": {
     "unsupportedApp": "Aplicación no compatible",

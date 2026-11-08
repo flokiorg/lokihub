@@ -327,7 +327,8 @@
     "createdToast": "JIT ウォレットハブ「{{name}}」を作成しました",
     "errors": {
       "create": "JIT ウォレットハブの作成に失敗しました"
-    }
+    },
+    "submitHint": "続行するには、名前と Lokicash の最大予算を入力してください。"
   },
   "disconnectCircleHub": {
     "checking": "メンバーウォレットの残高を確認しています…",

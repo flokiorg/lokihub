@@ -327,7 +327,8 @@
     "createdToast": "هاب کیف‌پول JIT «{{name}}» ایجاد شد",
     "errors": {
       "create": "ایجاد هاب کیف‌پول JIT ناموفق بود"
-    }
+    },
+    "submitHint": "برای ادامه، یک نام و حداکثر بودجه Lokicash وارد کنید."
   },
   "disconnectCircleHub": {
     "checking": "در حال بررسی موجودی کیف‌پول اعضا…",

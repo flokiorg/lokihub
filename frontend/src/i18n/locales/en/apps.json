@@ -190,7 +190,11 @@
     "hubExpiryBeforeBillsWarning": "This {{kind}}'s connection expires before the longest bill it can mint. Bills already issued keep their own deadline, but you won't be able to mint new ones once the connection expires.",
     "advancedTitle": "Advanced",
     "spentRetentionLabel": "Answer about spent bills for",
-    "spentRetentionHelper": "How long the hub keeps telling a holder their bill was spent, before falling silent. Without it, a spent bill and an unreachable hub look identical. Disabled means it falls silent immediately."
+    "spentRetentionHelper": "How long the hub keeps telling a holder their bill was spent, before falling silent. Without it, a spent bill and an unreachable hub look identical. Disabled means it falls silent immediately.",
+    "cashMinTransferLabel": "Min Transfer Amount",
+    "cashMinTransferHelper": "Smallest amount a Lokicash may be split into, or leave behind as change — 0 means no floor.",
+    "cashRedeemFeeLabel": "Redeem Fee (ppm)",
+    "cashRedeemFeeHelper": "Per-million fee charged when a recipient redeems a Lokicash out to an external wallet (0 = free). Never charged on a transfer/split, or on a redemption into another wallet on this same node."
   },
   "newApp": {
     "title": "Connect a New App",

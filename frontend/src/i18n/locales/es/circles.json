@@ -327,7 +327,8 @@
     "createdToast": "Hub de Billetera JIT \"{{name}}\" creado",
     "errors": {
       "create": "Error al crear el Hub de Billetera JIT"
-    }
+    },
+    "submitHint": "Introduce un nombre y un presupuesto máximo de Lokicash para continuar."
   },
   "disconnectCircleHub": {
     "checking": "Comprobando los saldos de las billeteras de los miembros…",

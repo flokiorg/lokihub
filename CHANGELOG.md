@@ -58,6 +58,10 @@ hub to services the user has explicitly selected.
 
 ### Changed
 
+- Reorganizes the Cash Hub creation form into clearer sections — the per-bill
+  cap and expiry stay prominent while the economics knobs (min transfer, redeem
+  fee, retention) move under one Advanced section — and keeps the Create button
+  disabled until a name and budget are set.
 - Breaking: renames the chain-branded hub-info/rate API to chain-neutral names
   (`/api/loki/rates` → `/api/rates`, `/api/loki/info` → `/api/hub/info`,
   `/api/loki/faq` → `/api/hub/faq`) so lokihub reads generically across

@@ -339,7 +339,8 @@
     "createdToast": "Cash Hub \"{{name}}\" created",
     "errors": {
       "create": "Failed to create Cash Hub"
-    }
+    },
+    "submitHint": "Enter a name and a maximum Cash Bill budget to continue."
   },
   "disconnectCircleHub": {
     "title": "Close this circle?",

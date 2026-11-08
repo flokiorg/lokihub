@@ -68,6 +68,11 @@ export function NewCashHub() {
     setLoading(false);
   };
 
+  // Single submit-gate: a Cash Hub needs a name and a positive per-bill cap
+  // (0 budget has no meaning). maxExpSecs=0 ("never") and the economics knobs
+  // are all valid, so they do not gate submission.
+  const canSubmit = name.trim().length > 0 && perWalletMaxLoki > 0;
+
   return (
     <div className="grid gap-5">
       <AppHeader
@@ -76,7 +81,7 @@ export function NewCashHub() {
       />
       <form
         onSubmit={handleSubmit}
-        className="flex flex-col items-start gap-4 max-w-lg"
+        className="flex w-full max-w-2xl flex-col items-start gap-4"
       >
         <div className="w-full grid gap-1.5">
           <Label htmlFor="name">{t("common.nameLabel")}</Label>
@@ -106,13 +111,24 @@ export function NewCashHub() {
           spentRetentionSecs={spentRetentionSecs}
           onSpentRetentionSecsChange={setSpentRetentionSecs}
         />
-        <div className="flex gap-3">
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
-            {tc("actions.cancel")}
-          </Button>
-          <LoadingButton loading={isLoading} type="submit">
-            {t("newCashHub.submit")}
-          </LoadingButton>
+        <div className="grid gap-2">
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+              {tc("actions.cancel")}
+            </Button>
+            <LoadingButton
+              loading={isLoading}
+              type="submit"
+              disabled={!canSubmit}
+            >
+              {t("newCashHub.submit")}
+            </LoadingButton>
+          </div>
+          {!canSubmit && (
+            <p className="text-muted-foreground text-sm">
+              {t("newCashHub.submitHint")}
+            </p>
+          )}
         </div>
       </form>
     </div>

@@ -327,7 +327,8 @@
     "createdToast": "JIT 지갑 허브 \"{{name}}\"이(가) 생성되었습니다",
     "errors": {
       "create": "JIT 지갑 허브를 생성하지 못했습니다"
-    }
+    },
+    "submitHint": "계속하려면 이름과 최대 Lokicash 예산을 입력하세요."
   },
   "disconnectCircleHub": {
     "checking": "멤버 지갑 잔액을 확인하는 중…",

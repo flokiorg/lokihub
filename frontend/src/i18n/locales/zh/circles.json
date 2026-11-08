@@ -327,7 +327,8 @@
     "createdToast": "JIT 钱包中心“{{name}}”已创建",
     "errors": {
       "create": "创建 JIT 钱包中心失败"
-    }
+    },
+    "submitHint": "请输入名称和最大 Lokicash 预算以继续。"
   },
   "disconnectCircleHub": {
     "checking": "正在检查成员钱包余额…",

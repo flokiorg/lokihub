@@ -143,7 +143,11 @@
     "hubExpiryBeforeBillsWarning": "この {{kind}} の接続は、鋳造できる最長の紙幣よりも先に期限切れになります。発行済みの紙幣は自身の期限を保ちますが、接続が期限切れになると新しく鋳造できなくなります。",
     "advancedTitle": "詳細設定",
     "spentRetentionLabel": "使用済み紙幣について応答する期間",
-    "spentRetentionHelper": "紙幣が使用済みであることをハブが保持者に伝え続ける期間で、その後は沈黙します。これがないと、使用済みの紙幣と到達できないハブは見分けがつきません。無効はただちに沈黙することを意味します。"
+    "spentRetentionHelper": "紙幣が使用済みであることをハブが保持者に伝え続ける期間で、その後は沈黙します。これがないと、使用済みの紙幣と到達できないハブは見分けがつきません。無効はただちに沈黙することを意味します。",
+    "cashMinTransferLabel": "最小送金額",
+    "cashMinTransferHelper": "Lokicash を分割できる最小額、またはお釣りとして残せる最小額 — 0 は下限なしを意味します。",
+    "cashRedeemFeeLabel": "償還手数料（ppm）",
+    "cashRedeemFeeHelper": "受取人が Lokicash を外部ウォレットに償還する際に請求される百万分率の手数料（0 = 無料）。送金・分割、または同じノード上の別のウォレットへの償還では請求されません。"
   },
   "newApp": {
     "unsupportedApp": "未対応のアプリ",

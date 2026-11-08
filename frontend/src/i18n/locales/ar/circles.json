@@ -406,7 +406,8 @@
     "createdToast": "تم إنشاء مركز محفظة JIT \"{{name}}\"",
     "errors": {
       "create": "فشل إنشاء مركز محفظة JIT"
-    }
+    },
+    "submitHint": "أدخل اسمًا والحد الأقصى لميزانية Lokicash للمتابعة."
   },
   "disconnectCircleHub": {
     "checking": "جارٍ التحقق من أرصدة محافظ الأعضاء…",
