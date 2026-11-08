@@ -221,7 +221,7 @@ function MembershipPreview({
                   </span>
                 )}
                 {isManagedFollowSet && followSet.title && (
-                  <span className="font-medium">{followSet.title}</span>
+                  <span className="truncate font-medium">{followSet.title}</span>
                 )}
               </div>
             )}
