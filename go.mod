@@ -48,7 +48,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.9.2
-	github.com/ohstr/nmilat v0.5.0-rc.45
+	github.com/ohstr/nmilat v0.5.0-rc.52
 	github.com/rivo/uniseg v0.4.7
 	github.com/rs/zerolog v1.35.1
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
@@ -142,7 +142,7 @@ require (
 	github.com/jrick/logrotate v1.1.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kkdai/bstream v1.0.0 // indirect
-	github.com/klauspost/compress v1.18.7 // indirect
+	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/leaanthony/go-ansi-parser v1.6.1 // indirect
