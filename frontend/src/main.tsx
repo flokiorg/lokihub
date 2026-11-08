@@ -5,16 +5,8 @@ import "src/i18n"; // Initialize i18n before React renders
 import "src/i18n/types"; // TypeScript augmentation for typed t() keys
 import "src/fonts.css";
 import "src/index.css";
-import { isHttpMode } from "src/utils/isHttpMode";
-
-// redirect hash router links to browser router links
-// TODO: remove after 2026-01-01
-if (isHttpMode() && window.location.href.indexOf("/#/") > -1) {
-  window.location.href = window.location.href.replace("/#/", "/");
-} else {
-  ReactDOM.createRoot(document.getElementById("root")!).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-}
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
