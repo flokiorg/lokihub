@@ -2,6 +2,8 @@ package hubinfo
 
 import (
 	"context"
+
+	"github.com/flokiorg/lokihub/internal/seed"
 )
 
 type HubInfoService interface {
@@ -40,6 +42,10 @@ type HubInfo struct {
 	// placeholder and is only meaningful in "proxy" mode.
 	ImageProxyMode     string `json:"imageProxyMode"`
 	ImageProxyTemplate string `json:"imageProxyTemplate"`
+	// NativeAsset is the hub's on-chain asset descriptor (ticker/units/decimals/
+	// explorer) so the frontend formats amounts and builds explorer links from
+	// one source of truth. Embedded default = Flokicoin.
+	NativeAsset seed.NativeAsset `json:"nativeAsset"`
 }
 
 type FiatRate struct {
