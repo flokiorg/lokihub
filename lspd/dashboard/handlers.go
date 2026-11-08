@@ -801,31 +801,31 @@ func (s *Handlers) handleGetOrderDetail(req *lsps.JsonRpcRequest) *lsps.JsonRpcR
 		}
 	}
 
-	// Build a rich response with timeline events
+	// Build a rich response with timeline events. Only ORDER_CREATED has a
+	// persisted time (CreatedAt); the per-state transition times are not
+	// recorded yet, so those events omit a timestamp rather than claim
+	// CreatedAt for all of them.
 	timeline := []map[string]interface{}{
 		{"event": "ORDER_CREATED", "timestamp": order.CreatedAt.Format(time.RFC3339), "detail": "Order registered by peer"},
 	}
 	if order.PaymentState == string(lsps.Lsps1PaymentStatePaid) || order.OrderState == string(lsps.Lsps1OrderStateCompleted) {
 		timeline = append(timeline, map[string]interface{}{
-			"event":     "PAYMENT_RECEIVED",
-			"timestamp": order.CreatedAt.Format(time.RFC3339), // Recorded at same time for now
-			"detail":    "Invoice payment confirmed",
+			"event":  "PAYMENT_RECEIVED",
+			"detail": "Invoice payment confirmed",
 		})
 	}
 
 	if order.FundingTxid != nil && *order.FundingTxid != "" {
 		timeline = append(timeline, map[string]interface{}{
-			"event":     "CHANNEL_FUNDED",
-			"timestamp": order.CreatedAt.Format(time.RFC3339), // Recorded at same time for now
-			"detail":    "Funding TX: " + *order.FundingTxid,
+			"event":  "CHANNEL_FUNDED",
+			"detail": "Funding TX: " + *order.FundingTxid,
 		})
 	}
 
 	if order.OrderState == string(lsps.Lsps1OrderStateCompleted) {
 		timeline = append(timeline, map[string]interface{}{
-			"event":     "ORDER_COMPLETED",
-			"timestamp": order.CreatedAt.Format(time.RFC3339), // Recorded at same time for now
-			"detail":    "Channel opened and confirmed",
+			"event":  "ORDER_COMPLETED",
+			"detail": "Channel opened and confirmed",
 		})
 	}
 

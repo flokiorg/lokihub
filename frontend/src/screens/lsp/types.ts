@@ -57,7 +57,8 @@ export interface LspOrder {
 // get_order_detail (handlers.go handleGetOrderDetail).
 export interface LspOrderTimelineEvent {
   event: string;
-  timestamp: string;
+  // Absent for state transitions whose exact time the LSP does not record yet.
+  timestamp?: string;
   detail: string;
 }
 export interface LspOrderDetail {
