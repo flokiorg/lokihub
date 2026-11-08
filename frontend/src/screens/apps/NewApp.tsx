@@ -49,9 +49,13 @@ import {
 import { useApp } from "src/hooks/useApp";
 import { useAppLogo } from "src/hooks/useAppLogo";
 import { useAppStore } from "src/hooks/useAppStore";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
-import { formatFlokicoinAmount } from "src/utils/flokicoinFormatting";
+import {
+  FLOKICOIN_NATIVE_ASSET,
+  formatNativeAmount,
+} from "src/utils/flokicoinFormatting";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { returnUrlOrigin, safeReturnUrl } from "src/utils/safeReturnUrl";
 import Permissions from "../../components/Permissions";
@@ -629,6 +633,7 @@ function FinalizeConnection({
   const navigate = useNavigate();
   const { t } = useTranslation("apps");
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
 
   const pairingUri = createAppResponse.pairingUri;
   const { data: app } = useApp(createAppResponse.id, true);
@@ -677,9 +682,10 @@ function FinalizeConnection({
         {app?.isolated && info && (
           <li>
             {t("newApp.optionalTopUp", {
-              amount: formatFlokicoinAmount(
+              amount: formatNativeAmount(
                 app.balance,
-                info.flokicoinDisplayFormat
+                info.flokicoinDisplayFormat,
+                hubInfo?.nativeAsset ?? FLOKICOIN_NATIVE_ASSET
               ),
             })}{" "}
             <IsolatedAppTopupDialog appId={app.id}>

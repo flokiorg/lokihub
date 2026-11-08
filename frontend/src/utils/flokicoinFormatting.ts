@@ -105,41 +105,29 @@ export function formatFlokicoinAmount(
  */
 export function getFlokicoinUnit(
   displayFormat: FlokicoinDisplayFormat,
-  amountLoki?: number
+  amountUnits?: number,
+  asset: NativeAssetFormat = FLOKICOIN_NATIVE_ASSET
 ): string {
-  let effectiveFormat = displayFormat;
-  if (displayFormat === FLOKICOIN_DISPLAY_FORMAT_AUTO) {
-    effectiveFormat =
-      (amountLoki || 0) >= AUTO_UNIT_THRESHOLD_LOKI
-        ? FLOKICOIN_DISPLAY_FORMAT_FLC
-        : "loki";
-  }
-
-  if (effectiveFormat === FLOKICOIN_DISPLAY_FORMAT_FLC) {
-    return "FLC";
-  }
-  return "loki";
+  const showTicker =
+    displayFormat === FLOKICOIN_DISPLAY_FORMAT_FLC ||
+    (displayFormat === FLOKICOIN_DISPLAY_FORMAT_AUTO &&
+      (amountUnits || 0) >= asset.autoThresholdLoki);
+  return showTicker ? asset.ticker : asset.unitName;
 }
 
 /**
  * Converts from internal loki units to display units (FLC or loki)
  */
 export function lokiToDisplay(
-  amountLoki: number,
-  displayFormat: FlokicoinDisplayFormat
+  amountUnits: number,
+  displayFormat: FlokicoinDisplayFormat,
+  asset: NativeAssetFormat = FLOKICOIN_NATIVE_ASSET
 ): number {
-  let effectiveFormat = displayFormat;
-  if (displayFormat === FLOKICOIN_DISPLAY_FORMAT_AUTO) {
-    effectiveFormat =
-      amountLoki >= AUTO_UNIT_THRESHOLD_LOKI
-        ? FLOKICOIN_DISPLAY_FORMAT_FLC
-        : "loki";
-  }
-
-  if (effectiveFormat === FLOKICOIN_DISPLAY_FORMAT_FLC) {
-    return amountLoki / 100_000_000;
-  }
-  return amountLoki;
+  const showTicker =
+    displayFormat === FLOKICOIN_DISPLAY_FORMAT_FLC ||
+    (displayFormat === FLOKICOIN_DISPLAY_FORMAT_AUTO &&
+      amountUnits >= asset.autoThresholdLoki);
+  return showTicker ? amountUnits / 10 ** asset.decimals : amountUnits;
 }
 
 /**
@@ -147,19 +135,14 @@ export function lokiToDisplay(
  */
 export function displayToLoki(
   amountDisplay: number,
-  displayFormat: FlokicoinDisplayFormat
+  displayFormat: FlokicoinDisplayFormat,
+  asset: NativeAssetFormat = FLOKICOIN_NATIVE_ASSET
 ): number {
-  // In AUTO mode, we assume the user entered the value in the "effective" unit currently shown.
-  // This is handled by the caller usually, but for parsing we need to know if it's FLC or loki.
-  // If the input was decimal, it's definitely FLC. If it's a large integer, it's tricky.
-  // To keep it simple, if displayFormat is AUTO, we default to the same logic as lokiToDisplay
-  // but this is mostly used for user input.
-
+  // In AUTO mode we assume the user entered the value in the "effective" unit
+  // currently shown. Input forms usually pass an explicit ticker/unit format
+  // rather than AUTO, so for AUTO we treat the input as base units.
   if (displayFormat === FLOKICOIN_DISPLAY_FORMAT_FLC) {
-    return Math.round(amountDisplay * 100_000_000);
+    return Math.round(amountDisplay * 10 ** asset.decimals);
   }
-
-  // NOTE: If AUTO is used for input, it might be ambiguous.
-  // However, input forms usually don't use AUTO for the Input itself, they use the current state.
   return Math.round(amountDisplay);
 }

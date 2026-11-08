@@ -8,8 +8,11 @@ import {
 import {
   FLOKICOIN_NATIVE_ASSET,
   NativeAssetFormat,
+  displayToLoki,
   formatFlokicoinAmount,
   formatNativeAmount,
+  getFlokicoinUnit,
+  lokiToDisplay,
 } from "src/utils/flokicoinFormatting";
 
 // Regression guard (FIX #2): after generalizing to formatNativeAmount, the
@@ -85,5 +88,45 @@ describe("formatNativeAmount (chain-neutral: a BTC/sat asset)", () => {
       "0.0015 FLC"
     );
     expect(FLOKICOIN_NATIVE_ASSET.ticker).toBe("FLC");
+  });
+});
+
+// Sibling helpers: numerically identical for Flokicoin, generalized for BTC.
+describe("getFlokicoinUnit / lokiToDisplay / displayToLoki", () => {
+  const BTC: NativeAssetFormat = {
+    ticker: "BTC",
+    symbol: "₿",
+    unitName: "sat",
+    subunitName: "msat",
+    decimals: 8,
+    subunitPerUnit: 1000,
+    autoThresholdLoki: 100_000,
+    bech32Hrp: "bc",
+    explorer: {
+      label: "mempool.space",
+      url: "https://mempool.space",
+      txPath: "/tx/{txid}",
+    },
+  };
+
+  it("getFlokicoinUnit returns ticker vs base unit (Flokicoin, unchanged)", () => {
+    expect(getFlokicoinUnit(FLOKICOIN_DISPLAY_FORMAT_FLC)).toBe("FLC");
+    expect(getFlokicoinUnit(FLOKICOIN_DISPLAY_FORMAT_LOKI)).toBe("loki");
+    expect(getFlokicoinUnit(FLOKICOIN_DISPLAY_FORMAT_AUTO, 50)).toBe("loki");
+    expect(getFlokicoinUnit(FLOKICOIN_DISPLAY_FORMAT_AUTO, 100_000)).toBe("FLC");
+  });
+
+  it("lokiToDisplay / displayToLoki (Flokicoin, unchanged)", () => {
+    expect(lokiToDisplay(100_000_000, FLOKICOIN_DISPLAY_FORMAT_FLC)).toBe(1);
+    expect(lokiToDisplay(500, FLOKICOIN_DISPLAY_FORMAT_LOKI)).toBe(500);
+    expect(displayToLoki(1, FLOKICOIN_DISPLAY_FORMAT_FLC)).toBe(100_000_000);
+    expect(displayToLoki(500, FLOKICOIN_DISPLAY_FORMAT_LOKI)).toBe(500);
+  });
+
+  it("generalizes to a BTC/sat asset", () => {
+    expect(getFlokicoinUnit(FLOKICOIN_DISPLAY_FORMAT_FLC, 0, BTC)).toBe("BTC");
+    expect(getFlokicoinUnit(FLOKICOIN_DISPLAY_FORMAT_LOKI, 0, BTC)).toBe("sat");
+    expect(lokiToDisplay(100_000_000, FLOKICOIN_DISPLAY_FORMAT_FLC, BTC)).toBe(1);
+    expect(displayToLoki(1, FLOKICOIN_DISPLAY_FORMAT_FLC, BTC)).toBe(100_000_000);
   });
 });
