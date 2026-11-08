@@ -11,9 +11,11 @@
     "selectMember": "멤버 선택",
     "nameLabel": "이름",
     "maxWalletBudgetLabel": "최대 지갑 예산",
+    "cashMaxBudgetLabel": "최대 Lokicash 예산",
     "minRenewalLabel": "최소 갱신 주기",
     "minRenewalHelper": "멤버가 자신의 서클 지갑 예산에 대해 요청할 수 있는 가장 짧은 갱신 주기",
     "maxWalletExpiryLabel": "최대 지갑 만료 기간",
+    "cashMaxExpiryLabel": "최대 Lokicash 만료 기간",
     "feePpmLabel": "수수료 (ppm)",
     "feePpmHelper": "서클 지갑이 진행하는 결제에 부과되는 백만분율 수수료 (0 = 무료)",
     "advancedSettings": "고급 설정",
@@ -222,7 +224,7 @@
     "duplicateIdentity": "이 아이덴티티는 이미 다른 수령인이 사용 중입니다.",
     "walletBudgetLabel": "금액",
     "requestedSummary": "{{total}} loki 요청됨",
-    "requestedSummaryWithMax": "{{total}} loki 요청됨 (이 허브의 최대 지갑 예산 {{max}} loki 중)",
+    "requestedSummaryWithMax": "{{total}} loki 요청됨 (이 허브의 최대 Lokicash 예산 {{max}} loki 중)",
     "claimDeadlineLabel": "교환 기한",
     "deadlineExceeds": "이 허브의 최대 교환 기한({{max}})을 초과합니다",
     "deadlineHelp": "각 수령인은 생성 시점으로부터 이 기간 내에 교환해야 합니다",
@@ -235,7 +237,7 @@
     "recipientColumn": "수령인",
     "revealConnection": "연결 표시",
     "selectRecipient": "수령인 선택",
-    "selectAllInWallet": "이 지갑의 모든 수령인 선택",
+    "selectAllInWallet": "이 Lokicash의 모든 수령인 선택",
     "collapseRecipients": "수령인 목록 접기",
     "expandRecipients": "수령인 목록 펼치기",
     "removeWallet": "Lokicash 제거",
@@ -319,7 +321,7 @@
   "newCashHub": {
     "title": "새 JIT 지갑 허브",
     "description": "수령인에게 지출 전용 JIT 지갑을 발급하는 사전 자금 지원 허브를 생성합니다",
-    "maxWalletBudgetHelper": "이 허브에서 발급되는 각 JIT 지갑에 할당할 수 있는 최대 예산",
+    "maxWalletBudgetHelper": "이 허브에서 발급되는 각 Lokicash에 할당할 수 있는 최대 예산",
     "maxExpiryHelper": "발급된 JIT 지갑의 최대 유효 기간",
     "submit": "JIT 지갑 허브 생성",
     "createdToast": "JIT 지갑 허브 \"{{name}}\"이(가) 생성되었습니다",
@@ -419,7 +421,7 @@
     "medianTimeToRedeemInfo": "지폐가 상환되기까지 걸리는 일반적인 시간. 최근 1,000건의 상환으로 측정합니다.",
     "writtenOffInfo": "이 허브로 전혀 돌려받을 수 없었던 금액 — 회수가 아니라 손실입니다.",
     "leftInBudgetInfo": "갱신 전까지 남은 이 허브의 결제 예산. 허브 연결을 통한 일반 결제를 제한할 뿐, 발행 가능한 캐시 양은 제한하지 않습니다.",
-    "budgetRenewalInfo": "이 허브의 전체 결제 예산과 초기화 주기. 발행은 여기서 차감되지 않으며, 지폐 금액은 허브 설정의 지갑당 최대값으로 제한됩니다."
+    "budgetRenewalInfo": "이 허브의 전체 결제 예산과 초기화 주기. 발행은 여기서 차감되지 않으며, 지폐 금액은 허브 설정의 Lokicash당 최대값으로 제한됩니다."
   },
   "cashCharts": {
     "outstandingTitle": "미상환 추이",

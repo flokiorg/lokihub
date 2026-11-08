@@ -11,9 +11,11 @@
     "selectMember": "انتخاب عضو",
     "nameLabel": "نام",
     "maxWalletBudgetLabel": "حداکثر بودجه کیف‌پول",
+    "cashMaxBudgetLabel": "حداکثر بودجه Lokicash",
     "minRenewalLabel": "کوتاه‌ترین دوره تجدید",
     "minRenewalHelper": "کوتاه‌ترین دوره تجدید که یک عضو می‌تواند برای بودجه کیف‌پول حلقه خود درخواست کند",
     "maxWalletExpiryLabel": "حداکثر مدت اعتبار کیف‌پول",
+    "cashMaxExpiryLabel": "حداکثر مدت اعتبار Lokicash",
     "feePpmLabel": "کارمزد (ppm)",
     "feePpmHelper": "کارمزد به ازای هر میلیون که از پرداخت‌های کیف‌پول‌های حلقه دریافت می‌شود (۰ = رایگان)",
     "advancedSettings": "تنظیمات پیشرفته",
@@ -222,7 +224,7 @@
     "duplicateIdentity": "این هویت هم‌اکنون توسط دریافت‌کننده دیگری استفاده می‌شود.",
     "walletBudgetLabel": "مبلغ",
     "requestedSummary": "{{total}} loki درخواست شد",
-    "requestedSummaryWithMax": "{{total}} loki درخواست شد از حداکثر بودجه کیف‌پول این هاب که {{max}} loki است",
+    "requestedSummaryWithMax": "{{total}} loki درخواست شد از حداکثر بودجه Lokicash این هاب که {{max}} loki است",
     "claimDeadlineLabel": "مهلت بازخرید",
     "deadlineExceeds": "از حداکثر مهلت بازخرید این هاب یعنی {{max}} بیشتر است",
     "deadlineHelp": "هر دریافت‌کننده باید ظرف این مدت از زمان ایجاد، بازخرید کند",
@@ -235,7 +237,7 @@
     "recipientColumn": "دریافت‌کننده",
     "revealConnection": "نمایش اتصال",
     "selectRecipient": "انتخاب دریافت‌کننده",
-    "selectAllInWallet": "انتخاب همه دریافت‌کنندگان این کیف‌پول",
+    "selectAllInWallet": "انتخاب همه دریافت‌کنندگان این Lokicash",
     "collapseRecipients": "جمع کردن دریافت‌کنندگان",
     "expandRecipients": "گسترش دریافت‌کنندگان",
     "removeWallet": "حذف Lokicash",
@@ -319,7 +321,7 @@
   "newCashHub": {
     "title": "هاب کیف‌پول JIT جدید",
     "description": "یک هاب از پیش تأمین‌مالی‌شده ایجاد کنید که کیف‌پول‌های JIT مخصوص خرج کردن را برای ذی‌نفعان صادر می‌کند",
-    "maxWalletBudgetHelper": "حداکثر بودجه‌ای که می‌توان به هر کیف‌پول JIT صادرشده از این هاب تخصیص داد",
+    "maxWalletBudgetHelper": "حداکثر بودجه‌ای که می‌توان به هر Lokicash صادرشده از این هاب تخصیص داد",
     "maxExpiryHelper": "حداکثر مدت اعتبار کیف‌پول‌های JIT صادرشده",
     "submit": "ایجاد هاب کیف‌پول JIT",
     "createdToast": "هاب کیف‌پول JIT «{{name}}» ایجاد شد",
@@ -419,7 +421,7 @@
     "medianTimeToRedeemInfo": "معمولاً یک اسکناس چقدر می‌ماند تا بازخرید شود، بر پایهٔ ۱۰۰۰ بازخرید اخیر.",
     "writtenOffInfo": "ارزشی که اصلاً نتوانست به این هاب بازگردد — یک زیان، نه بازیابی.",
     "leftInBudgetInfo": "چقدر از بودجهٔ پرداخت این هاب تا تمدید باقی مانده است. این سقف پرداخت‌های عادی از طریق اتصال هاب است و مقدار نقدی قابل ضرب را محدود نمی‌کند.",
-    "budgetRenewalInfo": "کل بودجهٔ پرداخت این هاب و بازهٔ بازنشانی آن. ضرب کردن از آن کسر نمی‌شود؛ اندازهٔ هر اسکناس با سقف هر کیف‌پول در تنظیمات هاب محدود می‌شود."
+    "budgetRenewalInfo": "کل بودجهٔ پرداخت این هاب و بازهٔ بازنشانی آن. ضرب کردن از آن کسر نمی‌شود؛ اندازهٔ هر اسکناس با سقف هر Lokicash در تنظیمات هاب محدود می‌شود."
   },
   "cashCharts": {
     "outstandingTitle": "در جریان در طول زمان",

@@ -39,7 +39,7 @@
     "customAmount": "カスタム予算（{{unit}}）",
     "spent": "使用済み",
     "remaining": "残高",
-    "cashHubCaption": "このハブ自身の接続を通じて行われる通常の支払いに上限を設けます。鋳造は制限しません — 紙幣は内部送金で賄われ、その大きさはハブ設定のウォレットごとの上限で制限されます。"
+    "cashHubCaption": "このハブ自身の接続を通じて行われる通常の支払いに上限を設けます。鋳造は制限しません — 紙幣は内部送金で賄われ、その大きさはハブ設定の Lokicash ごとの上限で制限されます。"
   },
   "renewals": {
     "daily": "毎日",
@@ -122,9 +122,11 @@
     "cashHubSettingsDescription": "変更は今後発行される Lokicash にのみ適用され、すでに発行されたものには影響しません。",
     "circleHubSettingsDescription": "変更は今後作成されるサークルウォレットにのみ適用され、すでに作成されたウォレットには影響しません。",
     "maxWalletBudgetLabel": "ウォレットの最大予算",
+    "cashMaxBudgetLabel": "Lokicash の最大予算",
     "cashMaxWalletBudgetHelper": "このハブから発行される各 Lokicash に割り当てられる最大予算（デフォルト：1,000 loki）",
     "circleMaxWalletBudgetHelper": "メンバーがサークルウォレットに対してリクエストできる最大予算（デフォルト：1,000 loki）",
     "maxWalletExpiryLabel": "ウォレットの最長有効期限",
+    "cashMaxExpiryLabel": "Lokicash の最長有効期限",
     "cashMaxExpiryHelper": "発行された Lokicash の最長有効期限（デフォルト：1日）",
     "circleMaxExpiryHelper": "発行されたサークルウォレットの最長有効期限（デフォルト：30日）",
     "minRenewalLabel": "最短更新間隔",

@@ -91,9 +91,9 @@ export function NewCashHub() {
           />
         </div>
         <CashHubConfigCard
-          budgetLabel={t("common.maxWalletBudgetLabel")}
+          budgetLabel={t("common.cashMaxBudgetLabel")}
           budgetHelper={t("newCashHub.maxWalletBudgetHelper")}
-          expiryLabel={t("common.maxWalletExpiryLabel")}
+          expiryLabel={t("common.cashMaxExpiryLabel")}
           expiryHelper={t("newCashHub.maxExpiryHelper")}
           perWalletMaxLoki={perWalletMaxLoki}
           onPerWalletMaxLokiChange={setPerWalletMaxLoki}

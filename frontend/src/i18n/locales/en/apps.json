@@ -52,7 +52,7 @@
     "set": "Set budget",
     "used": "used",
     "circleSharedCaption": "Shared by all wallets in this circle.",
-    "cashHubCaption": "Caps ordinary payments made over this hub's own connection. It does not limit minting — a bill is funded by internal transfer, and its size is capped by the per-wallet maximum in Hub Settings."
+    "cashHubCaption": "Caps ordinary payments made over this hub's own connection. It does not limit minting — a bill is funded by internal transfer, and its size is capped by the per-bill maximum in Hub Settings."
   },
   "renewals": {
     "daily": "Daily",
@@ -169,9 +169,11 @@
     "cashHubSettingsDescription": "Changes only apply to Cash Bills issued from now on and won't affect ones already issued.",
     "circleHubSettingsDescription": "Changes only apply to circle wallets created from now on and won't affect wallets already created.",
     "maxWalletBudgetLabel": "Max Wallet Budget",
+    "cashMaxBudgetLabel": "Max Cash Bill Budget",
     "cashMaxWalletBudgetHelper": "Maximum budget that can be allocated to each Cash Bill issued from this hub (default: 1,000 loki)",
     "circleMaxWalletBudgetHelper": "Maximum budget a member may request for their circle wallet (default: 1,000 loki)",
     "maxWalletExpiryLabel": "Max Wallet Expiry",
+    "cashMaxExpiryLabel": "Max Cash Bill Expiry",
     "cashMaxExpiryHelper": "Maximum lifetime for issued Cash Bills (default: 1 day)",
     "circleMaxExpiryHelper": "Maximum lifetime for issued circle wallets (default: 30 days)",
     "minRenewalLabel": "Min Renewal",

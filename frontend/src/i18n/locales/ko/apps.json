@@ -39,7 +39,7 @@
     "customAmount": "사용자 지정 예산 ({{unit}})",
     "spent": "사용됨",
     "remaining": "남은 금액",
-    "cashHubCaption": "이 허브 자체 연결을 통해 이루어지는 일반 결제를 제한합니다. 발행은 제한하지 않습니다 — 지폐는 내부 이체로 충당되며, 그 크기는 허브 설정의 지갑당 최대값으로 제한됩니다."
+    "cashHubCaption": "이 허브 자체 연결을 통해 이루어지는 일반 결제를 제한합니다. 발행은 제한하지 않습니다 — 지폐는 내부 이체로 충당되며, 그 크기는 허브 설정의 Lokicash당 최대값으로 제한됩니다."
   },
   "renewals": {
     "daily": "매일",
@@ -122,9 +122,11 @@
     "cashHubSettingsDescription": "변경 사항은 이후 발급되는 Lokicash에만 적용되며, 이미 발급된 것에는 영향을 주지 않습니다.",
     "circleHubSettingsDescription": "변경 사항은 이후 생성되는 서클 지갑에만 적용되며, 이미 생성된 지갑에는 영향을 주지 않습니다.",
     "maxWalletBudgetLabel": "최대 지갑 예산",
+    "cashMaxBudgetLabel": "최대 Lokicash 예산",
     "cashMaxWalletBudgetHelper": "이 허브에서 발급되는 각 Lokicash에 할당할 수 있는 최대 예산 (기본값: 1,000 loki)",
     "circleMaxWalletBudgetHelper": "멤버가 자신의 서클 지갑에 대해 요청할 수 있는 최대 예산 (기본값: 1,000 loki)",
     "maxWalletExpiryLabel": "최대 지갑 만료 기간",
+    "cashMaxExpiryLabel": "최대 Lokicash 만료 기간",
     "cashMaxExpiryHelper": "발급된 Lokicash의 최대 유효 기간 (기본값: 1일)",
     "circleMaxExpiryHelper": "발급된 서클 지갑의 최대 유효 기간 (기본값: 30일)",
     "minRenewalLabel": "최소 갱신 주기",

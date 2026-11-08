@@ -323,9 +323,9 @@ const Scopes: React.FC<ScopesProps> = ({
           {cashHub && onCashHubConfigChanged && (
             <div className="mt-3">
               <CashHubConfigCard
-                budgetLabel="Max Wallet Budget"
+                budgetLabel="Max Cash Bill Budget"
                 budgetHelper="Maximum cash that can be minted into each cash bill from this connection"
-                expiryLabel="Max Wallet Expiry"
+                expiryLabel="Max Cash Bill Expiry"
                 expiryHelper="Maximum lifetime for a cash bill's minted cash"
                 perWalletMaxLoki={cashPerWalletMaxLoki}
                 onPerWalletMaxLokiChange={(perWalletMaxLoki) =>

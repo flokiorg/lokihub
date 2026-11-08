@@ -11,9 +11,11 @@
     "selectMember": "メンバーを選択",
     "nameLabel": "名前",
     "maxWalletBudgetLabel": "ウォレットの最大予算",
+    "cashMaxBudgetLabel": "Lokicash の最大予算",
     "minRenewalLabel": "最短更新間隔",
     "minRenewalHelper": "メンバーがサークルウォレットの予算に対してリクエストできる最短の更新間隔",
     "maxWalletExpiryLabel": "ウォレットの最長有効期限",
+    "cashMaxExpiryLabel": "Lokicash の最長有効期限",
     "feePpmLabel": "手数料（ppm）",
     "feePpmHelper": "サークルウォレットが行う支払いに課される100万分の1単位の手数料（0 = 無料）",
     "advancedSettings": "詳細設定",
@@ -222,7 +224,7 @@
     "duplicateIdentity": "このアイデンティティはすでに別の受取人が使用しています。",
     "walletBudgetLabel": "金額",
     "requestedSummary": "{{total}} loki をリクエスト",
-    "requestedSummaryWithMax": "{{total}} loki をリクエスト（このハブの最大ウォレット予算 {{max}} loki のうち）",
+    "requestedSummaryWithMax": "{{total}} loki をリクエスト（このハブの最大 Lokicash 予算 {{max}} loki のうち）",
     "claimDeadlineLabel": "引き換え期限",
     "deadlineExceeds": "このハブの最大引き換え期限（{{max}}）を超えています",
     "deadlineHelp": "各受取人は作成からこの期間内に引き換える必要があります",
@@ -235,7 +237,7 @@
     "recipientColumn": "受取人",
     "revealConnection": "接続を表示",
     "selectRecipient": "受取人を選択",
-    "selectAllInWallet": "このウォレットの受取人をすべて選択",
+    "selectAllInWallet": "この Lokicash の受取人をすべて選択",
     "collapseRecipients": "受取人を折りたたむ",
     "expandRecipients": "受取人を展開",
     "removeWallet": "Lokicash を削除",
@@ -319,7 +321,7 @@
   "newCashHub": {
     "title": "新しい JIT ウォレットハブ",
     "description": "受取人に支出専用の JIT ウォレットを発行する、事前に資金提供されたハブを作成します",
-    "maxWalletBudgetHelper": "このハブから発行される各 JIT ウォレットに割り当てられる最大予算",
+    "maxWalletBudgetHelper": "このハブから発行される各 Lokicash に割り当てられる最大予算",
     "maxExpiryHelper": "発行された JIT ウォレットの最長有効期限",
     "submit": "JIT ウォレットハブを作成",
     "createdToast": "JIT ウォレットハブ「{{name}}」を作成しました",
@@ -419,7 +421,7 @@
     "medianTimeToRedeemInfo": "紙幣が償還されるまでの典型的な滞留時間。直近 1,000 件の償還で測定します。",
     "writtenOffInfo": "このハブに一切戻せなかった額 — 回収ではなく損失です。",
     "leftInBudgetInfo": "更新までに残っているこのハブ自身の支払い予算。ハブの接続経由の通常の支払いを制限しますが、発行できる現金量は制限しません。",
-    "budgetRenewalInfo": "このハブの支払い予算の総額とリセット間隔。発行はここから引かれません。紙幣の額はハブ設定のウォレットごとの上限で決まります。"
+    "budgetRenewalInfo": "このハブの支払い予算の総額とリセット間隔。発行はここから引かれません。紙幣の額はハブ設定の Lokicash ごとの上限で決まります。"
   },
   "cashCharts": {
     "outstandingTitle": "未償還額の推移",

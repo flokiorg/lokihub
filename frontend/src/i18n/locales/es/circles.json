@@ -11,9 +11,11 @@
     "selectMember": "Seleccionar miembro",
     "nameLabel": "Nombre",
     "maxWalletBudgetLabel": "Presupuesto máximo de la billetera",
+    "cashMaxBudgetLabel": "Presupuesto máximo del Lokicash",
     "minRenewalLabel": "Renovación mínima",
     "minRenewalHelper": "Período de renovación más corto que un miembro puede solicitar para el presupuesto de su billetera",
     "maxWalletExpiryLabel": "Caducidad máxima de la billetera",
+    "cashMaxExpiryLabel": "Caducidad máxima del Lokicash",
     "feePpmLabel": "Comisión (ppm)",
     "feePpmHelper": "Comisión por millón cobrada en los pagos realizados por las billeteras de círculo (0 = gratis)",
     "advancedSettings": "Ajustes avanzados",
@@ -222,7 +224,7 @@
     "duplicateIdentity": "Esta identidad ya la usa otro destinatario.",
     "walletBudgetLabel": "Importe",
     "requestedSummary": "{{total}} loki solicitados",
-    "requestedSummaryWithMax": "{{total}} loki solicitados de un presupuesto máximo de billetera de este hub de {{max}} loki",
+    "requestedSummaryWithMax": "{{total}} loki solicitados de un presupuesto máximo de Lokicash de este hub de {{max}} loki",
     "claimDeadlineLabel": "Plazo de canje",
     "deadlineExceeds": "Supera el plazo máximo de canje de este hub de {{max}}",
     "deadlineHelp": "Cada destinatario debe canjear dentro de este plazo desde la creación",
@@ -235,7 +237,7 @@
     "recipientColumn": "Destinatario",
     "revealConnection": "Revelar conexión",
     "selectRecipient": "Seleccionar destinatario",
-    "selectAllInWallet": "Seleccionar todos los destinatarios de esta billetera",
+    "selectAllInWallet": "Seleccionar todos los destinatarios de este Lokicash",
     "collapseRecipients": "Contraer destinatarios",
     "expandRecipients": "Expandir destinatarios",
     "removeWallet": "Eliminar Lokicash",
@@ -319,7 +321,7 @@
   "newCashHub": {
     "title": "Nuevo Hub de Billetera JIT",
     "description": "Crea un hub prefinanciado que emite billeteras JIT de solo gasto a los beneficiarios",
-    "maxWalletBudgetHelper": "Presupuesto máximo que se puede asignar a cada billetera JIT emitida desde este hub",
+    "maxWalletBudgetHelper": "Presupuesto máximo que se puede asignar a cada Lokicash emitido desde este hub",
     "maxExpiryHelper": "Vida útil máxima de las billeteras JIT emitidas",
     "submit": "Crear Hub de Billetera JIT",
     "createdToast": "Hub de Billetera JIT \"{{name}}\" creado",
@@ -419,7 +421,7 @@
     "medianTimeToRedeemInfo": "Cuánto suele tardar un billete en canjearse, medido sobre los últimos 1000 canjes.",
     "writtenOffInfo": "Valor que no se pudo devolver al hub en absoluto: una pérdida, no una recuperación.",
     "leftInBudgetInfo": "Cuánto queda del presupuesto de pagos de este hub antes de renovarse. Limita los pagos ordinarios hechos por su conexión, NO cuánto efectivo puede acuñar.",
-    "budgetRenewalInfo": "El presupuesto de pagos completo de este hub y cada cuánto se reinicia. La acuñación no sale de ahí; el tamaño de un billete lo limita el máximo por billetera en los ajustes del hub."
+    "budgetRenewalInfo": "El presupuesto de pagos completo de este hub y cada cuánto se reinicia. La acuñación no sale de ahí; el tamaño de un billete lo limita el máximo por Lokicash en los ajustes del hub."
   },
   "cashCharts": {
     "outstandingTitle": "Pendiente a lo largo del tiempo",

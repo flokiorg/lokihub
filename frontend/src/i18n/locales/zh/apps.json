@@ -39,7 +39,7 @@
     "customAmount": "自定义预算金额（{{unit}}）",
     "spent": "已支出",
     "remaining": "剩余",
-    "cashHubCaption": "限制通过此中心自身连接进行的普通支付。它不限制铸造——现金券由内部转账提供资金，其额度由中心设置中的每钱包上限决定。"
+    "cashHubCaption": "限制通过此中心自身连接进行的普通支付。它不限制铸造——现金券由内部转账提供资金，其额度由中心设置中的每 Lokicash 上限决定。"
   },
   "renewals": {
     "daily": "每日",
@@ -122,9 +122,11 @@
     "cashHubSettingsDescription": "更改仅适用于此后发放的 Lokicash，不会影响已发放的。",
     "circleHubSettingsDescription": "更改仅适用于此后创建的圈子钱包，不会影响已创建的钱包。",
     "maxWalletBudgetLabel": "最大钱包预算",
+    "cashMaxBudgetLabel": "最大 Lokicash 预算",
     "cashMaxWalletBudgetHelper": "此中心发放的每个 Lokicash 可分配的最大预算（默认：1,000 loki）",
     "circleMaxWalletBudgetHelper": "成员为其圈子钱包可申请的最大预算（默认：1,000 loki）",
     "maxWalletExpiryLabel": "最长钱包有效期",
+    "cashMaxExpiryLabel": "最长 Lokicash 有效期",
     "cashMaxExpiryHelper": "已发放 Lokicash 的最长有效期（默认：1 天）",
     "circleMaxExpiryHelper": "已发放圈子钱包的最长有效期（默认：30 天）",
     "minRenewalLabel": "最短续期周期",

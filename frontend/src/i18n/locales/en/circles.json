@@ -11,9 +11,11 @@
     "selectMember": "Select member",
     "nameLabel": "Name",
     "maxWalletBudgetLabel": "Max Wallet Budget",
+    "cashMaxBudgetLabel": "Max Cash Bill Budget",
     "minRenewalLabel": "Min Renewal",
     "minRenewalHelper": "Shortest renewal period a member may request for their circle wallet's budget",
     "maxWalletExpiryLabel": "Max Wallet Expiry",
+    "cashMaxExpiryLabel": "Max Cash Bill Expiry",
     "feePpmLabel": "Fee (ppm)",
     "feePpmHelper": "Per-million fee charged on payments made by circle wallets (0 = free)",
     "advancedSettings": "Advanced settings",
@@ -234,7 +236,7 @@
     "duplicateIdentity": "This identity is already used by another recipient.",
     "walletBudgetLabel": "Amount",
     "requestedSummary": "{{total}} loki requested",
-    "requestedSummaryWithMax": "{{total}} loki requested of this hub's max wallet budget of {{max}} loki",
+    "requestedSummaryWithMax": "{{total}} loki requested of this hub's max bill budget of {{max}} loki",
     "claimDeadlineLabel": "Redeem Deadline",
     "deadlineExceeds": "Exceeds this hub's max redeem deadline of {{max}}",
     "deadlineHelp": "Every recipient must redeem within this long of creation",
@@ -247,7 +249,7 @@
     "recipientColumn": "Recipient",
     "revealConnection": "Reveal connection",
     "selectRecipient": "Select recipient",
-    "selectAllInWallet": "Select all recipients in this wallet",
+    "selectAllInWallet": "Select all recipients in this bill",
     "collapseRecipients": "Collapse recipients",
     "expandRecipients": "Expand recipients",
     "removeWallet": "Remove Lokicash",
@@ -441,7 +443,7 @@
     "medianTimeToRedeemInfo": "How long a bill typically sits before it is redeemed, measured over the most recent 1,000 redemptions.",
     "writtenOffInfo": "Value that could not be returned to this hub at all — a loss, not a recovery.",
     "leftInBudgetInfo": "How much of this hub's own payment budget is left before it renews. It caps ordinary payments made over the hub's connection — it does NOT limit how much cash the hub can mint.",
-    "budgetRenewalInfo": "This hub's full payment budget and how often it resets. Minting is not drawn from it; a bill's size is capped by the per-wallet maximum in Hub Settings."
+    "budgetRenewalInfo": "This hub's full payment budget and how often it resets. Minting is not drawn from it; a bill's size is capped by the per-bill maximum in Hub Settings."
   },
   "cashCharts": {
     "outstandingTitle": "Outstanding over time",
