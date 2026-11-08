@@ -24,6 +24,7 @@ import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { ONCHAIN_DUST_LOKI } from "src/constants";
 import { useBalances } from "src/hooks/useBalances";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
@@ -98,6 +99,9 @@ function OnchainForm({
 }) {
   const navigate = useNavigate();
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const explorerLabel =
+    hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
   const { data: balances } = useBalances();
   const { unit, scaleInputAmount, parseInputAmount } = useUnit();
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
@@ -272,7 +276,7 @@ function OnchainForm({
                   to={info?.mempoolUrl}
                   className="text-muted-foreground underline flex items-center gap-2"
                 >
-                  View on Flokicoin Explorer
+                  View on {explorerLabel}
                   <ExternalLinkIcon className="w-4 h-4" />
                 </ExternalLink>
               </div>

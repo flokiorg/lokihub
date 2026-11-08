@@ -89,6 +89,12 @@ describe("formatNativeAmount (chain-neutral: a BTC/sat asset)", () => {
     );
     expect(FLOKICOIN_NATIVE_ASSET.ticker).toBe("FLC");
   });
+
+  it("flips the block-explorer label with the asset", () => {
+    // Components interpolate asset.explorer.label into "View on {{explorer}}".
+    expect(FLOKICOIN_NATIVE_ASSET.explorer.label).toBe("Flokicoin Explorer");
+    expect(BTC.explorer.label).toBe("mempool.space");
+  });
 });
 
 // Sibling helpers: numerically identical for Flokicoin, generalized for BTC.

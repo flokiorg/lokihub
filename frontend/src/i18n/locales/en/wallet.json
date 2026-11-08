@@ -99,7 +99,7 @@
       "waiting": "Waiting for Payment...",
       "newAddress": "New Address",
       "waitingConfirm": "Waiting for On-chain Confirmation...",
-      "viewExplorer": "View on Flokicoin Explorer",
+      "viewExplorer": "View on Explorer",
       "received": "Transaction Received!",
       "receiveAnother": "Receive Another Payment",
       "backToWallet": "Back to Wallet"

@@ -29,6 +29,7 @@ import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Input } from "src/components/ui/input";
 import { ONCHAIN_DUST_LOKI } from "src/constants";
 import { useBalances } from "src/hooks/useBalances";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
@@ -41,6 +42,9 @@ import { request } from "src/utils/request";
 export default function WithdrawOnchainFunds() {
   const [isLoading, setLoading] = React.useState(false);
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const explorerLabel =
+    hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
   const { data: balances } = useBalances();
   const { parseInputAmount, scaleInputAmount } = useUnit();
 
@@ -162,7 +166,7 @@ export default function WithdrawOnchainFunds() {
           to={`${info?.mempoolUrl}/tx/${transactionId}`}
           className="underline flex items-center mt-2"
         >
-          View on Flokicoin Explorer
+          View on {explorerLabel}
           <ExternalLinkIcon className="size-4 ms-2" />
         </ExternalLink>
         <p>Your on-chain balance in Lokihub may take some time to update.</p>
@@ -319,7 +323,7 @@ export default function WithdrawOnchainFunds() {
                       to={info?.mempoolUrl}
                       className="text-sm text-muted-foreground underline flex items-center gap-2"
                     >
-                      View on Flokicoin Explorer
+                      View on {explorerLabel}
                       <ExternalLinkIcon className="w-4 h-4" />
                     </ExternalLink>
                   </div>

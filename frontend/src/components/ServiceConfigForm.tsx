@@ -64,8 +64,7 @@ const fallbackT: TFunction = (
 ) => {
   const map: Record<string, string> = {
     "services.validation.relayRequired": "At least one relay is required",
-    "services.validation.explorerRequired":
-      "Flokicoin Explorer URL is required.",
+    "services.validation.explorerRequired": "Explorer URL is required.",
     "services.validation.invalidUrl": `${options?.field ?? "Field"}: invalid URL format`,
   };
   return map[key] ?? key;
@@ -129,13 +128,10 @@ export const validateServiceConfig = (
   if (!state.mempoolApi) {
     errors.push(t("services.validation.explorerRequired"));
   } else {
-    const mempoolErr = validateHTTPURL(
-      state.mempoolApi,
-      "Flokicoin Explorer URL"
-    );
+    const mempoolErr = validateHTTPURL(state.mempoolApi, "Explorer URL");
     if (mempoolErr)
       errors.push(
-        t("services.validation.invalidUrl", { field: "Flokicoin Explorer URL" })
+        t("services.validation.invalidUrl", { field: "Explorer URL" })
       );
   }
 

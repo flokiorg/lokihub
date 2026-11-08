@@ -24,6 +24,7 @@ import {
 import { ExternalLinkButton } from "src/components/ui/custom/external-link-button";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { useOnchainAddress } from "src/hooks/useOnchainAddress";
@@ -137,6 +138,9 @@ function DepositPending({
   txId: string;
 }) {
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const explorerLabel =
+    hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
   const { t } = useTranslation("channels");
 
   return (
@@ -162,7 +166,9 @@ function DepositPending({
             variant="outline"
             className="flex items-center mt-2"
           >
-            {t("onchain.viewExplorer", "View on Flokicoin Explorer")}
+            {t("onchain.viewExplorer", "View on {{explorer}}", {
+              explorer: explorerLabel,
+            })}
             <ExternalLinkIcon className="size-4 ms-2" />
           </ExternalLinkButton>
         </div>
@@ -173,6 +179,9 @@ function DepositPending({
 
 function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const explorerLabel =
+    hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
   const { t } = useTranslation("channels");
 
   return (
@@ -197,7 +206,9 @@ function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
               variant="outline"
               className="flex items-center mt-2"
             >
-              {t("onchain.viewExplorer", "View on Flokicoin Explorer")}
+              {t("onchain.viewExplorer", "View on {{explorer}}", {
+              explorer: explorerLabel,
+            })}
               <ExternalLinkIcon className="size-4 ms-2" />
             </ExternalLinkButton>
           </div>
