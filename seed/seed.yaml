@@ -80,6 +80,7 @@ fiat_rate_oracle:
 # Flokicoin, so nothing changes unless an operator overrides it via a
 # LOKIHUB_SEED_FILE. bech32_hrp is informational in L1 (load-bearing in L2).
 native_asset:
+  name: "Flokicoin"
   ticker: "FLC"
   symbol: "FLC"
   unit_name: "loki"

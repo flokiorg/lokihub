@@ -19,6 +19,7 @@ export interface NativeAssetExplorer {
 // useHubInfo().nativeAsset directly. The embedded Flokicoin default is
 // FLOKICOIN_NATIVE_ASSET.
 export interface NativeAssetFormat {
+  name: string; // chain/brand name shown to users, e.g. "Flokicoin"
   ticker: string; // unit of account shown to users, e.g. "FLC"
   symbol: string; // symbol/glyph, often equal to ticker
   unitName: string; // base on-chain unit, e.g. "loki"
@@ -32,6 +33,7 @@ export interface NativeAssetFormat {
 
 // The embedded Flokicoin default — mirrors internal/seed/seed.yaml native_asset.
 export const FLOKICOIN_NATIVE_ASSET: NativeAssetFormat = {
+  name: "Flokicoin",
   ticker: "FLC",
   symbol: "FLC",
   unitName: "loki",

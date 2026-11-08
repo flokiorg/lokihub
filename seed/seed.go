@@ -66,6 +66,7 @@ type FiatRateOracle struct {
 // truth and an operator can rebrand the chain via LOKIHUB_SEED_FILE with no
 // code change. Informational in L1; bech32_hrp becomes load-bearing in L2.
 type NativeAsset struct {
+	Name              string              `yaml:"name" json:"name"` // chain/brand name shown to users, e.g. "Flokicoin"
 	Ticker            string              `yaml:"ticker" json:"ticker"`
 	Symbol            string              `yaml:"symbol" json:"symbol"`
 	UnitName          string              `yaml:"unit_name" json:"unitName"`

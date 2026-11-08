@@ -57,6 +57,7 @@ describe("formatFlokicoinAmount (regression: unchanged Flokicoin output)", () =>
 // "BTC" ticker with the same 8-decimal shape.
 describe("formatNativeAmount (chain-neutral: a BTC/sat asset)", () => {
   const BTC: NativeAssetFormat = {
+    name: "Bitcoin",
     ticker: "BTC",
     symbol: "₿",
     unitName: "sat",
@@ -106,6 +107,7 @@ describe("formatNativeAmount (chain-neutral: a BTC/sat asset)", () => {
 // Sibling helpers: numerically identical for Flokicoin, generalized for BTC.
 describe("getFlokicoinUnit / lokiToDisplay / displayToLoki", () => {
   const BTC: NativeAssetFormat = {
+    name: "Bitcoin",
     ticker: "BTC",
     symbol: "₿",
     unitName: "sat",

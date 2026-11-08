@@ -5,7 +5,7 @@ import i18n from "src/i18n";
 import { FLOKICOIN_NATIVE_ASSET } from "src/utils/flokicoinFormatting";
 
 /**
- * Keeps i18next's global interpolation defaults ({{unit}}/{{ticker}}/{{subunit}})
+ * Keeps i18next's global interpolation defaults ({{unit}}/{{ticker}}/{{subunit}}/{{chain}})
  * in sync with the hub's native asset, so locale strings render the right units
  * without threading values through every t() call. Falls back to the embedded
  * Flokicoin asset until hub info loads.
@@ -16,7 +16,12 @@ export function useNativeAssetI18n() {
 
   useEffect(() => {
     const a = asset ?? FLOKICOIN_NATIVE_ASSET;
-    const vars = { unit: a.unitName, ticker: a.ticker, subunit: a.subunitName };
+    const vars = {
+      unit: a.unitName,
+      ticker: a.ticker,
+      subunit: a.subunitName,
+      chain: a.name,
+    };
 
     if (i18n.options.interpolation) {
       i18n.options.interpolation.defaultVariables = {
