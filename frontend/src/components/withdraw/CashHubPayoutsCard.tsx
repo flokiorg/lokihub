@@ -21,8 +21,6 @@ import {
 import {
   cancelNote,
   depthLabel,
-  feeRate,
-  loki,
   outpoint,
   overdue,
   shorten,
@@ -30,6 +28,7 @@ import {
   type PayoutDetail,
   type PayoutRow,
 } from "src/components/withdraw/payouts";
+import { useNativeAmountFormat } from "src/hooks/useNativeAmountFormat";
 import { cn } from "src/lib/utils";
 import { swrFetcher } from "src/utils/swr";
 
@@ -41,6 +40,7 @@ const when = (secs?: number) =>
 // operator action changes a payout (WP-19 item 10).
 export function CashHubPayoutsCard({ hubId }: { hubId: number }) {
   const { t } = useTranslation("settings");
+  const { loki } = useNativeAmountFormat();
   const { data: rows, error } = useSWR<PayoutRow[]>(
     `/api/cash-hubs/${hubId}/payouts`,
     swrFetcher
@@ -137,6 +137,7 @@ function PayoutDetailDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation("settings");
+  const { loki, feeRate } = useNativeAmountFormat();
   const { data: d } = useSWR<PayoutDetail>(
     payoutId ? `/api/cash-hubs/${hubId}/payouts/${payoutId}` : null,
     swrFetcher
