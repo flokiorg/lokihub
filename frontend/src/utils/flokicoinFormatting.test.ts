@@ -95,6 +95,12 @@ describe("formatNativeAmount (chain-neutral: a BTC/sat asset)", () => {
     expect(FLOKICOIN_NATIVE_ASSET.explorer.label).toBe("Flokicoin Explorer");
     expect(BTC.explorer.label).toBe("mempool.space");
   });
+
+  it("uses the native base unit for fee rates (sat/vB)", () => {
+    // Fee-rate labels render `${nativeAsset.unitName}/vB`.
+    expect(`${FLOKICOIN_NATIVE_ASSET.unitName}/vB`).toBe("loki/vB");
+    expect(`${BTC.unitName}/vB`).toBe("sat/vB");
+  });
 });
 
 // Sibling helpers: numerically identical for Flokicoin, generalized for BTC.

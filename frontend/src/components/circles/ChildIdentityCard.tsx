@@ -7,6 +7,7 @@ import {
   QrCodeIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 
 import { CashStatusBadge } from "src/components/cash/CashStatusBadge";
 import { NostrIdentityHeader } from "src/components/circles/NostrIdentityHeader";
@@ -140,7 +141,7 @@ function BeneficiaryProfile({
       >
         <div className="flex items-center gap-2 sm:justify-end">
           <span className="text-sm font-medium">
-            {(claim.amount_mloki / 1000).toLocaleString()} loki
+            <FormattedFlokicoinAmount amount={claim.amount_mloki} />
           </span>
           <CashStatusBadge status={claim.status} />
         </div>

@@ -137,14 +137,15 @@ export function overdue(
 
 // feeRate is a version's fee rate in loki per vbyte, from per-1000-vbyte.
 export function feeRate(
-  v: Pick<PayoutVersion, "fee_rate_sat_kvb">
+  v: Pick<PayoutVersion, "fee_rate_sat_kvb">,
+  unitName = "loki"
 ): string | null {
   if (v.fee_rate_sat_kvb == null) {
     return null;
   }
-  return `${(v.fee_rate_sat_kvb / 1000).toFixed(3).replace(/\.?0+$/, "")} loki/vB`;
+  return `${(v.fee_rate_sat_kvb / 1000).toFixed(3).replace(/\.?0+$/, "")} ${unitName}/vB`;
 }
 
-export function loki(millis: number): string {
-  return `${millisToLoki(millis)} loki`;
+export function loki(millis: number, unitName = "loki"): string {
+  return `${millisToLoki(millis)} ${unitName}`;
 }

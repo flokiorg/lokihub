@@ -56,6 +56,8 @@ describe("payout display", () => {
     expect(feeRate({ fee_rate_sat_kvb: 2500 })).toBe("2.5 loki/vB");
     expect(feeRate({ fee_rate_sat_kvb: 1000 })).toBe("1 loki/vB");
     expect(feeRate({})).toBeNull();
+    // A different native asset flips the rate unit (BTC => sat/vB).
+    expect(feeRate({ fee_rate_sat_kvb: 2500 }, "sat")).toBe("2.5 sat/vB");
     expect(loki(19258000)).toBe("19258 loki");
     expect(shorten("short")).toBe("short");
   });

@@ -69,6 +69,7 @@ import { useIdentityAuthorities } from "src/hooks/useIdentityAuthorities";
 import { useNip05Verification } from "src/hooks/useNip05Verification";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
 import { NostrProfile, useNostrProfiles } from "src/hooks/useNostrProfiles";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
@@ -1669,7 +1670,9 @@ export const CashHubAllocations = React.forwardRef<
                         >
                           <div className="flex items-center justify-end gap-2">
                             <span className="text-sm font-medium">
-                              {totalLoki.toLocaleString()} loki
+                              <FormattedFlokicoinAmount
+                                amount={totalLoki * 1000}
+                              />
                             </span>
                             {/* An archived bill no longer exists. Without
                                 this it is indistinguishable from a live one
@@ -1891,8 +1894,9 @@ export const CashHubAllocations = React.forwardRef<
 
                               <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:justify-end sm:gap-3">
                                 <span className="text-sm font-medium tabular-nums">
-                                  {(c.amount_mloki / 1000).toLocaleString()}{" "}
-                                  loki
+                                  <FormattedFlokicoinAmount
+                                    amount={c.amount_mloki}
+                                  />
                                 </span>
                                 <CashStatusBadge status={c.status} />
                                 {ownerLock(c) && (

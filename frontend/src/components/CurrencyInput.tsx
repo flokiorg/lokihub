@@ -1,6 +1,8 @@
 import React from "react";
 import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useUnit } from "src/hooks/useUnit";
+import { FLOKICOIN_NATIVE_ASSET } from "src/utils/flokicoinFormatting";
 import { cn } from "src/lib/utils";
 
 interface CurrencyInputProps
@@ -21,6 +23,8 @@ export function CurrencyInput({
   ...props
 }: CurrencyInputProps) {
   const { displayFormat } = useUnit();
+  const { data: hubInfo } = useHubInfo();
+  const asset = hubInfo?.nativeAsset ?? FLOKICOIN_NATIVE_ASSET;
   // Callers typically derive `amount` from a parsed number (e.g.
   // scaleInputAmount(loki, unit).toString()), which round-trips through
   // parseFloat on every keystroke. Deleting down to something like "0.0000"
@@ -41,7 +45,7 @@ export function CurrencyInput({
     if (displayFormat !== "auto") {
       return (
         <span className="me-3 text-muted-foreground text-sm font-medium">
-          {displayFormat === "flc" ? "FLC" : "loki"}
+          {displayFormat === "flc" ? asset.ticker : asset.unitName}
         </span>
       );
     }
@@ -61,7 +65,7 @@ export function CurrencyInput({
             onInputUnitChange("FLC");
           }}
         >
-          FLC
+          {asset.ticker}
         </button>
         <button
           type="button"
@@ -76,7 +80,7 @@ export function CurrencyInput({
             onInputUnitChange("loki");
           }}
         >
-          loki
+          {asset.unitName}
         </button>
       </div>
     );

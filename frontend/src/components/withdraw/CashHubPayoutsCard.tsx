@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import useSWR from "swr";
 import { Badge } from "src/components/ui/badge";
 import {
@@ -210,7 +211,11 @@ function PayoutDetailDialog({
                   </div>
                   <div className="text-muted-foreground flex flex-wrap gap-x-4">
                     {feeRate(v) && <span>{feeRate(v)}</span>}
-                    {v.fee_sat != null && <span>{v.fee_sat} loki</span>}
+                    {v.fee_sat != null && (
+                      <span>
+                        <FormattedFlokicoinAmount amount={v.fee_sat * 1000} />
+                      </span>
+                    )}
                     <span>
                       {t("withdraw.payouts.inputs", { count: v.inputs.length })}
                     </span>

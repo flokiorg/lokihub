@@ -26,7 +26,9 @@ import {
   FLOKICOIN_DISPLAY_FORMAT_FLC,
   FLOKICOIN_DISPLAY_FORMAT_LOKI,
 } from "src/constants";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
+import { FLOKICOIN_NATIVE_ASSET } from "src/utils/flokicoinFormatting";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
 
@@ -37,6 +39,8 @@ function Settings() {
   const [fiatCurrencies, setFiatCurrencies] = useState<[string, string][]>([]);
 
   const { data: info, mutate: reloadInfo } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const asset = hubInfo?.nativeAsset ?? FLOKICOIN_NATIVE_ASSET;
 
   useEffect(() => {
     async function fetchCurrencies() {
@@ -181,10 +185,10 @@ function Settings() {
                     {t("units.auto")}
                   </SelectItem>
                   <SelectItem value={FLOKICOIN_DISPLAY_FORMAT_FLC}>
-                    FLC
+                    {asset.ticker}
                   </SelectItem>
                   <SelectItem value={FLOKICOIN_DISPLAY_FORMAT_LOKI}>
-                    loki
+                    {asset.unitName}
                   </SelectItem>
                 </SelectContent>
               </Select>

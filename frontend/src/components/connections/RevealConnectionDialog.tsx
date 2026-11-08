@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
 import {
   Dialog,
@@ -132,7 +133,9 @@ export function RevealConnectionDialog({
                 {t("connectAppCard.amountLabel", "Amount")}
               </span>
               <span className="font-medium tabular-nums">
-                {walletSummary.amountLoki.toLocaleString()} loki
+                <FormattedFlokicoinAmount
+                  amount={walletSummary.amountLoki * 1000}
+                />
               </span>
             </div>
             <div className="flex items-center justify-between">
