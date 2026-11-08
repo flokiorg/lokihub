@@ -22,7 +22,6 @@ import (
 
 const (
 	// Dashboard limits and scoring
-	radarFullMark        = 150
 	defaultListLimit     = 100
 	analyticsListLimit   = 2000
 	summaryListLimit     = 1000
@@ -142,8 +141,6 @@ func (s *Handlers) Route(req *lsps.JsonRpcRequest) *lsps.JsonRpcResponse {
 		return s.handleGetSummary(req)
 	case "list_orders":
 		return s.handleListOrders(req)
-	case "get_radar_data":
-		return s.handleGetRadarData(req)
 	case "get_analytics":
 		return s.handleGetAnalytics(req)
 	case "list_nodes":
@@ -167,63 +164,6 @@ func (s *Handlers) Route(req *lsps.JsonRpcRequest) *lsps.JsonRpcResponse {
 	default:
 		return lsps.NewJsonRpcErrorResponse(req.Id, -32601, "Method not found", nil)
 	}
-}
-
-func (s *Handlers) handleGetRadarData(req *lsps.JsonRpcRequest) *lsps.JsonRpcResponse {
-	// Calculate real metrics
-	totalCapacity, _, reserved := s.getLiquidityMetrics(context.Background())
-
-	// 1. Liquidity Score (0-radarFullMark)
-	liquidityScore := radarFullMark
-	if totalCapacity > 0 {
-		usage := float64(reserved) / float64(totalCapacity)
-		liquidityScore = int(radarFullMark * (1.0 - usage))
-	}
-
-	// 2. Uptime Score (0-radarFullMark)
-	uptimeScore := radarFullMark
-	nodes := s.nodesService.GetNodes()
-	if len(nodes) > 0 {
-		peers, _ := nodes[0].Client.ListPeers()
-		activeCount := 0
-		for _, p := range peers {
-			if p.Active {
-				activeCount++
-			}
-		}
-		if len(peers) > 0 {
-			uptimeScore = int(radarFullMark * (float64(activeCount) / float64(len(peers))))
-		}
-	}
-
-	// 3. Success Score (0-radarFullMark)
-	// Base success score weighted by order outcomes
-	successScore := (radarFullMark * 85) / 100 // 85% base
-	orders, _ := s.openingStore.ListLsps1Orders(defaultListLimit, 0)
-	if len(orders) > 0 {
-		completed := 0
-		failed := 0
-		for _, o := range orders {
-			if o.OrderState == string(lsps.Lsps1OrderStateCompleted) {
-				completed++
-			} else if o.OrderState == string(lsps.Lsps1OrderStateFailed) {
-				failed++
-			}
-		}
-		if completed+failed > 0 {
-			successScore = int(radarFullMark * (float64(completed) / float64(completed+failed)))
-		}
-	}
-
-	data := []map[string]interface{}{
-		{"subject": "Liquidity", "A": liquidityScore, "fullMark": radarFullMark},
-		{"subject": "Uptime", "A": uptimeScore, "fullMark": radarFullMark},
-		{"subject": "Speed", "A": 120, "fullMark": radarFullMark}, // TODO: compute real speed
-		{"subject": "Success", "A": successScore, "fullMark": radarFullMark},
-		{"subject": "Fees", "A": 110, "fullMark": radarFullMark}, // TODO: compute fee score
-		{"subject": "Compliance", "A": radarFullMark, "fullMark": radarFullMark},
-	}
-	return lsps.NewJsonRpcResponse(req.Id, data)
 }
 
 func (s *Handlers) handleGetAnalytics(req *lsps.JsonRpcRequest) *lsps.JsonRpcResponse {
