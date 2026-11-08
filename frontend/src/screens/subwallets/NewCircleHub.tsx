@@ -12,6 +12,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "src/components/ui/accordion";
+import { FieldSet, FieldLegend } from "src/components/ui/field";
 import { Button } from "src/components/ui/button";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { DurationInput } from "src/components/DurationInput";
@@ -339,7 +340,7 @@ export function NewCircleHub() {
       <RelayHint className="max-w-lg" />
       <form
         onSubmit={handleSubmit}
-        className="flex flex-col items-start gap-6 max-w-lg"
+        className="flex w-full flex-col items-start gap-6 max-w-2xl"
       >
         <div className="w-full grid gap-1.5">
           <Label htmlFor="name">{t("common.nameLabel")}</Label>
@@ -526,78 +527,84 @@ export function NewCircleHub() {
           </div>
         ) : null}
 
+        <FieldSet className="w-full gap-4">
+          <FieldLegend variant="label">
+            {t("newCircleHub.walletLimitsLegend")}
+          </FieldLegend>
+          <div className="w-full grid gap-1.5">
+            <Label htmlFor="perWalletMax">
+              {t("common.maxWalletBudgetLabel")}
+            </Label>
+            <CurrencyInput
+              id="perWalletMax"
+              amount={
+                perWalletMaxLoki
+                  ? scaleInputAmount(perWalletMaxLoki, inputUnit).toString()
+                  : ""
+              }
+              onAmountChange={(val) =>
+                setPerWalletMaxLoki(
+                  parseInputAmount(parseFloat(val) || 0, inputUnit)
+                )
+              }
+              inputUnit={inputUnit}
+              onInputUnitChange={setInputUnit}
+              required
+              min={scaleInputAmount(MIN_CIRCLE_WALLET_MAX_LOKI, inputUnit)}
+            />
+            <p className="text-muted-foreground text-sm">
+              {t("newCircleHub.maxWalletBudgetHelper")}{" "}
+              {t("newCircleHub.minWalletBudgetHint", {
+                min: MIN_CIRCLE_WALLET_MAX_LOKI,
+              })}
+            </p>
+          </div>
+          <div className="w-full grid gap-1.5">
+            <BudgetRenewalSelect
+              label={t("common.minRenewalLabel")}
+              value={minBudgetRenewal}
+              onChange={setMinBudgetRenewal}
+            />
+            <p className="-mt-2 text-sm text-muted-foreground">
+              {t("common.minRenewalHelper")}
+            </p>
+          </div>
+          <div className="w-full grid gap-1.5">
+            <Label htmlFor="maxExpSecs">
+              {t("common.maxWalletExpiryLabel")}
+            </Label>
+            <DurationInput
+              id="maxExpSecs"
+              seconds={maxExpSecs}
+              onChange={setMaxExpSecs}
+              min={60}
+              presets={WEEK_SCALE_PRESETS}
+            />
+            <p className="text-muted-foreground text-sm">
+              {t("newCircleHub.maxExpiryHelper")}
+            </p>
+          </div>
+          <div className="w-full grid gap-1.5">
+            <Label htmlFor="feesPpm">{t("common.feePpmLabel")}</Label>
+            <Input
+              id="feesPpm"
+              type="number"
+              min={0}
+              value={feesPpm}
+              onChange={(e) => setFeesPpm(Number(e.target.value))}
+            />
+            <p className="text-muted-foreground text-sm">
+              {t("common.feePpmHelper")}
+            </p>
+          </div>
+        </FieldSet>
+
         <Accordion type="single" collapsible className="w-full">
           <AccordionItem value="advanced">
             <AccordionTrigger className="text-sm">
               {t("common.advancedSettings")}
             </AccordionTrigger>
             <AccordionContent className="grid gap-4">
-              <div className="w-full grid gap-1.5">
-                <Label htmlFor="perWalletMax">
-                  {t("common.maxWalletBudgetLabel")}
-                </Label>
-                <CurrencyInput
-                  id="perWalletMax"
-                  amount={
-                    perWalletMaxLoki
-                      ? scaleInputAmount(perWalletMaxLoki, inputUnit).toString()
-                      : ""
-                  }
-                  onAmountChange={(val) =>
-                    setPerWalletMaxLoki(
-                      parseInputAmount(parseFloat(val) || 0, inputUnit)
-                    )
-                  }
-                  inputUnit={inputUnit}
-                  onInputUnitChange={setInputUnit}
-                  required
-                  min={scaleInputAmount(MIN_CIRCLE_WALLET_MAX_LOKI, inputUnit)}
-                />
-                <p className="text-muted-foreground text-sm">
-                  {t("newCircleHub.maxWalletBudgetHelper")}{" "}
-                  {t("newCircleHub.minWalletBudgetHint", {
-                    min: MIN_CIRCLE_WALLET_MAX_LOKI,
-                  })}
-                </p>
-              </div>
-              <div className="w-full grid gap-1.5">
-                <BudgetRenewalSelect
-                  label={t("common.minRenewalLabel")}
-                  value={minBudgetRenewal}
-                  onChange={setMinBudgetRenewal}
-                />
-                <p className="-mt-2 text-sm text-muted-foreground">
-                  {t("common.minRenewalHelper")}
-                </p>
-              </div>
-              <div className="w-full grid gap-1.5">
-                <Label htmlFor="maxExpSecs">
-                  {t("common.maxWalletExpiryLabel")}
-                </Label>
-                <DurationInput
-                  id="maxExpSecs"
-                  seconds={maxExpSecs}
-                  onChange={setMaxExpSecs}
-                  min={60}
-                  presets={WEEK_SCALE_PRESETS}
-                />
-                <p className="text-muted-foreground text-sm">
-                  {t("newCircleHub.maxExpiryHelper")}
-                </p>
-              </div>
-              <div className="w-full grid gap-1.5">
-                <Label htmlFor="feesPpm">{t("common.feePpmLabel")}</Label>
-                <Input
-                  id="feesPpm"
-                  type="number"
-                  min={0}
-                  value={feesPpm}
-                  onChange={(e) => setFeesPpm(Number(e.target.value))}
-                />
-                <p className="text-muted-foreground text-sm">
-                  {t("common.feePpmHelper")}
-                </p>
-              </div>
               <div className="w-full grid gap-1.5">
                 <Label htmlFor="hubMaxAmount">
                   {t("newCircleHub.hubBudgetLabel")}

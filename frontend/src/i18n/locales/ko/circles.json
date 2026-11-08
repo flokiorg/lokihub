@@ -316,7 +316,8 @@
     "allowlistSeedFailedToast": "서클 지갑 허브 \"{{name}}\"이(가) 생성되었지만 멤버 목록 초기화에 실패했습니다 — 허브의 허용 목록 페이지에서 멤버를 추가하세요.",
     "errors": {
       "create": "서클 지갑 허브를 생성하지 못했습니다"
-    }
+    },
+    "walletLimitsLegend": "지갑 한도"
   },
   "newCashHub": {
     "title": "새 JIT 지갑 허브",

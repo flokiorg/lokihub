@@ -316,7 +316,8 @@
     "allowlistSeedFailedToast": "サークルウォレットハブ「{{name}}」を作成しましたが、メンバーリストの初期設定に失敗しました — ハブの許可リストページからメンバーを追加してください。",
     "errors": {
       "create": "サークルウォレットハブの作成に失敗しました"
-    }
+    },
+    "walletLimitsLegend": "ウォレットの上限"
   },
   "newCashHub": {
     "title": "新しい JIT ウォレットハブ",

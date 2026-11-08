@@ -328,7 +328,8 @@
     "allowlistSeedFailedToast": "Circle Wallet Hub \"{{name}}\" created, but seeding the member list failed — add members from the hub's Allowlist page.",
     "errors": {
       "create": "Failed to create Circle Wallet Hub"
-    }
+    },
+    "walletLimitsLegend": "Wallet limits"
   },
   "newCashHub": {
     "title": "New Cash Hub",

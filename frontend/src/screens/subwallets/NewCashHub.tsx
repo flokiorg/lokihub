@@ -113,7 +113,11 @@ export function NewCashHub() {
         />
         <div className="grid gap-2">
           <div className="flex gap-3">
-            <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate(-1)}
+            >
               {tc("actions.cancel")}
             </Button>
             <LoadingButton

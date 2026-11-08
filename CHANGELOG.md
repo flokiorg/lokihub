@@ -62,6 +62,9 @@ hub to services the user has explicitly selected.
   cap and expiry stay prominent while the economics knobs (min transfer, redeem
   fee, retention) move under one Advanced section — and keeps the Create button
   disabled until a name and budget are set.
+- Reorganizes the Circle Wallet creation form so the wallet budget, renewal,
+  expiry and fee limits move out of the collapsed Advanced section into a
+  visible Wallet limits panel, leaving only the hub-wide caps as advanced.
 - Breaking: renames the chain-branded hub-info/rate API to chain-neutral names
   (`/api/loki/rates` → `/api/rates`, `/api/loki/info` → `/api/hub/info`,
   `/api/loki/faq` → `/api/hub/faq`) so lokihub reads generically across

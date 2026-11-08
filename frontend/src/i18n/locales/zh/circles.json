@@ -316,7 +316,8 @@
     "allowlistSeedFailedToast": "圈子钱包中心“{{name}}”已创建，但初始化成员列表失败 —— 请从该中心的允许列表页面添加成员。",
     "errors": {
       "create": "创建圈子钱包中心失败"
-    }
+    },
+    "walletLimitsLegend": "钱包限额"
   },
   "newCashHub": {
     "title": "新建 JIT 钱包中心",

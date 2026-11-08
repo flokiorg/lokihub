@@ -316,7 +316,8 @@
     "allowlistSeedFailedToast": "Hub de Billetera de Círculo \"{{name}}\" creado, pero no se pudo sembrar la lista de miembros — añade miembros desde la página de Lista de Permitidos del hub.",
     "errors": {
       "create": "Error al crear el Hub de Billetera de Círculo"
-    }
+    },
+    "walletLimitsLegend": "Límites de la billetera"
   },
   "newCashHub": {
     "title": "Nuevo Hub de Billetera JIT",
