@@ -658,10 +658,17 @@ func (s *Handlers) handleLsps1GetOrder(req *JsonRpcRequest) *JsonRpcResponse {
 		if order.FundingOutpoint != nil {
 			vout = *order.FundingOutpoint
 		}
+		// Real funding time; fall back to CreatedAt only for orders funded
+		// before funded_at was persisted. channel.expires_at is measured from
+		// funding, so it derives from the same base.
+		fundedAt := order.CreatedAt
+		if order.FundedAt != nil {
+			fundedAt = *order.FundedAt
+		}
 		channelInfo = map[string]interface{}{
-			"funded_at":        order.CreatedAt.Format(time.RFC3339), // Fallback to CreatedAt if FundedAt missing
+			"funded_at":        fundedAt.Format(time.RFC3339),
 			"funding_outpoint": fmt.Sprintf("%s:%d", *order.FundingTxid, vout),
-			"expires_at":       order.CreatedAt.Add(time.Duration(order.ChannelExpiryBlocks) * time.Minute).Format(time.RFC3339),
+			"expires_at":       fundedAt.Add(time.Duration(order.ChannelExpiryBlocks) * time.Minute).Format(time.RFC3339),
 		}
 	}
 

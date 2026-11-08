@@ -806,32 +806,38 @@ func (s *Handlers) handleGetOrderDetail(req *lsps.JsonRpcRequest) *lsps.JsonRpcR
 		}
 	}
 
-	// Build a rich response with timeline events. Only ORDER_CREATED has a
-	// persisted time (CreatedAt); the per-state transition times are not
-	// recorded yet, so those events omit a timestamp rather than claim
-	// CreatedAt for all of them.
+	// Build a rich response with timeline events. ORDER_CREATED uses CreatedAt;
+	// the per-state transitions use their persisted timestamps (paid_at /
+	// funded_at / completed_at) and omit the field while still null, so no event
+	// ever claims a time it does not have.
+	withTime := func(m map[string]interface{}, t *time.Time) map[string]interface{} {
+		if t != nil {
+			m["timestamp"] = t.Format(time.RFC3339)
+		}
+		return m
+	}
 	timeline := []map[string]interface{}{
 		{"event": "ORDER_CREATED", "timestamp": order.CreatedAt.Format(time.RFC3339), "detail": "Order registered by peer"},
 	}
 	if order.PaymentState == string(lsps.Lsps1PaymentStatePaid) || order.OrderState == string(lsps.Lsps1OrderStateCompleted) {
-		timeline = append(timeline, map[string]interface{}{
+		timeline = append(timeline, withTime(map[string]interface{}{
 			"event":  "PAYMENT_RECEIVED",
 			"detail": "Invoice payment confirmed",
-		})
+		}, order.PaidAt))
 	}
 
 	if order.FundingTxid != nil && *order.FundingTxid != "" {
-		timeline = append(timeline, map[string]interface{}{
+		timeline = append(timeline, withTime(map[string]interface{}{
 			"event":  "CHANNEL_FUNDED",
 			"detail": "Funding TX: " + *order.FundingTxid,
-		})
+		}, order.FundedAt))
 	}
 
 	if order.OrderState == string(lsps.Lsps1OrderStateCompleted) {
-		timeline = append(timeline, map[string]interface{}{
+		timeline = append(timeline, withTime(map[string]interface{}{
 			"event":  "ORDER_COMPLETED",
 			"detail": "Channel opened and confirmed",
-		})
+		}, order.CompletedAt))
 	}
 
 	result := map[string]interface{}{

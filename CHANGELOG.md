@@ -95,10 +95,10 @@ hub to services the user has explicitly selected.
 
 ### Fixed
 
-- Fixes the LSP order-detail timeline that stamped PAYMENT_RECEIVED,
-  CHANNEL_FUNDED and ORDER_COMPLETED with the order's creation time; only the
-  creation event has a recorded time, so the others no longer show a
-  fabricated timestamp.
+- Fixes the LSP order-detail timeline and the LSPS1 `get_order` `funded_at`,
+  which stamped every lifecycle event with the order's creation time; the
+  per-state transition times (paid, funded, completed) are now persisted and
+  reported as the real times.
 - Shows the LSP dashboard's liquidity as unavailable (—) when the node or its
   wallet balance cannot be reached, instead of a placeholder 5 FLC figure.
 - Shows a loading indicator instead of a raw "TODO" debug string on the channel

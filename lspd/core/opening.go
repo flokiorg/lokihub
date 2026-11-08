@@ -111,6 +111,13 @@ type Lsps1Order struct {
 	// gets funded).
 	ExpiresAt          time.Time `json:"expires_at"`
 	ReservedAmountLoki uint64    `json:"reserved_amount_loki"`
+
+	// Per-state transition timestamps, nil until the order reaches that state
+	// (persisted so the dashboard timeline and the LSPS1 channel.funded_at
+	// report the real time, not the order's creation time).
+	PaidAt      *time.Time `json:"paid_at,omitempty"`
+	FundedAt    *time.Time `json:"funded_at,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
 type Lsps5Webhook struct {

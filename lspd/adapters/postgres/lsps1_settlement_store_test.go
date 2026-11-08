@@ -154,6 +154,49 @@ func TestUpdateLsps1OrderFunding_UpdatesFields(t *testing.T) {
 	assert.Equal(t, 2, *order.FundingOutpoint)
 }
 
+// TestUpdateLsps1OrderState_StampsTransitionTimestamps asserts the per-state
+// timestamps (paid_at/funded_at/completed_at) are recorded on the first
+// transition into each state and are not overwritten by a later one.
+func TestUpdateLsps1OrderState_StampsTransitionTimestamps(t *testing.T) {
+	store := NewPostgresOpeningStore(testPool)
+	orderId := "ts-transition-order"
+	insertTestOrder(t, orderId, "CREATED")
+
+	order, err := store.GetLsps1Order(orderId)
+	require.NoError(t, err)
+	assert.Nil(t, order.PaidAt)
+	assert.Nil(t, order.FundedAt)
+	assert.Nil(t, order.CompletedAt)
+
+	// CREATED -> PAID stamps paid_at.
+	ok, err := store.UpdateLsps1OrderState(orderId, "PAID", "PAID", "CREATED")
+	require.NoError(t, err)
+	require.True(t, ok)
+	order, err = store.GetLsps1Order(orderId)
+	require.NoError(t, err)
+	require.NotNil(t, order.PaidAt, "paid_at is stamped on the PAID transition")
+	paidAt := *order.PaidAt
+	assert.Nil(t, order.CompletedAt)
+
+	// Funding stamps funded_at.
+	funded, err := store.UpdateLsps1OrderFunding(orderId, "txid-ts", 0)
+	require.NoError(t, err)
+	require.True(t, funded)
+	order, err = store.GetLsps1Order(orderId)
+	require.NoError(t, err)
+	require.NotNil(t, order.FundedAt, "funded_at is stamped on funding")
+
+	// PAID -> COMPLETED stamps completed_at and must not overwrite paid_at.
+	ok, err = store.UpdateLsps1OrderState(orderId, "COMPLETED", "PAID", "PAID")
+	require.NoError(t, err)
+	require.True(t, ok)
+	order, err = store.GetLsps1Order(orderId)
+	require.NoError(t, err)
+	require.NotNil(t, order.CompletedAt, "completed_at is stamped on the COMPLETED transition")
+	require.NotNil(t, order.PaidAt)
+	assert.True(t, order.PaidAt.Equal(paidAt), "paid_at is not overwritten by a later transition")
+}
+
 // TestUpdateLsps1OrderFunding_SecondWriteOnFundedOrderRejected is the
 // regression test for FLSPD-0021: once an order's funding is recorded, a
 // later write with a DIFFERENT channel point must not silently overwrite it.
