@@ -253,45 +253,63 @@ func (svc *service) publishAllAppInfoEvents() {
 		}
 	}()
 
-	var apps []db.App
-	result := svc.db.Where("wallet_pubkey IS NOT NULL").Find(&apps)
-	if result.Error != nil {
-		logger.Logger.Error().Err(result.Error).Msg("Failed to fetch App records with non-empty WalletPubkey")
+	if err := svc.forEachAppWithWallet(walletSeedPageSize, func(apps []db.App) {
+		for _, app := range apps {
+			func(app db.App) {
+				// Skipped for cash bills — see db.PublishesNip47InfoEvent. Without
+				// this, every restart would re-advertise every live bill, undoing
+				// the suppression at creation time.
+				if !db.PublishesNip47InfoEvent(app.Kind) {
+					return
+				}
+				// queue info event publish request for all existing apps
+				walletPrivKey, err := svc.keys.GetAppWalletKey(app.ID)
+				if err != nil {
+					logger.Logger.Error().Err(err).
+						Uint("app_id", app.ID).
+						Msg("Could not get app wallet key")
+					return
+				}
+				logger.Logger.Debug().Interface("app_id", app.ID).Msg("Enqueuing publish of app info event")
+				for _, relayUrl := range svc.cfg.GetRelayUrls() {
+					svc.nip47Service.EnqueueNip47InfoPublishRequest(app.ID, *app.WalletPubkey, walletPrivKey, relayUrl)
+				}
+			}(app)
+		}
+	}); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch App records with non-empty WalletPubkey")
 		return
 	}
+}
 
-	for _, app := range apps {
-		func(app db.App) {
-			// Skipped for cash bills — see db.PublishesNip47InfoEvent. Without
-			// this, every restart would re-advertise every live bill, undoing
-			// the suppression at creation time.
-			if !db.PublishesNip47InfoEvent(app.Kind) {
-				return
-			}
-			// queue info event publish request for all existing apps
-			walletPrivKey, err := svc.keys.GetAppWalletKey(app.ID)
-			if err != nil {
-				logger.Logger.Error().Err(err).
-					Uint("app_id", app.ID).
-					Msg("Could not get app wallet key")
-				return
-			}
-			logger.Logger.Debug().Interface("app_id", app.ID).Msg("Enqueuing publish of app info event")
-			for _, relayUrl := range svc.cfg.GetRelayUrls() {
-				svc.nip47Service.EnqueueNip47InfoPublishRequest(app.ID, *app.WalletPubkey, walletPrivKey, relayUrl)
-			}
-		}(app)
+// walletSeedPageSize bounds how many App rows the startup wallet seeders hold
+// at once (keyset-paged by id), so neither the registry seed nor the per-wallet
+// subscription loop materialises the whole apps table at startup at any scale.
+const walletSeedPageSize = 10000
+
+// forEachAppWithWallet calls fn for each id-keyset page of Apps that have a
+// wallet_pubkey, in ascending id order. pageSize is a parameter so tests can
+// exercise the paging with a small value.
+func (svc *service) forEachAppWithWallet(pageSize int, fn func(apps []db.App)) error {
+	var lastID uint
+	for {
+		var page []db.App
+		if err := svc.db.Where("wallet_pubkey IS NOT NULL AND id > ?", lastID).
+			Order("id").Limit(pageSize).Find(&page).Error; err != nil {
+			return err
+		}
+		if len(page) == 0 {
+			return nil
+		}
+		fn(page)
+		lastID = page[len(page)-1].ID
+		if len(page) < pageSize {
+			return nil
+		}
 	}
 }
 
 func (svc *service) startAllExistingAppsWalletSubscriptions(ctx context.Context, pool *nostr.SimplePool) {
-	var apps []db.App
-	result := svc.db.Where("wallet_pubkey IS NOT NULL").Find(&apps)
-	if result.Error != nil {
-		logger.Logger.Error().Err(result.Error).Msg("Failed to fetch App records with non-empty WalletPubkey")
-		return
-	}
-
 	// Captured once here (svc.nostrGroup was set synchronously at the top of
 	// the startNostr call that led here) and threaded through explicitly from
 	// this point on, rather than re-read from svc.nostrGroup inside a spawned
@@ -300,11 +318,18 @@ func (svc *service) startAllExistingAppsWalletSubscriptions(ctx context.Context,
 	group := svc.nostrGroup
 
 	if svc.cfg.TrustedNwcRelay() {
-		pubkeys := make([]string, 0, len(apps))
-		for _, app := range apps {
-			pubkeys = append(pubkeys, *app.WalletPubkey)
+		total := 0
+		if err := svc.forEachAppWithWallet(walletSeedPageSize, func(apps []db.App) {
+			pubkeys := make([]string, 0, len(apps))
+			for _, app := range apps {
+				pubkeys = append(pubkeys, *app.WalletPubkey)
+			}
+			svc.walletRegistry.Add(pubkeys...)
+			total += len(apps)
+		}); err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to seed the wallet registry")
+			return
 		}
-		svc.walletRegistry.Add(pubkeys...)
 
 		// One consumer for every wallet: with a shared subscription there is
 		// no per-wallet subscription left to cancel on deletion, so the
@@ -314,19 +339,26 @@ func (svc *service) startAllExistingAppsWalletSubscriptions(ctx context.Context,
 			svc:  svc,
 		})
 
-		logger.Logger.Info().Int("app_count", len(apps)).Msg("Subscribing to all NIP-47 requests (one subscription for every app wallet)")
+		logger.Logger.Info().Int("app_count", total).Msg("Subscribing to all NIP-47 requests (one subscription for every app wallet)")
 		group.Go(func() error {
 			return svc.startTrustedRelaySubscription(ctx, pool, group)
 		})
 		return
 	}
 
-	logger.Logger.Info().Int("app_count", len(apps)).Msg("Subscribing to events for app wallets")
-	for _, app := range apps {
-		group.Go(func() error {
-			return svc.startAppWalletSubscription(ctx, pool, *app.WalletPubkey, group)
-		})
+	total := 0
+	if err := svc.forEachAppWithWallet(walletSeedPageSize, func(apps []db.App) {
+		for _, app := range apps {
+			group.Go(func() error {
+				return svc.startAppWalletSubscription(ctx, pool, *app.WalletPubkey, group)
+			})
+		}
+		total += len(apps)
+	}); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to read app wallets for subscription")
+		return
 	}
+	logger.Logger.Info().Int("app_count", total).Msg("Subscribing to events for app wallets")
 }
 
 func (svc *service) startAppWalletSubscription(ctx context.Context, pool *nostr.SimplePool, appWalletPubKey string, group *errgroup.Group) error {
