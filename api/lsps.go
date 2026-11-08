@@ -159,14 +159,13 @@ func (api *api) LSPS1GetOrder(ctx context.Context, req *LSPS1GetOrderRequest) (i
 	if event.Payment.Bolt11 != nil {
 		invoice = event.Payment.Bolt11.Invoice
 	}
-	// Extract state from Payment info (Bolt11) or OrderState?
-	// msgs.go has OrderState string.
-	// OrderChannel.tsx expects `state`.
-	// Use OrderState from the event/response.
-
+	// blip-0051 order_state is authoritative. Fall back to the bolt11 payment
+	// state only if the LSP returned an empty order_state (defensive: a spec
+	// response always carries one), so the frontend never receives a blank state.
 	state := event.OrderState
-	// If OrderState is empty/unknown, maybe fallback to Payment state?
-	// For now trust OrderState.
+	if state == "" && event.Payment.Bolt11 != nil {
+		state = event.Payment.Bolt11.State
+	}
 
 	var feeTotalLoki, orderTotalLoki uint64
 	if event.Payment.Bolt11 != nil {

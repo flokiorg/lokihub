@@ -99,6 +99,8 @@ hub to services the user has explicitly selected.
   which stamped every lifecycle event with the order's creation time; the
   per-state transition times (paid, funded, completed) are now persisted and
   reported as the real times.
+- Falls back to the LSPS1 payment state when an LSP returns an empty
+  `order_state`, so the channel-order screen never shows a blank status.
 - Shows the LSP dashboard's liquidity as unavailable (—) when the node or its
   wallet balance cannot be reached, instead of a placeholder 5 FLC figure.
 - Shows a loading indicator instead of a raw "TODO" debug string on the channel
