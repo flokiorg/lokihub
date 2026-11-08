@@ -625,28 +625,6 @@ func (s *Handlers) handleLsps1GetOrder(req *JsonRpcRequest) *JsonRpcResponse {
 		paymentState = string(Lsps1PaymentStateExpired)
 	}
 
-	// Construct fee (approximate if not stored separately, but we stored total invoice amount)
-	// We stored ClientBalanceLoki and LspBalanceLoki.
-	// OrderTotal is in PaymentInvoice (decoded) or we can infer it.
-	// Actually, we didn't store the Fee separately in DB, but we have LspBalance and ClientBalance.
-	// Wait, we didn't store Fee in DB. But we have `payment_invoice`.
-	// We can't easily get the amount from the invoice string without decoding it.
-	// Ideally we should have stored `fee_loki` or `order_total_loki` in DB.
-	// For this iteration, I'll calculate it on the fly if I can, or update DB schema?
-	// The DB schema didn't have `fee_loki`.
-	// I'll update `lsps1.orders` schema to include `order_total_loki` or `fee_loki`?
-	// The `lsps1.orders` table I created in Step 614 does NOT have fee columns.
-	// However, I can compute fee = OrderTotal - ClientBalance.
-	// But I don't have OrderTotal easily without decoding invoice.
-	// I'll skip returning fee_total_sat for get_order for now, or just return "0" and fix later.
-	// Wait, spec says response is SAME as create_order.
-	// I should probably decode the invoice or store the total.
-	// I'll add `fee_loki` to the DB schema in a "migration fix" or just alter table?
-	// Since I can't easily alter table right now without migration tool...
-	// AND I just created the table...
-	// Maybe I can just decode the invoice... but I don't have a bolt11 decoder imported.
-	// I will just store `order_total_loki` in the DB. I'll issue a new schema migration command now.
-
 	// Map internal-only states back to the blip-0051 wire enums before they
 	// reach the client (FLSPD-0020). order_state is only CREATED|COMPLETED|
 	// FAILED on the wire and payment.bolt11.state is only EXPECT_PAYMENT|HOLD|
