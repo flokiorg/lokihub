@@ -1155,7 +1155,7 @@ export interface CircleMemberActivity {
 }
 
 // A circle hub's money question mirrors a cash hub's. A cash hub owes value it
-// handed out as bearer bills; a circle hub has ALLOCATED value into wallets
+// handed out as cash bills; a circle hub has ALLOCATED value into wallets
 // its members still hold and it can reclaim. So the headline is an allocation
 // rather than a liability, and the risk is drift — budgets filling up, one
 // member outspending the rest — rather than insolvency.
