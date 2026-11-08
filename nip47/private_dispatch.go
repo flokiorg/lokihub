@@ -110,6 +110,27 @@ func (svc *nip47Service) servePrivateItem(
 	// decided after the lookup (I3).
 	signer, signed := svc.billProofSigner(item, binding)
 
+	// A Pre-Authorisation grant stands IN PLACE OF a bill proof (NIP-CASH
+	// §Pre-Authorisation). An item carrying both is malformed — refuse before
+	// verifying either, so the hub never spends two possession verifications on one
+	// item, whose VerificationCost counts exactly one. A grant that verifies supplies
+	// the possession signer (its own signer is the bill's connection key, checked
+	// against the target at I3 exactly as a bill proof's signer is); one that does
+	// not is answered with silence, like any failed possession.
+	var grant *transport.GrantInfo
+	if item.HasGrant() {
+		if item.HasBillProof() {
+			omitted(item, "an item carries either a bill proof or a grant, never both")
+			return transport.Result{}, false
+		}
+		if info, ok := svc.verifyGrant(item, binding); ok {
+			grant = &info
+			signer, signed = info.ConnKey, true
+		} else {
+			signer, signed = "", false
+		}
+	}
+
 	// cash_lookup resolves its own targets, which include bills the Hub has
 	// destroyed and calls it has recorded (NIP-CASH §Looking Up a Call).
 	if item.Method == constants.NIP47MethodCashLookup {
@@ -215,7 +236,7 @@ func (svc *nip47Service) servePrivateItem(
 	// The connection the bill proof came through: the hub's own, or a listed
 	// circle's listing connection, which the join record names (WP-14, WP-25).
 	connUsed := signer
-	signer, billIsCashMode, authorized, lookupErr := svc.privateItemIsAuthorized(item, binding, &app)
+	signer, billIsCashMode, authorized, lookupErr := svc.privateItemIsAuthorized(item, binding, &app, grant)
 	if lookupErr != nil {
 		// The hub could not read its own records, which says nothing about the
 		// sender: answer with a code a client retries, not a refusal. Circle
@@ -227,6 +248,14 @@ func (svc *nip47Service) servePrivateItem(
 		return refuse(code, "the hub could not read this wallet's records, please retry")
 	}
 	if !authorized {
+		if grant != nil {
+			// A grant item that failed authorization — a slice proof that did not
+			// verify, or whose signer is not the grant's named delegate — is answered
+			// with silence, never a message: a message would tell a grant thief why
+			// their grant was refused (NIP-CASH §Pre-Authorisation, §Errors).
+			omitted(item, "grant item not authorized")
+			return transport.Result{}, false
+		}
 		switch {
 		case item.HasProof() && signer == "":
 			// The item proof did not verify.
@@ -253,6 +282,15 @@ func (svc *nip47Service) servePrivateItem(
 			// The proof verified, but its signer holds no slice of this bill.
 			return refuse(constants.ERROR_NOT_FOUND, "no slice of this bill is registered for the identity that signed this item")
 		}
+	}
+
+	// A grant authorises READ methods only today. A value method (a pull payment) or
+	// a single-use grant needs the amount-cap and single-use store that are not yet
+	// built, so they are answered with silence rather than served uncapped — the
+	// delegate holds a valid grant, but this hub does not yet honour it for this use.
+	if grant != nil && (!grantReadMethods[item.Method] || grant.SingleUse) {
+		omitted(item, "this grant is not yet served for this method")
+		return transport.Result{}, false
 	}
 
 	// An order is placed on a connection that grants nothing else: the app kind
@@ -709,7 +747,29 @@ func (svc *nip47Service) privateItemIsAuthorized(
 	item transport.Item,
 	binding PrivateItemBinding,
 	app *db.App,
+	grant *transport.GrantInfo,
 ) (signer string, billIsCashMode bool, authorized bool, lookupErr error) {
+	if grant != nil {
+		// A grant authorises this delegate to act on the bill, so — unlike a plain
+		// slice proof — the signer need NOT own a slice of it. Verify the slice proof
+		// and require its signer to BE the grant's named delegate: that binding is the
+		// one load-bearing rule, without which a leaked grant is a second bearer
+		// secret (NIP-CASH §Pre-Authorisation). billIsCashMode is false: a grant item
+		// carries a slice proof, never a cash secret.
+		paramsHash, err := transport.CanonicalParamsHash(item.Params)
+		if err != nil {
+			return "", false, false, nil
+		}
+		signer, err := transport.VerifyItemProof(item.Proof, transport.ProofBinding{
+			Target: item.Target, HubXOnly: binding.HubXOnly, Method: item.Method,
+			ParamsHash: paramsHash, Nonce: binding.Nonce, NotAfter: binding.NotAfter,
+		}, time.Now())
+		if err != nil || signer != grant.Delegate {
+			return signer, false, false, nil
+		}
+		return signer, false, true, nil
+	}
+
 	// create_circle_wallet acts on a HUB rather than a bill, so there are no claims to
 	// match a signer against — the kind-23199 identity proof inside its own params is what
 	// authorizes it, and the controller checks that. Handled first because a hub
