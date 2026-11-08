@@ -6,6 +6,8 @@ import (
 	"github.com/ohstr/nmilat/nipcash/transport"
 
 	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/logger"
 )
 
 // A Pre-Authorisation grant (NIP-CASH §Pre-Authorisation) lets a bill holder
@@ -47,4 +49,21 @@ func (svc *nip47Service) verifyGrant(item transport.Item, binding PrivateItemBin
 		return transport.GrantInfo{}, false
 	}
 	return info, true
+}
+
+// claimGrantUse spends a single-use grant by recording its id, so a second use is
+// refused. It returns false when the grant was already spent OR the store could not
+// record it (fail closed) — the item is then answered with silence, like any other
+// grant that cannot be honoured. A grant that is not single-use is never recorded
+// and always claims successfully. The grant's event id is the primary key, so two
+// deliveries racing on one grant are decided by the insert, not by a read-then-write.
+func (svc *nip47Service) claimGrantUse(info transport.GrantInfo) bool {
+	if !info.SingleUse {
+		return true
+	}
+	err := svc.db.Create(&db.PrivateUsedGrant{GrantID: info.ID, NotAfter: info.ExpiresAt}).Error
+	if err != nil && !db.IsDuplicateKeyError(err) {
+		logger.Logger.Warn().Err(err).Msg("Could not record a single-use grant; refusing it")
+	}
+	return err == nil
 }

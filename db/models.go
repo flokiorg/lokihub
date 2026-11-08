@@ -565,6 +565,15 @@ type PrivateServedNonce struct {
 	NotAfter int64  `gorm:"not null;index"`
 }
 
+// PrivateUsedGrant is the id of a single-use Pre-Authorisation grant this hub has
+// spent (NIP-CASH §Pre-Authorisation). The grant's event id is the primary key, so
+// a second use races against the insert and loses; kept until the grant's own
+// not_after passes, after which the grant would be refused as expired anyway.
+type PrivateUsedGrant struct {
+	GrantID  string `gorm:"primaryKey;size:64"`
+	NotAfter int64  `gorm:"not null;index"`
+}
+
 // RevokedToken is the jti of a session JWT invalidated before its own expiry —
 // by logout or an explicit single-token revocation. A stateless HS256 token
 // cannot otherwise be killed short of rotating the signing secret (which logs

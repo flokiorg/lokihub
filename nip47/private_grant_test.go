@@ -160,14 +160,6 @@ func TestServePrivateItem_GrantForgeriesAreOmitted(t *testing.T) {
 			why: "value methods under a grant need the amount-cap store, not yet built",
 		},
 		{
-			name: "single-use grant (not yet served)",
-			item: func() transport.Item {
-				return buildGrantItem(t, "x", walletPubkey, constants.NIP47MethodCashStatus, `{"scope":"all"}`,
-					delegatePriv, validGrant(constants.NIP47MethodCashStatus, future, true), hubXOnly, nonce, notAfter)
-			},
-			why: "single-use needs the use-tracking store, not yet built",
-		},
-		{
 			name: "both a grant and a bill proof",
 			item: func() transport.Item {
 				it := buildGrantItem(t, "x", walletPubkey, constants.NIP47MethodCashStatus, `{"scope":"all"}`,
@@ -189,6 +181,42 @@ func TestServePrivateItem_GrantForgeriesAreOmitted(t *testing.T) {
 			assert.Nil(t, result.Error, "an omission carries no error result: %s", tc.name)
 		})
 	}
+}
+
+// TestServePrivateItem_SingleUseGrantSpentOnce: a single-use grant is honoured
+// exactly once. The second request carrying the same grant — even with its own
+// fresh slice proof in a new envelope — is answered with silence.
+func TestServePrivateItem_SingleUseGrantSpentOnce(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+	walletPubkey, _, _, connPriv := privateDispatchFixture(t, svc)
+
+	hubXOnly := strings.Repeat("ab", 32)
+	notAfter := time.Now().Add(time.Minute).Unix()
+
+	delegatePriv, delegatePub := delegateKeypair(t)
+	grant, err := transport.BuildGrant(connPriv, transport.GrantParams{
+		Delegate: delegatePub, Target: walletPubkey, HubXOnly: hubXOnly,
+		Method: constants.NIP47MethodCashStatus, ExpiresAt: time.Now().Add(time.Hour).Unix(),
+		SingleUse: true,
+	})
+	require.NoError(t, err)
+
+	// serve runs one request for the same single-use grant in its own envelope
+	// (fresh nonce + slice proof) and reports whether it was answered.
+	serve := func(nonce string) bool {
+		binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
+		item := buildGrantItem(t, "g", walletPubkey, constants.NIP47MethodCashStatus, `{"scope":"all"}`,
+			delegatePriv, grant, hubXOnly, nonce, notAfter)
+		_, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+		return served
+	}
+
+	require.True(t, serve(strings.Repeat("11", 32)), "first use of a single-use grant must be served")
+	require.False(t, serve(strings.Repeat("22", 32)), "second use of a single-use grant must be silenced")
 }
 
 func mustHash(t *testing.T, params json.RawMessage) string {

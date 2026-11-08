@@ -284,12 +284,20 @@ func (svc *nip47Service) servePrivateItem(
 		}
 	}
 
-	// A grant authorises READ methods only today. A value method (a pull payment) or
-	// a single-use grant needs the amount-cap and single-use store that are not yet
-	// built, so they are answered with silence rather than served uncapped — the
-	// delegate holds a valid grant, but this hub does not yet honour it for this use.
-	if grant != nil && (!grantReadMethods[item.Method] || grant.SingleUse) {
-		omitted(item, "this grant is not yet served for this method")
+	// A grant authorises READ methods only today. A value method (a pull payment)
+	// needs the amount-cap enforcement that is not yet built, so it is answered with
+	// silence rather than served uncapped — the delegate holds a valid grant, but
+	// this hub does not yet honour it for a value method.
+	if grant != nil && !grantReadMethods[item.Method] {
+		omitted(item, "this method is not yet served under a grant")
+		return transport.Result{}, false
+	}
+	// A single-use grant is spent the first time it is honoured: claim it atomically
+	// before serving, so two deliveries racing on one grant cannot both be answered.
+	// A claim that fails — already spent, or the store could not record it — is
+	// answered with silence. A reusable grant is never recorded and always claims.
+	if grant != nil && !svc.claimGrantUse(*grant) {
+		omitted(item, "single-use grant already spent")
 		return transport.Result{}, false
 	}
 

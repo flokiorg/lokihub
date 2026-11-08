@@ -59,6 +59,14 @@ func (s dbServedNonces) prune(now time.Time) (int64, error) {
 	return result.RowsAffected, result.Error
 }
 
+// pruneUsedGrants forgets every spent single-use grant whose not_after has passed;
+// past it, the grant is refused as expired before its use is ever looked up, so the
+// record is no longer needed.
+func (s dbServedNonces) pruneUsedGrants(now time.Time) (int64, error) {
+	result := s.db.Where("not_after < ?", now.Unix()).Delete(&db.PrivateUsedGrant{})
+	return result.RowsAffected, result.Error
+}
+
 // servedNoncePruneInterval is how often expired served nonces are deleted.
 const servedNoncePruneInterval = time.Minute
 
@@ -75,6 +83,11 @@ func (s dbServedNonces) startPruner(ctx context.Context, group *errgroup.Group) 
 					logger.Logger.Warn().Err(err).Msg("Failed to prune served envelope nonces")
 				} else if n > 0 {
 					logger.Logger.Debug().Int64("pruned", n).Msg("Pruned expired served envelope nonces")
+				}
+				if n, err := s.pruneUsedGrants(now); err != nil {
+					logger.Logger.Warn().Err(err).Msg("Failed to prune spent single-use grants")
+				} else if n > 0 {
+					logger.Logger.Debug().Int64("pruned", n).Msg("Pruned expired single-use grants")
 				}
 			}
 		}
