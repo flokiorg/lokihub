@@ -93,25 +93,29 @@ func (s *Handlers) SetAnnounce(relays []string, check func(cfg *config.NodeConfi
 }
 
 type SummaryResponse struct {
-	NodeName          string         `json:"node_name"`
-	NodePubkey        string         `json:"node_pubkey"`
-	NodeHost          string         `json:"node_host"`
-	Version           string         `json:"version"`
-	Revenue24h        uint64         `json:"revenue_24h"`
-	LiquidityTotal    uint64         `json:"liquidity_total"`
-	LiquidityFree     uint64         `json:"liquidity_free"`
-	LiquidityBlocked  uint64         `json:"liquidity_blocked"`
-	LiquidityOutbound uint64         `json:"liquidity_outbound"`
-	LiquidityInbound  uint64         `json:"liquidity_inbound"`
-	ActiveOrders      map[string]int `json:"active_orders"`
-	NodeStatus        string         `json:"node_status"`
-	SyncedToChain     bool           `json:"synced_to_chain"`
-	SyncHeight        uint32         `json:"sync_height"`
-	PeersConnected    uint32         `json:"peers_connected"`
-	ChannelsActive    uint32         `json:"channels_active"`
-	ChannelsPending   uint32         `json:"channels_pending"`
-	ChannelsInactive  uint32         `json:"channels_inactive"`
-	RevenueTrend      string         `json:"revenue_trend"`
+	NodeName          string `json:"node_name"`
+	NodePubkey        string `json:"node_pubkey"`
+	NodeHost          string `json:"node_host"`
+	Version           string `json:"version"`
+	Revenue24h        uint64 `json:"revenue_24h"`
+	LiquidityTotal    uint64 `json:"liquidity_total"`
+	LiquidityFree     uint64 `json:"liquidity_free"`
+	LiquidityBlocked  uint64 `json:"liquidity_blocked"`
+	LiquidityOutbound uint64 `json:"liquidity_outbound"`
+	LiquidityInbound  uint64 `json:"liquidity_inbound"`
+	// LiquidityAvailable is false when the node (or its wallet balance) could
+	// not be reached, in which case the liquidity_total/free figures are 0 and
+	// unknown rather than real.
+	LiquidityAvailable bool           `json:"liquidity_available"`
+	ActiveOrders       map[string]int `json:"active_orders"`
+	NodeStatus         string         `json:"node_status"`
+	SyncedToChain      bool           `json:"synced_to_chain"`
+	SyncHeight         uint32         `json:"sync_height"`
+	PeersConnected     uint32         `json:"peers_connected"`
+	ChannelsActive     uint32         `json:"channels_active"`
+	ChannelsPending    uint32         `json:"channels_pending"`
+	ChannelsInactive   uint32         `json:"channels_inactive"`
+	RevenueTrend       string         `json:"revenue_trend"`
 }
 
 func NewHandlers(
@@ -285,7 +289,7 @@ func (s *Handlers) handleGetSummary(req *lsps.JsonRpcRequest) *lsps.JsonRpcRespo
 	mainNode := nodes[0]
 
 	// Aggregate metrics
-	totalCapacity, free, reserved := s.getLiquidityMetrics(context.Background())
+	totalCapacity, free, reserved, liquidityAvailable := s.getLiquidityMetrics(context.Background())
 
 	// Real Metrics for Summary
 	var revenue24h int64 = 0
@@ -383,25 +387,26 @@ func (s *Handlers) handleGetSummary(req *lsps.JsonRpcRequest) *lsps.JsonRpcRespo
 
 	// Create simplified summary
 	summary := SummaryResponse{
-		NodeName:          mainNode.NodeConfig.Load().Name,
-		NodePubkey:        mainNode.NodeConfig.Load().NodePubkey,
-		NodeHost:          mainNode.NodeConfig.Load().Host,
-		Version:           build.GetTag(),
-		Revenue24h:        uint64(revenue24h),
-		LiquidityTotal:    totalCapacity,
-		LiquidityFree:     free,
-		LiquidityBlocked:  reserved,
-		LiquidityOutbound: outboundLiquidity,
-		LiquidityInbound:  inboundLiquidity,
-		ActiveOrders:      orderStates,
-		NodeStatus:        nodeStatus,
-		SyncedToChain:     syncedToChain,
-		SyncHeight:        syncHeight,
-		PeersConnected:    peersConnected,
-		ChannelsActive:    channelsActive,
-		ChannelsPending:   channelsPending,
-		ChannelsInactive:  channelsInactive,
-		RevenueTrend:      revenueTrend,
+		NodeName:           mainNode.NodeConfig.Load().Name,
+		NodePubkey:         mainNode.NodeConfig.Load().NodePubkey,
+		NodeHost:           mainNode.NodeConfig.Load().Host,
+		Version:            build.GetTag(),
+		Revenue24h:         uint64(revenue24h),
+		LiquidityTotal:     totalCapacity,
+		LiquidityFree:      free,
+		LiquidityBlocked:   reserved,
+		LiquidityOutbound:  outboundLiquidity,
+		LiquidityInbound:   inboundLiquidity,
+		LiquidityAvailable: liquidityAvailable,
+		ActiveOrders:       orderStates,
+		NodeStatus:         nodeStatus,
+		SyncedToChain:      syncedToChain,
+		SyncHeight:         syncHeight,
+		PeersConnected:     peersConnected,
+		ChannelsActive:     channelsActive,
+		ChannelsPending:    channelsPending,
+		ChannelsInactive:   channelsInactive,
+		RevenueTrend:       revenueTrend,
 	}
 
 	return lsps.NewJsonRpcResponse(req.Id, summary)
@@ -836,7 +841,7 @@ func (s *Handlers) handleGetOrderDetail(req *lsps.JsonRpcRequest) *lsps.JsonRpcR
 	return lsps.NewJsonRpcResponse(req.Id, result)
 }
 
-func (s *Handlers) getLiquidityMetrics(ctx context.Context) (total, free, reserved uint64) {
+func (s *Handlers) getLiquidityMetrics(ctx context.Context) (total, free, reserved uint64, available bool) {
 	reserved, _ = s.openingStore.GetReservedLiquidity()
 
 	nodes := s.nodesService.GetNodes()
@@ -845,12 +850,13 @@ func (s *Handlers) getLiquidityMetrics(ctx context.Context) (total, free, reserv
 		if err == nil {
 			free = uint64(balance.ConfirmedBalance)
 			total = free + reserved
+			available = true
 			return
 		}
 	}
 
-	// Fallback to placeholder if node not available or error
-	total = 500000000
-	free = 500000000 - reserved
+	// Node unavailable or wallet-balance error: report liquidity as unknown
+	// (total/free stay 0, available=false) rather than inventing a figure.
+	// reserved comes from the store and stays valid.
 	return
 }

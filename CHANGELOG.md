@@ -99,6 +99,8 @@ hub to services the user has explicitly selected.
   CHANNEL_FUNDED and ORDER_COMPLETED with the order's creation time; only the
   creation event has a recorded time, so the others no longer show a
   fabricated timestamp.
+- Shows the LSP dashboard's liquidity as unavailable (—) when the node or its
+  wallet balance cannot be reached, instead of a placeholder 5 FLC figure.
 - Connects to a node that reports its network as `main` or `test` (the short
   names lokid and Bitcoin Core use); such a node was refused at startup with a
   spurious "the node is on another chain" error. (#213)
