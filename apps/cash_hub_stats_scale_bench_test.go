@@ -21,7 +21,7 @@ import (
 // computed from indexes or from table scans, and how many statements a dashboard
 // load costs.
 
-var statsLadder = []int{1_000, 10_000, 50_000}
+var statsLadder = []int{1_000, 10_000, 50_000, 100_000}
 
 // seedHubWithBills writes a hub with n bills, each carrying one claim, split
 // across the outcome buckets the dashboard reports so every branch of the union
