@@ -1,3 +1,5 @@
+import type { NativeAssetFormat } from "src/utils/flokicoinFormatting";
+
 import {
   ArrowRightLeftIcon,
   BellIcon,
@@ -754,6 +756,10 @@ export type HubInfo = {
   // placeholder and is only used in "proxy" mode.
   imageProxyMode?: ImageProxyMode;
   imageProxyTemplate?: string;
+  // The hub's on-chain asset descriptor (ticker/units/decimals/explorer) from
+  // the backend seed; drives chain-neutral amount and explorer display. Falls
+  // back to the embedded Flokicoin default when absent.
+  nativeAsset?: NativeAssetFormat;
 };
 
 export type FiatRate = {
