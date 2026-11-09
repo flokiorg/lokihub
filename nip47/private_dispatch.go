@@ -984,7 +984,7 @@ func (svc *nip47Service) cashStatusConnKeyScope(item transport.Item, claims []db
 	if err := json.Unmarshal(item.Params, &p); err != nil || p.IdentityValue == "" || p.IAPubkey == "" || p.AttestationEvent == "" {
 		return "", false
 	}
-	now := clock.Now().Unix()
+	now := hubclock.Now().Unix()
 	for i := range claims {
 		cl := &claims[i]
 		if cl.IdentityType != db.CashIdentityConnectionKey || cl.IdentityValue != p.IdentityValue || cl.IAPubkey != p.IAPubkey {

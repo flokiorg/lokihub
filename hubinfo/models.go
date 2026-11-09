@@ -3,7 +3,7 @@ package hubinfo
 import (
 	"context"
 
-	"github.com/flokiorg/lokihub/internal/seed"
+	"github.com/flokiorg/lokihub/seed"
 )
 
 type HubInfoService interface {
