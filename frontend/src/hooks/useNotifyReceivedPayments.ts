@@ -32,5 +32,5 @@ export function useNotifyReceivedPayments() {
       }
       setPrevTransaction(latestTx);
     }
-  }, [prevTransaction, transactionsData, info]);
+  }, [prevTransaction, transactionsData, info, hubInfo?.nativeAsset]);
 }
