@@ -198,6 +198,17 @@ func (svc *nip47Service) servePrivateItem(
 		(app.Kind == db.AppKindCashOrder) != (item.Method == constants.NIP47MethodCashOrder) {
 		return refuse(constants.ERROR_NOT_IMPLEMENTED, item.Method+" is not served on this transport")
 	}
+	// create_circle_wallet acts on a Circle Wallet Hub connection only. A target
+	// that resolved to an ordinary bill the sender holds is a target this Hub
+	// does not hold FOR THIS METHOD, so it is OMITTED, not answered — the same I2
+	// rule the cash_order↔Order pairing gets above, kept here rather than in the
+	// controller so the sender cannot tell a bill it holds from one it does not
+	// (NIP-CASH §Serving an Envelope, I2). A legitimate join whose target IS a
+	// circle_hub passes through.
+	if item.Method == constants.NIP47MethodCreateCircleWallet && app.Kind != db.AppKindCircleHub {
+		omitted(item, "create_circle_wallet target is not a circle_hub connection")
+		return transport.Result{}, false
+	}
 	// Both withdrawal methods are on the allowlist, but are NOT_IMPLEMENTED
 	// while the bill's Cash Hub does not offer on-chain withdrawals.
 	if withdrawMethods[item.Method] && !svc.withdrawOffered(&app) {
