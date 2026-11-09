@@ -55,9 +55,36 @@ hub to services the user has explicitly selected.
 - Adds an "Open data folder" button to the desktop app's startup-error and
   critical-error screens, so the app-data folder (database, config, logs) can
   be opened when something goes wrong. (#215)
+- Accepts NIP-47 Pre-Authorisation grants for read methods on the private
+  transport, so a holder can delegate read access such as `cash_status` to
+  another key without handing over its own slice proof; a grant marked
+  single-use is spent on first use and a replay is answered with silence. (#224)
 
 ### Changed
 
+- Reorganizes the Cash Hub creation form into clearer sections — the per-bill
+  cap and expiry stay prominent while the economics knobs (min transfer, redeem
+  fee, retention) move under one Advanced section — and keeps the Create button
+  disabled until a name and budget are set.
+- Reorganizes the Circle Wallet creation form so the wallet budget, renewal,
+  expiry and fee limits move out of the collapsed Advanced section into a
+  visible Wallet limits panel, leaving only the hub-wide caps as advanced.
+- Adds a live membership preview beside the Circle Wallet creation form that
+  summarizes who publishes the follow set and lists its members as you edit.
+- Relabels the Cash Hub surface from "wallet" to "Cash Bill" across its
+  dashboard, creation and edit views, so the operator UI matches the cash-bill
+  model it serves. (#224)
+- Drives on-chain amount and unit labels from the hub's native-asset descriptor
+  (now seeded and served on `/api/hub/info`) instead of a hardcoded Flokicoin
+  unit, and de-brands the block-explorer label and chain-name strings to
+  `{{chain}}`/`{{unit}}` tokens, so the UI follows the configured chain. (#224)
+- Pages the startup wallet seeders and bounds the stale-outgoing transaction
+  sweep to a fixed batch per tick, so a hub with many apps or a large pending
+  backlog starts and sweeps in bounded work instead of loading every app at
+  once. (#224)
+- References nmilat's NIP-47 kind constants directly instead of redeclaring
+  them, keeping lokihub's method and notification kinds aligned with the
+  protocol library. (#224)
 - Breaking: renames the chain-branded hub-info/rate API to chain-neutral names
   (`/api/loki/rates` → `/api/rates`, `/api/loki/info` → `/api/hub/info`,
   `/api/loki/faq` → `/api/hub/faq`) so lokihub reads generically across
@@ -95,6 +122,33 @@ hub to services the user has explicitly selected.
 
 ### Fixed
 
+- Fixes the LSP order-detail timeline and the LSPS1 `get_order` `funded_at`,
+  which stamped every lifecycle event with the order's creation time; the
+  per-state transition times (paid, funded, completed) are now persisted and
+  reported as the real times.
+- Falls back to the LSPS1 payment state when an LSP returns an empty
+  `order_state`, so the channel-order screen never shows a blank status.
+- Shows the LSP dashboard's liquidity as unavailable (—) when the node or its
+  wallet balance cannot be reached, instead of a placeholder 5 FLC figure.
+- Shows a loading indicator instead of a raw "TODO" debug string on the channel
+  order screen when an order is in an unhandled transitional state.
+- Returns a proper internal error from the LSP's LSPS1 `get_order` when the order
+  lookup fails for a reason other than the order not existing, instead of always
+  reporting "order not found".
+- Lets a `connection_key` recipient read its own `cash_status` row by presenting
+  its slice attestation; such a recipient previously got `NOT_FOUND` under every
+  scope because its signer is never the slice's identity value. (#224)
+- Spends a `cash_transfer`/`cash_consolidate` `request_id` before applying the
+  rate limit, so a rate-limited retry can no longer replay the same request. (#224)
+- Omits `create_circle_wallet` from a connection's offered methods when the
+  target is not a circle hub, so a client is not shown an action the hub would
+  reject. (#224)
+- Retries a paid or minted on-chain order lookup during a chain-scan outage
+  instead of reporting a stale "window not ended" result, so a transient failure
+  to read the chain is surfaced as retryable rather than a wrong answer. (#224)
+- Fixes the desktop tray/menu-bar icon rendering clipped into a corner at small
+  sizes (a non-zero SVG viewBox origin), and renders it as a template image that
+  tints to both light and dark macOS menu bars. (#224)
 - Connects to a node that reports its network as `main` or `test` (the short
   names lokid and Bitcoin Core use); such a node was refused at startup with a
   spurious "the node is on another chain" error. (#213)

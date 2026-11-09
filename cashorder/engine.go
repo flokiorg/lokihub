@@ -688,10 +688,12 @@ func (e *Engine) EndWindowIfDue(ctx context.Context, orderID uint) error {
 	return e.windowEnded(o.ID, now)
 }
 
-// windowEnded is ErrWindowNotEnded for an order still open past its pay_by.
+// windowEnded is ErrWindowNotEnded for an order whose window a successful run
+// has not ended past its pay_by (payment is read so WindowNotEnded can tell an
+// on-chain order apart from a Lightning one).
 func (e *Engine) windowEnded(orderID uint, now int64) error {
 	var o db.CashOrder
-	if err := e.DB.Select("id", "state", "pay_by").First(&o, orderID).Error; err != nil {
+	if err := e.DB.Select("id", "state", "pay_by", "payment").First(&o, orderID).Error; err != nil {
 		return err
 	}
 	if WindowNotEnded(&o, now) {
@@ -700,10 +702,24 @@ func (e *Engine) windowEnded(orderID uint, now int64) error {
 	return nil
 }
 
-// WindowNotEnded reports an order still open past its pay_by: its window was
-// not ended, so its state is not known yet.
+// WindowNotEnded reports an order past its pay_by whose payment window a
+// successful run has not ended, so its state is not known yet: still open, or —
+// only for an on-chain order — still paid or minted. A good chain scan moves an
+// on-chain order past pay_by to closed (a payment was seen) or expired (none),
+// never leaving it paid or minted (NIP-CO §Order State); so an on-chain order
+// still paid or minted past pay_by means the chain could not be read
+// (EndWindowIfDue returned on a ScanChain failure) and the table's closed is not
+// yet reachable — answer a retryable error, not the stale state. A Lightning
+// order stays legitimately paid or minted past pay_by while the Hub retries
+// minting, so this never holds for one.
 func WindowNotEnded(o *db.CashOrder, now int64) bool {
-	return o.State == db.CashOrderOpen && now > o.PayBy
+	if now <= o.PayBy {
+		return false
+	}
+	if o.State == db.CashOrderOpen {
+		return true
+	}
+	return o.Payment == nipCO.PaymentOnchain && (o.State == db.CashOrderPaid || o.State == db.CashOrderMinted)
 }
 
 // endWindow ends o's payment window, its pay_by passed.

@@ -96,9 +96,11 @@ function TimelineCard({ events }: { events: LspOrderTimelineEvent[] }) {
             <div className="grid gap-0.5">
               <span className="text-sm font-medium">{e.event}</span>
               <span className="text-xs text-muted-foreground">{e.detail}</span>
-              <span className="text-xs text-muted-foreground slashed-zero">
-                {new Date(e.timestamp).toLocaleString()}
-              </span>
+              {e.timestamp && (
+                <span className="text-xs text-muted-foreground slashed-zero">
+                  {new Date(e.timestamp).toLocaleString()}
+                </span>
+              )}
             </div>
           </div>
         ))}

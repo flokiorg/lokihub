@@ -75,3 +75,21 @@ fiat_rate_oracle:
     - "wss://relay.ohstr.com"
   refresh_interval: "300s"
   staleness_ttl: "3600s"
+
+# native_asset is the on-chain asset shown to users. The embedded default is
+# Flokicoin, so nothing changes unless an operator overrides it via a
+# LOKIHUB_SEED_FILE. bech32_hrp is informational in L1 (load-bearing in L2).
+native_asset:
+  name: "Flokicoin"
+  ticker: "FLC"
+  symbol: "FLC"
+  unit_name: "loki"
+  subunit_name: "mloki"
+  decimals: 8
+  subunit_per_unit: 1000
+  auto_threshold_loki: 100000
+  bech32_hrp: ""
+  explorer:
+    label: "Flokicoin Explorer"
+    url: "https://flokichain.info"
+    tx_path: "/tx/{txid}"

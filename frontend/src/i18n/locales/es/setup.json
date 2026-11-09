@@ -39,7 +39,7 @@
   "intro": {
     "slide1": {
       "title": "Bienvenido a Lokihub",
-      "subtitle": "Una poderosa billetera Lightning de Flokicoin todo en uno que impulsa la próxima web de interacción.",
+      "subtitle": "Una poderosa billetera Lightning de {{chain}} todo en uno que impulsa la próxima web de interacción.",
       "next": "Siguiente"
     },
     "slide2": {
@@ -112,7 +112,7 @@
       "saving": "Guardando..."
     },
     "explorer": {
-      "title": "Explorador Flokicoin",
+      "title": "Explorador {{chain}}",
       "description": "Usado para estimación de comisiones y detalles de transacciones.",
       "custom": "Explorador personalizado"
     },
@@ -141,8 +141,8 @@
       },
       "notAnnounced": "Sin anuncio utilizable",
       "claimedWebsite": "Web (declarada)",
-      "feeHint": "Comisión del canal JIT desde {{min}} loki + {{ppm}} ppm",
-      "inGraph": "En el grafo de tu nodo: {{channels}} canales, {{capacity}} loki",
+      "feeHint": "Comisión del canal JIT desde {{min}} {{unit}} + {{ppm}} ppm",
+      "inGraph": "En el grafo de tu nodo: {{channels}} canales, {{capacity}} {{unit}}",
       "notInGraphFact": "No está en el grafo de tu nodo",
       "notInGraph": "{{count}} fuera del grafo de tu nodo",
       "checkOk": "Comprobación en vivo: coincide con el anuncio",
@@ -168,7 +168,7 @@
     },
     "validation": {
       "relayRequired": "Se requiere al menos un relé",
-      "explorerRequired": "La URL del Explorador Flokicoin es obligatoria",
+      "explorerRequired": "La URL del Explorador {{chain}} es obligatoria",
       "swapRequired": "La URL del servicio de intercambio es obligatoria cuando está habilitado",
       "invalidUrl": "{{field}}: formato de URL inválido"
     },

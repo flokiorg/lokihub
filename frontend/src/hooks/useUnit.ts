@@ -1,7 +1,9 @@
 import React from "react";
 import { localStorageKeys } from "src/constants";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import {
+  FLOKICOIN_NATIVE_ASSET,
   displayToLoki,
   getFlokicoinUnit,
   lokiToDisplay,
@@ -12,19 +14,22 @@ import {
  */
 export function useUnit() {
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
 
   const displayFormat = info?.flokicoinDisplayFormat || "auto";
+  const asset = hubInfo?.nativeAsset ?? FLOKICOIN_NATIVE_ASSET;
 
   return {
-    unit: (amountLoki?: number) => getFlokicoinUnit(displayFormat, amountLoki),
+    unit: (amountLoki?: number) =>
+      getFlokicoinUnit(displayFormat, amountLoki, asset),
     scaleAmount: (amountLoki: number) =>
-      lokiToDisplay(amountLoki, displayFormat),
+      lokiToDisplay(amountLoki, displayFormat, asset),
     parseAmount: (amountDisplay: number) =>
-      displayToLoki(amountDisplay, displayFormat),
+      displayToLoki(amountDisplay, displayFormat, asset),
     scaleInputAmount: (amountLoki: number, inputUnit: "FLC" | "loki") =>
-      lokiToDisplay(amountLoki, inputUnit === "FLC" ? "flc" : "loki"),
+      lokiToDisplay(amountLoki, inputUnit === "FLC" ? "flc" : "loki", asset),
     parseInputAmount: (amountDisplay: number, inputUnit: "FLC" | "loki") =>
-      displayToLoki(amountDisplay, inputUnit === "FLC" ? "flc" : "loki"),
+      displayToLoki(amountDisplay, inputUnit === "FLC" ? "flc" : "loki", asset),
     displayFormat,
   };
 }

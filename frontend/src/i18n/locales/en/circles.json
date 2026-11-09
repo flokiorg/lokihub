@@ -11,9 +11,11 @@
     "selectMember": "Select member",
     "nameLabel": "Name",
     "maxWalletBudgetLabel": "Max Wallet Budget",
+    "cashMaxBudgetLabel": "Max Cash Bill Budget",
     "minRenewalLabel": "Min Renewal",
     "minRenewalHelper": "Shortest renewal period a member may request for their circle wallet's budget",
     "maxWalletExpiryLabel": "Max Wallet Expiry",
+    "cashMaxExpiryLabel": "Max Cash Bill Expiry",
     "feePpmLabel": "Fee (ppm)",
     "feePpmHelper": "Per-million fee charged on payments made by circle wallets (0 = free)",
     "advancedSettings": "Advanced settings",
@@ -203,7 +205,7 @@
     },
     "graceLeft_one": "grace: {{days}} day left",
     "graceLeft_other": "grace: {{days}} days left",
-    "graceOver": "grace over: deleted once at most {{dust}} loki",
+    "graceOver": "grace over: deleted once at most {{dust}} {{unit}}",
     "frozenBadge": "Frozen",
     "frozenHint": "The member froze this wallet: its key is refused until an unfreeze or a completed rotation.",
     "rotationBadge": "Rotating at {{at}}",
@@ -233,8 +235,8 @@
     "chooseSavedIAInstead": "Choose from Settings instead",
     "duplicateIdentity": "This identity is already used by another recipient.",
     "walletBudgetLabel": "Amount",
-    "requestedSummary": "{{total}} loki requested",
-    "requestedSummaryWithMax": "{{total}} loki requested of this hub's max wallet budget of {{max}} loki",
+    "requestedSummary": "{{total}} {{unit}} requested",
+    "requestedSummaryWithMax": "{{total}} {{unit}} requested of this hub's max bill budget of {{max}} {{unit}}",
     "claimDeadlineLabel": "Redeem Deadline",
     "deadlineExceeds": "Exceeds this hub's max redeem deadline of {{max}}",
     "deadlineHelp": "Every recipient must redeem within this long of creation",
@@ -243,11 +245,11 @@
     "setClaimDeadline": "Set redeem deadline",
     "statusAll": "All",
     "statusExpired": "Expired",
-    "allocatedSummary": "{{allocated}} loki allocated on this page · {{total}} {{status}}",
+    "allocatedSummary": "{{allocated}} {{unit}} allocated on this page · {{total}} {{status}}",
     "recipientColumn": "Recipient",
     "revealConnection": "Reveal connection",
     "selectRecipient": "Select recipient",
-    "selectAllInWallet": "Select all recipients in this wallet",
+    "selectAllInWallet": "Select all recipients in this bill",
     "collapseRecipients": "Collapse recipients",
     "expandRecipients": "Expand recipients",
     "removeWallet": "Remove Lokicash",
@@ -310,7 +312,7 @@
     "identityNamePlaceholder": "e.g. Family circle",
     "identityNameHelper": "Used only to identify this saved identity when reused across circles — not published anywhere.",
     "maxWalletBudgetHelper": "Maximum budget a member may request for their circle wallet",
-    "minWalletBudgetHint": "At least {{min}} loki. Any less, and the 10-loki Lightning fee reserve would leave a wallet unable to pay out.",
+    "minWalletBudgetHint": "At least {{min}} {{unit}}. Any less, and the 10-loki Lightning fee reserve would leave a wallet unable to pay out.",
     "maxExpiryHelper": "Maximum lifetime for issued circle wallets",
     "hubBudgetLabel": "Hub Budget (optional)",
     "hubBudgetHelper": "Caps the combined budget of every wallet this circle can have live at once. Leave blank for no cap beyond this hub's real balance.",
@@ -326,7 +328,8 @@
     "allowlistSeedFailedToast": "Circle Wallet Hub \"{{name}}\" created, but seeding the member list failed — add members from the hub's Allowlist page.",
     "errors": {
       "create": "Failed to create Circle Wallet Hub"
-    }
+    },
+    "walletLimitsLegend": "Wallet limits"
   },
   "newCashHub": {
     "title": "New Cash Hub",
@@ -337,14 +340,15 @@
     "createdToast": "Cash Hub \"{{name}}\" created",
     "errors": {
       "create": "Failed to create Cash Hub"
-    }
+    },
+    "submitHint": "Enter a name and a maximum Cash Bill budget to continue."
   },
   "disconnectCircleHub": {
     "title": "Close this circle?",
     "checking": "Checking member wallet balances…",
     "colName": "Name",
     "colPubkey": "Pubkey",
-    "colBalance": "Balance (loki)",
+    "colBalance": "Balance ({{unit}})",
     "deletedToast": "Circle deleted",
     "errors": {
       "load": "Failed to load circle wallets",
@@ -352,8 +356,8 @@
     },
     "closeExplanation_one": "Its {{count}} member wallet moves to Closing: it keeps its balance and can only pay out, the circle takes no new members, and the circle is deleted once its last wallet is gone after its grace period.",
     "closeExplanation_other": "Its {{count}} member wallets move to Closing: each keeps its balance and can only pay out, the circle takes no new members, and the circle is deleted once its last wallet is gone after its grace period.",
-    "balancesStay_one": "{{total}} loki in {{count}} wallet stays the member's until paid out.",
-    "balancesStay_other": "{{total}} loki in {{count}} wallets stays the members' until paid out.",
+    "balancesStay_one": "{{total}} {{unit}} in {{count}} wallet stays the member's until paid out.",
+    "balancesStay_other": "{{total}} {{unit}} in {{count}} wallets stays the members' until paid out.",
     "closeCircle": "Close circle",
     "closingToast_one": "{{count}} wallet closing",
     "closingToast_other": "{{count}} wallets closing",
@@ -441,7 +445,7 @@
     "medianTimeToRedeemInfo": "How long a bill typically sits before it is redeemed, measured over the most recent 1,000 redemptions.",
     "writtenOffInfo": "Value that could not be returned to this hub at all — a loss, not a recovery.",
     "leftInBudgetInfo": "How much of this hub's own payment budget is left before it renews. It caps ordinary payments made over the hub's connection — it does NOT limit how much cash the hub can mint.",
-    "budgetRenewalInfo": "This hub's full payment budget and how often it resets. Minting is not drawn from it; a bill's size is capped by the per-wallet maximum in Hub Settings."
+    "budgetRenewalInfo": "This hub's full payment budget and how often it resets. Minting is not drawn from it; a bill's size is capped by the per-bill maximum in Hub Settings."
   },
   "cashCharts": {
     "outstandingTitle": "Outstanding over time",
@@ -471,7 +475,7 @@
     "flowHint": "Issued above the line; everything that stopped being redeemable below it.",
     "splitSeries": "Split",
     "writtenOffSeries": "Written off",
-    "netFooter": "Net {{net}} loki",
+    "netFooter": "Net {{net}} {{unit}}",
     "outstandingHint": "What the hub still owes, reconstructed day by day from today's total.",
     "othersBar_one": "+{{count}} other",
     "othersBar_other": "+{{count}} others",
@@ -512,7 +516,7 @@
     "holds": "Holds",
     "spent": "Spent",
     "received": "Received",
-    "capFooter": "{{used}} of {{cap}} loki this period",
+    "capFooter": "{{used}} of {{cap}} {{unit}} this period",
     "uncapped": "No budget cap",
     "flowTitle": "Daily flow",
     "flowHint": "Received above the line, spent below it.",
@@ -543,14 +547,14 @@
     "defaultExpiry": "Default wallet lifetime",
     "defaultExpiryHelper": "What a member gets when they name no expiry. Never above the maximum lifetime; under a maximum, it cannot be never.",
     "never": "Never",
-    "maxReceive": "Maximum receive cap per wallet (loki)",
+    "maxReceive": "Maximum receive cap per wallet ({{unit}})",
     "maxReceiveHelper": "The most a member may ask to receive from outside the circle in one budget period.",
-    "holdingsCeiling": "Holdings ceiling (loki)",
+    "holdingsCeiling": "Holdings ceiling ({{unit}})",
     "holdingsCeilingHelper": "The most the circle's active wallets may hold together, open invoices included. New joins, invoices and credits past it are refused.",
     "feeReservePpm": "Routing-fee reserve (ppm)",
-    "feeReserveMin": "Minimum routing-fee reserve (loki)",
+    "feeReserveMin": "Minimum routing-fee reserve ({{unit}})",
     "feeReserveMinHelper": "A member's Lightning payment holds back, and may spend, the larger of this and the amount times the ppm.",
-    "outboundCeiling": "Outbound ceiling (loki, 0 = none)",
+    "outboundCeiling": "Outbound ceiling ({{unit}}, 0 = none)",
     "outboundCeilingHelper": "Optionally bounds what all wallets together send outside the circle in one period.",
     "outboundPeriod": "Outbound period",
     "period": {
@@ -561,7 +565,7 @@
     },
     "grace": "Grace period",
     "graceHelper": "How long a wallet the member did not delete can still pay out before it may be deleted.",
-    "dust": "Dust threshold (loki)",
+    "dust": "Dust threshold ({{unit}})",
     "dustHelper": "The most the hub keeps when it deletes a wallet. Fixed for each wallet when it joins.",
     "rotation": "Member requests (rotate, freeze, unfreeze)",
     "rotationHelper": "Lets a member who lost their connection move the wallet to a new key, after a delay the current key can cancel.",
@@ -570,5 +574,15 @@
   "cashLock": {
     "ordered": "ordered: never expires, cannot be removed",
     "reminted": "re-minted: cannot be removed"
+  },
+  "membershipPreview": {
+    "title": "Membership preview",
+    "publishedBy": "Published by",
+    "publishedByHub": "Published by this hub",
+    "publisherPending": "Choose who publishes the set",
+    "members": "Members",
+    "hiddenCount": "{{count}} hidden",
+    "externalNote": "Members come from the external set",
+    "empty": "No members added yet"
   }
 }

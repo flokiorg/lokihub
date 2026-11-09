@@ -1121,6 +1121,17 @@ func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, t
 
 const stalePendingTTL = 48 * time.Hour
 
+const (
+	// sweepBatchSize / sweepMaxBatchesPerTick bound SweepStalePendingOutgoing the
+	// same way runCashCleanup bounds itself (service/cash_cleanup_service.go): at
+	// most sweepBatchSize rows per query and sweepMaxBatchesPerTick batches per
+	// 5-minute tick, keyset-paged by id, so a large backlog (or rows left PENDING
+	// because the node was unreachable) spreads across ticks instead of being
+	// re-scanned unbounded every tick.
+	sweepBatchSize         = 200
+	sweepMaxBatchesPerTick = 10
+)
+
 // CashRedeemRouteCapKey is the payment metadata key carrying a cash_redeem's
 // routing-fee cap. Only cash_redeem sets it; callers' metadata never may.
 const CashRedeemRouteCapKey = "cash_redeem_route_cap_mloki"
@@ -1251,32 +1262,45 @@ func (svc *transactionsService) applyPaymentLookup(payment *db.Transaction, look
 //     record: settled → this leg is settled with the same preimage; failed or
 //     missing → failed; still open → left PENDING.
 func (svc *transactionsService) SweepStalePendingOutgoing(ctx context.Context, lnClient lnclient.LNClient) {
-	var stale []db.Transaction
 	cutoff := time.Now().Add(-stalePendingTTL)
-	if err := svc.db.Where(
-		"type = ? AND state = ? AND created_at < ?",
-		constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_PENDING, cutoff,
-	).Find(&stale).Error; err != nil {
-		svc.logger.Error().Err(err).Msg("SweepStalePendingOutgoing: failed to query stale transactions")
-		return
-	}
-
-	for i := range stale {
-		if err := svc.checkUnsettledTransaction(ctx, &stale[i], lnClient); err != nil {
-			// LN node was unreachable — payment state is unknown; do not force-cancel.
-			svc.logger.Warn().Err(err).Uint("tx_id", stale[i].ID).
-				Msg("SweepStalePendingOutgoing: skipping — LN unreachable, state unknown")
-			continue
+	var lastID uint
+	for batch := 0; batch < sweepMaxBatchesPerTick; batch++ {
+		var stale []db.Transaction
+		if err := svc.db.Where(
+			"type = ? AND state = ? AND created_at < ? AND id > ?",
+			constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_PENDING, cutoff, lastID,
+		).Order("id").Limit(sweepBatchSize).Find(&stale).Error; err != nil {
+			svc.logger.Error().Err(err).Msg("SweepStalePendingOutgoing: failed to query stale transactions")
+			return
+		}
+		if len(stale) == 0 {
+			return
 		}
 
-		var refreshed db.Transaction
-		if err := svc.db.First(&refreshed, stale[i].ID).Error; err != nil {
-			continue
+		for i := range stale {
+			lastID = stale[i].ID
+			if err := svc.checkUnsettledTransaction(ctx, &stale[i], lnClient); err != nil {
+				// LN node was unreachable — payment state is unknown; do not force-cancel.
+				svc.logger.Warn().Err(err).Uint("tx_id", stale[i].ID).
+					Msg("SweepStalePendingOutgoing: skipping — LN unreachable, state unknown")
+				continue
+			}
+
+			var refreshed db.Transaction
+			if err := svc.db.First(&refreshed, stale[i].ID).Error; err != nil {
+				continue
+			}
+			if refreshed.State != constants.TRANSACTION_STATE_PENDING {
+				continue
+			}
+			svc.resolveStalePendingOutgoing(ctx, &refreshed, lnClient)
 		}
-		if refreshed.State != constants.TRANSACTION_STATE_PENDING {
-			continue
+
+		// A short page means the backlog is drained for this tick; a full page
+		// means more may remain, handled by the next batch (or the next tick).
+		if len(stale) < sweepBatchSize {
+			return
 		}
-		svc.resolveStalePendingOutgoing(ctx, &refreshed, lnClient)
 	}
 }
 

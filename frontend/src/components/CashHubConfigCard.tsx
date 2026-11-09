@@ -87,8 +87,17 @@ export function CashHubConfigCard({
   const { scaleInputAmount, parseInputAmount } = useUnit();
   const [inputUnit, setInputUnit] = useInputUnit(perWalletMaxLoki);
 
+  // The per-bill cap and expiry are the two limits almost everyone sets, so
+  // they stay prominent. Min-transfer, redeem-fee and spent-bill retention are
+  // economics/policy knobs with good defaults, so they live together under one
+  // Advanced disclosure (rendered only when its owner passes the handlers).
+  const hasAdvanced =
+    !!onMinTransferLokiChange ||
+    !!onRedeemFeePpmChange ||
+    !!onSpentRetentionSecsChange;
+
   const fields = (
-    <div className="w-full grid gap-4 max-w-lg">
+    <div className="w-full grid gap-4">
       <div className="w-full grid gap-1.5">
         <Label htmlFor="cashPerWalletMax">{budgetLabel}</Label>
         <CurrencyInput
@@ -121,73 +130,80 @@ export function CashHubConfigCard({
         />
         <p className="text-muted-foreground text-sm">{expiryHelper}</p>
       </div>
-      {onMinTransferLokiChange && (
-        <div className="w-full grid gap-1.5">
-          <Label htmlFor="cashMinTransferMax">Min Transfer Amount</Label>
-          <CurrencyInput
-            id="cashMinTransferMax"
-            amount={
-              minTransferLoki
-                ? scaleInputAmount(minTransferLoki, inputUnit).toString()
-                : ""
-            }
-            onAmountChange={(val) =>
-              onMinTransferLokiChange(
-                parseInputAmount(parseFloat(val) || 0, inputUnit)
-              )
-            }
-            inputUnit={inputUnit}
-            onInputUnitChange={setInputUnit}
-            min={0}
-          />
-          <p className="text-muted-foreground text-sm">
-            Smallest amount a lokicash may be split into, or leave behind as
-            change — 0 means no floor
-          </p>
-        </div>
-      )}
-      {onRedeemFeePpmChange && (
-        <div className="w-full grid gap-1.5">
-          <Label htmlFor="cashRedeemFeePpm">Redeem Fee (ppm)</Label>
-          <Input
-            id="cashRedeemFeePpm"
-            type="number"
-            min={0}
-            value={redeemFeePpm ?? 0}
-            onChange={(e) => onRedeemFeePpmChange(Number(e.target.value))}
-          />
-          <p className="text-muted-foreground text-sm">
-            Per-million fee charged when a recipient redeems a lokicash out to
-            an external wallet (0 = free). Never charged on a transfer/split, or
-            on a redemption into another wallet on this same node.
-          </p>
-        </div>
-      )}
-      {onSpentRetentionSecsChange && (
-        // Advanced, because it changes what the hub says about bills it has
-        // already destroyed rather than how it mints new ones — the default
-        // is right for almost everyone.
+      {hasAdvanced && (
         <Accordion type="single" collapsible>
           <AccordionItem value="advanced" className="border-b-0">
             <AccordionTrigger className="py-2 text-sm font-medium">
               {t("circleHub.advancedTitle")}
             </AccordionTrigger>
             <AccordionContent className="pb-0">
-              <div className="w-full grid gap-1.5">
-                <Label htmlFor="cashSpentRetentionSecs">
-                  {t("circleHub.spentRetentionLabel")}
-                </Label>
-                <DurationInput
-                  id="cashSpentRetentionSecs"
-                  seconds={spentRetentionSecs ?? 0}
-                  onChange={onSpentRetentionSecsChange}
-                  min={60}
-                  presets={WEEK_SCALE_PRESETS}
-                  allowNever
-                />
-                <p className="text-muted-foreground text-sm">
-                  {t("circleHub.spentRetentionHelper")}
-                </p>
+              <div className="w-full grid gap-4">
+                {onMinTransferLokiChange && (
+                  <div className="w-full grid gap-1.5">
+                    <Label htmlFor="cashMinTransferMax">
+                      {t("circleHub.cashMinTransferLabel")}
+                    </Label>
+                    <CurrencyInput
+                      id="cashMinTransferMax"
+                      amount={
+                        minTransferLoki
+                          ? scaleInputAmount(
+                              minTransferLoki,
+                              inputUnit
+                            ).toString()
+                          : ""
+                      }
+                      onAmountChange={(val) =>
+                        onMinTransferLokiChange(
+                          parseInputAmount(parseFloat(val) || 0, inputUnit)
+                        )
+                      }
+                      inputUnit={inputUnit}
+                      onInputUnitChange={setInputUnit}
+                      min={0}
+                    />
+                    <p className="text-muted-foreground text-sm">
+                      {t("circleHub.cashMinTransferHelper")}
+                    </p>
+                  </div>
+                )}
+                {onRedeemFeePpmChange && (
+                  <div className="w-full grid gap-1.5">
+                    <Label htmlFor="cashRedeemFeePpm">
+                      {t("circleHub.cashRedeemFeeLabel")}
+                    </Label>
+                    <Input
+                      id="cashRedeemFeePpm"
+                      type="number"
+                      min={0}
+                      value={redeemFeePpm ?? 0}
+                      onChange={(e) =>
+                        onRedeemFeePpmChange(Number(e.target.value))
+                      }
+                    />
+                    <p className="text-muted-foreground text-sm">
+                      {t("circleHub.cashRedeemFeeHelper")}
+                    </p>
+                  </div>
+                )}
+                {onSpentRetentionSecsChange && (
+                  <div className="w-full grid gap-1.5">
+                    <Label htmlFor="cashSpentRetentionSecs">
+                      {t("circleHub.spentRetentionLabel")}
+                    </Label>
+                    <DurationInput
+                      id="cashSpentRetentionSecs"
+                      seconds={spentRetentionSecs ?? 0}
+                      onChange={onSpentRetentionSecsChange}
+                      min={60}
+                      presets={WEEK_SCALE_PRESETS}
+                      allowNever
+                    />
+                    <p className="text-muted-foreground text-sm">
+                      {t("circleHub.spentRetentionHelper")}
+                    </p>
+                  </div>
+                )}
               </div>
             </AccordionContent>
           </AccordionItem>

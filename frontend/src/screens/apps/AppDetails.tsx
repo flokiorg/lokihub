@@ -793,9 +793,9 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
             <CashHubConfigCard
               title={t("circleHub.hubSettingsTitle")}
               description={t("circleHub.cashHubSettingsDescription")}
-              budgetLabel={t("circleHub.maxWalletBudgetLabel")}
+              budgetLabel={t("circleHub.cashMaxBudgetLabel")}
               budgetHelper={t("circleHub.cashMaxWalletBudgetHelper")}
-              expiryLabel={t("circleHub.maxWalletExpiryLabel")}
+              expiryLabel={t("circleHub.cashMaxExpiryLabel")}
               expiryHelper={t("circleHub.cashMaxExpiryHelper")}
               perWalletMaxLoki={cashPerWalletMaxLoki}
               onPerWalletMaxLokiChange={setCashPerWalletMaxLoki}

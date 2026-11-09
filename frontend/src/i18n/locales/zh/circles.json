@@ -11,9 +11,11 @@
     "selectMember": "选择成员",
     "nameLabel": "名称",
     "maxWalletBudgetLabel": "最大钱包预算",
+    "cashMaxBudgetLabel": "最大 Lokicash 预算",
     "minRenewalLabel": "最短续期周期",
     "minRenewalHelper": "成员为其圈子钱包预算可申请的最短续期周期",
     "maxWalletExpiryLabel": "最长钱包有效期",
+    "cashMaxExpiryLabel": "最长 Lokicash 有效期",
     "feePpmLabel": "手续费（ppm）",
     "feePpmHelper": "圈子钱包付款收取的百万分之一手续费（0 = 免费）",
     "advancedSettings": "高级设置",
@@ -221,8 +223,8 @@
     "chooseSavedIAInstead": "改为从设置中选择",
     "duplicateIdentity": "该身份已被另一位接收人使用。",
     "walletBudgetLabel": "金额",
-    "requestedSummary": "已申请 {{total}} loki",
-    "requestedSummaryWithMax": "已申请 {{total}} loki，占此中心最大钱包预算 {{max}} loki 的一部分",
+    "requestedSummary": "已申请 {{total}} {{unit}}",
+    "requestedSummaryWithMax": "已申请 {{total}} {{unit}}，占此中心最大 Lokicash 预算 {{max}} {{unit}} 的一部分",
     "claimDeadlineLabel": "兑换截止时间",
     "deadlineExceeds": "超过此中心的最长兑换期限 {{max}}",
     "deadlineHelp": "每位接收人都必须在创建后的这段时间内兑换",
@@ -231,11 +233,11 @@
     "setClaimDeadline": "设置兑换截止时间",
     "statusAll": "全部",
     "statusExpired": "已过期",
-    "allocatedSummary": "本页已分配 {{allocated}} loki · 共 {{total}} 个{{status}}",
+    "allocatedSummary": "本页已分配 {{allocated}} {{unit}} · 共 {{total}} 个{{status}}",
     "recipientColumn": "接收人",
     "revealConnection": "显示连接",
     "selectRecipient": "选择接收人",
-    "selectAllInWallet": "选择此钱包的所有接收人",
+    "selectAllInWallet": "选择此 Lokicash 的所有接收人",
     "collapseRecipients": "收起接收人",
     "expandRecipients": "展开接收人",
     "removeWallet": "移除 Lokicash",
@@ -298,7 +300,7 @@
     "identityNamePlaceholder": "例如：家庭圈子",
     "identityNameHelper": "仅用于在多个圈子中重复使用时识别此已保存的身份 —— 不会在任何地方公开发布。",
     "maxWalletBudgetHelper": "成员为其圈子钱包可申请的最大预算",
-    "minWalletBudgetHint": "至少 {{min}} loki。低于此值时，10 loki 的 Lightning 手续费预留会让钱包无法对外付款。",
+    "minWalletBudgetHint": "至少 {{min}} {{unit}}。低于此值时，10 {{unit}} 的 Lightning 手续费预留会让钱包无法对外付款。",
     "maxExpiryHelper": "已发放圈子钱包的最长有效期",
     "hubBudgetLabel": "中心预算（可选）",
     "hubBudgetHelper": "限制此圈子同时存在的所有钱包的总预算上限。留空则不设上限，仅受此中心实际余额的限制。",
@@ -314,24 +316,26 @@
     "allowlistSeedFailedToast": "圈子钱包中心“{{name}}”已创建，但初始化成员列表失败 —— 请从该中心的允许列表页面添加成员。",
     "errors": {
       "create": "创建圈子钱包中心失败"
-    }
+    },
+    "walletLimitsLegend": "钱包限额"
   },
   "newCashHub": {
     "title": "新建 JIT 钱包中心",
     "description": "创建一个预先注资的中心，为受益人发放仅支持支出的 JIT 钱包",
-    "maxWalletBudgetHelper": "此中心发放的每个 JIT 钱包可分配的最大预算",
+    "maxWalletBudgetHelper": "此中心发放的每个 Lokicash 可分配的最大预算",
     "maxExpiryHelper": "已发放 JIT 钱包的最长有效期",
     "submit": "创建 JIT 钱包中心",
     "createdToast": "JIT 钱包中心“{{name}}”已创建",
     "errors": {
       "create": "创建 JIT 钱包中心失败"
-    }
+    },
+    "submitHint": "请输入名称和最大 Lokicash 预算以继续。"
   },
   "disconnectCircleHub": {
     "checking": "正在检查成员钱包余额…",
     "colName": "名称",
     "colPubkey": "公钥",
-    "colBalance": "余额（loki）",
+    "colBalance": "余额（{{unit}}）",
     "deletedToast": "圈子已删除",
     "errors": {
       "load": "加载圈子钱包失败",
@@ -382,7 +386,7 @@
     "holds": "持有",
     "spent": "已花费",
     "received": "已收到",
-    "capFooter": "本期已用 {{used}} / {{cap}} loki",
+    "capFooter": "本期已用 {{used}} / {{cap}} {{unit}}",
     "uncapped": "无预算上限",
     "flowTitle": "每日流水",
     "flowHint": "收到的在线上方，花费的在下方。",
@@ -419,7 +423,7 @@
     "medianTimeToRedeemInfo": "现金券通常在被兑付前停留多久，按最近 1000 笔兑付计算。",
     "writtenOffInfo": "完全无法退回此中心的价值——属于损失，而非回收。",
     "leftInBudgetInfo": "此中心自身支付预算在续期前的剩余额度。它限制通过中心连接进行的普通支付，并不限制可铸造的现金量。",
-    "budgetRenewalInfo": "此中心的完整支付预算及其重置频率。铸造不从中扣除；单张现金券的金额由中心设置中的每钱包上限决定。"
+    "budgetRenewalInfo": "此中心的完整支付预算及其重置频率。铸造不从中扣除；单张现金券的金额由中心设置中的每 Lokicash 上限决定。"
   },
   "cashCharts": {
     "outstandingTitle": "未兑付额趋势",
@@ -432,7 +436,7 @@
     "returnedSeries": "已退回",
     "splitSeries": "已拆分",
     "writtenOffSeries": "已核销",
-    "netFooter": "净额 {{net}} loki",
+    "netFooter": "净额 {{net}} {{unit}}",
     "billsTooltip_one": "{{count}} 张现金券",
     "billsTooltip_other": "{{count}} 张现金券",
     "coverageTitle": "偿付能力",
@@ -457,5 +461,15 @@
   "cashLock": {
     "ordered": "订单票据：永不过期，不可移除",
     "reminted": "已重铸：不可移除"
+  },
+  "membershipPreview": {
+    "title": "成员预览",
+    "publishedBy": "发布者",
+    "publishedByHub": "由本中心发布",
+    "publisherPending": "选择由谁发布该集合",
+    "members": "成员",
+    "hiddenCount": "{{count}} 个隐藏",
+    "externalNote": "成员来自外部集合",
+    "empty": "尚未添加成员"
   }
 }

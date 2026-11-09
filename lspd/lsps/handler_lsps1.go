@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -603,13 +604,22 @@ func (s *Handlers) handleLsps1GetOrder(req *JsonRpcRequest) *JsonRpcResponse {
 
 	order, err := s.openingService.GetLsps1Order(params.OrderId)
 	if err != nil {
-		// Assume error means not found for now, or distinguish DB error?
-		// Spec says 101 for Not found
-		return NewJsonRpcErrorResponse(req.Id, 101, "Order not found", nil)
+		if errors.Is(err, core.ErrOrderNotFound) {
+			// blip-0051: error code 101 for an unknown order_id.
+			return NewJsonRpcErrorResponse(req.Id, 101, "Order not found", nil)
+		}
+		log.Error().
+			Str("component", string(logging.LogComponentLSPS1)).
+			Str("action", string(logging.LogActionRequest)).
+			Err(err).
+			Str("order_id", params.OrderId).
+			Msg("LSPS1: get_order store lookup failed")
+		return NewJsonRpcErrorResponse(req.Id, -32603, "Internal error", nil)
 	}
 
-	// TODO: Check if payment is actually paid by querying LND if state is EXPECT_PAYMENT?
-	// For now, trust DB state.
+	// The persisted order state is authoritative here: payment, funding and
+	// completion transitions are written by the settlement path, so get_order
+	// reports the stored state directly rather than re-querying the node.
 
 	// The order's own persisted expiry (F-19/Phase 7) -- not recomputed
 	// from live config, so this stays consistent with the DB sweep and
@@ -624,28 +634,6 @@ func (s *Handlers) handleLsps1GetOrder(req *JsonRpcRequest) *JsonRpcResponse {
 		orderState = string(Lsps1OrderStateExpired)
 		paymentState = string(Lsps1PaymentStateExpired)
 	}
-
-	// Construct fee (approximate if not stored separately, but we stored total invoice amount)
-	// We stored ClientBalanceLoki and LspBalanceLoki.
-	// OrderTotal is in PaymentInvoice (decoded) or we can infer it.
-	// Actually, we didn't store the Fee separately in DB, but we have LspBalance and ClientBalance.
-	// Wait, we didn't store Fee in DB. But we have `payment_invoice`.
-	// We can't easily get the amount from the invoice string without decoding it.
-	// Ideally we should have stored `fee_loki` or `order_total_loki` in DB.
-	// For this iteration, I'll calculate it on the fly if I can, or update DB schema?
-	// The DB schema didn't have `fee_loki`.
-	// I'll update `lsps1.orders` schema to include `order_total_loki` or `fee_loki`?
-	// The `lsps1.orders` table I created in Step 614 does NOT have fee columns.
-	// However, I can compute fee = OrderTotal - ClientBalance.
-	// But I don't have OrderTotal easily without decoding invoice.
-	// I'll skip returning fee_total_sat for get_order for now, or just return "0" and fix later.
-	// Wait, spec says response is SAME as create_order.
-	// I should probably decode the invoice or store the total.
-	// I'll add `fee_loki` to the DB schema in a "migration fix" or just alter table?
-	// Since I can't easily alter table right now without migration tool...
-	// AND I just created the table...
-	// Maybe I can just decode the invoice... but I don't have a bolt11 decoder imported.
-	// I will just store `order_total_loki` in the DB. I'll issue a new schema migration command now.
 
 	// Map internal-only states back to the blip-0051 wire enums before they
 	// reach the client (FLSPD-0020). order_state is only CREATED|COMPLETED|
@@ -670,10 +658,17 @@ func (s *Handlers) handleLsps1GetOrder(req *JsonRpcRequest) *JsonRpcResponse {
 		if order.FundingOutpoint != nil {
 			vout = *order.FundingOutpoint
 		}
+		// Real funding time; fall back to CreatedAt only for orders funded
+		// before funded_at was persisted. channel.expires_at is measured from
+		// funding, so it derives from the same base.
+		fundedAt := order.CreatedAt
+		if order.FundedAt != nil {
+			fundedAt = *order.FundedAt
+		}
 		channelInfo = map[string]interface{}{
-			"funded_at":        order.CreatedAt.Format(time.RFC3339), // Fallback to CreatedAt if FundedAt missing
+			"funded_at":        fundedAt.Format(time.RFC3339),
 			"funding_outpoint": fmt.Sprintf("%s:%d", *order.FundingTxid, vout),
-			"expires_at":       order.CreatedAt.Add(time.Duration(order.ChannelExpiryBlocks) * time.Minute).Format(time.RFC3339),
+			"expires_at":       fundedAt.Add(time.Duration(order.ChannelExpiryBlocks) * time.Minute).Format(time.RFC3339),
 		}
 	}
 

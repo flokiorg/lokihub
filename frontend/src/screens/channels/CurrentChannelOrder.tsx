@@ -107,11 +107,10 @@ function ChannelOrderInternal({ order }: { order: NewChannelOrder }) {
       break;
   }
 
-  return (
-    <p>
-      TODO: {order.status} {order.paymentMethod}
-    </p>
-  );
+  // Any status/payment-method not handled above is a transient state while the
+  // wallet re-syncs (useSyncWallet above); show the loading indicator rather
+  // than a raw debug string.
+  return <Loading />;
 }
 
 function Success() {

@@ -11,9 +11,11 @@
     "selectMember": "انتخاب عضو",
     "nameLabel": "نام",
     "maxWalletBudgetLabel": "حداکثر بودجه کیف‌پول",
+    "cashMaxBudgetLabel": "حداکثر بودجه Lokicash",
     "minRenewalLabel": "کوتاه‌ترین دوره تجدید",
     "minRenewalHelper": "کوتاه‌ترین دوره تجدید که یک عضو می‌تواند برای بودجه کیف‌پول حلقه خود درخواست کند",
     "maxWalletExpiryLabel": "حداکثر مدت اعتبار کیف‌پول",
+    "cashMaxExpiryLabel": "حداکثر مدت اعتبار Lokicash",
     "feePpmLabel": "کارمزد (ppm)",
     "feePpmHelper": "کارمزد به ازای هر میلیون که از پرداخت‌های کیف‌پول‌های حلقه دریافت می‌شود (۰ = رایگان)",
     "advancedSettings": "تنظیمات پیشرفته",
@@ -221,8 +223,8 @@
     "chooseSavedIAInstead": "در عوض از تنظیمات انتخاب کنید",
     "duplicateIdentity": "این هویت هم‌اکنون توسط دریافت‌کننده دیگری استفاده می‌شود.",
     "walletBudgetLabel": "مبلغ",
-    "requestedSummary": "{{total}} loki درخواست شد",
-    "requestedSummaryWithMax": "{{total}} loki درخواست شد از حداکثر بودجه کیف‌پول این هاب که {{max}} loki است",
+    "requestedSummary": "{{total}} {{unit}} درخواست شد",
+    "requestedSummaryWithMax": "{{total}} {{unit}} درخواست شد از حداکثر بودجه Lokicash این هاب که {{max}} {{unit}} است",
     "claimDeadlineLabel": "مهلت بازخرید",
     "deadlineExceeds": "از حداکثر مهلت بازخرید این هاب یعنی {{max}} بیشتر است",
     "deadlineHelp": "هر دریافت‌کننده باید ظرف این مدت از زمان ایجاد، بازخرید کند",
@@ -231,11 +233,11 @@
     "setClaimDeadline": "تعیین مهلت بازخرید",
     "statusAll": "همه",
     "statusExpired": "منقضی‌شده",
-    "allocatedSummary": "{{allocated}} loki در این صفحه تخصیص یافته · {{total}} {{status}}",
+    "allocatedSummary": "{{allocated}} {{unit}} در این صفحه تخصیص یافته · {{total}} {{status}}",
     "recipientColumn": "دریافت‌کننده",
     "revealConnection": "نمایش اتصال",
     "selectRecipient": "انتخاب دریافت‌کننده",
-    "selectAllInWallet": "انتخاب همه دریافت‌کنندگان این کیف‌پول",
+    "selectAllInWallet": "انتخاب همه دریافت‌کنندگان این Lokicash",
     "collapseRecipients": "جمع کردن دریافت‌کنندگان",
     "expandRecipients": "گسترش دریافت‌کنندگان",
     "removeWallet": "حذف Lokicash",
@@ -298,7 +300,7 @@
     "identityNamePlaceholder": "مثلاً حلقهٔ خانوادگی",
     "identityNameHelper": "فقط برای شناسایی این هویت ذخیره‌شده هنگام استفاده مجدد در حلقه‌ها استفاده می‌شود — در هیچ‌جا منتشر نمی‌شود.",
     "maxWalletBudgetHelper": "حداکثر بودجه‌ای که یک عضو می‌تواند برای کیف‌پول حلقه خود درخواست کند",
-    "minWalletBudgetHint": "دست‌کم {{min}} loki. با مبلغ کمتر، ذخیرهٔ ۱۰ loki برای کارمزد Lightning نمی‌گذارد کیف‌پول پرداختی انجام دهد.",
+    "minWalletBudgetHint": "دست‌کم {{min}} {{unit}}. با مبلغ کمتر، ذخیرهٔ ۱۰ {{unit}} برای کارمزد Lightning نمی‌گذارد کیف‌پول پرداختی انجام دهد.",
     "maxExpiryHelper": "حداکثر مدت اعتبار کیف‌پول‌های حلقه صادرشده",
     "hubBudgetLabel": "بودجه هاب (اختیاری)",
     "hubBudgetHelper": "بودجه ترکیبی همه کیف‌پول‌هایی که این حلقه می‌تواند هم‌زمان فعال داشته باشد را محدود می‌کند. برای عدم اعمال محدودیت فراتر از موجودی واقعی این هاب، خالی بگذارید.",
@@ -314,24 +316,26 @@
     "allowlistSeedFailedToast": "هاب کیف‌پول حلقه «{{name}}» ایجاد شد، اما مقداردهی اولیه فهرست اعضا ناموفق بود — اعضا را از صفحه فهرست مجاز هاب اضافه کنید.",
     "errors": {
       "create": "ایجاد هاب کیف‌پول حلقه ناموفق بود"
-    }
+    },
+    "walletLimitsLegend": "محدودیت‌های کیف‌پول"
   },
   "newCashHub": {
     "title": "هاب کیف‌پول JIT جدید",
     "description": "یک هاب از پیش تأمین‌مالی‌شده ایجاد کنید که کیف‌پول‌های JIT مخصوص خرج کردن را برای ذی‌نفعان صادر می‌کند",
-    "maxWalletBudgetHelper": "حداکثر بودجه‌ای که می‌توان به هر کیف‌پول JIT صادرشده از این هاب تخصیص داد",
+    "maxWalletBudgetHelper": "حداکثر بودجه‌ای که می‌توان به هر Lokicash صادرشده از این هاب تخصیص داد",
     "maxExpiryHelper": "حداکثر مدت اعتبار کیف‌پول‌های JIT صادرشده",
     "submit": "ایجاد هاب کیف‌پول JIT",
     "createdToast": "هاب کیف‌پول JIT «{{name}}» ایجاد شد",
     "errors": {
       "create": "ایجاد هاب کیف‌پول JIT ناموفق بود"
-    }
+    },
+    "submitHint": "برای ادامه، یک نام و حداکثر بودجه Lokicash وارد کنید."
   },
   "disconnectCircleHub": {
     "checking": "در حال بررسی موجودی کیف‌پول اعضا…",
     "colName": "نام",
     "colPubkey": "کلید عمومی",
-    "colBalance": "موجودی (loki)",
+    "colBalance": "موجودی ({{unit}})",
     "deletedToast": "حلقه حذف شد",
     "errors": {
       "load": "بارگذاری کیف‌پول‌های حلقه ناموفق بود",
@@ -419,7 +423,7 @@
     "medianTimeToRedeemInfo": "معمولاً یک اسکناس چقدر می‌ماند تا بازخرید شود، بر پایهٔ ۱۰۰۰ بازخرید اخیر.",
     "writtenOffInfo": "ارزشی که اصلاً نتوانست به این هاب بازگردد — یک زیان، نه بازیابی.",
     "leftInBudgetInfo": "چقدر از بودجهٔ پرداخت این هاب تا تمدید باقی مانده است. این سقف پرداخت‌های عادی از طریق اتصال هاب است و مقدار نقدی قابل ضرب را محدود نمی‌کند.",
-    "budgetRenewalInfo": "کل بودجهٔ پرداخت این هاب و بازهٔ بازنشانی آن. ضرب کردن از آن کسر نمی‌شود؛ اندازهٔ هر اسکناس با سقف هر کیف‌پول در تنظیمات هاب محدود می‌شود."
+    "budgetRenewalInfo": "کل بودجهٔ پرداخت این هاب و بازهٔ بازنشانی آن. ضرب کردن از آن کسر نمی‌شود؛ اندازهٔ هر اسکناس با سقف هر Lokicash در تنظیمات هاب محدود می‌شود."
   },
   "cashCharts": {
     "outstandingTitle": "در جریان در طول زمان",
@@ -457,5 +461,15 @@
   "cashLock": {
     "ordered": "سفارشی: منقضی نمی‌شود، قابل حذف نیست",
     "reminted": "بازضرب‌شده: قابل حذف نیست"
+  },
+  "membershipPreview": {
+    "title": "پیش‌نمایش عضویت",
+    "publishedBy": "منتشرشده توسط",
+    "publishedByHub": "منتشرشده توسط این هاب",
+    "publisherPending": "انتخاب کنید چه کسی مجموعه را منتشر می‌کند",
+    "members": "اعضا",
+    "hiddenCount": "{{count}} پنهان",
+    "externalNote": "اعضا از مجموعهٔ خارجی گرفته می‌شوند",
+    "empty": "هنوز عضوی اضافه نشده است"
   }
 }

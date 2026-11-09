@@ -993,8 +993,13 @@ func (i *Interceptor) resolvePayment(req core.InterceptRequest) (*interceptData,
 					token = lsps1Order.Token
 					destination = nextHop
 
-					// Use default fee params for now as LSPS1 params aren't stored in DB in same format
-					// TODO: Store actual params from order creation
+					// Record the order's own fee negotiated at create_order, not the
+					// hub's current config defaults. For LSPS1 the skim is enforced
+					// by the incoming/outgoing amounts below (outgoing =
+					// client_balance), which equals this fee when the client pays the
+					// order total; these stored params are the payment record, so
+					// they must reflect what was agreed, not a later config snapshot.
+					// FeeTotalLoki is a flat fee (LSPS1 has no proportional component).
 					cfg := i.config.Load()
 					validity := time.Hour * 24
 					if cfg.JitValidUntilSeconds > 0 {
@@ -1006,8 +1011,8 @@ func (i *Interceptor) resolvePayment(req core.InterceptRequest) (*interceptData,
 					}
 
 					params = &core.OpeningFeeParams{
-						MinFeeMloki:          uint64(cfg.ChannelMinimumFeeMloki),
-						Proportional:         uint32(cfg.ChannelFeePermyriad * 100),
+						MinFeeMloki:          uint64(max(lsps1Order.FeeTotalLoki, 0)) * 1000, // loki -> mloki, the agreed flat fee
+						Proportional:         0,
 						ValidUntil:           time.Now().Add(validity).Format(common.TimeFormat),
 						MinLifetime:          uint32(cfg.MaxInactiveDuration / 60), // seconds -> blocks (1 min/block)
 						MaxClientToSelfDelay: maxDelay,

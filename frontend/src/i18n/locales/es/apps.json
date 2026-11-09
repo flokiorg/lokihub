@@ -39,7 +39,7 @@
     "customAmount": "Monto de presupuesto personalizado ({{unit}})",
     "spent": "Gastado",
     "remaining": "Restante",
-    "cashHubCaption": "Limita los pagos ordinarios hechos a través de la propia conexión de este hub. No limita la acuñación: un billete se financia por transferencia interna y su tamaño lo limita el máximo por billetera en Ajustes del Hub."
+    "cashHubCaption": "Limita los pagos ordinarios hechos a través de la propia conexión de este hub. No limita la acuñación: un billete se financia por transferencia interna y su tamaño lo limita el máximo por Lokicash en Ajustes del Hub."
   },
   "renewals": {
     "daily": "Diario",
@@ -122,9 +122,11 @@
     "cashHubSettingsDescription": "Los cambios solo se aplican al Lokicash emitido a partir de ahora y no afectarán al ya emitido.",
     "circleHubSettingsDescription": "Los cambios solo se aplican a las billeteras de círculo creadas a partir de ahora y no afectarán a las ya creadas.",
     "maxWalletBudgetLabel": "Presupuesto máximo de la billetera",
-    "cashMaxWalletBudgetHelper": "Presupuesto máximo que se puede asignar a cada Lokicash emitido desde este hub (por defecto: 1000 loki)",
-    "circleMaxWalletBudgetHelper": "Presupuesto máximo que un miembro puede solicitar para su billetera de círculo (por defecto: 1000 loki)",
+    "cashMaxBudgetLabel": "Presupuesto máximo del Lokicash",
+    "cashMaxWalletBudgetHelper": "Presupuesto máximo que se puede asignar a cada Lokicash emitido desde este hub (por defecto: 1000 {{unit}})",
+    "circleMaxWalletBudgetHelper": "Presupuesto máximo que un miembro puede solicitar para su billetera de círculo (por defecto: 1000 {{unit}})",
     "maxWalletExpiryLabel": "Caducidad máxima de la billetera",
+    "cashMaxExpiryLabel": "Caducidad máxima del Lokicash",
     "cashMaxExpiryHelper": "Vida útil máxima del Lokicash emitido (por defecto: 1 día)",
     "circleMaxExpiryHelper": "Vida útil máxima de las billeteras de círculo emitidas (por defecto: 30 días)",
     "minRenewalLabel": "Renovación mínima",
@@ -141,7 +143,11 @@
     "hubExpiryBeforeBillsWarning": "La conexión de este {{kind}} caduca antes que el billete de mayor duración que puede acuñar. Los billetes ya emitidos conservan su propio plazo, pero no podrás acuñar nuevos una vez que caduque la conexión.",
     "advancedTitle": "Avanzado",
     "spentRetentionLabel": "Responder sobre billetes gastados durante",
-    "spentRetentionHelper": "Cuánto tiempo sigue el hub informando a un titular de que su billete se gastó, antes de callar. Sin esto, un billete gastado y un hub inaccesible se ven igual. Desactivado significa callar de inmediato."
+    "spentRetentionHelper": "Cuánto tiempo sigue el hub informando a un titular de que su billete se gastó, antes de callar. Sin esto, un billete gastado y un hub inaccesible se ven igual. Desactivado significa callar de inmediato.",
+    "cashMinTransferLabel": "Importe mínimo de transferencia",
+    "cashMinTransferHelper": "Cantidad más pequeña en la que se puede dividir un Lokicash, o dejar como cambio — 0 significa sin mínimo.",
+    "cashRedeemFeeLabel": "Comisión de canje (ppm)",
+    "cashRedeemFeeHelper": "Comisión por millón cobrada cuando un destinatario canjea un Lokicash a una billetera externa (0 = gratis). Nunca se cobra en una transferencia/división, ni en un canje a otra billetera de este mismo nodo."
   },
   "newApp": {
     "unsupportedApp": "Aplicación no compatible",

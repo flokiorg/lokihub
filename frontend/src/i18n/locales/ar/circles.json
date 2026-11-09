@@ -11,9 +11,11 @@
     "selectMember": "تحديد العضو",
     "nameLabel": "الاسم",
     "maxWalletBudgetLabel": "الحد الأقصى لميزانية المحفظة",
+    "cashMaxBudgetLabel": "الحد الأقصى لميزانية Lokicash",
     "minRenewalLabel": "أقل فترة تجديد",
     "minRenewalHelper": "أقصر فترة تجديد يمكن للعضو طلبها لميزانية محفظة الدائرة الخاصة به",
     "maxWalletExpiryLabel": "الحد الأقصى لانتهاء صلاحية المحفظة",
+    "cashMaxExpiryLabel": "الحد الأقصى لانتهاء صلاحية Lokicash",
     "feePpmLabel": "الرسوم (جزء من مليون)",
     "feePpmHelper": "رسوم لكل مليون تُفرض على المدفوعات التي تجريها محافظ الدائرة (0 = مجاني)",
     "advancedSettings": "إعدادات متقدمة",
@@ -284,8 +286,8 @@
     "chooseSavedIAInstead": "الاختيار من الإعدادات بدلاً من ذلك",
     "duplicateIdentity": "هذه الهوية مستخدَمة بالفعل من قِبل مستلم آخر.",
     "walletBudgetLabel": "المبلغ",
-    "requestedSummary": "تم طلب {{total}} loki",
-    "requestedSummaryWithMax": "تم طلب {{total}} loki من الحد الأقصى لميزانية المحفظة لهذا المركز وهو {{max}} loki",
+    "requestedSummary": "تم طلب {{total}} {{unit}}",
+    "requestedSummaryWithMax": "تم طلب {{total}} {{unit}} من الحد الأقصى لميزانية Lokicash لهذا المركز وهو {{max}} {{unit}}",
     "claimDeadlineLabel": "الموعد النهائي للاسترداد",
     "deadlineExceeds": "يتجاوز الحد الأقصى لمهلة الاسترداد لهذا المركز وهو {{max}}",
     "deadlineHelp": "يجب على كل مستلم الاسترداد خلال هذه المدة من وقت الإنشاء",
@@ -294,7 +296,7 @@
     "setClaimDeadline": "تعيين موعد نهائي للاسترداد",
     "statusAll": "الكل",
     "statusExpired": "منتهية الصلاحية",
-    "allocatedSummary": "تم تخصيص {{allocated}} loki في هذه الصفحة · {{total}} {{status}}",
+    "allocatedSummary": "تم تخصيص {{allocated}} {{unit}} في هذه الصفحة · {{total}} {{status}}",
     "recipientColumn": "المستلم",
     "revealConnection": "إظهار الاتصال",
     "groupSummary_zero": "لا يوجد مستلمون · {{claimed}}/{{count}} تمت المطالبة به",
@@ -302,7 +304,7 @@
     "groupSummary_few": "{{count}} مستلمين · {{claimed}}/{{count}} تمت المطالبة به",
     "groupSummary_many": "{{count}} مستلمًا · {{claimed}}/{{count}} تمت المطالبة به",
     "selectRecipient": "تحديد المستلم",
-    "selectAllInWallet": "تحديد جميع المستلمين في هذه المحفظة",
+    "selectAllInWallet": "تحديد جميع المستلمين في هذا Lokicash",
     "collapseRecipients": "طي المستلمين",
     "expandRecipients": "توسيع المستلمين",
     "removeWallet": "إزالة Lokicash",
@@ -377,7 +379,7 @@
     "identityNamePlaceholder": "مثال: دائرة العائلة",
     "identityNameHelper": "تُستخدم فقط لتحديد هذه الهوية المحفوظة عند إعادة استخدامها عبر الدوائر — لا تُنشَر في أي مكان.",
     "maxWalletBudgetHelper": "الحد الأقصى للميزانية التي يمكن للعضو طلبها لمحفظة الدائرة الخاصة به",
-    "minWalletBudgetHint": "{{min}} loki على الأقل. أي مبلغ أقل يجعل احتياطي رسوم Lightning البالغ 10 loki يمنع المحفظة من الدفع.",
+    "minWalletBudgetHint": "{{min}} {{unit}} على الأقل. أي مبلغ أقل يجعل احتياطي رسوم Lightning البالغ 10 {{unit}} يمنع المحفظة من الدفع.",
     "maxExpiryHelper": "أقصى مدة صلاحية لمحافظ الدائرة الصادرة",
     "hubBudgetLabel": "ميزانية المركز (اختياري)",
     "hubBudgetHelper": "يحدّ من إجمالي ميزانية جميع المحافظ التي يمكن أن تكون نشطة في هذه الدائرة في وقت واحد. اتركه فارغًا لعدم فرض حد يتجاوز الرصيد الفعلي لهذا المركز.",
@@ -393,24 +395,26 @@
     "allowlistSeedFailedToast": "تم إنشاء مركز محفظة الدائرة \"{{name}}\"، لكن تعذّر تهيئة قائمة الأعضاء — أضف الأعضاء من صفحة القائمة المسموح بها الخاصة بالمركز.",
     "errors": {
       "create": "فشل إنشاء مركز محفظة الدائرة"
-    }
+    },
+    "walletLimitsLegend": "حدود المحفظة"
   },
   "newCashHub": {
     "title": "مركز محفظة JIT جديد",
     "description": "أنشئ مركزًا ممولاً مسبقًا يصدر محافظ JIT مخصصة للإنفاق فقط للمستفيدين",
-    "maxWalletBudgetHelper": "الحد الأقصى للميزانية التي يمكن تخصيصها لكل محفظة JIT صادرة من هذا المركز",
+    "maxWalletBudgetHelper": "الحد الأقصى للميزانية التي يمكن تخصيصها لكل Lokicash صادر من هذا المركز",
     "maxExpiryHelper": "أقصى مدة صلاحية لمحافظ JIT الصادرة",
     "submit": "إنشاء مركز محفظة JIT",
     "createdToast": "تم إنشاء مركز محفظة JIT \"{{name}}\"",
     "errors": {
       "create": "فشل إنشاء مركز محفظة JIT"
-    }
+    },
+    "submitHint": "أدخل اسمًا والحد الأقصى لميزانية Lokicash للمتابعة."
   },
   "disconnectCircleHub": {
     "checking": "جارٍ التحقق من أرصدة محافظ الأعضاء…",
     "colName": "الاسم",
     "colPubkey": "المفتاح العام",
-    "colBalance": "الرصيد (loki)",
+    "colBalance": "الرصيد ({{unit}})",
     "deletedToast": "تم حذف الدائرة",
     "errors": {
       "load": "فشل تحميل محافظ الدائرة",
@@ -538,7 +542,7 @@
     "medianTimeToRedeemInfo": "كم تبقى الورقة عادةً قبل صرفها، مقيسة على آخر 1000 عملية صرف.",
     "writtenOffInfo": "قيمة تعذّر إعادتها إلى هذا المركز إطلاقاً — خسارة، لا استرداد.",
     "leftInBudgetInfo": "كم تبقّى من ميزانية الدفع الخاصة بهذا المركز قبل تجديدها. تحدّ المدفوعات العادية عبر اتصال المركز — ولا تحدّ مقدار ما يمكنه سكّه من نقد.",
-    "budgetRenewalInfo": "ميزانية الدفع الكاملة لهذا المركز ووتيرة إعادة ضبطها. السك لا يُخصم منها؛ حجم الورقة محكوم بالحد الأقصى لكل محفظة في إعدادات المركز."
+    "budgetRenewalInfo": "ميزانية الدفع الكاملة لهذا المركز ووتيرة إعادة ضبطها. السك لا يُخصم منها؛ حجم الورقة محكوم بالحد الأقصى لكل Lokicash في إعدادات المركز."
   },
   "cashCharts": {
     "outstandingTitle": "القائم عبر الزمن",
@@ -584,5 +588,15 @@
   "cashLock": {
     "ordered": "مطلوبة: لا تنتهي، لا يمكن إزالتها",
     "reminted": "أعيد سكّها: لا يمكن إزالتها"
+  },
+  "membershipPreview": {
+    "title": "معاينة العضوية",
+    "publishedBy": "ينشره",
+    "publishedByHub": "ينشره هذا المحور",
+    "publisherPending": "اختر من ينشر المجموعة",
+    "members": "الأعضاء",
+    "hiddenCount": "{{count}} مخفي",
+    "externalNote": "الأعضاء يأتون من المجموعة الخارجية",
+    "empty": "لم تتم إضافة أعضاء بعد"
   }
 }

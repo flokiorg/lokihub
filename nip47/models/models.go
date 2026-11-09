@@ -2,14 +2,18 @@ package models
 
 import (
 	"encoding/json"
+
+	"github.com/ohstr/nmilat/nip47"
 )
 
+// NIP-47 base event kinds are owned by nmilat (the protocol layer); reference
+// them here rather than redeclaring the integers, so the two cannot drift.
 const (
-	INFO_EVENT_KIND          = 13194
-	REQUEST_KIND             = 23194
-	RESPONSE_KIND            = 23195
-	LEGACY_NOTIFICATION_KIND = 23196
-	NOTIFICATION_KIND        = 23197
+	INFO_EVENT_KIND          = nip47.KindNWCInfo
+	REQUEST_KIND             = nip47.KindNWCRequest
+	RESPONSE_KIND            = nip47.KindNWCResponse
+	LEGACY_NOTIFICATION_KIND = nip47.KindNWCLegacyNotification
+	NOTIFICATION_KIND        = nip47.KindNWCNotification
 
 	// request methods
 	PAY_INVOICE_METHOD         = "pay_invoice"

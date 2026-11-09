@@ -22,7 +22,6 @@ import (
 
 const (
 	// Dashboard limits and scoring
-	radarFullMark        = 150
 	defaultListLimit     = 100
 	analyticsListLimit   = 2000
 	summaryListLimit     = 1000
@@ -94,25 +93,29 @@ func (s *Handlers) SetAnnounce(relays []string, check func(cfg *config.NodeConfi
 }
 
 type SummaryResponse struct {
-	NodeName          string         `json:"node_name"`
-	NodePubkey        string         `json:"node_pubkey"`
-	NodeHost          string         `json:"node_host"`
-	Version           string         `json:"version"`
-	Revenue24h        uint64         `json:"revenue_24h"`
-	LiquidityTotal    uint64         `json:"liquidity_total"`
-	LiquidityFree     uint64         `json:"liquidity_free"`
-	LiquidityBlocked  uint64         `json:"liquidity_blocked"`
-	LiquidityOutbound uint64         `json:"liquidity_outbound"`
-	LiquidityInbound  uint64         `json:"liquidity_inbound"`
-	ActiveOrders      map[string]int `json:"active_orders"`
-	NodeStatus        string         `json:"node_status"`
-	SyncedToChain     bool           `json:"synced_to_chain"`
-	SyncHeight        uint32         `json:"sync_height"`
-	PeersConnected    uint32         `json:"peers_connected"`
-	ChannelsActive    uint32         `json:"channels_active"`
-	ChannelsPending   uint32         `json:"channels_pending"`
-	ChannelsInactive  uint32         `json:"channels_inactive"`
-	RevenueTrend      string         `json:"revenue_trend"`
+	NodeName          string `json:"node_name"`
+	NodePubkey        string `json:"node_pubkey"`
+	NodeHost          string `json:"node_host"`
+	Version           string `json:"version"`
+	Revenue24h        uint64 `json:"revenue_24h"`
+	LiquidityTotal    uint64 `json:"liquidity_total"`
+	LiquidityFree     uint64 `json:"liquidity_free"`
+	LiquidityBlocked  uint64 `json:"liquidity_blocked"`
+	LiquidityOutbound uint64 `json:"liquidity_outbound"`
+	LiquidityInbound  uint64 `json:"liquidity_inbound"`
+	// LiquidityAvailable is false when the node (or its wallet balance) could
+	// not be reached, in which case the liquidity_total/free figures are 0 and
+	// unknown rather than real.
+	LiquidityAvailable bool           `json:"liquidity_available"`
+	ActiveOrders       map[string]int `json:"active_orders"`
+	NodeStatus         string         `json:"node_status"`
+	SyncedToChain      bool           `json:"synced_to_chain"`
+	SyncHeight         uint32         `json:"sync_height"`
+	PeersConnected     uint32         `json:"peers_connected"`
+	ChannelsActive     uint32         `json:"channels_active"`
+	ChannelsPending    uint32         `json:"channels_pending"`
+	ChannelsInactive   uint32         `json:"channels_inactive"`
+	RevenueTrend       string         `json:"revenue_trend"`
 }
 
 func NewHandlers(
@@ -142,8 +145,6 @@ func (s *Handlers) Route(req *lsps.JsonRpcRequest) *lsps.JsonRpcResponse {
 		return s.handleGetSummary(req)
 	case "list_orders":
 		return s.handleListOrders(req)
-	case "get_radar_data":
-		return s.handleGetRadarData(req)
 	case "get_analytics":
 		return s.handleGetAnalytics(req)
 	case "list_nodes":
@@ -167,63 +168,6 @@ func (s *Handlers) Route(req *lsps.JsonRpcRequest) *lsps.JsonRpcResponse {
 	default:
 		return lsps.NewJsonRpcErrorResponse(req.Id, -32601, "Method not found", nil)
 	}
-}
-
-func (s *Handlers) handleGetRadarData(req *lsps.JsonRpcRequest) *lsps.JsonRpcResponse {
-	// Calculate real metrics
-	totalCapacity, _, reserved := s.getLiquidityMetrics(context.Background())
-
-	// 1. Liquidity Score (0-radarFullMark)
-	liquidityScore := radarFullMark
-	if totalCapacity > 0 {
-		usage := float64(reserved) / float64(totalCapacity)
-		liquidityScore = int(radarFullMark * (1.0 - usage))
-	}
-
-	// 2. Uptime Score (0-radarFullMark)
-	uptimeScore := radarFullMark
-	nodes := s.nodesService.GetNodes()
-	if len(nodes) > 0 {
-		peers, _ := nodes[0].Client.ListPeers()
-		activeCount := 0
-		for _, p := range peers {
-			if p.Active {
-				activeCount++
-			}
-		}
-		if len(peers) > 0 {
-			uptimeScore = int(radarFullMark * (float64(activeCount) / float64(len(peers))))
-		}
-	}
-
-	// 3. Success Score (0-radarFullMark)
-	// Base success score weighted by order outcomes
-	successScore := (radarFullMark * 85) / 100 // 85% base
-	orders, _ := s.openingStore.ListLsps1Orders(defaultListLimit, 0)
-	if len(orders) > 0 {
-		completed := 0
-		failed := 0
-		for _, o := range orders {
-			if o.OrderState == string(lsps.Lsps1OrderStateCompleted) {
-				completed++
-			} else if o.OrderState == string(lsps.Lsps1OrderStateFailed) {
-				failed++
-			}
-		}
-		if completed+failed > 0 {
-			successScore = int(radarFullMark * (float64(completed) / float64(completed+failed)))
-		}
-	}
-
-	data := []map[string]interface{}{
-		{"subject": "Liquidity", "A": liquidityScore, "fullMark": radarFullMark},
-		{"subject": "Uptime", "A": uptimeScore, "fullMark": radarFullMark},
-		{"subject": "Speed", "A": 120, "fullMark": radarFullMark}, // TODO: compute real speed
-		{"subject": "Success", "A": successScore, "fullMark": radarFullMark},
-		{"subject": "Fees", "A": 110, "fullMark": radarFullMark}, // TODO: compute fee score
-		{"subject": "Compliance", "A": radarFullMark, "fullMark": radarFullMark},
-	}
-	return lsps.NewJsonRpcResponse(req.Id, data)
 }
 
 func (s *Handlers) handleGetAnalytics(req *lsps.JsonRpcRequest) *lsps.JsonRpcResponse {
@@ -345,7 +289,7 @@ func (s *Handlers) handleGetSummary(req *lsps.JsonRpcRequest) *lsps.JsonRpcRespo
 	mainNode := nodes[0]
 
 	// Aggregate metrics
-	totalCapacity, free, reserved := s.getLiquidityMetrics(context.Background())
+	totalCapacity, free, reserved, liquidityAvailable := s.getLiquidityMetrics(context.Background())
 
 	// Real Metrics for Summary
 	var revenue24h int64 = 0
@@ -443,25 +387,26 @@ func (s *Handlers) handleGetSummary(req *lsps.JsonRpcRequest) *lsps.JsonRpcRespo
 
 	// Create simplified summary
 	summary := SummaryResponse{
-		NodeName:          mainNode.NodeConfig.Load().Name,
-		NodePubkey:        mainNode.NodeConfig.Load().NodePubkey,
-		NodeHost:          mainNode.NodeConfig.Load().Host,
-		Version:           build.GetTag(),
-		Revenue24h:        uint64(revenue24h),
-		LiquidityTotal:    totalCapacity,
-		LiquidityFree:     free,
-		LiquidityBlocked:  reserved,
-		LiquidityOutbound: outboundLiquidity,
-		LiquidityInbound:  inboundLiquidity,
-		ActiveOrders:      orderStates,
-		NodeStatus:        nodeStatus,
-		SyncedToChain:     syncedToChain,
-		SyncHeight:        syncHeight,
-		PeersConnected:    peersConnected,
-		ChannelsActive:    channelsActive,
-		ChannelsPending:   channelsPending,
-		ChannelsInactive:  channelsInactive,
-		RevenueTrend:      revenueTrend,
+		NodeName:           mainNode.NodeConfig.Load().Name,
+		NodePubkey:         mainNode.NodeConfig.Load().NodePubkey,
+		NodeHost:           mainNode.NodeConfig.Load().Host,
+		Version:            build.GetTag(),
+		Revenue24h:         uint64(revenue24h),
+		LiquidityTotal:     totalCapacity,
+		LiquidityFree:      free,
+		LiquidityBlocked:   reserved,
+		LiquidityOutbound:  outboundLiquidity,
+		LiquidityInbound:   inboundLiquidity,
+		LiquidityAvailable: liquidityAvailable,
+		ActiveOrders:       orderStates,
+		NodeStatus:         nodeStatus,
+		SyncedToChain:      syncedToChain,
+		SyncHeight:         syncHeight,
+		PeersConnected:     peersConnected,
+		ChannelsActive:     channelsActive,
+		ChannelsPending:    channelsPending,
+		ChannelsInactive:   channelsInactive,
+		RevenueTrend:       revenueTrend,
 	}
 
 	return lsps.NewJsonRpcResponse(req.Id, summary)
@@ -861,32 +806,38 @@ func (s *Handlers) handleGetOrderDetail(req *lsps.JsonRpcRequest) *lsps.JsonRpcR
 		}
 	}
 
-	// Build a rich response with timeline events
+	// Build a rich response with timeline events. ORDER_CREATED uses CreatedAt;
+	// the per-state transitions use their persisted timestamps (paid_at /
+	// funded_at / completed_at) and omit the field while still null, so no event
+	// ever claims a time it does not have.
+	withTime := func(m map[string]interface{}, t *time.Time) map[string]interface{} {
+		if t != nil {
+			m["timestamp"] = t.Format(time.RFC3339)
+		}
+		return m
+	}
 	timeline := []map[string]interface{}{
 		{"event": "ORDER_CREATED", "timestamp": order.CreatedAt.Format(time.RFC3339), "detail": "Order registered by peer"},
 	}
 	if order.PaymentState == string(lsps.Lsps1PaymentStatePaid) || order.OrderState == string(lsps.Lsps1OrderStateCompleted) {
-		timeline = append(timeline, map[string]interface{}{
-			"event":     "PAYMENT_RECEIVED",
-			"timestamp": order.CreatedAt.Format(time.RFC3339), // Recorded at same time for now
-			"detail":    "Invoice payment confirmed",
-		})
+		timeline = append(timeline, withTime(map[string]interface{}{
+			"event":  "PAYMENT_RECEIVED",
+			"detail": "Invoice payment confirmed",
+		}, order.PaidAt))
 	}
 
 	if order.FundingTxid != nil && *order.FundingTxid != "" {
-		timeline = append(timeline, map[string]interface{}{
-			"event":     "CHANNEL_FUNDED",
-			"timestamp": order.CreatedAt.Format(time.RFC3339), // Recorded at same time for now
-			"detail":    "Funding TX: " + *order.FundingTxid,
-		})
+		timeline = append(timeline, withTime(map[string]interface{}{
+			"event":  "CHANNEL_FUNDED",
+			"detail": "Funding TX: " + *order.FundingTxid,
+		}, order.FundedAt))
 	}
 
 	if order.OrderState == string(lsps.Lsps1OrderStateCompleted) {
-		timeline = append(timeline, map[string]interface{}{
-			"event":     "ORDER_COMPLETED",
-			"timestamp": order.CreatedAt.Format(time.RFC3339), // Recorded at same time for now
-			"detail":    "Channel opened and confirmed",
-		})
+		timeline = append(timeline, withTime(map[string]interface{}{
+			"event":  "ORDER_COMPLETED",
+			"detail": "Channel opened and confirmed",
+		}, order.CompletedAt))
 	}
 
 	result := map[string]interface{}{
@@ -896,7 +847,7 @@ func (s *Handlers) handleGetOrderDetail(req *lsps.JsonRpcRequest) *lsps.JsonRpcR
 	return lsps.NewJsonRpcResponse(req.Id, result)
 }
 
-func (s *Handlers) getLiquidityMetrics(ctx context.Context) (total, free, reserved uint64) {
+func (s *Handlers) getLiquidityMetrics(ctx context.Context) (total, free, reserved uint64, available bool) {
 	reserved, _ = s.openingStore.GetReservedLiquidity()
 
 	nodes := s.nodesService.GetNodes()
@@ -905,12 +856,13 @@ func (s *Handlers) getLiquidityMetrics(ctx context.Context) (total, free, reserv
 		if err == nil {
 			free = uint64(balance.ConfirmedBalance)
 			total = free + reserved
+			available = true
 			return
 		}
 	}
 
-	// Fallback to placeholder if node not available or error
-	total = 500000000
-	free = 500000000 - reserved
+	// Node unavailable or wallet-balance error: report liquidity as unknown
+	// (total/free stay 0, available=false) rather than inventing a figure.
+	// reserved comes from the store and stays valid.
 	return
 }

@@ -134,7 +134,7 @@ type API interface {
 
 	// LSPS
 	LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsRequest) (*LSPS0ListProtocolsResponse, error)
-	LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (interface{}, error) // placeholder return type for now using generic interface or specific if needed
+	LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (*LSPS1GetInfoResponse, error)
 	LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderRequest) (interface{}, error)
 	LSPS1GetOrder(ctx context.Context, req *LSPS1GetOrderRequest) (interface{}, error)
 	LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (interface{}, error) // Returns OpeningFeeParams

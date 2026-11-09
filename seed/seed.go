@@ -60,6 +60,32 @@ type FiatRateOracle struct {
 	StalenessTTL    string   `yaml:"staleness_ttl"`
 }
 
+// NativeAsset describes the hub's on-chain asset for display: ticker/unit
+// names, decimals, the AUTO display threshold and the block explorer. It is
+// seeded (embedded default = Flokicoin) so the frontend reads one source of
+// truth and an operator can rebrand the chain via LOKIHUB_SEED_FILE with no
+// code change. Informational in L1; bech32_hrp becomes load-bearing in L2.
+type NativeAsset struct {
+	Name              string              `yaml:"name" json:"name"` // chain/brand name shown to users, e.g. "Flokicoin"
+	Ticker            string              `yaml:"ticker" json:"ticker"`
+	Symbol            string              `yaml:"symbol" json:"symbol"`
+	UnitName          string              `yaml:"unit_name" json:"unitName"`
+	SubunitName       string              `yaml:"subunit_name" json:"subunitName"`
+	Decimals          int                 `yaml:"decimals" json:"decimals"`
+	SubunitPerUnit    int64               `yaml:"subunit_per_unit" json:"subunitPerUnit"`
+	AutoThresholdLoki int64               `yaml:"auto_threshold_loki" json:"autoThresholdLoki"`
+	Bech32HRP         string              `yaml:"bech32_hrp" json:"bech32Hrp"`
+	Explorer          NativeAssetExplorer `yaml:"explorer" json:"explorer"`
+}
+
+// NativeAssetExplorer is the seed default block explorer for the native asset;
+// an operator-configured explorer (GetServices) still wins over it.
+type NativeAssetExplorer struct {
+	Label  string `yaml:"label" json:"label"`
+	URL    string `yaml:"url" json:"url"`
+	TxPath string `yaml:"tx_path" json:"txPath"`
+}
+
 // Seed is the whole embedded catalogue. Services is keyed by category
 // (flokicoin_explorer, nostr_relay); LSPs are intentionally absent.
 type Seed struct {
@@ -68,6 +94,7 @@ type Seed struct {
 	FAQ            []FAQ                     `yaml:"faq" json:"faq"`
 	Info           Info                      `yaml:"info" json:"info"`
 	FiatRateOracle FiatRateOracle            `yaml:"fiat_rate_oracle" json:"-"`
+	NativeAsset    NativeAsset               `yaml:"native_asset" json:"nativeAsset"`
 }
 
 var (

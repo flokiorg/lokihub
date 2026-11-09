@@ -47,8 +47,16 @@ export function LspOverview() {
             <Kpi
               icon={<CoinsIcon className="size-4" />}
               label="Total liquidity"
-              value={formatLoki(summary.liquidity_total)}
-              sub={`${formatLoki(summary.liquidity_free)} free`}
+              value={
+                summary.liquidity_available
+                  ? formatLoki(summary.liquidity_total)
+                  : "—"
+              }
+              sub={
+                summary.liquidity_available
+                  ? `${formatLoki(summary.liquidity_free)} free`
+                  : undefined
+              }
             />
             <Kpi
               icon={<CoinsIcon className="size-4" />}

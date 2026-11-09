@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useSWRConfig } from "swr";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { NostrProfileRow } from "src/components/circles/NostrProfileRow";
 import {
   AlertDialog,
@@ -234,7 +235,7 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
                   <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end sm:gap-3">
                     <CircleWalletStatus child={child} />
                     <div className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
-                      {(child.balanceMloki / 1000).toLocaleString()} loki
+                      <FormattedFlokicoinAmount amount={child.balanceMloki} />
                     </div>
                     <Button
                       variant="ghost"

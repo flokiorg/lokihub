@@ -33,7 +33,7 @@
       "waiting": "결제 대기 중...",
       "newAddress": "새 주소",
       "waitingConfirm": "온체인 확인 대기 중...",
-      "viewExplorer": "Flokicoin 탐색기에서 보기",
+      "viewExplorer": "{{chain}} 탐색기에서 보기",
       "received": "트랜잭션 수신됨!",
       "receiveAnother": "다른 결제 받기",
       "backToWallet": "지갑으로 돌아가기"

@@ -29,6 +29,7 @@ import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Input } from "src/components/ui/input";
 import { ONCHAIN_DUST_LOKI } from "src/constants";
 import { useBalances } from "src/hooks/useBalances";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
@@ -41,6 +42,10 @@ import { request } from "src/utils/request";
 export default function WithdrawOnchainFunds() {
   const [isLoading, setLoading] = React.useState(false);
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const explorerLabel =
+    hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
+  const feeUnit = hubInfo?.nativeAsset?.unitName ?? "loki";
   const { data: balances } = useBalances();
   const { parseInputAmount, scaleInputAmount } = useUnit();
 
@@ -162,7 +167,7 @@ export default function WithdrawOnchainFunds() {
           to={`${info?.mempoolUrl}/tx/${transactionId}`}
           className="underline flex items-center mt-2"
         >
-          View on Flokicoin Explorer
+          View on {explorerLabel}
           <ExternalLinkIcon className="size-4 ms-2" />
         </ExternalLink>
         <p>Your on-chain balance in Lokihub may take some time to update.</p>
@@ -275,7 +280,7 @@ export default function WithdrawOnchainFunds() {
           <>
             {showAdvanced && (
               <div className="grid gap-2">
-                <Label htmlFor="fee-rate">Fee Rate (loki/vB)</Label>
+                <Label htmlFor="fee-rate">Fee Rate ({feeUnit}/vB)</Label>
                 {mempoolError && (
                   <div className="text-muted-foreground text-xs flex gap-1 items-center">
                     <AlertTriangleIcon className="h-3 w-3" />
@@ -319,7 +324,7 @@ export default function WithdrawOnchainFunds() {
                       to={info?.mempoolUrl}
                       className="text-sm text-muted-foreground underline flex items-center gap-2"
                     >
-                      View on Flokicoin Explorer
+                      View on {explorerLabel}
                       <ExternalLinkIcon className="w-4 h-4" />
                     </ExternalLink>
                   </div>
@@ -348,7 +353,8 @@ export default function WithdrawOnchainFunds() {
                 <div className="mt-2 text-muted-foreground text-sm flex gap-1 items-center justify-center">
                   <InfoIcon className="h-4 w-4" />
                   On-chain payment will be made with{" "}
-                  <span className="font-semibold">{feeRate} loki/vB</span> fee
+                  <span className="font-semibold">{feeRate} {feeUnit}/vB</span>{" "}
+                  fee
                 </div>
               )}
 
@@ -386,7 +392,7 @@ export default function WithdrawOnchainFunds() {
                           <span className="font-bold slashed-zero">
                             {feeRate}
                           </span>{" "}
-                          loki/vB
+                          {feeUnit}/vB
                         </p>
                       )}
                     </div>

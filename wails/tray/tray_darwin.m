@@ -65,6 +65,10 @@ void createTray(const char* title, const void* iconData, int iconLen) {
             NSData *data = [NSData dataWithBytes:iconData length:iconLen];
             NSImage *icon = [[NSImage alloc] initWithData:data];
             icon.size = NSMakeSize(18, 18);
+            // The icon is a black-on-transparent mask (see wails/tray/icon_darwin.go).
+            // As a template image, macOS tints it to the menu bar: black on a light
+            // bar, white on a dark bar, and inverted while the menu is open.
+            [icon setTemplate:YES];
             statusItem.button.image = icon;
         } else {
             statusItem.button.title = [NSString stringWithUTF8String:title];

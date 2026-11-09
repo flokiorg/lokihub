@@ -47,13 +47,19 @@ import (
 // direction explicitly, since an item that could name its own scope subject
 // could read any co-recipient's row by naming theirs.
 type CashStatusCaller struct {
-	// IdentityValue is the verified signer's identity value, for a
-	// pubkey-bound bill.
+	// IdentityValue is the item-proof signer: a pubkey slice's own identity
+	// value, or a connection_key caller's signing key (which also authorizes any
+	// withdraw_request_id on its rows, matching cash_withdraw's authorizer).
 	IdentityValue string
 	// IsCash marks a cash-mode bill, whose slices have no identity of their
 	// own — authorization there is the secret in params, and the bill's single
 	// cash row is by definition the caller's.
 	IsCash bool
+	// ConnKeyValue is the connection_key slice's identity_value this caller
+	// proved it holds, via the attestation the dispatch verified (NIP-CASH
+	// §Scoping the Roster, mirroring cash_withdraw_quote). Empty for a pubkey or
+	// cash caller; set, it scopes "mine" to exactly that ck slice.
+	ConnKeyValue string
 }
 
 // HandleCashStatusEvent returns a cash_wallet's recipients — identity, entitled
@@ -95,9 +101,12 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 	}
 	if scope == nipcash.ScopeMine {
 		claims = claimsForCaller(oneRowPerIdentity(claims), caller)
-		// "mine" comes from the item-proof signer alone (NIP-CASH §Scoping the Roster,
+		// "mine" comes from the item-proof signer (NIP-CASH §Scoping the Roster,
 		// XQ-5): a caller it names no row for gets NOT_FOUND, never a wider roster. A
-		// connection_key holder reads scope "all" and picks its row.
+		// connection_key holder's signer is its signing key, which is never a slice's
+		// identity_value, so the dispatch resolves it to the ck slice from its
+		// attestation (CashStatusCaller.ConnKeyValue) exactly as cash_withdraw_quote
+		// does; claimsForCaller then scopes to that one slice.
 		if len(claims) == 0 {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "no slice of this bill is registered for the identity that signed this item")
 			return
@@ -237,14 +246,22 @@ func claimsForCaller(claims []db.CashWalletClaim, caller *CashStatusCaller) []db
 	}
 	out := make([]db.CashWalletClaim, 0, 1)
 	for _, c := range claims {
-		if caller.IsCash {
+		switch {
+		case caller.IsCash:
 			if c.IdentityType == db.CashIdentityCash {
 				out = append(out, c)
 			}
-			continue
-		}
-		if c.IdentityType != db.CashIdentityCash && c.IdentityValue == caller.IdentityValue {
-			out = append(out, c)
+		case caller.ConnKeyValue != "":
+			// A connection_key caller proved (via its attestation, verified in the
+			// dispatch) that it holds the ck slice named by ConnKeyValue: its own row
+			// is that slice, matched by identity_value, and never a pubkey row.
+			if c.IdentityType == db.CashIdentityConnectionKey && c.IdentityValue == caller.ConnKeyValue {
+				out = append(out, c)
+			}
+		default:
+			if c.IdentityType != db.CashIdentityCash && c.IdentityValue == caller.IdentityValue {
+				out = append(out, c)
+			}
 		}
 	}
 	return out

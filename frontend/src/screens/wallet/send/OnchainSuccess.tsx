@@ -16,6 +16,7 @@ import Loading from "src/components/Loading";
 import LottieLoading from "src/components/LottieLoading";
 import { ExternalLinkButton } from "src/components/ui/custom/external-link-button";
 import { LinkButton } from "src/components/ui/custom/link-button";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { MempoolTransaction } from "src/types";
@@ -23,6 +24,9 @@ import { MempoolTransaction } from "src/types";
 export default function OnchainSuccess() {
   const { state } = useLocation();
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const explorerLabel =
+    hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
 
   const amount = state?.amount as number;
   const txId = state?.txId as string;
@@ -68,7 +72,7 @@ export default function OnchainSuccess() {
               className="w-full"
             >
               <ExternalLinkIcon className="w-4 h-4 mr-2" />
-              View on Flokicoin Explorer
+              View on {explorerLabel}
             </ExternalLinkButton>
             <LinkButton to="/wallet/send" variant="outline" className="w-full">
               <HandCoinsIcon className="w-4 h-4 mr-2" />

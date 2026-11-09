@@ -9,7 +9,7 @@
   "intro": {
     "slide1": {
       "title": "Welcome to Lokihub",
-      "subtitle": "A powerful, all-in-one Flokicoin Lightning wallet powering the next web of engagement.",
+      "subtitle": "A powerful, all-in-one {{chain}} Lightning wallet powering the next web of engagement.",
       "next": "Next"
     },
     "slide2": {
@@ -28,7 +28,7 @@
   },
   "welcome": {
     "title": "Welcome to Lokihub",
-    "subtitle": "A powerful, all-in-one Flokicoin Lightning wallet powering the next web of engagement.",
+    "subtitle": "A powerful, all-in-one {{chain}} Lightning wallet powering the next web of engagement.",
     "getStarted": "Get Started"
   },
   "start": {
@@ -109,7 +109,7 @@
       "saving": "Saving..."
     },
     "explorer": {
-      "title": "Flokicoin Explorer",
+      "title": "Block Explorer",
       "description": "Used for fee estimation and transaction details.",
       "custom": "Custom Explorer"
     },
@@ -158,8 +158,8 @@
       },
       "notAnnounced": "No usable announcement",
       "claimedWebsite": "Website (claimed)",
-      "feeHint": "JIT channel fee from {{min}} loki + {{ppm}} ppm",
-      "inGraph": "In your node's graph: {{channels}} channels, {{capacity}} loki",
+      "feeHint": "JIT channel fee from {{min}} {{unit}} + {{ppm}} ppm",
+      "inGraph": "In your node's graph: {{channels}} channels, {{capacity}} {{unit}}",
       "notInGraphFact": "Not in your node's graph",
       "notInGraph": "{{count}} not in your node's graph",
       "notInGraph_one": "{{count}} not in your node's graph",
@@ -186,7 +186,7 @@
     },
     "validation": {
       "relayRequired": "At least one relay is required",
-      "explorerRequired": "Flokicoin Explorer URL is required",
+      "explorerRequired": "Explorer URL is required",
       "swapRequired": "Swap Service URL is required when enabled",
       "invalidUrl": "{{field}}: invalid URL format"
     },

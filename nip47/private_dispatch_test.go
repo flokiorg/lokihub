@@ -231,6 +231,38 @@ func TestServePrivateItem_OmitsRatherThanErrors(t *testing.T) {
 	assert.False(t, served)
 }
 
+// TestServePrivateItem_CreateCircleWalletOnNonCircleBillIsOmitted pins I2 for
+// create_circle_wallet: its target must be one of this Hub's Circle Wallet Hub
+// connections, so an item whose target resolved to an ordinary cash bill the
+// sender holds is a target this Hub does not hold FOR THIS METHOD and is
+// OMITTED, never answered. It used to pass the dispatch and reach the
+// create_circle_wallet controller, which refused NOT_IMPLEMENTED — an answer
+// that confirms the Hub holds the bill and so leaks it (NIP-CASH §Serving an
+// Envelope, I2).
+func TestServePrivateItem_CreateCircleWalletOnNonCircleBillIsOmitted(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+	walletPubkey, recipientPriv, recipientPub, connPriv := privateDispatchFixture(t, svc)
+
+	hubXOnly := strings.Repeat("ab", 32)
+	nonce := strings.Repeat("cd", 32)
+	notAfter := time.Now().Add(time.Minute).Unix()
+	binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
+
+	// The bill proof verifies and is signed by this bill's connection key, so the
+	// item reaches I5 and would reach the controller — yet the target is a
+	// cash_wallet, not a circle_hub.
+	item := buildItem(t, "cw1", walletPubkey, constants.NIP47MethodCreateCircleWallet,
+		`{"pubkey":"`+recipientPub+`"}`, recipientPriv, connPriv, hubXOnly, nonce, notAfter)
+
+	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+	assert.False(t, served, "a create_circle_wallet target that is not a circle_hub must be OMITTED, not answered")
+	assert.Nil(t, result.Error, "an omitted item must carry no error, or it would leak which bills the hub holds")
+}
+
 // TestServePrivateItem_RecordsOneRequestEventPerItem: the controllers take a
 // requestEventId, and the standard path creates one row per Nostr event. A batch is one
 // event carrying N operations, so sharing a row would leave every audit record and failure

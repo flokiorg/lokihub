@@ -60,6 +60,7 @@ func (svc *hubInfoService) GetInfo(ctx context.Context) (*HubInfo, error) {
 		ReleaseNotes:       info.ReleaseNotes,
 		ImageProxyMode:     svc.cfg.GetImageProxyMode(),
 		ImageProxyTemplate: svc.cfg.GetImageProxyTemplate(),
+		NativeAsset:        seed.Get().NativeAsset,
 	}, nil
 }
 

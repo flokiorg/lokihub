@@ -1,6 +1,14 @@
 package core
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// ErrOrderNotFound is returned by the opening store/service when no LSPS1
+// order matches the given order id, so callers can tell a genuine not-found
+// from an internal/DB error.
+var ErrOrderNotFound = errors.New("lsps1 order not found")
 
 type OpeningFeeParamsSetting struct {
 	Validity time.Duration
@@ -103,6 +111,13 @@ type Lsps1Order struct {
 	// gets funded).
 	ExpiresAt          time.Time `json:"expires_at"`
 	ReservedAmountLoki uint64    `json:"reserved_amount_loki"`
+
+	// Per-state transition timestamps, nil until the order reaches that state
+	// (persisted so the dashboard timeline and the LSPS1 channel.funded_at
+	// report the real time, not the order's creation time).
+	PaidAt      *time.Time `json:"paid_at,omitempty"`
+	FundedAt    *time.Time `json:"funded_at,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
 type Lsps5Webhook struct {

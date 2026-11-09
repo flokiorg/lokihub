@@ -275,27 +275,29 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		proofs = []cashwallet.ClaimProof{{EventID: verdict.RecomputedID, CreatedAt: eventCreatedAt(params.IdentityEvent), Method: method}}
 	}
 
-	// The call limit, keyed by the verified claim signer or the slice's
-	// commitment, never by the bill, and shared with cash_redeem and
-	// cash_consolidate.
-	limitKey := claimSigner
-	if isCashSource {
-		limitKey = claim.IdentityValue
-	}
-	if !controller.claimCallAllowed(limitKey) {
-		refuse(constants.ERROR_RATE_LIMITED, "too many calls by this signer; retry later")
-		return
-	}
-
 	// The call is authorized: its request_id is used from now on, whatever
-	// happens to it (NIP-CASH §request_id). A concurrent call that marked it
-	// first wins.
+	// happens to it (NIP-CASH §request_id), including the RATE_LIMITED refusal
+	// below — a rate-limited retry past authorization needs a fresh id, as
+	// cash_withdraw does. A concurrent call that marked it first wins.
 	if err := cashrequest.New(controller.db).MarkUsed(params.RequestID, method); err != nil {
 		if errors.Is(err, cashrequest.ErrRequestReused) {
 			refuse(constants.ERROR_REQUEST_REUSED, "this request_id was already used on this node")
 			return
 		}
 		refuse(constants.ERROR_INTERNAL, "could not record this request_id, please retry")
+		return
+	}
+
+	// The call limit, keyed by the verified claim signer or the slice's
+	// commitment, never by the bill, and shared with cash_redeem and
+	// cash_consolidate. Checked after the request_id is marked, so a call
+	// refused here has still spent its id.
+	limitKey := claimSigner
+	if isCashSource {
+		limitKey = claim.IdentityValue
+	}
+	if !controller.claimCallAllowed(limitKey) {
+		refuse(constants.ERROR_RATE_LIMITED, "too many calls by this signer; retry later")
 		return
 	}
 

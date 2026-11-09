@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/flokiorg/lokihub/lspd/core"
@@ -189,7 +190,8 @@ func (s *PostgresOpeningStore) GetLsps1Order(orderId string) (*core.Lsps1Order, 
 			funding_confirms_within_blocks, required_channel_confirmations,
 			channel_expiry_blocks, token, announce_channel, created_at,
 			order_state, payment_state, payment_invoice, payment_preimage, funding_txid, funding_outpoint,
-			COALESCE(refund_onchain_address, ''), COALESCE(order_total_loki, 0), COALESCE(fee_total_loki, 0)
+			COALESCE(refund_onchain_address, ''), COALESCE(order_total_loki, 0), COALESCE(fee_total_loki, 0),
+			paid_at, funded_at, completed_at
 		FROM lsps1.orders WHERE order_id=$1`, orderId)
 
 	var order core.Lsps1Order
@@ -199,8 +201,12 @@ func (s *PostgresOpeningStore) GetLsps1Order(orderId string) (*core.Lsps1Order, 
 		&order.ChannelExpiryBlocks, &order.Token, &order.AnnounceChannel, &order.CreatedAt,
 		&order.OrderState, &order.PaymentState, &order.PaymentInvoice, &order.PaymentPreimage, &order.FundingTxid, &order.FundingOutpoint,
 		&order.RefundOnchainAddress, &order.OrderTotalLoki, &order.FeeTotalLoki,
+		&order.PaidAt, &order.FundedAt, &order.CompletedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, core.ErrOrderNotFound
+		}
 		return nil, err
 	}
 	return &order, nil
@@ -212,7 +218,8 @@ func (s *PostgresOpeningStore) ListLsps1Orders(limit, offset int) ([]*core.Lsps1
 			funding_confirms_within_blocks, required_channel_confirmations,
 			channel_expiry_blocks, token, announce_channel, created_at,
 			order_state, payment_state, payment_invoice, payment_preimage, funding_txid, funding_outpoint,
-			COALESCE(refund_onchain_address, ''), COALESCE(order_total_loki, 0), COALESCE(fee_total_loki, 0)
+			COALESCE(refund_onchain_address, ''), COALESCE(order_total_loki, 0), COALESCE(fee_total_loki, 0),
+			paid_at, funded_at, completed_at
 		FROM lsps1.orders
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2`, limit, offset)
@@ -230,6 +237,7 @@ func (s *PostgresOpeningStore) ListLsps1Orders(limit, offset int) ([]*core.Lsps1
 			&o.ChannelExpiryBlocks, &o.Token, &o.AnnounceChannel, &o.CreatedAt,
 			&o.OrderState, &o.PaymentState, &o.PaymentInvoice, &o.PaymentPreimage, &o.FundingTxid, &o.FundingOutpoint,
 			&o.RefundOnchainAddress, &o.OrderTotalLoki, &o.FeeTotalLoki,
+			&o.PaidAt, &o.FundedAt, &o.CompletedAt,
 		)
 		if err != nil {
 			return nil, err

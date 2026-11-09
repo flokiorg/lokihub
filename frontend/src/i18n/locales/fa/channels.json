@@ -160,7 +160,7 @@
     "recommendDeposit": "ما توصیه می کنیم واریز کنید",
     "return": "بازگشت به نود",
     "scanQr": "اسکن بارکد برای واریز",
-    "sendFloki": "ارسال Flokicoin",
+    "sendFloki": "ارسال {{chain}}",
     "successMsg": "کانال با موفقیت سفارش داده شد",
     "toOpen": "برای باز کردن یک کانال به مبلغ",
     "waitingChannel": "در انتظار باز شدن کانال...",

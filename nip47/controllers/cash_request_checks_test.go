@@ -96,16 +96,24 @@ func TestCashTransferAndConsolidate_ThrottledCallsAreRateLimited(t *testing.T) {
 		controller.cashClaimLimiter.Allow("claim:"+f.ownerPub, limit)
 	}
 
+	// The rate limit is checked AFTER the request_id is marked used, so a call
+	// refused RATE_LIMITED past authorization has still spent its id — a retry
+	// is REQUEST_REUSED and needs a fresh one, matching cash_withdraw and the
+	// §request_id rule (used once the call passes authorization).
 	proof := buildTransferProofEvent(t, f.ownerPriv, *f.s1.WalletPubkey, db.CashIdentityPubkey, f.newPub, "", 3000, nil, time.Now())
+	transferID := testRequestID()
 	transfer := handleCashTransferFor(t, f.svc, controller, f.s1, cashTransferParams{
 		IdentityType: db.CashIdentityPubkey, IdentityValue: f.ownerPub, IdentityEvent: mustMarshal(t, proof),
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: f.newPub},
-		RequestID:   testRequestID(),
+		RequestID:   transferID,
 	})
 	require.NotNil(t, transfer.Error)
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, transfer.Error.Code)
+	assert.True(t, isUsed(t, f.svc, transferID), "a rate-limited transfer past authorization has spent its request_id")
 
-	consolidate := handleCashConsolidateFor(t, f.svc, controller, f.s1, f.params(t))
+	consolidateParams := f.params(t)
+	consolidate := handleCashConsolidateFor(t, f.svc, controller, f.s1, consolidateParams)
 	require.NotNil(t, consolidate.Error)
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, consolidate.Error.Code)
+	assert.True(t, isUsed(t, f.svc, consolidateParams.RequestID), "a rate-limited consolidate past authorization has spent its request_id")
 }

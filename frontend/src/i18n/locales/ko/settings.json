@@ -37,7 +37,7 @@
     "themeUpdated": "테마가 업데이트되었습니다.",
     "appearanceUpdated": "외관이 업데이트되었습니다.",
     "currencyUpdated": "통화가 {{currency}}로 설정되었습니다",
-    "formatUpdated": "Flokicoin 표시 형식이 업데이트되었습니다",
+    "formatUpdated": "{{chain}} 표시 형식이 업데이트되었습니다",
     "currencyFetchFailed": "통화를 가져오지 못했습니다: {{error}}",
     "updateFailed": "설정 업데이트에 실패했습니다"
   },
@@ -128,16 +128,16 @@
       "nodeOff": "먼저 설정에서 노드의 온체인 출금을 켜세요.",
       "notCapable": "이 노드의 백엔드는 온체인 출금을 지급할 수 없습니다."
     },
-    "feeBase": "출금 기본 수수료 (loki)",
+    "feeBase": "출금 기본 수수료 ({{unit}})",
     "feePpm": "출금 수수료 (ppm)",
-    "min": "최소 (loki)",
-    "max": "최대 (loki)",
+    "min": "최소 ({{unit}})",
+    "max": "최대 ({{unit}})",
     "none": "없음",
     "errors": {
-      "feeBase": "기본 수수료는 소수점 셋째 자리까지의 loki 금액입니다.",
+      "feeBase": "기본 수수료는 소수점 셋째 자리까지의 {{unit}} 금액입니다.",
       "feePpm": "수수료율은 0부터 {{max}} ppm까지의 정수입니다.",
-      "min": "최소는 소수점 셋째 자리까지의 loki 금액입니다.",
-      "max": "최대는 소수점 셋째 자리까지의 loki 금액입니다.",
+      "min": "최소는 소수점 셋째 자리까지의 {{unit}} 금액입니다.",
+      "max": "최대는 소수점 셋째 자리까지의 {{unit}} 금액입니다.",
       "minAboveMax": "최소가 최대보다 큽니다."
     },
     "scriptTypes": "지급하는 스크립트 유형",

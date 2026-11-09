@@ -39,7 +39,7 @@
   "intro": {
     "slide1": {
       "title": "Lokihub에 오신 것을 환영합니다",
-      "subtitle": "다음 세대의 참여 웹을 지원하는 강력한 올인원 Flokicoin Lightning 지갑.",
+      "subtitle": "다음 세대의 참여 웹을 지원하는 강력한 올인원 {{chain}} Lightning 지갑.",
       "next": "다음"
     },
     "slide2": {
@@ -112,7 +112,7 @@
       "saving": "저장 중..."
     },
     "explorer": {
-      "title": "Flokicoin 탐색기",
+      "title": "{{chain}} 탐색기",
       "description": "수수료 추정 및 트랜잭션 세부 정보에 사용됩니다.",
       "custom": "사용자 정의 탐색기"
     },
@@ -141,8 +141,8 @@
       },
       "notAnnounced": "사용 가능한 공지 없음",
       "claimedWebsite": "웹사이트(주장)",
-      "feeHint": "JIT 채널 수수료 {{min}} loki + {{ppm}} ppm부터",
-      "inGraph": "내 노드 그래프에 있음: 채널 {{channels}}개, {{capacity}} loki",
+      "feeHint": "JIT 채널 수수료 {{min}} {{unit}} + {{ppm}} ppm부터",
+      "inGraph": "내 노드 그래프에 있음: 채널 {{channels}}개, {{capacity}} {{unit}}",
       "notInGraphFact": "내 노드 그래프에 없음",
       "notInGraph": "내 노드 그래프 밖 {{count}}개",
       "checkOk": "실시간 확인: 공지와 일치",
@@ -168,7 +168,7 @@
     },
     "validation": {
       "relayRequired": "릴레이가 하나 이상 필요합니다",
-      "explorerRequired": "Flokicoin 탐색기 URL은 필수입니다",
+      "explorerRequired": "{{chain}} 탐색기 URL은 필수입니다",
       "swapRequired": "활성화 시 스왑 서비스 URL은 필수입니다",
       "invalidUrl": "{{field}}: 잘못된 URL 형식"
     },

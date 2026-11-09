@@ -16,6 +16,9 @@ export interface LspSummary {
   liquidity_blocked: number;
   liquidity_outbound: number;
   liquidity_inbound: number;
+  // false when the node/wallet-balance was unreachable: the liquidity totals
+  // are unknown (0) rather than real.
+  liquidity_available: boolean;
   active_orders: Record<string, number>;
   node_status: string;
   synced_to_chain: boolean;
@@ -57,7 +60,8 @@ export interface LspOrder {
 // get_order_detail (handlers.go handleGetOrderDetail).
 export interface LspOrderTimelineEvent {
   event: string;
-  timestamp: string;
+  // Absent for state transitions whose exact time the LSP does not record yet.
+  timestamp?: string;
   detail: string;
 }
 export interface LspOrderDetail {

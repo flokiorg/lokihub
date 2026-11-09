@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import useSWR from "swr";
 import { Badge } from "src/components/ui/badge";
 import {
@@ -20,8 +21,6 @@ import {
 import {
   cancelNote,
   depthLabel,
-  feeRate,
-  loki,
   outpoint,
   overdue,
   shorten,
@@ -29,6 +28,7 @@ import {
   type PayoutDetail,
   type PayoutRow,
 } from "src/components/withdraw/payouts";
+import { useNativeAmountFormat } from "src/hooks/useNativeAmountFormat";
 import { cn } from "src/lib/utils";
 import { swrFetcher } from "src/utils/swr";
 
@@ -40,6 +40,7 @@ const when = (secs?: number) =>
 // operator action changes a payout (WP-19 item 10).
 export function CashHubPayoutsCard({ hubId }: { hubId: number }) {
   const { t } = useTranslation("settings");
+  const { loki } = useNativeAmountFormat();
   const { data: rows, error } = useSWR<PayoutRow[]>(
     `/api/cash-hubs/${hubId}/payouts`,
     swrFetcher
@@ -136,6 +137,7 @@ function PayoutDetailDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation("settings");
+  const { loki, feeRate } = useNativeAmountFormat();
   const { data: d } = useSWR<PayoutDetail>(
     payoutId ? `/api/cash-hubs/${hubId}/payouts/${payoutId}` : null,
     swrFetcher
@@ -210,7 +212,11 @@ function PayoutDetailDialog({
                   </div>
                   <div className="text-muted-foreground flex flex-wrap gap-x-4">
                     {feeRate(v) && <span>{feeRate(v)}</span>}
-                    {v.fee_sat != null && <span>{v.fee_sat} loki</span>}
+                    {v.fee_sat != null && (
+                      <span>
+                        <FormattedFlokicoinAmount amount={v.fee_sat * 1000} />
+                      </span>
+                    )}
                     <span>
                       {t("withdraw.payouts.inputs", { count: v.inputs.length })}
                     </span>

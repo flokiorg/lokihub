@@ -47,7 +47,9 @@ func (s *PostgresOpeningStore) GetLsps1OrderByPaymentInvoice(paymentInvoice stri
 func (s *PostgresOpeningStore) UpdateLsps1OrderState(orderId string, newState string, newPaymentState string, expectedCurrentState string) (bool, error) {
 	result, err := s.pool.Exec(context.Background(),
 		`UPDATE lsps1.orders
-		 SET order_state = $2, payment_state = $3
+		 SET order_state = $2, payment_state = $3,
+		     paid_at = COALESCE(paid_at, CASE WHEN $3 = 'PAID' THEN NOW() END),
+		     completed_at = COALESCE(completed_at, CASE WHEN $2 = 'COMPLETED' THEN NOW() END)
 		 WHERE order_id = $1 AND order_state = $4`,
 		orderId, newState, newPaymentState, expectedCurrentState)
 
@@ -234,7 +236,7 @@ func (s *PostgresOpeningStore) GetAllCreatedLsps1Orders() ([]*core.Lsps1Order, e
 func (s *PostgresOpeningStore) UpdateLsps1OrderFunding(orderId string, fundingTxid string, fundingOutpoint int) (bool, error) {
 	result, err := s.pool.Exec(context.Background(),
 		`UPDATE lsps1.orders
-		 SET funding_txid = $2, funding_outpoint = $3
+		 SET funding_txid = $2, funding_outpoint = $3, funded_at = COALESCE(funded_at, NOW())
 		 WHERE order_id = $1 AND (funding_txid IS NULL OR funding_txid = '')`,
 		orderId, fundingTxid, fundingOutpoint)
 

@@ -11,9 +11,11 @@
     "selectMember": "メンバーを選択",
     "nameLabel": "名前",
     "maxWalletBudgetLabel": "ウォレットの最大予算",
+    "cashMaxBudgetLabel": "Lokicash の最大予算",
     "minRenewalLabel": "最短更新間隔",
     "minRenewalHelper": "メンバーがサークルウォレットの予算に対してリクエストできる最短の更新間隔",
     "maxWalletExpiryLabel": "ウォレットの最長有効期限",
+    "cashMaxExpiryLabel": "Lokicash の最長有効期限",
     "feePpmLabel": "手数料（ppm）",
     "feePpmHelper": "サークルウォレットが行う支払いに課される100万分の1単位の手数料（0 = 無料）",
     "advancedSettings": "詳細設定",
@@ -221,8 +223,8 @@
     "chooseSavedIAInstead": "代わりに設定から選択",
     "duplicateIdentity": "このアイデンティティはすでに別の受取人が使用しています。",
     "walletBudgetLabel": "金額",
-    "requestedSummary": "{{total}} loki をリクエスト",
-    "requestedSummaryWithMax": "{{total}} loki をリクエスト（このハブの最大ウォレット予算 {{max}} loki のうち）",
+    "requestedSummary": "{{total}} {{unit}} をリクエスト",
+    "requestedSummaryWithMax": "{{total}} {{unit}} をリクエスト（このハブの最大 Lokicash 予算 {{max}} {{unit}} のうち）",
     "claimDeadlineLabel": "引き換え期限",
     "deadlineExceeds": "このハブの最大引き換え期限（{{max}}）を超えています",
     "deadlineHelp": "各受取人は作成からこの期間内に引き換える必要があります",
@@ -231,11 +233,11 @@
     "setClaimDeadline": "引き換え期限を設定",
     "statusAll": "すべて",
     "statusExpired": "期限切れ",
-    "allocatedSummary": "このページで {{allocated}} loki が割り当て済み · 合計 {{total}} 件（{{status}}）",
+    "allocatedSummary": "このページで {{allocated}} {{unit}} が割り当て済み · 合計 {{total}} 件（{{status}}）",
     "recipientColumn": "受取人",
     "revealConnection": "接続を表示",
     "selectRecipient": "受取人を選択",
-    "selectAllInWallet": "このウォレットの受取人をすべて選択",
+    "selectAllInWallet": "この Lokicash の受取人をすべて選択",
     "collapseRecipients": "受取人を折りたたむ",
     "expandRecipients": "受取人を展開",
     "removeWallet": "Lokicash を削除",
@@ -298,7 +300,7 @@
     "identityNamePlaceholder": "例: 家族のサークル",
     "identityNameHelper": "複数のサークルで再利用する際にこの保存済みアイデンティティを識別するためだけに使用され、どこにも公開されません。",
     "maxWalletBudgetHelper": "メンバーがサークルウォレットに対してリクエストできる最大予算",
-    "minWalletBudgetHint": "{{min}} loki 以上。これより少ないと、10 loki の Lightning 手数料の予約のためにウォレットから支払いができなくなります。",
+    "minWalletBudgetHint": "{{min}} {{unit}} 以上。これより少ないと、10 {{unit}} の Lightning 手数料の予約のためにウォレットから支払いができなくなります。",
     "maxExpiryHelper": "発行されたサークルウォレットの最長有効期限",
     "hubBudgetLabel": "ハブの予算（任意）",
     "hubBudgetHelper": "このサークルが同時に保持できるすべてのウォレットの合計予算に上限を設けます。空欄の場合、このハブの実際の残高以外に上限はありません。",
@@ -314,24 +316,26 @@
     "allowlistSeedFailedToast": "サークルウォレットハブ「{{name}}」を作成しましたが、メンバーリストの初期設定に失敗しました — ハブの許可リストページからメンバーを追加してください。",
     "errors": {
       "create": "サークルウォレットハブの作成に失敗しました"
-    }
+    },
+    "walletLimitsLegend": "ウォレットの上限"
   },
   "newCashHub": {
     "title": "新しい JIT ウォレットハブ",
     "description": "受取人に支出専用の JIT ウォレットを発行する、事前に資金提供されたハブを作成します",
-    "maxWalletBudgetHelper": "このハブから発行される各 JIT ウォレットに割り当てられる最大予算",
+    "maxWalletBudgetHelper": "このハブから発行される各 Lokicash に割り当てられる最大予算",
     "maxExpiryHelper": "発行された JIT ウォレットの最長有効期限",
     "submit": "JIT ウォレットハブを作成",
     "createdToast": "JIT ウォレットハブ「{{name}}」を作成しました",
     "errors": {
       "create": "JIT ウォレットハブの作成に失敗しました"
-    }
+    },
+    "submitHint": "続行するには、名前と Lokicash の最大予算を入力してください。"
   },
   "disconnectCircleHub": {
     "checking": "メンバーウォレットの残高を確認しています…",
     "colName": "名前",
     "colPubkey": "公開鍵",
-    "colBalance": "残高（loki）",
+    "colBalance": "残高（{{unit}}）",
     "deletedToast": "サークルを削除しました",
     "errors": {
       "load": "サークルウォレットの読み込みに失敗しました",
@@ -382,7 +386,7 @@
     "holds": "保有",
     "spent": "支出",
     "received": "受取",
-    "capFooter": "今期 {{cap}} loki 中 {{used}} loki",
+    "capFooter": "今期 {{cap}} {{unit}} 中 {{used}} {{unit}}",
     "uncapped": "予算上限なし",
     "flowTitle": "日次フロー",
     "flowHint": "受取は線の上、支出は線の下。",
@@ -419,7 +423,7 @@
     "medianTimeToRedeemInfo": "紙幣が償還されるまでの典型的な滞留時間。直近 1,000 件の償還で測定します。",
     "writtenOffInfo": "このハブに一切戻せなかった額 — 回収ではなく損失です。",
     "leftInBudgetInfo": "更新までに残っているこのハブ自身の支払い予算。ハブの接続経由の通常の支払いを制限しますが、発行できる現金量は制限しません。",
-    "budgetRenewalInfo": "このハブの支払い予算の総額とリセット間隔。発行はここから引かれません。紙幣の額はハブ設定のウォレットごとの上限で決まります。"
+    "budgetRenewalInfo": "このハブの支払い予算の総額とリセット間隔。発行はここから引かれません。紙幣の額はハブ設定の Lokicash ごとの上限で決まります。"
   },
   "cashCharts": {
     "outstandingTitle": "未償還額の推移",
@@ -432,7 +436,7 @@
     "returnedSeries": "返還",
     "splitSeries": "分割",
     "writtenOffSeries": "償却",
-    "netFooter": "差引 {{net}} loki",
+    "netFooter": "差引 {{net}} {{unit}}",
     "billsTooltip_one": "紙幣 {{count}} 枚",
     "billsTooltip_other": "紙幣 {{count}} 枚",
     "coverageTitle": "カバレッジ",
@@ -457,5 +461,15 @@
   "cashLock": {
     "ordered": "注文分: 期限なし、削除不可",
     "reminted": "再発行: 削除不可"
+  },
+  "membershipPreview": {
+    "title": "メンバーシップのプレビュー",
+    "publishedBy": "公開者",
+    "publishedByHub": "このハブが公開",
+    "publisherPending": "セットを公開する主体を選択してください",
+    "members": "メンバー",
+    "hiddenCount": "非表示 {{count}} 件",
+    "externalNote": "メンバーは外部セットから取得されます",
+    "empty": "メンバーはまだ追加されていません"
   }
 }

@@ -1,9 +1,9 @@
-import {
-  FLOKICOIN_DISPLAY_FORMAT_AUTO,
-  FLOKICOIN_DISPLAY_FORMAT_FLC,
-} from "src/constants";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
-import { getFlokicoinUnit } from "src/utils/flokicoinFormatting";
+import {
+  FLOKICOIN_NATIVE_ASSET,
+  formatNativeAmount,
+} from "src/utils/flokicoinFormatting";
 
 interface FormattedFlokicoinAmountProps {
   amount: number; // Amount in milliloki
@@ -12,7 +12,9 @@ interface FormattedFlokicoinAmountProps {
 }
 
 /**
- * Formats a Flokicoin amount according to user settings
+ * Formats an on-chain amount according to the user's display-format setting and
+ * the hub's native asset (ticker/units/decimals from GET /api/hub/info). Falls
+ * back to the embedded Flokicoin asset while the hub info is loading.
  * @param amount - Amount in milliloki
  * @param className - Optional CSS classes
  * @param showSymbol - Whether to show the symbol/unit (default: true)
@@ -23,48 +25,19 @@ export function FormattedFlokicoinAmount({
   showSymbol = true,
 }: FormattedFlokicoinAmountProps) {
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
 
   if (!info) {
     return null;
   }
 
-  // Convert from milliloki to loki
-  const loki = Math.floor(amount / 1000);
-
-  // Get display format from settings
-  const displayFormat = info.flokicoinDisplayFormat;
-
-  const unit = getFlokicoinUnit(displayFormat, loki);
-
-  if (
-    displayFormat === FLOKICOIN_DISPLAY_FORMAT_FLC ||
-    (displayFormat === FLOKICOIN_DISPLAY_FORMAT_AUTO && unit === "FLC")
-  ) {
-    const flc = loki / 100_000_000;
-    const formattedNumber = new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 8,
-    }).format(flc);
-
-    if (!showSymbol) {
-      return <span className={className}>{formattedNumber}</span>;
-    }
-    return (
-      <span className={className}>
-        {formattedNumber} {unit}
-      </span>
-    );
-  }
-
-  const formattedNumber = new Intl.NumberFormat().format(loki);
-
-  if (!showSymbol) {
-    return <span className={className}>{formattedNumber}</span>;
-  }
-
-  return (
-    <span className={className}>
-      {formattedNumber} {unit}
-    </span>
+  const asset = hubInfo?.nativeAsset ?? FLOKICOIN_NATIVE_ASSET;
+  const formatted = formatNativeAmount(
+    amount,
+    info.flokicoinDisplayFormat,
+    asset,
+    showSymbol
   );
+
+  return <span className={className}>{formatted}</span>;
 }

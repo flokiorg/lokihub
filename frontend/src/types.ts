@@ -1,3 +1,5 @@
+import type { NativeAssetFormat } from "src/utils/flokicoinFormatting";
+
 import {
   ArrowRightLeftIcon,
   BellIcon,
@@ -754,6 +756,10 @@ export type HubInfo = {
   // placeholder and is only used in "proxy" mode.
   imageProxyMode?: ImageProxyMode;
   imageProxyTemplate?: string;
+  // The hub's on-chain asset descriptor (ticker/units/decimals/explorer) from
+  // the backend seed; drives chain-neutral amount and explorer display. Falls
+  // back to the embedded Flokicoin default when absent.
+  nativeAsset?: NativeAssetFormat;
 };
 
 export type FiatRate = {
@@ -1155,7 +1161,7 @@ export interface CircleMemberActivity {
 }
 
 // A circle hub's money question mirrors a cash hub's. A cash hub owes value it
-// handed out as bearer bills; a circle hub has ALLOCATED value into wallets
+// handed out as cash bills; a circle hub has ALLOCATED value into wallets
 // its members still hold and it can reclaim. So the headline is an allocation
 // rather than a liability, and the risk is drift — budgets filling up, one
 // member outspending the rest — rather than insolvency.

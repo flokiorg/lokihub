@@ -11,9 +11,11 @@
     "selectMember": "멤버 선택",
     "nameLabel": "이름",
     "maxWalletBudgetLabel": "최대 지갑 예산",
+    "cashMaxBudgetLabel": "최대 Lokicash 예산",
     "minRenewalLabel": "최소 갱신 주기",
     "minRenewalHelper": "멤버가 자신의 서클 지갑 예산에 대해 요청할 수 있는 가장 짧은 갱신 주기",
     "maxWalletExpiryLabel": "최대 지갑 만료 기간",
+    "cashMaxExpiryLabel": "최대 Lokicash 만료 기간",
     "feePpmLabel": "수수료 (ppm)",
     "feePpmHelper": "서클 지갑이 진행하는 결제에 부과되는 백만분율 수수료 (0 = 무료)",
     "advancedSettings": "고급 설정",
@@ -221,8 +223,8 @@
     "chooseSavedIAInstead": "대신 설정에서 선택",
     "duplicateIdentity": "이 아이덴티티는 이미 다른 수령인이 사용 중입니다.",
     "walletBudgetLabel": "금액",
-    "requestedSummary": "{{total}} loki 요청됨",
-    "requestedSummaryWithMax": "{{total}} loki 요청됨 (이 허브의 최대 지갑 예산 {{max}} loki 중)",
+    "requestedSummary": "{{total}} {{unit}} 요청됨",
+    "requestedSummaryWithMax": "{{total}} {{unit}} 요청됨 (이 허브의 최대 Lokicash 예산 {{max}} {{unit}} 중)",
     "claimDeadlineLabel": "교환 기한",
     "deadlineExceeds": "이 허브의 최대 교환 기한({{max}})을 초과합니다",
     "deadlineHelp": "각 수령인은 생성 시점으로부터 이 기간 내에 교환해야 합니다",
@@ -231,11 +233,11 @@
     "setClaimDeadline": "교환 기한 설정",
     "statusAll": "전체",
     "statusExpired": "만료됨",
-    "allocatedSummary": "이 페이지에서 {{allocated}} loki 할당됨 · 전체 {{total}}건 ({{status}})",
+    "allocatedSummary": "이 페이지에서 {{allocated}} {{unit}} 할당됨 · 전체 {{total}}건 ({{status}})",
     "recipientColumn": "수령인",
     "revealConnection": "연결 표시",
     "selectRecipient": "수령인 선택",
-    "selectAllInWallet": "이 지갑의 모든 수령인 선택",
+    "selectAllInWallet": "이 Lokicash의 모든 수령인 선택",
     "collapseRecipients": "수령인 목록 접기",
     "expandRecipients": "수령인 목록 펼치기",
     "removeWallet": "Lokicash 제거",
@@ -298,7 +300,7 @@
     "identityNamePlaceholder": "예: 가족 서클",
     "identityNameHelper": "여러 서클에서 재사용할 때 이 저장된 아이덴티티를 식별하는 용도로만 사용되며, 어디에도 게시되지 않습니다.",
     "maxWalletBudgetHelper": "멤버가 자신의 서클 지갑에 대해 요청할 수 있는 최대 예산",
-    "minWalletBudgetHint": "최소 {{min}} loki. 이보다 적으면 10 loki의 Lightning 수수료 예약 때문에 지갑에서 송금할 수 없습니다.",
+    "minWalletBudgetHint": "최소 {{min}} {{unit}}. 이보다 적으면 10 {{unit}}의 Lightning 수수료 예약 때문에 지갑에서 송금할 수 없습니다.",
     "maxExpiryHelper": "발급된 서클 지갑의 최대 유효 기간",
     "hubBudgetLabel": "허브 예산 (선택 사항)",
     "hubBudgetHelper": "이 서클이 동시에 보유할 수 있는 모든 지갑의 총 예산 상한을 설정합니다. 비워두면 이 허브의 실제 잔액 외에는 상한이 없습니다.",
@@ -314,24 +316,26 @@
     "allowlistSeedFailedToast": "서클 지갑 허브 \"{{name}}\"이(가) 생성되었지만 멤버 목록 초기화에 실패했습니다 — 허브의 허용 목록 페이지에서 멤버를 추가하세요.",
     "errors": {
       "create": "서클 지갑 허브를 생성하지 못했습니다"
-    }
+    },
+    "walletLimitsLegend": "지갑 한도"
   },
   "newCashHub": {
     "title": "새 JIT 지갑 허브",
     "description": "수령인에게 지출 전용 JIT 지갑을 발급하는 사전 자금 지원 허브를 생성합니다",
-    "maxWalletBudgetHelper": "이 허브에서 발급되는 각 JIT 지갑에 할당할 수 있는 최대 예산",
+    "maxWalletBudgetHelper": "이 허브에서 발급되는 각 Lokicash에 할당할 수 있는 최대 예산",
     "maxExpiryHelper": "발급된 JIT 지갑의 최대 유효 기간",
     "submit": "JIT 지갑 허브 생성",
     "createdToast": "JIT 지갑 허브 \"{{name}}\"이(가) 생성되었습니다",
     "errors": {
       "create": "JIT 지갑 허브를 생성하지 못했습니다"
-    }
+    },
+    "submitHint": "계속하려면 이름과 최대 Lokicash 예산을 입력하세요."
   },
   "disconnectCircleHub": {
     "checking": "멤버 지갑 잔액을 확인하는 중…",
     "colName": "이름",
     "colPubkey": "공개 키",
-    "colBalance": "잔액 (loki)",
+    "colBalance": "잔액 ({{unit}})",
     "deletedToast": "서클이 삭제되었습니다",
     "errors": {
       "load": "서클 지갑을 불러오지 못했습니다",
@@ -382,7 +386,7 @@
     "holds": "보유",
     "spent": "지출",
     "received": "수령",
-    "capFooter": "이번 기간 {{cap}} loki 중 {{used}} loki",
+    "capFooter": "이번 기간 {{cap}} {{unit}} 중 {{used}} {{unit}}",
     "uncapped": "예산 한도 없음",
     "flowTitle": "일별 흐름",
     "flowHint": "수령은 선 위, 지출은 선 아래.",
@@ -419,7 +423,7 @@
     "medianTimeToRedeemInfo": "지폐가 상환되기까지 걸리는 일반적인 시간. 최근 1,000건의 상환으로 측정합니다.",
     "writtenOffInfo": "이 허브로 전혀 돌려받을 수 없었던 금액 — 회수가 아니라 손실입니다.",
     "leftInBudgetInfo": "갱신 전까지 남은 이 허브의 결제 예산. 허브 연결을 통한 일반 결제를 제한할 뿐, 발행 가능한 캐시 양은 제한하지 않습니다.",
-    "budgetRenewalInfo": "이 허브의 전체 결제 예산과 초기화 주기. 발행은 여기서 차감되지 않으며, 지폐 금액은 허브 설정의 지갑당 최대값으로 제한됩니다."
+    "budgetRenewalInfo": "이 허브의 전체 결제 예산과 초기화 주기. 발행은 여기서 차감되지 않으며, 지폐 금액은 허브 설정의 Lokicash당 최대값으로 제한됩니다."
   },
   "cashCharts": {
     "outstandingTitle": "미상환 추이",
@@ -432,7 +436,7 @@
     "returnedSeries": "반환",
     "splitSeries": "분할",
     "writtenOffSeries": "상각",
-    "netFooter": "순증감 {{net}} loki",
+    "netFooter": "순증감 {{net}} {{unit}}",
     "billsTooltip_one": "지폐 {{count}}장",
     "billsTooltip_other": "지폐 {{count}}장",
     "coverageTitle": "커버리지",
@@ -457,5 +461,15 @@
   "cashLock": {
     "ordered": "주문분: 만료 없음, 제거 불가",
     "reminted": "재발행: 제거 불가"
+  },
+  "membershipPreview": {
+    "title": "멤버십 미리보기",
+    "publishedBy": "게시자",
+    "publishedByHub": "이 허브가 게시",
+    "publisherPending": "세트를 게시할 주체를 선택하세요",
+    "members": "멤버",
+    "hiddenCount": "숨김 {{count}}명",
+    "externalNote": "멤버는 외부 세트에서 가져옵니다",
+    "empty": "아직 추가된 멤버가 없습니다"
   }
 }

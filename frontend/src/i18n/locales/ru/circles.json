@@ -11,9 +11,11 @@
     "selectMember": "Выбрать участника",
     "nameLabel": "Название",
     "maxWalletBudgetLabel": "Максимальный бюджет кошелька",
+    "cashMaxBudgetLabel": "Максимальный бюджет Lokicash",
     "minRenewalLabel": "Минимальное обновление",
     "minRenewalHelper": "Кратчайший период обновления бюджета, который участник может запросить для своего кошелька круга",
     "maxWalletExpiryLabel": "Максимальный срок действия кошелька",
+    "cashMaxExpiryLabel": "Максимальный срок действия Lokicash",
     "feePpmLabel": "Комиссия (ppm)",
     "feePpmHelper": "Комиссия за миллион, взимаемая с платежей кошельков круга (0 = бесплатно)",
     "advancedSettings": "Дополнительные настройки",
@@ -247,8 +249,8 @@
     "chooseSavedIAInstead": "Выбрать из настроек",
     "duplicateIdentity": "Эта личность уже используется другим получателем.",
     "walletBudgetLabel": "Сумма",
-    "requestedSummary": "Запрошено {{total}} loki",
-    "requestedSummaryWithMax": "Запрошено {{total}} loki из максимального бюджета кошелька этого хаба в {{max}} loki",
+    "requestedSummary": "Запрошено {{total}} {{unit}}",
+    "requestedSummaryWithMax": "Запрошено {{total}} {{unit}} из максимального бюджета Lokicash этого хаба в {{max}} {{unit}}",
     "claimDeadlineLabel": "Срок обмена",
     "deadlineExceeds": "Превышает максимальный срок обмена этого хаба: {{max}}",
     "deadlineHelp": "Каждый получатель должен обменять в течение этого времени с момента создания",
@@ -257,13 +259,13 @@
     "setClaimDeadline": "Установить срок обмена",
     "statusAll": "Все",
     "statusExpired": "Просроченные",
-    "allocatedSummary": "Выделено {{allocated}} loki на этой странице · {{total}} {{status}}",
+    "allocatedSummary": "Выделено {{allocated}} {{unit}} на этой странице · {{total}} {{status}}",
     "recipientColumn": "Получатель",
     "revealConnection": "Показать подключение",
     "groupSummary_few": "{{count}} получателя · получено {{claimed}}/{{count}}",
     "groupSummary_many": "{{count}} получателей · получено {{claimed}}/{{count}}",
     "selectRecipient": "Выбрать получателя",
-    "selectAllInWallet": "Выбрать всех получателей этого кошелька",
+    "selectAllInWallet": "Выбрать всех получателей этого Lokicash",
     "collapseRecipients": "Свернуть получателей",
     "expandRecipients": "Развернуть получателей",
     "removeWallet": "Удалить Lokicash",
@@ -332,7 +334,7 @@
     "identityNamePlaceholder": "например, Семейный круг",
     "identityNameHelper": "Используется только для обозначения этой сохранённой личности при повторном использовании в кругах — нигде не публикуется.",
     "maxWalletBudgetHelper": "Максимальный бюджет, который участник может запросить для своего кошелька круга",
-    "minWalletBudgetHint": "Не меньше {{min}} loki. Иначе резерв в 10 loki на комиссии Lightning не позволит кошельку платить.",
+    "minWalletBudgetHint": "Не меньше {{min}} {{unit}}. Иначе резерв в 10 {{unit}} на комиссии Lightning не позволит кошельку платить.",
     "maxExpiryHelper": "Максимальный срок действия выданных кошельков круга",
     "hubBudgetLabel": "Бюджет хаба (необязательно)",
     "hubBudgetHelper": "Ограничивает совокупный бюджет всех одновременно активных кошельков этого круга. Оставьте пустым, чтобы не ограничивать сверх реального баланса этого хаба.",
@@ -348,24 +350,26 @@
     "allowlistSeedFailedToast": "Хаб кошельков круга «{{name}}» создан, но не удалось заполнить список участников — добавьте участников со страницы списка разрешённых хаба.",
     "errors": {
       "create": "Не удалось создать Хаб кошельков круга"
-    }
+    },
+    "walletLimitsLegend": "Лимиты кошелька"
   },
   "newCashHub": {
     "title": "Новый Хаб JIT-кошельков",
     "description": "Создайте предварительно профинансированный хаб, который выдаёт получателям кошельки только для расходования (JIT)",
-    "maxWalletBudgetHelper": "Максимальный бюджет, который можно выделить каждому JIT-кошельку, выданному этим хабом",
+    "maxWalletBudgetHelper": "Максимальный бюджет, который можно выделить каждому Lokicash, выданному этим хабом",
     "maxExpiryHelper": "Максимальный срок действия выданных JIT-кошельков",
     "submit": "Создать Хаб JIT-кошельков",
     "createdToast": "Хаб JIT-кошельков «{{name}}» создан",
     "errors": {
       "create": "Не удалось создать Хаб JIT-кошельков"
-    }
+    },
+    "submitHint": "Введите имя и максимальный бюджет Lokicash, чтобы продолжить."
   },
   "disconnectCircleHub": {
     "checking": "Проверка балансов кошельков участников…",
     "colName": "Название",
     "colPubkey": "Публичный ключ",
-    "colBalance": "Баланс (loki)",
+    "colBalance": "Баланс ({{unit}})",
     "deletedToast": "Круг удалён",
     "errors": {
       "load": "Не удалось загрузить кошельки круга",
@@ -424,7 +428,7 @@
     "holds": "Держит",
     "spent": "Потрачено",
     "received": "Получено",
-    "capFooter": "{{used}} из {{cap}} loki за период",
+    "capFooter": "{{used}} из {{cap}} {{unit}} за период",
     "uncapped": "Без лимита бюджета",
     "flowTitle": "Движение за день",
     "flowHint": "Полученное над линией, потраченное под ней.",
@@ -473,7 +477,7 @@
     "medianTimeToRedeemInfo": "Сколько купюра обычно лежит до погашения, по последним 1000 погашениям.",
     "writtenOffInfo": "Стоимость, которую вообще не удалось вернуть в хаб, — это убыток, а не возврат.",
     "leftInBudgetInfo": "Сколько осталось от платёжного бюджета хаба до обновления. Он ограничивает обычные платежи через подключение хаба, но НЕ объём выпускаемой наличности.",
-    "budgetRenewalInfo": "Полный платёжный бюджет хаба и частота его сброса. Выпуск из него не вычитается; размер купюры ограничен максимумом на кошелёк в настройках хаба."
+    "budgetRenewalInfo": "Полный платёжный бюджет хаба и частота его сброса. Выпуск из него не вычитается; размер купюры ограничен максимумом на Lokicash в настройках хаба."
   },
   "cashCharts": {
     "outstandingTitle": "Обязательства во времени",
@@ -486,7 +490,7 @@
     "returnedSeries": "Возвращено",
     "splitSeries": "Разделено",
     "writtenOffSeries": "Списано",
-    "netFooter": "Итого {{net}} loki",
+    "netFooter": "Итого {{net}} {{unit}}",
     "billsTooltip_one": "{{count}} купюра",
     "billsTooltip_few": "{{count}} купюры",
     "billsTooltip_many": "{{count}} купюр",
@@ -515,5 +519,15 @@
   "cashLock": {
     "ordered": "заказная: не истекает, нельзя удалить",
     "reminted": "перевыпущена: нельзя удалить"
+  },
+  "membershipPreview": {
+    "title": "Предпросмотр участников",
+    "publishedBy": "Публикует",
+    "publishedByHub": "Публикует этот хаб",
+    "publisherPending": "Выберите, кто публикует набор",
+    "members": "Участники",
+    "hiddenCount": "{{count}} скрытых",
+    "externalNote": "Участники берутся из внешнего набора",
+    "empty": "Участники ещё не добавлены"
   }
 }

@@ -16,6 +16,7 @@ import { Label } from "src/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "src/components/ui/radio-group";
 import { useBalances } from "src/hooks/useBalances";
 import { useChannels } from "src/hooks/useChannels";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { copyToClipboard } from "src/lib/clipboard";
 import { Channel, CloseChannelResponse } from "src/types";
@@ -40,6 +41,9 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
   const [step, setStep] = React.useState(channel.active ? 2 : 1);
   const [fundingTxId, setFundingTxId] = React.useState("");
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const explorerLabel =
+    hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
   const { mutate: reloadBalances } = useBalances();
   const { data: channels, mutate: reloadChannels } = useChannels();
   const [loading, setLoading] = React.useState(false);
@@ -244,7 +248,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
                 to={`${info?.mempoolUrl}/tx/${fundingTxId}`}
                 className="underline flex items-center mt-2"
               >
-                View on Flokicoin Explorer
+                View on {explorerLabel}
                 <ExternalLinkIcon className="size-4 ms-2" />
               </ExternalLink>
             </AlertDialogDescription>

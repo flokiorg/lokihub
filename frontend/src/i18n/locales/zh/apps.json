@@ -39,7 +39,7 @@
     "customAmount": "自定义预算金额（{{unit}}）",
     "spent": "已支出",
     "remaining": "剩余",
-    "cashHubCaption": "限制通过此中心自身连接进行的普通支付。它不限制铸造——现金券由内部转账提供资金，其额度由中心设置中的每钱包上限决定。"
+    "cashHubCaption": "限制通过此中心自身连接进行的普通支付。它不限制铸造——现金券由内部转账提供资金，其额度由中心设置中的每 Lokicash 上限决定。"
   },
   "renewals": {
     "daily": "每日",
@@ -122,9 +122,11 @@
     "cashHubSettingsDescription": "更改仅适用于此后发放的 Lokicash，不会影响已发放的。",
     "circleHubSettingsDescription": "更改仅适用于此后创建的圈子钱包，不会影响已创建的钱包。",
     "maxWalletBudgetLabel": "最大钱包预算",
-    "cashMaxWalletBudgetHelper": "此中心发放的每个 Lokicash 可分配的最大预算（默认：1,000 loki）",
-    "circleMaxWalletBudgetHelper": "成员为其圈子钱包可申请的最大预算（默认：1,000 loki）",
+    "cashMaxBudgetLabel": "最大 Lokicash 预算",
+    "cashMaxWalletBudgetHelper": "此中心发放的每个 Lokicash 可分配的最大预算（默认：1,000 {{unit}}）",
+    "circleMaxWalletBudgetHelper": "成员为其圈子钱包可申请的最大预算（默认：1,000 {{unit}}）",
     "maxWalletExpiryLabel": "最长钱包有效期",
+    "cashMaxExpiryLabel": "最长 Lokicash 有效期",
     "cashMaxExpiryHelper": "已发放 Lokicash 的最长有效期（默认：1 天）",
     "circleMaxExpiryHelper": "已发放圈子钱包的最长有效期（默认：30 天）",
     "minRenewalLabel": "最短续期周期",
@@ -141,7 +143,11 @@
     "hubExpiryBeforeBillsWarning": "此 {{kind}} 的连接会在它能铸造的最长现金券之前过期。已发行的现金券保留各自的期限，但连接过期后你将无法铸造新的。",
     "advancedTitle": "高级",
     "spentRetentionLabel": "对已花费现金券的应答时长",
-    "spentRetentionHelper": "中心在沉默之前，会持续告知持有者其现金券已被花费多长时间。没有它，已花费的现金券与无法访问的中心看起来完全相同。禁用表示立即沉默。"
+    "spentRetentionHelper": "中心在沉默之前，会持续告知持有者其现金券已被花费多长时间。没有它，已花费的现金券与无法访问的中心看起来完全相同。禁用表示立即沉默。",
+    "cashMinTransferLabel": "最小转账金额",
+    "cashMinTransferHelper": "Lokicash 可被拆分或作为找零保留的最小金额 — 0 表示无下限。",
+    "cashRedeemFeeLabel": "赎回费用（ppm）",
+    "cashRedeemFeeHelper": "当接收者将 Lokicash 赎回到外部钱包时按百万分之一收取的费用（0 = 免费）。转账/拆分或赎回到本节点上的另一个钱包时从不收取。"
   },
   "newApp": {
     "unsupportedApp": "不支持的应用程序",

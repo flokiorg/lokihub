@@ -39,7 +39,7 @@
   "intro": {
     "slide1": {
       "title": "به Lokihub خوش آمدید",
-      "subtitle": "یک کیف پول جامع و قدرتمند Flokicoin Lightning که به وب تعاملی بعدی قدرت می بخشد.",
+      "subtitle": "یک کیف پول جامع و قدرتمند {{chain}} Lightning که به وب تعاملی بعدی قدرت می بخشد.",
       "next": "بعدی"
     },
     "slide2": {
@@ -103,7 +103,7 @@
       "warningText": "شما مسئول خدماتی هستید که به آن‌ها متصل می‌شوید. مطمئن شوید به ارائه‌دهندگان این URL‌ها اعتماد دارید.",
       "configErrors": "خطاهای پیکربندی",
       "explorer": {
-        "title": "کاوشگر Flokicoin",
+        "title": "کاوشگر {{chain}}",
         "description": "برای تخمین کارمزد و جزئیات تراکنش استفاده می‌شود.",
         "custom": "کاوشگر سفارشی"
       },
@@ -132,8 +132,8 @@
         },
         "notAnnounced": "اعلان قابل‌استفاده ندارد",
         "claimedWebsite": "وب‌سایت (ادعایی)",
-        "feeHint": "کارمزد کانال JIT از {{min}} loki + {{ppm}} ppm",
-        "inGraph": "در گراف گره شما: {{channels}} کانال، {{capacity}} loki",
+        "feeHint": "کارمزد کانال JIT از {{min}} {{unit}} + {{ppm}} ppm",
+        "inGraph": "در گراف گره شما: {{channels}} کانال، {{capacity}} {{unit}}",
         "notInGraphFact": "در گراف گره شما نیست",
         "notInGraph": "{{count}} خارج از گراف گره شما",
         "checkOk": "بررسی زنده: با اعلان مطابق است",
@@ -159,7 +159,7 @@
       },
       "validation": {
         "relayRequired": "حداقل یک رله الزامی است",
-        "explorerRequired": "URL کاوشگر Flokicoin الزامی است",
+        "explorerRequired": "URL کاوشگر {{chain}} الزامی است",
         "swapRequired": "URL سرویس تبادل هنگام فعال‌سازی الزامی است",
         "invalidUrl": "{{field}}: فرمت URL نامعتبر است"
       }

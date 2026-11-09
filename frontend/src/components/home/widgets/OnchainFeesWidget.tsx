@@ -4,9 +4,12 @@ import {
   CardHeader,
   CardTitle,
 } from "src/components/ui/card";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 
 export function OnchainFeesWidget() {
+  const { data: hubInfo } = useHubInfo();
+  const feeUnit = hubInfo?.nativeAsset?.unitName ?? "loki";
   const { data: recommendedFees } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -46,7 +49,9 @@ export function OnchainFeesWidget() {
         {entries.map((entry) => (
           <div key={entry.title}>
             <p className="text-muted-foreground text-xs">{entry.title}</p>
-            <p className="text-xl font-semibold">{entry.value} loki/vB</p>
+            <p className="text-xl font-semibold">
+              {entry.value} {feeUnit}/vB
+            </p>
           </div>
         ))}
       </CardContent>
