@@ -101,18 +101,35 @@ func TestOrderLookup_ChainScanFailsPastPayBy_RetryThenPaid(t *testing.T) {
 	require.Len(t, got.Bills, 1)
 }
 
-func TestOrderLookup_ChainScanFailsWithPaymentRecorded_AnswersPaid(t *testing.T) {
+// A paid on-chain order past pay_by during a chain-scan outage reports a
+// retryable INTERNAL, not its stale paid state: the state table closes a
+// paid/minted on-chain order at pay_by, but closed is only reachable once a good
+// scan ends the window, so while the chain cannot be read the client must retry
+// rather than see a state the table says is already closed (NIP-CO §Order
+// State). Once the chain is readable the window ends and the lookup answers
+// closed.
+func TestOrderLookup_ChainScanFailsWithPaymentRecorded_RetryThenClosed(t *testing.T) {
 	f := newIntakeFixture(t)
 	f.nip47svc.SetOrderPayBy(f.engine.EndWindowIfDue)
 	buyer, addr, p := f.onchainOrder(t)
 	f.chain.outputs = []lnclient.OnchainOutput{{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, SeenAt: f.clock.Unix()}}
 	require.NoError(t, f.engine.ScanChain(context.TODO()))
+	require.Equal(t, db.CashOrderPaid, f.orderRow(t, p.RequestID).State, "a scan before pay_by records the payment")
 	f.chain.err = errScan
 	f.pastPayBy(t, p.RequestID)
 
+	// The chain cannot be read, so the window is not ended: retry, and the order
+	// row stays paid until a good scan closes it (never answered paid past pay_by).
 	refusal, got := f.lookupAnswer(t, buyer, p)
-	require.Nil(t, refusal, "a payment recorded before pay_by is the true state")
-	assert.Equal(t, nipCO.OrderPaid, got.State)
+	require.NotNil(t, refusal, "answered %+v past pay_by with the window not ended", got)
+	assert.Equal(t, constants.ERROR_INTERNAL, refusal.Code)
+	assert.Contains(t, refusal.Message, "retry")
+	assert.Equal(t, db.CashOrderPaid, f.orderRow(t, p.RequestID).State)
+
+	f.chain.err = nil
+	refusal, got = f.lookupAnswer(t, buyer, p)
+	require.Nil(t, refusal)
+	assert.Equal(t, nipCO.OrderClosed, got.State, "seen by pay_by: closed, still minting")
 	assert.False(t, coclient.EndedUnpaid(got, false, f.clock.Unix()))
 }
 
