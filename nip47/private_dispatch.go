@@ -247,7 +247,11 @@ func (svc *nip47Service) servePrivateItem(
 	// The connection the bill proof came through: the hub's own, or a listed
 	// circle's listing connection, which the join record names (WP-14, WP-25).
 	connUsed := signer
-	signer, billIsCashMode, authorized, lookupErr := svc.privateItemIsAuthorized(item, binding, &app, grant)
+	// ckScope is the connection_key slice's identity_value a cash_status caller
+	// proved it holds (via its attestation); "" for every other caller. It scopes
+	// "mine" to that slice in the controller (NIP-CASH §Scoping the Roster).
+	var ckScope string
+	signer, billIsCashMode, authorized, lookupErr := svc.privateItemIsAuthorized(item, binding, &app, grant, &ckScope)
 	if lookupErr != nil {
 		// The hub could not read its own records, which says nothing about the
 		// sender: answer with a code a client retries, not a refusal. Circle
@@ -390,7 +394,7 @@ func (svc *nip47Service) servePrivateItem(
 	switch item.Method {
 	case constants.NIP47MethodCashStatus:
 		controller.WithWithdraw(svc.withdrawSvc()).HandleCashStatusEvent(ctx, request, requestEvent.ID, &app, collector.publish,
-			&controllers.CashStatusCaller{IdentityValue: signer, IsCash: billIsCashMode})
+			&controllers.CashStatusCaller{IdentityValue: signer, IsCash: billIsCashMode, ConnKeyValue: ckScope})
 	case constants.NIP47MethodCashRedeem:
 		controller.HandleCashRedeemEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil,
 			&controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer})
@@ -762,11 +766,15 @@ func cashSecretMatchesBill(item transport.Item, claims []db.CashWalletClaim) boo
 // no key to recover there, since the secret in params is the whole authorization.
 // billIsCashMode is read from the hub's own claim rows, never from the item.
 // lookupErr reports that those rows could not be read, which decides nothing.
+// ckScope, when non-nil, is set to the connection_key slice's identity_value a
+// cash_status caller proved it holds (via its attestation), so the controller can
+// scope "mine" to that slice; it is left untouched for every other caller.
 func (svc *nip47Service) privateItemIsAuthorized(
 	item transport.Item,
 	binding PrivateItemBinding,
 	app *db.App,
 	grant *transport.GrantInfo,
+	ckScope *string,
 ) (signer string, billIsCashMode bool, authorized bool, lookupErr error) {
 	if grant != nil {
 		// A grant authorises this delegate to act on the bill, so — unlike a plain
@@ -916,14 +924,30 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		}
 	}
 	// On a bill with a connection_key slice the signer cannot be matched here, so a
-	// value method goes to its controller, which authorizes it itself. cash_status
-	// does not: its controller performs no identity check. NIP-CASH §Scoping the
-	// Roster decides "mine" from the item proof's own signer, never from anything the
-	// item asserts (so no attestation_event), and a caller whose proof verifies but
-	// who holds no slice MUST get NOT_FOUND, never a wider roster, whatever the scope.
-	// So cash_status falls through to the signer match below.
+	// value method goes to its controller, which authorizes it itself. cash_status's
+	// controller performs no identity check, so the signer is resolved to a slice here
+	// before the item reaches it.
+	//
+	// NIP-CASH §Scoping the Roster decides "mine" from the item proof's own signer,
+	// and a caller whose proof verifies but who holds no slice MUST get NOT_FOUND,
+	// never a wider roster, whatever the scope. A connection_key recipient's signer is
+	// never a slice's identity_value (that is a hash), so it reads its row exactly as
+	// cash_withdraw_quote locates a ck slice (§Quoting a Withdrawal): the item presents
+	// identity_value, ia_pubkey and attestation_event, the Hub verifies the attestation
+	// (its p == signer, d == identity_value, author == ia_pubkey, ia on the owner's
+	// allowlist) and matches the ck slice. cashStatusConnKeyScope authorizes only that
+	// one matched slice; a verified attestation naming no held ck slice, or an untrusted
+	// ia, is no match and stays NOT_FOUND — never widening.
 	if !decidableHere && item.Method != constants.NIP47MethodCashStatus {
 		return signer, billIsCashMode, true, nil
+	}
+	if item.Method == constants.NIP47MethodCashStatus {
+		if ckValue, ok := svc.cashStatusConnKeyScope(item, claims, signer); ok {
+			if ckScope != nil {
+				*ckScope = ckValue
+			}
+			return signer, billIsCashMode, true, nil
+		}
 	}
 	for _, claim := range claims {
 		if claim.IdentityType != db.CashIdentityCash && claim.IdentityValue == signer {
@@ -933,6 +957,63 @@ func (svc *nip47Service) privateItemIsAuthorized(
 	// Verified, but the signer holds no slice: the signer comes back so the caller
 	// can tell this NOT_FOUND from a proof that did not verify.
 	return signer, billIsCashMode, false, nil
+}
+
+// cashStatusConnKeyScope matches a cash_status item to a connection_key slice the
+// caller proves it holds, mirroring cashwithdraw.locateForQuote's ck path
+// (NIP-CASH §Quoting a Withdrawal) applied to §Scoping the Roster. The item
+// presents identity_value, ia_pubkey and attestation_event; the Hub verifies the
+// attestation against the named ck slice (nipcash.VerifySliceAttestation: kind
+// 35522, author == ia_pubkey, d == identity_value, p == the item-proof signer,
+// a platform/evidence/unexpired expiration, and the ia on the wallet owner's
+// allowlist) and returns that slice's identity_value as the scope subject.
+//
+// It returns ("", false) when the item presents no ck credential, the attestation
+// does not verify, the ia is untrusted, or no held ck slice matches — each left to
+// the NOT_FOUND the caller then receives, never a wider roster. Because it asserts
+// possession of one specific slice, it can only ever scope "mine" to that slice.
+func (svc *nip47Service) cashStatusConnKeyScope(item transport.Item, claims []db.CashWalletClaim, signer string) (string, bool) {
+	if signer == "" {
+		return "", false
+	}
+	var p struct {
+		IdentityValue    string `json:"identity_value"`
+		IAPubkey         string `json:"ia_pubkey"`
+		AttestationEvent string `json:"attestation_event"`
+	}
+	if err := json.Unmarshal(item.Params, &p); err != nil || p.IdentityValue == "" || p.IAPubkey == "" || p.AttestationEvent == "" {
+		return "", false
+	}
+	now := clock.Now().Unix()
+	for i := range claims {
+		cl := &claims[i]
+		if cl.IdentityType != db.CashIdentityConnectionKey || cl.IdentityValue != p.IdentityValue || cl.IAPubkey != p.IAPubkey {
+			continue
+		}
+		trusted, err := nipcash.VerifySliceAttestation(p.AttestationEvent, nipcash.AttestationExpectation{
+			SliceValue: cl.IdentityValue, SliceIA: cl.IAPubkey, Signer: signer, IATrusted: svc.iaTrusted,
+		}, now)
+		if err != nil || !trusted {
+			return "", false
+		}
+		return cl.IdentityValue, true
+	}
+	return "", false
+}
+
+// iaTrusted reports whether ia is on the wallet owner's Identity Authority
+// allowlist now, the check nipcash.VerifySliceAttestation folds into its trusted
+// result. A nil manager (never in production) or a read error is not trusted.
+func (svc *nip47Service) iaTrusted(ia string) bool {
+	if svc.identityAuthorityMgr == nil {
+		return false
+	}
+	ok, err := svc.identityAuthorityMgr.IsTrusted(ia)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to check Identity Authority trust for a cash_status attestation")
+		return false
+	}
+	return ok
 }
 
 // requestIDMethods are the private methods that are calls carrying a request_id
