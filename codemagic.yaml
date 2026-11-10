@@ -1,0 +1,37 @@
+# Codemagic build definition — the EXTERNAL macOS builder.
+#
+# macOS runners on GitHub are capacity-cancelled unpredictably, so the macOS
+# .dmg is built here instead, on Codemagic's Apple-silicon instance (free tier:
+# 500 macOS min/month). GitHub's release workflow triggers this via the Codemagic
+# REST API only when a release opts in (include_macos=true), then downloads the
+# .dmg and attaches it — see .github/workflows/release.yaml (job: macos).
+#
+# Setup required ONCE before the macos opt-in can work (owner action):
+#   1. Create a Codemagic account and connect the flokiorg/lokihub repo.
+#   2. Teams > Personal Account > Integrations > Codemagic API > Show -> token.
+#   3. Add GitHub repo secrets: CODEMAGIC_API_TOKEN and CODEMAGIC_APP_ID.
+# build-ci-macos.sh reads the version from the VERSION file, so no tag plumbing
+# is needed here.
+
+workflows:
+  lokihub-macos:
+    name: lokihub macOS dmg
+    instance_type: mac_mini_m2        # free-tier Apple-silicon instance
+    max_build_duration: 60
+    environment:
+      node: 20
+    scripts:
+      - name: Install toolchain
+        script: |
+          set -e
+          brew install go yarn create-dmg || true
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+          echo "PATH=$HOME/go/bin:$PATH" >> "$CM_ENV"
+      - name: Build macOS .dmg
+        script: |
+          set -e
+          export PATH="$HOME/go/bin:$PATH"
+          chmod +x ops/scripts/build-ci-macos.sh
+          ./ops/scripts/build-ci-macos.sh
+    artifacts:
+      - ops/bin/*.dmg

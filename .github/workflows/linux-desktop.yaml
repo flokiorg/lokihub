@@ -1,12 +1,17 @@
-name: Linux Build
+name: Linux Desktop Build
+
+# Opt-in (include_linux_desktop): the Linux DESKTOP packages — .deb/.rpm/.AppImage
+# across the amd64/arm64 x ubuntu22-legacy/ubuntu24-modern matrix. BUILD_MODE=desktop
+# skips the server tarball (that ships from linux-server.yaml) to avoid duplicate
+# assets. Only built for rc's that actually ship/test the desktop app.
 
 on:
   workflow_dispatch:
   workflow_call:
 
 jobs:
-  build-linux:
-    name: Build Linux (${{ matrix.name }})
+  build-linux-desktop:
+    name: Build Linux desktop (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -114,7 +119,7 @@ jobs:
           sudo pip3 install --break-system-packages appimage-builder==1.1.0 \
             || sudo pip3 install appimage-builder==1.1.0
 
-      - name: Run Linux Build Script
+      - name: Run Linux Desktop Build Script
         env:
           TAG: ${{ env.TAG }}
           BUILD_TAG: ${{ env.BUILD_TAG }}
@@ -122,6 +127,7 @@ jobs:
           DEB_SUFFIX: ${{ matrix.deb_suffix }}
           LIBWEBKIT: ${{ matrix.libwebkit }}
           LIBWEBKIT_RPM: ${{ matrix.libwebkit_rpm }}
+          BUILD_MODE: desktop
         run: |
           chmod +x ops/scripts/build-ci-linux.sh
           ./ops/scripts/build-ci-linux.sh
@@ -149,6 +155,6 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-linux-${{ matrix.goarch }}${{ matrix.deb_suffix }}-${{ env.TAG }}
+          name: artifacts-linux-desktop-${{ matrix.goarch }}${{ matrix.deb_suffix }}-${{ env.TAG }}
           path: ops/bin/*
           if-no-files-found: error
