@@ -44,42 +44,15 @@ yarn build:http
 cd ..
 
 # -----------------------------------------------------------------------------
-# 2. Build HTTP Server (Universal)
+# 2. Build Desktop (Universal)
 # -----------------------------------------------------------------------------
-
-build_http() {
-    local OUTPUT_NAME="lokihub-http-macos"
-    local TARGET_BINARY_NAME="lokihub"
-    local ARCHIVE_NAME="lokihub-server-macos-${TAG}"
-    
-    echo "Building HTTP Server (Universal)..."
-    
-    # Force CGO enabled and set CC for cross-compilation
-    echo "Building AMD64 slice..."
-    CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" \
-        go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=${VERSION_STRING}'" \
-        -o "ops/bin/lokihub-amd64" ./cmd/http
-
-    echo "Building ARM64 slice..."
-    CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CC="clang -arch arm64" \
-        go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=${VERSION_STRING}'" \
-        -o "ops/bin/lokihub-arm64" ./cmd/http
-    
-    echo "Creating Universal Binary..."
-    lipo -create -output "ops/bin/${OUTPUT_NAME}" "ops/bin/lokihub-amd64" "ops/bin/lokihub-arm64"
-    rm "ops/bin/lokihub-amd64" "ops/bin/lokihub-arm64"
-
-    # Package
-    pushd ops/bin > /dev/null
-    mv "$OUTPUT_NAME" "$TARGET_BINARY_NAME"
-    zip -q "${ARCHIVE_NAME}.zip" "$TARGET_BINARY_NAME"
-    rm "$TARGET_BINARY_NAME"
-    popd > /dev/null
-}
-
-# -----------------------------------------------------------------------------
-# 3. Build Desktop (Universal)
-# -----------------------------------------------------------------------------
+#
+# macOS ships ONLY the desktop .dmg -- there is no macOS HTTP-server release
+# (headless Hub on macOS is built from source; Linux/Windows still ship the
+# server). Dropping the server build also halves this job's two universal CGO
+# builds, so it grabs a hosted macOS runner faster and is less exposed to
+# capacity cancellation -- which matters because the release now requires the
+# .dmg (see .github/workflows/release.yaml).
 
 build_macos_desktop() {
     local BASENAME="lokihub-desktop-macos"
@@ -177,9 +150,6 @@ build_macos_desktop() {
         exit 1
     fi
 }
-
-echo "--- Building HTTP Servers ---"
-build_http
 
 echo "--- Building Darwin Desktop ---"
 build_macos_desktop
