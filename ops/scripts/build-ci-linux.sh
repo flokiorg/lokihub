@@ -18,6 +18,14 @@ fi
 VERSION_STRING="${BUILD_TAG:-$TAG}"
 GOOS="linux"
 
+# BUILD_MODE selects what this leg produces:
+#   server  - frontend + headless HTTP server tarball only (no GTK/webkit; the
+#             lean default shipped on every rc)
+#   desktop - frontend + Wails desktop binary + deb/rpm (opt-in; AppImage is
+#             assembled by the workflow from the AppDir staged here)
+#   all     - both (back-compat default)
+BUILD_MODE="${BUILD_MODE:-all}"
+
 export GOFLAGS="-buildvcs=false"
 
 # Set by the old ops/docker/build-linux-arm64*.Dockerfile images when
@@ -53,7 +61,7 @@ cd ..
 # the legacy/modern split - only build it once per arch (in the legacy leg,
 # for the widest glibc compatibility), or it archives under the same
 # filename from both legs and collides when release.yaml uploads assets.
-if [ -z "$DEB_SUFFIX" ]; then
+if [ "$BUILD_MODE" != "desktop" ] && [ -z "$DEB_SUFFIX" ]; then
     echo "--- Building HTTP Server ---"
     TARGET_BINARY_NAME="lokihub"
     OUTPUT_NAME="lokihub-http-${GOOS}-${GOARCH}"
@@ -71,6 +79,7 @@ else
     echo "--- Skipping HTTP Server build (already built in the legacy leg for this arch) ---"
 fi
 
+if [ "$BUILD_MODE" != "server" ]; then
 # -----------------------------------------------------------------------------
 # 3. Desktop Binary + AppDir Staging
 # -----------------------------------------------------------------------------
@@ -122,6 +131,7 @@ RPM_NAME="lokihub-desktop-linux${DEB_SUFFIX}-${RPM_ARCH}-${TAG}.rpm"
 nfpm package --config ops/packaging/nfpm.yaml --packager rpm --target "ops/bin/${RPM_NAME}"
 
 rm "ops/bin/${TARGET_BINARY}"
+fi  # BUILD_MODE != server
 
 echo "Build Complete. Artifacts in ops/bin:"
 ls -lh ops/bin

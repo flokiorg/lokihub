@@ -1,36 +1,43 @@
 name: Release
 
-# Build every platform and publish -- in ONE run, from ONE commit.
+# Lean by default, extras opt-in per release.
 #
-# macOS is MANDATORY. `publish` depends on linux AND macos AND windows, so the
-# release cannot be created unless the .dmg exists. If the GitHub-hosted macOS
-# runner is capacity-cancelled, the macos job is cancelled, publish is skipped,
-# and NO release is produced (the old "degrade gracefully without macOS" posture
-# is deliberately gone).
+# Every rc builds and publishes ONLY the Linux server binaries (amd64+arm64) --
+# the artifacts that actually get deployed. The desktop packages, Windows, and
+# the macOS .dmg are NOT built unless this release opts in, because most rc's
+# aren't going to test them and shipping an untested artifact is worse than
+# omitting it.
 #
-# Recover WITHOUT rebuilding Linux/Windows by re-running only the failed jobs:
+#   include_linux_desktop  -> adds Linux .deb/.rpm/.AppImage (full arch matrix)
+#   include_windows        -> adds the Windows desktop build
+#   include_macos          -> builds the .dmg on Codemagic (external; GitHub-hosted
+#                             macOS runners are capacity-unreliable) and attaches it
 #
-#     gh run rerun --failed <run-id>        (or the "Re-run failed jobs" button)
+# Publish gate: Linux server is always required; an opted-in platform that FAILS
+# blocks the release; a platform that wasn't opted in is simply absent. So you
+# never ship a release missing something you asked for, and never wait on
+# something you didn't. build-and-publish share one run, so binaries/tag/notes
+# are one commit by construction.
 #
-# That re-runs just the cancelled macos job + publish and reuses the Linux/
-# Windows artifacts already attached to the run. release-retry.yaml does this
-# automatically, a bounded number of times, when a Release run fails on a macOS
-# *cancellation* (a genuine macOS build *failure* is left for a human).
-#
-# Because build and publish share one run, the binaries, tag, release notes and
-# commit are the same commit by construction. There is no cross-run artifact
-# scavenging and no version-string run-selection -- the whole class of "released
-# rc.8 with rc.7 binaries" staleness bug is structurally impossible here, so the
-# guards the old decoupled design needed are gone with it.
-#
-# dry_run=true builds every platform but skips publish (a release-less test build
-# -- this replaces the former build-all.yaml).
+# dry_run=true builds the selected platforms but publishes nothing.
 
 on:
   workflow_dispatch:
     inputs:
+      include_linux_desktop:
+        description: "Also build Linux desktop (.deb/.rpm/.AppImage)"
+        type: boolean
+        default: false
+      include_windows:
+        description: "Also build the Windows desktop app"
+        type: boolean
+        default: false
+      include_macos:
+        description: "Also build the macOS .dmg (via Codemagic)"
+        type: boolean
+        default: false
       dry_run:
-        description: "Build all platforms but do not publish a release"
+        description: "Build selected platforms but do not publish"
         type: boolean
         default: false
 
@@ -38,27 +45,100 @@ permissions:
   contents: read
 
 jobs:
-  linux:
-    name: Linux
-    uses: ./.github/workflows/linux.yaml
+  linux-server:
+    name: Linux server
+    uses: ./.github/workflows/linux-server.yaml
     secrets: inherit
 
-  macos:
-    name: macOS
-    uses: ./.github/workflows/macos.yaml
+  linux-desktop:
+    name: Linux desktop
+    if: ${{ inputs.include_linux_desktop }}
+    uses: ./.github/workflows/linux-desktop.yaml
     secrets: inherit
 
   windows:
     name: Windows
+    if: ${{ inputs.include_windows }}
     uses: ./.github/workflows/windows.yaml
     secrets: inherit
 
+  macos:
+    name: macOS (Codemagic)
+    if: ${{ inputs.include_macos }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Version
+        shell: bash
+        run: |
+          TAG=$(cat VERSION | tr -d '[:space:]')
+          [ -n "$TAG" ] || { echo "::error::VERSION empty"; exit 1; }
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Build .dmg on Codemagic and download it
+        env:
+          CM_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          CM_APP_ID: ${{ secrets.CODEMAGIC_APP_ID }}
+          CM_WORKFLOW: lokihub-macos
+          REF: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CM_TOKEN:-}" ] || [ -z "${CM_APP_ID:-}" ]; then
+            echo "::error::include_macos=true but CODEMAGIC_API_TOKEN / CODEMAGIC_APP_ID secrets are not set. Connect Codemagic first (see codemagic.yaml)."
+            exit 1
+          fi
+          echo "Triggering Codemagic build ($CM_WORKFLOW on $REF)..."
+          build_id=$(curl -sS -X POST https://api.codemagic.io/builds \
+            -H "x-auth-token: $CM_TOKEN" -H "Content-Type: application/json" \
+            -d "{\"appId\":\"$CM_APP_ID\",\"workflowId\":\"$CM_WORKFLOW\",\"branch\":\"$REF\"}" \
+            | jq -r '.buildId')
+          if [ -z "$build_id" ] || [ "$build_id" = "null" ]; then
+            echo "::error::Codemagic did not return a buildId"; exit 1
+          fi
+          echo "Codemagic buildId=$build_id; polling..."
+          status=""
+          for _ in $(seq 1 120); do          # up to ~60 min (30s * 120)
+            sleep 30
+            resp=$(curl -sS https://api.codemagic.io/builds/"$build_id" -H "x-auth-token: $CM_TOKEN")
+            status=$(echo "$resp" | jq -r '.build.status')
+            echo "  status=$status"
+            case "$status" in
+              finished) break ;;
+              failed|timeout|canceled|skipped) echo "::error::Codemagic build $status"; exit 1 ;;
+            esac
+          done
+          [ "$status" = "finished" ] || { echo "::error::Codemagic build did not finish in time (last status: $status)"; exit 1; }
+          dmg_url=$(echo "$resp" | jq -r '.build.artefacts[]? | select(.name|endswith(".dmg")) | .url' | head -1)
+          [ -n "$dmg_url" ] && [ "$dmg_url" != "null" ] || { echo "::error::no .dmg artifact in Codemagic build"; exit 1; }
+          mkdir -p ops/bin
+          echo "Downloading $dmg_url"
+          curl -sSL -H "x-auth-token: $CM_TOKEN" -o "ops/bin/lokihub-desktop-macos-${TAG}.dmg" "$dmg_url"
+          ls -lh ops/bin/*.dmg
+
+      - name: Upload Artifacts (macOS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-macos-${{ env.TAG }}
+          path: ops/bin/*.dmg
+          if-no-files-found: error
+
   publish:
     name: Publish Release
-    # macOS is in this list on purpose: no .dmg => this job never runs => no
-    # release. Re-run failed jobs to retry macOS without rebuilding Linux/Windows.
-    needs: [linux, macos, windows]
-    if: ${{ !inputs.dry_run }}
+    needs: [linux-server, linux-desktop, windows, macos]
+    # Run unless cancelled, as long as the always-on Linux server succeeded and
+    # every OTHER platform either succeeded or was skipped (i.e. not opted in).
+    # An opted-in platform that failed leaves its result = 'failure' and blocks.
+    if: >-
+      ${{ !cancelled() && !inputs.dry_run &&
+          needs.linux-server.result == 'success' &&
+          needs.linux-desktop.result != 'failure' &&
+          needs.windows.result != 'failure' &&
+          needs.macos.result != 'failure' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -69,54 +149,28 @@ jobs:
       - name: Read Version
         shell: bash
         run: |
-          if [ ! -f VERSION ]; then
-            echo "::error::VERSION file not found"
-            exit 1
-          fi
+          [ -f VERSION ] || { echo "::error::VERSION file not found"; exit 1; }
           TAG=$(cat VERSION | tr -d '[:space:]')
-          if [ -z "$TAG" ]; then
-            echo "::error::VERSION file is empty"
-            exit 1
-          fi
+          [ -n "$TAG" ] || { echo "::error::VERSION file is empty"; exit 1; }
           echo "TAG=$TAG" >> "$GITHUB_ENV"
-          if [[ "$TAG" == *-* ]]; then
-            echo "PRERELEASE=true" >> "$GITHUB_ENV"
-          else
-            echo "PRERELEASE=false" >> "$GITHUB_ENV"
-          fi
+          if [[ "$TAG" == *-* ]]; then echo "PRERELEASE=true" >> "$GITHUB_ENV"; else echo "PRERELEASE=false" >> "$GITHUB_ENV"; fi
 
-      # A pre-release (e.g. 0.5.0-rc.34) documents the version it is a candidate
-      # for, so the notes live under that open "## [0.5.0]" section rather than
-      # one heading per candidate -- mirrors how nmilat's CHANGELOG.md
-      # accumulates an unreleased version across its rc's. A missing section is a
-      # hard error: a release with no notes is a mistake, not a success.
       - name: Resolve Release Notes from CHANGELOG.md
         id: notes
         shell: bash
         run: |
           NOTES_VERSION="${TAG%%-*}"
           NOTES=$(awk -v ver="$NOTES_VERSION" '
-            /^## \[/ {
-              if (found) exit
-              if (index($0, "[" ver "]") > 0) { found=1; next }
-            }
+            /^## \[/ { if (found) exit; if (index($0, "[" ver "]") > 0) { found=1; next } }
             found { print }
           ' CHANGELOG.md)
           NOTES=$(printf '%s\n' "$NOTES" | sed -e '/./,$!d' -e ':a' -e '/^\n*$/{$d;N;ba' -e '}')
           if [ -z "$NOTES" ]; then
-            echo "::error::no CHANGELOG.md section found for [$NOTES_VERSION] - write the release note and commit it before running this workflow"
+            echo "::error::no CHANGELOG.md section found for [$NOTES_VERSION] - write the release note and commit it first"
             exit 1
           fi
-          {
-            echo "notes<<RELEASE_NOTES_EOF"
-            echo "$NOTES"
-            echo "RELEASE_NOTES_EOF"
-          } >> "$GITHUB_OUTPUT"
-          echo "Release note found for [$NOTES_VERSION] in CHANGELOG.md"
+          { echo "notes<<RELEASE_NOTES_EOF"; echo "$NOTES"; echo "RELEASE_NOTES_EOF"; } >> "$GITHUB_OUTPUT"
 
-      # No run-id hunting: the platform jobs above are part of THIS run, so their
-      # artifacts download straight from it. download-artifact with no `name`
-      # fetches every artifact of the current run into artifacts/<name>/.
       - name: Download this run's build artifacts
         uses: actions/download-artifact@v4.3.0
         with:
@@ -125,39 +179,27 @@ jobs:
       - name: Display Artifacts
         run: ls -R artifacts
 
-      - name: Verify artifacts (version + all platforms present)
+      - name: Verify artifacts (version + required/opted-in platforms)
         shell: bash
+        env:
+          WANT_LINUX_DESKTOP: ${{ inputs.include_linux_desktop }}
+          WANT_WINDOWS: ${{ inputs.include_windows }}
+          WANT_MACOS: ${{ inputs.include_macos }}
         run: |
           set -euo pipefail
-          # Staleness guard: every file must carry exactly $TAG and NOT
-          # $TAG-followed-by-a-digit, so an rc.2 release never accepts rc.21
-          # binaries. (Cheap -- the version is in every asset's filename.)
+          # Staleness guard: every file carries exactly $TAG, not $TAG+digit.
           wrong=$(find artifacts -type f ! \( -name "*${TAG}*" -a ! -name "*${TAG}[0-9]*" \) | head -20 || true)
-          if [ -n "$wrong" ]; then
-            echo "::error::artifacts not carrying exactly ${TAG} were produced (wrong version):"
-            echo "$wrong"
-            exit 1
-          fi
+          if [ -n "$wrong" ]; then echo "::error::artifacts not carrying ${TAG}:"; echo "$wrong"; exit 1; fi
           versioned=$(find artifacts -type f -name "*${TAG}*" ! -name "*${TAG}[0-9]*")
-          if [ -z "$versioned" ]; then
-            echo "::error::no artifacts for ${TAG} were produced"
-            exit 1
-          fi
-          # All three platforms are REQUIRED -- macOS included. `needs` already
-          # guarantees each job succeeded; this is the belt-and-suspenders check
-          # that each actually produced its named asset.
-          for plat in linux macos windows; do
-            if ! grep -qi "$plat" <<<"$versioned"; then
-              echo "::error::no $plat artifacts for ${TAG} - cannot release; re-run failed jobs"
-              exit 1
-            fi
+          [ -n "$versioned" ] || { echo "::error::no artifacts for ${TAG}"; exit 1; }
+          # Always required: Linux server for both arches.
+          for want in "lokihub-server-linux-amd64" "lokihub-server-linux-arm64"; do
+            grep -q "$want" <<<"$versioned" || { echo "::error::missing required $want"; exit 1; }
           done
-          # macOS must include the desktop .dmg specifically (the one mandatory
-          # asset this whole gate exists to protect).
-          if ! grep -qiE 'desktop-macos.*\.dmg' <<<"$versioned"; then
-            echo "::error::macOS desktop .dmg missing for ${TAG} - cannot release"
-            exit 1
-          fi
+          # Opted-in platforms must have delivered their asset.
+          [ "$WANT_LINUX_DESKTOP" != "true" ] || grep -qiE 'desktop-linux.*\.(deb|rpm|AppImage)' <<<"$versioned" || { echo "::error::include_linux_desktop set but no desktop package"; exit 1; }
+          [ "$WANT_WINDOWS" != "true" ] || grep -qi 'windows' <<<"$versioned" || { echo "::error::include_windows set but no windows asset"; exit 1; }
+          [ "$WANT_MACOS" != "true" ] || grep -qiE 'macos.*\.dmg' <<<"$versioned" || { echo "::error::include_macos set but no .dmg"; exit 1; }
           echo "artifacts OK for ${TAG} ($(grep -c . <<<"$versioned") files)"
 
       - name: Create Release
