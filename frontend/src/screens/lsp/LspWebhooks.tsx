@@ -1,4 +1,5 @@
 import { WebhookIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import {
@@ -17,45 +18,44 @@ import {
 // live registry. Wiring a registry would require a new lspd dashboard method
 // (flagged for a follow-up; see the migration parity inventory, Webhooks GAP).
 export function LspWebhooks() {
+  const { t } = useTranslation("lsp");
   return (
     <div className="space-y-4">
       <AppHeader
-        title="Webhooks"
-        description="LSPS5 client notification webhooks"
+        title={t("webhooks.title")}
+        description={t("webhooks.description")}
       />
 
       <Alert>
         <WebhookIcon className="size-4" />
-        <AlertTitle>Managed by clients over the LSPS protocol</AlertTitle>
-        <AlertDescription>
-          Clients register and remove their own LSPS5 webhooks over the LSPS
-          transport (bLIP-55). The LSP operator dashboard API does not expose a
-          per-webhook registry, so there is nothing to list or edit here yet.
-        </AlertDescription>
+        <AlertTitle>{t("webhooks.alert.title")}</AlertTitle>
+        <AlertDescription>{t("webhooks.alert.description")}</AlertDescription>
       </Alert>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Transports</CardTitle>
+          <CardTitle className="text-base">
+            {t("webhooks.transports.title")}
+          </CardTitle>
           <CardDescription>
-            How notifications reach a client once it has registered a webhook.
+            {t("webhooks.transports.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div className="grid gap-0.5">
-            <span className="font-medium">push (HTTPS)</span>
+            <span className="font-medium">
+              {t("webhooks.transports.push.title")}
+            </span>
             <span className="text-muted-foreground">
-              A signed POST to the client&apos;s https:// URL. Dial-time SSRF
-              guard rejects private addresses unless loopback webhooks are
-              explicitly enabled on the daemon.
+              {t("webhooks.transports.push.description")}
             </span>
           </div>
           <div className="grid gap-0.5">
-            <span className="font-medium">nostr</span>
+            <span className="font-medium">
+              {t("webhooks.transports.nostr.title")}
+            </span>
             <span className="text-muted-foreground">
-              An encrypted event (kind 31055) to the client&apos;s
-              nostr+lsps5:// relay. Delivered through the daemon&apos;s relay
-              pool.
+              {t("webhooks.transports.nostr.description")}
             </span>
           </div>
         </CardContent>
@@ -63,12 +63,10 @@ export function LspWebhooks() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Limits</CardTitle>
-          <CardDescription>
-            Webhook limits are configured on the LSP daemon via environment
-            (LSPD_LSPS5_MAX_WEBHOOKS, LSPD_LSPS5_ALLOW_LOOPBACK_WEBHOOKS) and
-            are not editable from the Hub.
-          </CardDescription>
+          <CardTitle className="text-base">
+            {t("webhooks.limits.title")}
+          </CardTitle>
+          <CardDescription>{t("webhooks.limits.description")}</CardDescription>
         </CardHeader>
       </Card>
     </div>

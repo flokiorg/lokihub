@@ -11,7 +11,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/logger"
-	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
+	nostrlsps5 "github.com/ohstr/nostr-lsps5"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -35,11 +35,11 @@ type Listener struct {
 	relays            []string
 	stop              chan struct{}
 	getTrustedPubkeys func() []string
-	lsps5             *nostrlsps5.LSPS5
+	lsps5             *nostrlsps5.Client
 }
 
 func NewListener(keys keys.Keys, cfg config.Config, eventPublisher events.EventPublisher, getTrustedPubkeys func() []string) *Listener {
-	lsps5 := nostrlsps5.NewLSPS5(keys.GetNostrSecretKey())
+	lsps5 := nostrlsps5.New(keys.GetNostrSecretKey())
 	return &Listener{
 		keys:              keys,
 		cfg:               cfg,
@@ -79,10 +79,10 @@ func (l *Listener) Start(ctx context.Context, pool *nostr.SimplePool) error {
 		Msg("Starting LSPS5 Nostr listener")
 
 	filters := nostr.Filter{
-		Kinds: []int{nostrlsps5.KindLSPS5},
+		Kinds: []int{nostrlsps5.Kind},
 		Tags: nostr.TagMap{
 			"p": []string{pubkey},
-			"t": []string{nostrlsps5.TagLSPS5},
+			"t": []string{nostrlsps5.Tag},
 		},
 		Since: ptr(nostr.Timestamp(time.Now().Add(-24 * time.Hour).Unix())),
 	}
@@ -179,7 +179,7 @@ func (l *Listener) handleEvent(ctx context.Context, ev *nostr.Event) {
 	}
 
 	// Parse notification via library
-	notification, err := l.lsps5.ParseNotificationEvent(ev, ev.PubKey)
+	notification, err := l.lsps5.ParseEvent(ev, ev.PubKey)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("id", ev.ID).Msg("Failed to parse LSPS5 notification via library")
 		return

@@ -3,7 +3,7 @@ package nip47
 import (
 	"context"
 	"encoding/json"
-	"github.com/flokiorg/lokihub/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlelife"
 	"strings"
 	"sync"
 	"testing"

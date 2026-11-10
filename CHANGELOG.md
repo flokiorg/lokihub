@@ -9,6 +9,14 @@ hub to services the user has explicitly selected.
 
 ### Added
 
+- Accepts NIP-CASH Pre-Authorisation grants on the private transport: a bill
+  holder can delegate a read method (`cash_status`, `cash_withdraw_quote`) to
+  another key, which then reads the bill without the bearer connection secret.
+  The hub accepts the grant in place of a bill proof only when the item's slice
+  proof is signed by the grant's named delegate. (#N)
+- Adds a Settings button to rotate the private-transport inbox key, so a leaked
+  inbox key can be replaced from the UI; the retired key stays valid for the
+  request-freshness window. (#223)
 - Adds the Cash Hub: it issues multi-recipient cash bills, each held by a secret
   or bound to a Nostr identity and shared as a `lokicash1…` token. Recipients
   can split (`cash_transfer`), merge (`cash_consolidate`), read (`cash_status`)
@@ -24,6 +32,10 @@ hub to services the user has explicitly selected.
 - Sells a Cash Hub's cash over NIP-CO Order connections with configurable
   Lightning and on-chain terms; a paid order is minted into bills automatically
   and tracked through its lifecycle. (#158)
+- Adds the operator Sell-cash console for a Cash Hub: manage NIP-CO Order
+  connections with their re-showable `cashorder1…` strings, set the per-kind
+  selling terms and open-order ceilings, and read the orders placed and the
+  payments the Hub kept. (#220)
 - Pays a Cash Hub out on-chain: a slice can be redeemed to an on-chain address,
   with per-Hub withdraw fees and an operator screen for the payout engine. (#160)
 - Lists a circle as a public NIP-CASH offer (kind-31190) with its own
@@ -55,10 +67,6 @@ hub to services the user has explicitly selected.
 - Adds an "Open data folder" button to the desktop app's startup-error and
   critical-error screens, so the app-data folder (database, config, logs) can
   be opened when something goes wrong. (#215)
-- Accepts NIP-47 Pre-Authorisation grants for read methods on the private
-  transport, so a holder can delegate read access such as `cash_status` to
-  another key without handing over its own slice proof; a grant marked
-  single-use is spent on first use and a replay is answered with silence. (#224)
 
 ### Changed
 
@@ -71,20 +79,11 @@ hub to services the user has explicitly selected.
   visible Wallet limits panel, leaving only the hub-wide caps as advanced.
 - Adds a live membership preview beside the Circle Wallet creation form that
   summarizes who publishes the follow set and lists its members as you edit.
-- Relabels the Cash Hub surface from "wallet" to "Cash Bill" across its
-  dashboard, creation and edit views, so the operator UI matches the cash-bill
-  model it serves. (#224)
-- Drives on-chain amount and unit labels from the hub's native-asset descriptor
-  (now seeded and served on `/api/hub/info`) instead of a hardcoded Flokicoin
-  unit, and de-brands the block-explorer label and chain-name strings to
-  `{{chain}}`/`{{unit}}` tokens, so the UI follows the configured chain. (#224)
-- Pages the startup wallet seeders and bounds the stale-outgoing transaction
-  sweep to a fixed batch per tick, so a hub with many apps or a large pending
-  backlog starts and sweeps in bounded work instead of loading every app at
-  once. (#224)
-- References nmilat's NIP-47 kind constants directly instead of redeclaring
-  them, keeping lokihub's method and notification kinds aligned with the
-  protocol library. (#224)
+- Formats on-chain amounts, fee rates, block-explorer link labels and localized
+  unit labels and the chain name from the hub's configurable native asset (name,
+  ticker, base/sub units, decimals, explorer label from `GET /api/hub/info`)
+  instead of hardcoded Flokicoin values, so an operator can rebrand the chain
+  with no code change.
 - Breaking: renames the chain-branded hub-info/rate API to chain-neutral names
   (`/api/loki/rates` → `/api/rates`, `/api/loki/info` → `/api/hub/info`,
   `/api/loki/faq` → `/api/hub/faq`) so lokihub reads generically across
@@ -102,11 +101,26 @@ hub to services the user has explicitly selected.
   kinds (23198 and 23199), off the shared kind 35521. (#90)
 - Renames the built-in "Ohstr Relay" relay suggestion to "Ohstr" and lists it
   last in the setup relay picker. (#215)
+- Shows the live LSP catalogue during first-run setup — the same list as
+  Settings > Services — instead of a pointer note, and keeps trusting an LSP
+  optional so the step stays skippable. (#221)
 - Redesigns the desktop tray/menu-bar icon as a larger black-and-white Loki
   face, dropping the sunburst so it reads bigger and stays legible on both light
   and dark menu bars. (#216)
 - Updates `flnd` to v0.2.6-rc.1, `flndecodepay` to v1.0.6-rc.1 and `go-flokicoin`
   to v0.26.4-rc.1, and pins `google.golang.org/grpc` to v1.83.2. (#217)
+- Reorganises the Go packages for reuse as a library: `config` no longer
+  imports the cash domain, the cash and circle packages move under `cash/` and
+  `circle/`, and `hubclock`, `appversion`, `ratesoracle`, `utils`, `lspservice`
+  and `nostr/models` are renamed, merged or split. An architecture test now
+  guards the layering. **Packagers:** the release-version linker flag is now
+  `-X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=<version>'`.
+- Localises the LSP operator console: every screen and the service-status card
+  now resolve their labels, titles and messages through a new `lsp` i18n
+  namespace across all eight locales, with no change to layout or behaviour. (#222)
+- Relabels the Cash Hub's budget and expiry controls and copy from "wallet" to
+  "Cash Bill" (Lokicash) across all eight locales, so the UI names the token a
+  recipient actually holds; the Circle Hub's "wallet" wording is unchanged.
 
 ### Removed
 
@@ -122,6 +136,20 @@ hub to services the user has explicitly selected.
 
 ### Fixed
 
+- Lets a `connection_key` (web-identity) recipient read its own `cash_status`
+  row: the hub now scopes "mine" to that slice via the item's verified
+  attestation, as `cash_withdraw_quote` already does, instead of returning
+  `NOT_FOUND` under every scope. (#N)
+- Spends a `cash_transfer`/`cash_consolidate` `request_id` once authorization
+  passes, before the per-signer rate-limit check, matching `cash_withdraw`; a
+  rate-limited call no longer leaves its id reusable. (#N)
+- Omits a `create_circle_wallet` whose target is not a Circle Wallet Hub,
+  instead of answering `NOT_IMPLEMENTED`, per §Serving an Envelope I2. (#N)
+- Answers a retryable `INTERNAL` for a paid/minted on-chain order looked up
+  during a chain-scan outage past `pay_by`, instead of reporting a stale state. (#N)
+- Renders the full desktop tray icon: the SVG's offset `viewBox` had collapsed
+  the art to a corner at tray sizes; it is re-centered with padding and drawn as
+  a macOS template image so it tints to light and dark menu bars. (#N)
 - Fixes the LSP order-detail timeline and the LSPS1 `get_order` `funded_at`,
   which stamped every lifecycle event with the order's creation time; the
   per-state transition times (paid, funded, completed) are now persisted and
@@ -135,20 +163,6 @@ hub to services the user has explicitly selected.
 - Returns a proper internal error from the LSP's LSPS1 `get_order` when the order
   lookup fails for a reason other than the order not existing, instead of always
   reporting "order not found".
-- Lets a `connection_key` recipient read its own `cash_status` row by presenting
-  its slice attestation; such a recipient previously got `NOT_FOUND` under every
-  scope because its signer is never the slice's identity value. (#224)
-- Spends a `cash_transfer`/`cash_consolidate` `request_id` before applying the
-  rate limit, so a rate-limited retry can no longer replay the same request. (#224)
-- Omits `create_circle_wallet` from a connection's offered methods when the
-  target is not a circle hub, so a client is not shown an action the hub would
-  reject. (#224)
-- Retries a paid or minted on-chain order lookup during a chain-scan outage
-  instead of reporting a stale "window not ended" result, so a transient failure
-  to read the chain is surfaced as retryable rather than a wrong answer. (#224)
-- Fixes the desktop tray/menu-bar icon rendering clipped into a corner at small
-  sizes (a non-zero SVG viewBox origin), and renders it as a template image that
-  tints to both light and dark macOS menu bars. (#224)
 - Connects to a node that reports its network as `main` or `test` (the short
   names lokid and Bitcoin Core use); such a node was refused at startup with a
   spurious "the node is on another chain" error. (#213)

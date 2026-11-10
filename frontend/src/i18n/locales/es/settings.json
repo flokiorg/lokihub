@@ -181,5 +181,121 @@
         "cancelled": "cancelado ({{reason}})"
       }
     }
+  },
+  "sellCash": {
+    "connections": {
+      "title": "Conexiones de pedido",
+      "description": "Conexiones sobre las que los compradores hacen pedidos para comprar el efectivo de este Cash Hub. Cada una es una cadena cashorder1… que puedes volver a mostrar; su secreto es público.",
+      "labelPlaceholder": "Etiqueta (opcional)",
+      "create": "Crear conexión",
+      "createdToast": "Conexión de pedido creada",
+      "createFailed": "No se pudo crear la conexión de pedido",
+      "created": "Creada",
+      "retired": "Retirada",
+      "retiredToast": "Conexión de pedido retirada",
+      "retireFailed": "No se pudo retirar la conexión de pedido",
+      "empty": "Aún no hay conexiones de pedido.",
+      "unlabeled": "Sin etiqueta",
+      "cannotSign": "El nodo no puede firmar esta conexión ahora mismo; su cadena volverá a mostrarse cuando pueda.",
+      "show": "Mostrar",
+      "hide": "Ocultar",
+      "copy": "Copiar",
+      "retire": "Retirar",
+      "retireTitle": "¿Retirar esta conexión de pedido?",
+      "retireWarning": "Esto no se puede deshacer. No se podrán hacer nuevos pedidos en ella, pero sus pedidos existentes seguirán acuñándose y podrán leerse.",
+      "cancel": "Cancelar",
+      "retireConfirm": "Retirar"
+    },
+    "terms": {
+      "title": "Condiciones de venta",
+      "selling": "Este Cash Hub está vendiendo efectivo.",
+      "notSellingYet": "Este Cash Hub aún no vende. Define las condiciones abajo para empezar.",
+      "lightningTitle": "Lightning",
+      "onchainTitle": "On-chain",
+      "min": "Mínimo ({{unit}})",
+      "max": "Máximo ({{unit}})",
+      "feeBase": "Comisión base ({{unit}})",
+      "feePpm": "Comisión (ppm)",
+      "window": "Ventana (segundos)",
+      "ceiling": "Tope de pedidos abiertos ({{unit}})",
+      "tiersTitle": "Niveles de confirmación on-chain",
+      "tiersHint": "Un pago de hasta cada importe necesita sus confirmaciones; el último nivel es abierto y cubre cualquier valor mayor.",
+      "tierUpTo": "Hasta ({{unit}})",
+      "tierOpen": "Mayor",
+      "tierN": "Confirmaciones",
+      "tierAdd": "Añadir nivel",
+      "tierRemove": "Quitar nivel",
+      "billTitle": "Condiciones del billete",
+      "redeemFeeBase": "Comisión base de canje ({{unit}})",
+      "redeemFeePpm": "Comisión de canje (ppm)",
+      "minTransfer": "Transferencia mínima ({{unit}})",
+      "openTitle": "Límites de pedidos abiertos",
+      "openOnchainMax": "Máx. pedidos on-chain abiertos (0 = sin límite)",
+      "outboundWarnTitle": "Tope on-chain por encima del saldo saliente Lightning",
+      "outboundWarn": "El tope de pedidos abiertos on-chain ({{ceiling}}) supera la capacidad saliente Lightning del nodo ({{outbound}}). Puede que el Hub no pueda acuñar cada pedido on-chain en un billete.",
+      "save": "Guardar",
+      "saved": "Condiciones de venta guardadas",
+      "saveFailed": "No se pudieron guardar las condiciones de venta",
+      "errors": {
+        "lightningMin": "El mínimo de Lightning es un importe en {{unit}} de como máximo tres decimales.",
+        "lightningMax": "El máximo de Lightning es un importe en {{unit}} de como máximo tres decimales.",
+        "lightningFeeBase": "La comisión base de Lightning es un importe en {{unit}} de como máximo tres decimales.",
+        "lightningFeePpm": "La comisión de Lightning es un número entero de 0 a {{max}} ppm.",
+        "lightningWindow": "La ventana de Lightning es un número entero de segundos.",
+        "lightningMinAboveMax": "El mínimo de Lightning supera al máximo.",
+        "lightningCeiling": "El tope de pedidos abiertos de Lightning es un importe en {{unit}} positivo.",
+        "onchainMin": "El mínimo on-chain es un importe en {{unit}} de como máximo tres decimales.",
+        "onchainMax": "El máximo on-chain es un importe en {{unit}} de como máximo tres decimales.",
+        "onchainFeeBase": "La comisión base on-chain es un importe en {{unit}} de como máximo tres decimales.",
+        "onchainFeePpm": "La comisión on-chain es un número entero de 0 a {{max}} ppm.",
+        "onchainWindow": "La ventana on-chain es un número entero de segundos.",
+        "onchainMinAboveMax": "El mínimo on-chain supera al máximo.",
+        "onchainWhole": "Los importes on-chain son {{unit}} enteros.",
+        "onchainCeiling": "El tope de pedidos abiertos on-chain es un importe en {{unit}} positivo.",
+        "onchainCeilingWhole": "El tope de pedidos abiertos on-chain es un importe en {{unit}} entero.",
+        "tiers": "Cada nivel necesita al menos una confirmación, los importes deben ascender y solo el último nivel es abierto.",
+        "redeemFeeBase": "La comisión base de canje es un importe en {{unit}} de como máximo tres decimales.",
+        "redeemFeePpm": "La comisión de canje es un número entero de 0 a {{max}} ppm.",
+        "minTransfer": "La transferencia mínima es un importe en {{unit}} de como máximo tres decimales.",
+        "openOnchainMax": "El máximo de pedidos on-chain abiertos es un número entero."
+      }
+    },
+    "orders": {
+      "title": "Pedidos",
+      "description": "Pedidos hechos en este Cash Hub, del más reciente al más antiguo, con los pagos de cada uno. Solo datos del operador: sin token de efectivo ni clave del comprador.",
+      "amount": "Importe",
+      "fee": "Comisión",
+      "payBy": "Pagar antes de",
+      "requiredConfirmations": "Confirmaciones necesarias",
+      "recipient": "Destinatario",
+      "confirmations": "Confirmaciones",
+      "mintedBill": "Billete acuñado",
+      "keptTitle": "Retenido por el Hub",
+      "keptDescription": "Pagos que el Hub retuvo sin pedido: como mucho la comisión, o un pago a una dirección de pedido que no coincidió con ningún pedido activo.",
+      "kind": {
+        "lightning": "Lightning",
+        "onchain": "On-chain"
+      },
+      "state": {
+        "open": "abierto",
+        "paid": "pagado",
+        "minted": "acuñado",
+        "expired": "expirado",
+        "closed": "cerrado"
+      },
+      "paymentState": {
+        "seen": "visto",
+        "confirmed": "confirmado",
+        "minted": "acuñado",
+        "kept": "retenido",
+        "reorged": "reorganizado",
+        "dropped": "descartado"
+      },
+      "recipientType": {
+        "pubkey": "clave Nostr",
+        "cash": "secreto de efectivo",
+        "connection_key": "clave de conexión"
+      }
+    }
   }
 }

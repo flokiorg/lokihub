@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"

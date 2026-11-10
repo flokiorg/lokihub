@@ -36,5 +36,6 @@ func (svc *nip47Service) serveListingConn(ctx context.Context, lnClient lnclient
 		return
 	}
 	controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr).
+		WithGetInfoCaches(svc.getInfoOrders, svc.getInfoListed).
 		HandleListingConnGetInfo(ctx, req, requestEventID, app, publish)
 }

@@ -1,0 +1,248 @@
+{
+  "values": {
+    "yes": "是",
+    "no": "否",
+    "none": "无",
+    "ok": "正常"
+  },
+  "serviceCard": {
+    "title": "LSP 服务",
+    "description": "Hub 通过其 NIP-98 面板访问此 LSP 守护进程。下方的后台通过 Hub 提供服务；您的浏览器永远不会保存管理员密钥。",
+    "endpoint": "端点",
+    "node": "节点",
+    "version": "lspd 版本",
+    "adminPubkey": "管理员公钥",
+    "badge": {
+      "notConfigured": "未配置",
+      "attached": "已连接",
+      "reachable": "可访问",
+      "unreachable": "无法访问"
+    },
+    "error": {
+      "unreachable": "Hub 无法访问 LSP 守护进程的面板。",
+      "keyMismatch": "LSP 守护进程拒绝了管理员密钥：Hub 的 nsec/bunker 公钥不是此节点的 DASHBOARD_ADMIN_PUBKEY。"
+    }
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "LSP 服务未配置",
+      "body": "没有 LSP 守护进程连接到此 Hub。"
+    },
+    "unreachable": {
+      "title": "LSP 服务不可用",
+      "body": "Hub 无法访问 LSP 守护进程，或其管理员密钥被拒绝。"
+    },
+    "generic": {
+      "title": "无法加载 LSP 数据",
+      "body": "与 LSP 服务通信时发生意外错误。"
+    }
+  },
+  "overview": {
+    "title": "LSP 概览",
+    "description": "已连接的流动性服务提供商监控中心",
+    "kpi": {
+      "totalLiquidity": "总流动性",
+      "free": "{{amount}} 可用",
+      "revenue24h": "24 小时收入",
+      "trend": "趋势 {{trend}}",
+      "activeOrders": "活跃订单",
+      "createdPaid": "CREATED + PAID",
+      "successRate": "成功率",
+      "successFormula": "completed / (completed + failed)"
+    },
+    "node": {
+      "fallbackName": "节点",
+      "host": "主机",
+      "synced": "已同步",
+      "height": "高度",
+      "peers": "对等节点",
+      "channelsActive": "活跃通道",
+      "channelsPending": "待处理通道",
+      "inbound": "入站",
+      "outbound": "出站",
+      "blocked": "已冻结"
+    },
+    "orderStates": {
+      "title": "近期订单状态",
+      "description": "涵盖 lspd 为此节点报告的最近订单。"
+    },
+    "fleet": {
+      "title": "集群（{{count}} 个节点）",
+      "description": "此守护进程运行多个 LSP 节点。每个节点的配置和公告在“配置”界面中管理。",
+      "nodeFallback": "节点"
+    },
+    "topPeers": {
+      "title": "按交易量排名的对等节点"
+    }
+  },
+  "orders": {
+    "title": "通道与订单",
+    "description": "LSPS1 订单及其资助的 JIT 通道",
+    "tabs": {
+      "orders": "订单",
+      "jit": "JIT 通道"
+    },
+    "filter": {
+      "placeholder": "按订单 id、对等节点公钥或别名筛选",
+      "allStates": "所有状态"
+    },
+    "count": "{{filtered}} / {{total}}",
+    "empty": "没有匹配的订单。",
+    "table": {
+      "order": "订单",
+      "peer": "对等节点",
+      "state": "状态",
+      "amount": "金额",
+      "fee": "费用",
+      "created": "创建时间"
+    },
+    "jit": {
+      "empty": "尚无已资助的 JIT 通道。",
+      "scid": "SCID",
+      "capacity": "容量",
+      "status": "状态"
+    }
+  },
+  "orderDetail": {
+    "title": "订单详情",
+    "back": "返回订单",
+    "paymentBadge": "支付：{{state}}",
+    "announced": "已公告",
+    "readOnlyNote": "LSP 面板 API 以只读方式公开订单状态。结算和卡住订单的恢复在 LSP 守护进程内部自动运行，因此这里没有手动的退款/重开/恢复操作。",
+    "timeline": {
+      "title": "时间线"
+    },
+    "payment": {
+      "title": "支付",
+      "noInvoice": "此订单未记录发票。"
+    },
+    "channel": {
+      "title": "通道",
+      "fundingOutpoint": "资金输出点",
+      "fundingIndex": "（索引 {{index}}）",
+      "explorer": "浏览器",
+      "refundAddress": "退款地址"
+    },
+    "params": {
+      "title": "参数",
+      "lspBalance": "LSP 余额",
+      "clientBalance": "客户端余额",
+      "orderTotal": "订单总额",
+      "fee": "费用",
+      "reserved": "已预留",
+      "channelExpiry": "通道有效期",
+      "blocks": "{{count}} 个区块",
+      "confirmations": "确认数",
+      "peer": "对等节点",
+      "created": "创建时间",
+      "expires": "过期时间"
+    }
+  },
+  "clients": {
+    "title": "客户端与对等节点",
+    "description": "连接到此 LSP 节点的对等节点及其订单活动",
+    "empty": "没有已连接的对等节点。",
+    "online": "在线",
+    "offline": "离线",
+    "unknownAlias": "（未知）",
+    "table": {
+      "status": "状态",
+      "peer": "对等节点",
+      "received": "已接收",
+      "sent": "已发送",
+      "orders": "订单"
+    }
+  },
+  "analytics": {
+    "title": "分析",
+    "description": "14 天收入、订单量和分布",
+    "kpi": {
+      "totalRevenue": "总收入",
+      "successRate": "成功率",
+      "avgOrderSize": "平均订单金额",
+      "activePeers": "活跃对等节点"
+    },
+    "revenueChart": {
+      "title": "收入（14 天）",
+      "description": "以 {{unit}} 计的每日订单收入。",
+      "series": "收入"
+    },
+    "distributionChart": {
+      "title": "订单分布",
+      "description": "采样窗口内按状态划分的订单。"
+    }
+  },
+  "config": {
+    "title": "配置",
+    "description": "节点配置和 NIP-LSP 公告",
+    "noNodes": "LSP 守护进程上未配置任何节点。",
+    "nodeLabel": "节点",
+    "fields": {
+      "feeRate": "费率（比例）",
+      "baseFeeMloki": "基础费用（mloki）",
+      "channelFeePermyriad": "通道费用（permyriad）",
+      "channelMinimumFeeMloki": "通道最低费用（mloki）"
+    },
+    "fees": {
+      "title": "费用",
+      "description": "此节点的商业费用参数。秘密字段（节点密钥、tokens、LND 凭据）永远不会发送到浏览器，并在保存时保留。",
+      "save": "保存费用",
+      "saving": "保存中…",
+      "saved": "配置已保存",
+      "saveError": "保存配置失败"
+    },
+    "viewer": {
+      "title": "节点配置",
+      "description": "只读。秘密由守护进程剥离。",
+      "announceRelays": "公告中继"
+    },
+    "announce": {
+      "title": "NIP-LSP 公告",
+      "description": "暂停、恢复或下架此节点的 kind-10735 公告，并清除失败的自检。",
+      "enabled": "已启用",
+      "lastChange": "最近更改",
+      "blocked": "已阻止：{{reason}}",
+      "selfCheck": "自检",
+      "failed": "失败：{{problems}}",
+      "relays": "中继",
+      "pause": "暂停",
+      "resume": "恢复",
+      "unlist": "下架",
+      "recheck": "重新检查",
+      "toast": {
+        "pauseSuccess": "公告已暂停",
+        "pauseFailure": "暂停公告失败",
+        "resumeSuccess": "公告已恢复",
+        "resumeFailure": "恢复公告失败",
+        "unlistSuccess": "公告已下架",
+        "unlistFailure": "下架公告失败",
+        "recheckSuccess": "重新检查",
+        "recheckFailure": "重新检查失败"
+      }
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "LSPS5 客户端通知 webhooks",
+    "alert": {
+      "title": "由客户端通过 LSPS 协议管理",
+      "description": "客户端通过 LSPS 传输（bLIP-55）注册和移除自己的 LSPS5 webhooks。LSP 操作员面板 API 不公开按 webhook 的注册表，因此这里暂时没有可列出或编辑的内容。"
+    },
+    "transports": {
+      "title": "传输方式",
+      "description": "客户端注册 webhook 后，通知如何到达客户端。",
+      "push": {
+        "title": "push (HTTPS)",
+        "description": "向客户端的 https:// URL 发送签名的 POST 请求。连接时的 SSRF 防护会拒绝私有地址，除非在守护进程上显式启用了 loopback webhooks。"
+      },
+      "nostr": {
+        "title": "nostr",
+        "description": "向客户端的 nostr+lsps5:// 中继发送加密事件（kind 31055）。通过守护进程的中继池传递。"
+      }
+    },
+    "limits": {
+      "title": "限制",
+      "description": "Webhook 限制通过环境变量（LSPD_LSPS5_MAX_WEBHOOKS、LSPD_LSPS5_ALLOW_LOOPBACK_WEBHOOKS）在 LSP 守护进程上配置，无法从 Hub 编辑。"
+    }
+  }
+}

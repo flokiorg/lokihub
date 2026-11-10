@@ -16,7 +16,6 @@ import (
 
 	"github.com/adrg/xdg"
 
-	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -350,6 +349,26 @@ func (cfg *config) GetRelayUrls() []string {
 	return urls
 }
 
+// GetAdvertisedRelayUrls returns the NWC relays the Hub ADVERTISES to clients
+// (pairing URIs, cash/circle connection tokens, minted bills) — distinct from
+// GetRelayUrls, which the Hub DIALS. Read from the NWC_RELAY_ADVERTISED env;
+// empty falls back to the dialed relays, so a single-relay deployment is
+// unaffected. Trimming mirrors GetRelayUrls.
+func (cfg *config) GetAdvertisedRelayUrls() []string {
+	var urls []string
+	if env := cfg.GetEnv(); env != nil {
+		for _, relayUrl := range strings.Split(env.AdvertisedRelay, ",") {
+			if trimmed := strings.TrimSpace(relayUrl); trimmed != "" {
+				urls = append(urls, trimmed)
+			}
+		}
+	}
+	if len(urls) == 0 {
+		return cfg.GetRelayUrls()
+	}
+	return urls
+}
+
 // GetGeneralRelayUrls returns the relays used to fetch general Nostr social
 // data — profiles, notes, and events, including Circle contact lists
 // (kind:0/kind:1/kind:3) — independent of GetRelayUrls, which is used for
@@ -362,6 +381,38 @@ func (cfg *config) GetGeneralRelayUrls() []string {
 		return []string{}
 	}
 	return strings.Split(value, ",")
+}
+
+// GetAdvertisedGeneralRelayUrls are the client-reachable general/social relays
+// advertised to other clients (/api/info, follow-set publishing) — distinct
+// from GetGeneralRelayUrls, which the hub DIALS to read social data. Read from
+// the GENERAL_RELAY_ADVERTISED env; empty falls back to the dialed general
+// relays so an unset (e.g. mainnet) deployment is unaffected.
+func (cfg *config) GetAdvertisedGeneralRelayUrls() []string {
+	var urls []string
+	if env := cfg.GetEnv(); env != nil {
+		for _, relayUrl := range strings.Split(env.AdvertisedGeneralRelay, ",") {
+			if trimmed := strings.TrimSpace(relayUrl); trimmed != "" {
+				urls = append(urls, trimmed)
+			}
+		}
+	}
+	if len(urls) == 0 {
+		return cfg.GetGeneralRelayUrls()
+	}
+	return urls
+}
+
+// GetAdvertisedGeneralRelay is the single value /api/info advertises as the
+// general relay: the GENERAL_RELAY_ADVERTISED env when set, else the stored
+// (dialed) GetGeneralRelay.
+func (cfg *config) GetAdvertisedGeneralRelay() string {
+	if env := cfg.GetEnv(); env != nil {
+		if v := strings.TrimSpace(env.AdvertisedGeneralRelay); v != "" {
+			return v
+		}
+	}
+	return cfg.GetGeneralRelay()
 }
 
 // GetSearchRelayUrls returns the relays used only for NIP-50 search queries —
@@ -997,7 +1048,7 @@ func (cfg *config) PrivateEnvelopeLimits() transport.Limits {
 		MaxRequestAgeSeconds:  int64(cfg.privateEnvelopeInt(cashMaxRequestAgeKey, env.CashMaxRequestAgeSecs, int(defaults.MaxRequestAgeSeconds))),
 	}
 	// H never decreases (NIP-CASH §Deadlines): the largest H ever used is stored.
-	if stored, err := cashrequest.HorizonTx(cfg.db); err != nil {
+	if stored, err := db.HorizonTx(cfg.db); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to read the stored horizon")
 	} else if stored > limits.MaxRequestAgeSeconds {
 		limits.MaxRequestAgeSeconds = stored
@@ -1081,7 +1132,7 @@ func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
 			return err
 		}
 	}
-	if _, err := cashrequest.RaiseHorizon(cfg.db, limits.MaxRequestAgeSeconds, time.Now()); err != nil {
+	if _, err := db.RaiseHorizon(cfg.db, limits.MaxRequestAgeSeconds, time.Now()); err != nil {
 		return fmt.Errorf("failed to store the horizon: %w", err)
 	}
 	return nil

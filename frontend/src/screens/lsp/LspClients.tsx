@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import { Badge } from "src/components/ui/badge";
 import { Skeleton } from "src/components/ui/skeleton";
@@ -14,13 +15,14 @@ import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
 import { formatLoki, LspPeer } from "src/screens/lsp/types";
 
 export function LspClients() {
+  const { t } = useTranslation("lsp");
   const { data: peers, error } = useLspPeers();
 
   return (
     <div className="space-y-4">
       <AppHeader
-        title="Clients & Peers"
-        description="Peers connected to this LSP node and their order activity"
+        title={t("clients.title")}
+        description={t("clients.description")}
       />
       {error ? (
         <LspUnavailable error={error} />
@@ -28,17 +30,25 @@ export function LspClients() {
         <Skeleton className="h-48 w-full" />
       ) : peers.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          No connected peers.
+          {t("clients.empty")}
         </p>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-20">Status</TableHead>
-              <TableHead>Peer</TableHead>
-              <TableHead className="text-right">Received</TableHead>
-              <TableHead className="text-right">Sent</TableHead>
-              <TableHead className="text-right">Orders</TableHead>
+              <TableHead className="w-20">
+                {t("clients.table.status")}
+              </TableHead>
+              <TableHead>{t("clients.table.peer")}</TableHead>
+              <TableHead className="text-right">
+                {t("clients.table.received")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("clients.table.sent")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("clients.table.orders")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -46,12 +56,14 @@ export function LspClients() {
               <TableRow key={p.pub_key}>
                 <TableCell>
                   <Badge variant={p.active ? "positive" : "outline"}>
-                    {p.active ? "Online" : "Offline"}
+                    {p.active ? t("clients.online") : t("clients.offline")}
                   </Badge>
                 </TableCell>
                 <TableCell>
                   <div className="grid gap-0.5">
-                    <span className="truncate">{p.alias || "(unknown)"}</span>
+                    <span className="truncate">
+                      {p.alias || t("clients.unknownAlias")}
+                    </span>
                     <span className="font-mono text-xs text-muted-foreground break-all">
                       {p.pub_key}
                     </span>

@@ -1,8 +1,12 @@
 package controllers
 
 import (
-	"github.com/flokiorg/lokihub/nip47/models"
+	"errors"
+
 	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/flokiorg/lokihub/transactions"
 )
 
 type publishFunc = func(*models.Response, nostr.Tags)
@@ -20,4 +24,13 @@ type payResponse struct {
 	// always correctly charged and recorded (db.Transaction.FeeSkimMloki),
 	// just previously exposed only to the wallet owner via the admin API.
 	FeeSkimMloki uint64 `json:"fee_skim_mloki,omitempty"`
+}
+
+// payResultOf is the NIP-47 result of a completed payment, or an error if the
+// payment went through without yielding a preimage.
+func payResultOf(tx *transactions.Transaction) (payResponse, error) {
+	if tx == nil || tx.Preimage == nil {
+		return payResponse{}, errors.New("payment completed but preimage unavailable")
+	}
+	return payResponse{Preimage: *tx.Preimage, FeesPaid: tx.FeeMloki, FeeSkimMloki: tx.FeeSkimMloki}, nil
 }

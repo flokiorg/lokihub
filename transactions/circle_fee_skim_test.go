@@ -2,7 +2,7 @@ package transactions
 
 import (
 	"encoding/json"
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

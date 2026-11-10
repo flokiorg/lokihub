@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import AppHeader from "src/components/AppHeader";
 import { Badge } from "src/components/ui/badge";
@@ -37,16 +38,17 @@ import {
 const STATES = ["ALL", "CREATED", "PAID", "COMPLETED", "FAILED", "EXPIRED"];
 
 export function LspOrders() {
+  const { t } = useTranslation("lsp");
   return (
     <div className="space-y-4">
       <AppHeader
-        title="Channels & Orders"
-        description="LSPS1 orders and the JIT channels they funded"
+        title={t("orders.title")}
+        description={t("orders.description")}
       />
       <Tabs defaultValue="orders">
         <TabsList>
-          <TabsTrigger value="orders">Orders</TabsTrigger>
-          <TabsTrigger value="jit">JIT channels</TabsTrigger>
+          <TabsTrigger value="orders">{t("orders.tabs.orders")}</TabsTrigger>
+          <TabsTrigger value="jit">{t("orders.tabs.jit")}</TabsTrigger>
         </TabsList>
         <TabsContent value="orders" className="mt-4">
           <OrdersTab />
@@ -60,6 +62,7 @@ export function LspOrders() {
 }
 
 function OrdersTab() {
+  const { t } = useTranslation("lsp");
   const { data: orders, error } = useLspOrders();
   const [query, setQuery] = React.useState("");
   const [state, setState] = React.useState("ALL");
@@ -91,7 +94,7 @@ function OrdersTab() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <Input
-          placeholder="Filter by order id, peer pubkey or alias"
+          placeholder={t("orders.filter.placeholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="max-w-sm"
@@ -103,30 +106,37 @@ function OrdersTab() {
           <SelectContent>
             {STATES.map((s) => (
               <SelectItem key={s} value={s}>
-                {s === "ALL" ? "All states" : s}
+                {s === "ALL" ? t("orders.filter.allStates") : s}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
-          {filtered.length} of {orders.length}
+          {t("orders.count", {
+            filtered: filtered.length,
+            total: orders.length,
+          })}
         </span>
       </div>
 
       {filtered.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          No orders match.
+          {t("orders.empty")}
         </p>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Order</TableHead>
-              <TableHead>Peer</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead className="text-right">Fee</TableHead>
-              <TableHead>Created</TableHead>
+              <TableHead>{t("orders.table.order")}</TableHead>
+              <TableHead>{t("orders.table.peer")}</TableHead>
+              <TableHead>{t("orders.table.state")}</TableHead>
+              <TableHead className="text-right">
+                {t("orders.table.amount")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("orders.table.fee")}
+              </TableHead>
+              <TableHead>{t("orders.table.created")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -166,6 +176,7 @@ function OrdersTab() {
 }
 
 function JitTab() {
+  const { t } = useTranslation("lsp");
   const { data: channels, error } = useLspJitChannels();
   if (error) {
     return <LspUnavailable error={error} />;
@@ -176,7 +187,7 @@ function JitTab() {
   if (channels.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
-        No funded JIT channels yet.
+        {t("orders.jit.empty")}
       </p>
     );
   }
@@ -184,11 +195,13 @@ function JitTab() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Order</TableHead>
-          <TableHead>SCID</TableHead>
-          <TableHead>Peer</TableHead>
-          <TableHead className="text-right">Capacity</TableHead>
-          <TableHead>Status</TableHead>
+          <TableHead>{t("orders.table.order")}</TableHead>
+          <TableHead>{t("orders.jit.scid")}</TableHead>
+          <TableHead>{t("orders.table.peer")}</TableHead>
+          <TableHead className="text-right">
+            {t("orders.jit.capacity")}
+          </TableHead>
+          <TableHead>{t("orders.jit.status")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

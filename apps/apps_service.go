@@ -1,11 +1,10 @@
 package apps
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"slices"
 	"strings"
 	"time"
@@ -14,9 +13,10 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/internal/numeric"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/utils"
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -392,9 +392,10 @@ func (svc *appsService) prepareApp(queryDB *gorm.DB, name string, pubkey string,
 			return nil, "", err
 		}
 	} else {
-		pairingPublicKey = pubkey
-		decoded, err := hex.DecodeString(pairingPublicKey)
-		if err != nil || len(decoded) != 32 {
+		// Stored lower-cased: a key is matched byte for byte against the pubkey on
+		// incoming events, which are always lowercase hex.
+		pairingPublicKey = pubkeyhex.Normalize(pubkey)
+		if !pubkeyhex.Valid(pairingPublicKey) {
 			logger.Logger.Error().Interface("pairingPublicKey", pairingPublicKey).Msg("Invalid public key format")
 			return nil, "", fmt.Errorf("invalid public key format: %s", pairingPublicKey)
 		}
@@ -476,7 +477,7 @@ func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, max
 			App:           *app,
 			Scope:         scope,
 			ExpiresAt:     expiresAt,
-			MaxAmountLoki: utils.ClampUint64ToInt(maxAmountLoki),
+			MaxAmountLoki: numeric.ClampUint64ToInt(maxAmountLoki),
 			BudgetRenewal: budgetRenewal,
 		}
 		if err := tx.Create(&appPermission).Error; err != nil {
@@ -632,7 +633,7 @@ func (svc *appsService) deleteHubAppTx(app *db.App, confirmWatchEnd bool) error 
 		// A Cash Hub also stays while a request record naming it is retained
 		// (Q23, XQ-22(1)): a lookup may still need it.
 		if app.Kind == db.AppKindCashHub {
-			check, err := CashHubDeleteCheckTx(tx, app.ID, hubclock.Now())
+			check, err := CashHubDeleteCheckTx(tx, app.ID, clock.Now())
 			if err != nil {
 				return err
 			}

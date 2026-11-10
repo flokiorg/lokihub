@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/lnclient"
 )
 
 func TestFormatConnectionAddress(t *testing.T) {
@@ -50,5 +53,17 @@ func TestFormatConnectionAddress(t *testing.T) {
 			result := formatConnectionAddress(tt.address, tt.port)
 			assert.Equal(t, tt.expected, result)
 		})
+	}
+}
+
+func TestChannelClosedProperties_ExplorerLinkOnMainnetOnly(t *testing.T) {
+	main := channelClosedProperties(&lnclient.NodeInfo{Network: "bitcoin"}, "02ab", "COOPERATIVE_CLOSE")
+	require.Equal(t, "https://flokichain.info/lightning/node/02ab", main["counterparty_node_url"])
+	require.Equal(t, "02ab", main["counterparty_node_id"])
+
+	for _, info := range []*lnclient.NodeInfo{{Network: "regtest"}, {Network: "testnet"}, nil} {
+		props := channelClosedProperties(info, "02ab", "COOPERATIVE_CLOSE")
+		require.NotContains(t, props, "counterparty_node_url")
+		require.Equal(t, "COOPERATIVE_CLOSE", props["reason"])
 	}
 }

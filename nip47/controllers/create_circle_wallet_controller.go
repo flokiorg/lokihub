@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/circlelife"
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/circle/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -121,9 +121,10 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		refuse(constants.ERROR_INTERNAL, "circle hub is not fully initialized")
 		return
 	}
-	// The member reaches the wallet only through the relays sent back, so a Hub
-	// with none must not issue one (NIP-CW §Response).
-	relays := controller.cfg.GetRelayUrls()
+	// The member reaches the wallet only through the relays sent back, so these
+	// are the advertised (client-facing) relays, and a Hub with none must not
+	// issue one (NIP-CW §Response).
+	relays := controller.cfg.GetAdvertisedRelayUrls()
 	if len(relays) == 0 {
 		logger.Logger.Error().Uint("app_id", app.ID).Msg("No relay configured; refusing to issue an unreachable circle wallet")
 		refuse(constants.ERROR_INTERNAL, "this hub has no relay to offer")
@@ -234,7 +235,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	}
 	var expiresAt *time.Time
 	if expirySecs > 0 {
-		at := hubclock.Now().Add(time.Duration(expirySecs) * time.Second)
+		at := clock.Now().Add(time.Duration(expirySecs) * time.Second)
 		expiresAt = &at
 	}
 
@@ -305,7 +306,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		// The circle's holdings must be below its holdings ceiling (NIP-CW
 		// §Processing Algorithm step 9): a new wallet starts empty, so the
 		// check is the circle's room, not the requested caps.
-		holdings, err := circlemoney.Holdings(tx, app.ID, hubclock.Now())
+		holdings, err := circlemoney.Holdings(tx, app.ID, clock.Now())
 		if err != nil {
 			return fmt.Errorf("holdings check failed: %w", err)
 		}
@@ -404,7 +405,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		encryptedDetails = encrypted
 
 		// The join may not commit once its proof has left its freshness window.
-		if hubclock.Now().Unix() > proofCreatedAt+nipcw.JoinFreshness {
+		if clock.Now().Unix() > proofCreatedAt+nipcw.JoinFreshness {
 			return errJoinPastDeadline
 		}
 
@@ -510,7 +511,7 @@ func (controller *nip47Controller) expireDueMembership(hubID uint, member string
 		if err := tx.Where("id = ?", membership.WalletAppID).Limit(1).Find(&wallet).Error; err != nil || wallet.ID == 0 {
 			return err
 		}
-		now := hubclock.Now()
+		now := clock.Now()
 		if circlelife.EffectiveState(&wallet, now) != circlelife.StateExpired || circlelife.State(&wallet) == circlelife.StateExpired {
 			return nil
 		}

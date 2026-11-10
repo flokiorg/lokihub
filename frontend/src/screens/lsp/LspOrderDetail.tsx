@@ -1,4 +1,5 @@
 import { ArrowLeftIcon, CheckCircle2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import AppHeader from "src/components/AppHeader";
 import QRCode from "src/components/QRCode";
@@ -22,6 +23,7 @@ import {
 } from "src/screens/lsp/types";
 
 export function LspOrderDetail() {
+  const { t } = useTranslation("lsp");
   const { orderId } = useParams<{ orderId: string }>();
   const { data: detail, error } = useLspOrderDetail(orderId);
   const { data: info } = useInfo();
@@ -29,12 +31,12 @@ export function LspOrderDetail() {
   return (
     <div className="space-y-4">
       <AppHeader
-        title="Order detail"
+        title={t("orderDetail.title")}
         description={orderId}
         contentRight={
           <Button variant="outline" size="sm" asChild>
             <Link to="/lsp/orders">
-              <ArrowLeftIcon className="size-4" /> Back to orders
+              <ArrowLeftIcon className="size-4" /> {t("orderDetail.back")}
             </Link>
           </Button>
         }
@@ -51,10 +53,12 @@ export function LspOrderDetail() {
               {detail.order.state}
             </Badge>
             <Badge variant="outline">
-              payment: {detail.order.payment_state}
+              {t("orderDetail.paymentBadge", {
+                state: detail.order.payment_state,
+              })}
             </Badge>
             {detail.order.announce_channel && (
-              <Badge variant="secondary">announced</Badge>
+              <Badge variant="secondary">{t("orderDetail.announced")}</Badge>
             )}
           </div>
 
@@ -73,9 +77,7 @@ export function LspOrderDetail() {
           <ParamsCard order={detail.order} />
 
           <p className="text-xs text-muted-foreground">
-            The LSP dashboard API exposes order state read-only. Settlement and
-            stuck-order recovery run automatically inside the LSP daemon, so
-            there are no manual refund/reopen/recovery actions here.
+            {t("orderDetail.readOnlyNote")}
           </p>
         </>
       )}
@@ -84,10 +86,13 @@ export function LspOrderDetail() {
 }
 
 function TimelineCard({ events }: { events: LspOrderTimelineEvent[] }) {
+  const { t } = useTranslation("lsp");
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Timeline</CardTitle>
+        <CardTitle className="text-base">
+          {t("orderDetail.timeline.title")}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {events.map((e, i) => (
@@ -110,10 +115,13 @@ function TimelineCard({ events }: { events: LspOrderTimelineEvent[] }) {
 }
 
 function PaymentCard({ invoice }: { invoice: string }) {
+  const { t } = useTranslation("lsp");
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Payment</CardTitle>
+        <CardTitle className="text-base">
+          {t("orderDetail.payment.title")}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {invoice ? (
@@ -125,7 +133,7 @@ function PaymentCard({ invoice }: { invoice: string }) {
           </>
         ) : (
           <p className="text-sm text-muted-foreground">
-            No invoice recorded for this order.
+            {t("orderDetail.payment.noInvoice")}
           </p>
         )}
       </CardContent>
@@ -144,20 +152,27 @@ function ChannelCard({
   refundAddress: string;
   mempoolUrl: string | undefined;
 }) {
+  const { t } = useTranslation("lsp");
   if (!fundingTxid && !refundAddress) {
     return null;
   }
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Channel</CardTitle>
+        <CardTitle className="text-base">
+          {t("orderDetail.channel.title")}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         {fundingTxid && (
           <div className="grid gap-1">
             <span className="text-muted-foreground">
-              Funding outpoint{" "}
-              {fundingOutpoint !== null ? `(index ${fundingOutpoint})` : ""}
+              {t("orderDetail.channel.fundingOutpoint")}{" "}
+              {fundingOutpoint !== null
+                ? t("orderDetail.channel.fundingIndex", {
+                    index: fundingOutpoint,
+                  })
+                : ""}
             </span>
             <div className="flex items-center gap-2">
               <span className="break-all font-mono text-xs">{fundingTxid}</span>
@@ -167,7 +182,7 @@ function ChannelCard({
                   variant="link"
                   className="h-auto p-0 text-xs"
                 >
-                  explorer
+                  {t("orderDetail.channel.explorer")}
                 </ExternalLinkButton>
               )}
             </div>
@@ -175,7 +190,9 @@ function ChannelCard({
         )}
         {refundAddress && (
           <div className="grid gap-1">
-            <span className="text-muted-foreground">Refund address</span>
+            <span className="text-muted-foreground">
+              {t("orderDetail.channel.refundAddress")}
+            </span>
             <span className="break-all font-mono text-xs">{refundAddress}</span>
           </div>
         )}
@@ -189,35 +206,52 @@ function ParamsCard({
 }: {
   order: NonNullable<ReturnType<typeof useLspOrderDetail>["data"]>["order"];
 }) {
+  const { t } = useTranslation("lsp");
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Parameters</CardTitle>
+        <CardTitle className="text-base">
+          {t("orderDetail.params.title")}
+        </CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
-        <Row label="LSP balance" value={formatLoki(order.lsp_balance_loki)} />
         <Row
-          label="Client balance"
+          label={t("orderDetail.params.lspBalance")}
+          value={formatLoki(order.lsp_balance_loki)}
+        />
+        <Row
+          label={t("orderDetail.params.clientBalance")}
           value={formatLoki(order.client_balance_loki)}
         />
-        <Row label="Order total" value={formatLoki(order.amount)} />
-        <Row label="Fee" value={formatLoki(order.fee)} />
-        <Row label="Reserved" value={formatLoki(order.reserved_amount_loki)} />
         <Row
-          label="Channel expiry"
-          value={`${order.channel_expiry_blocks} blocks`}
+          label={t("orderDetail.params.orderTotal")}
+          value={formatLoki(order.amount)}
         />
         <Row
-          label="Confirmations"
+          label={t("orderDetail.params.fee")}
+          value={formatLoki(order.fee)}
+        />
+        <Row
+          label={t("orderDetail.params.reserved")}
+          value={formatLoki(order.reserved_amount_loki)}
+        />
+        <Row
+          label={t("orderDetail.params.channelExpiry")}
+          value={t("orderDetail.params.blocks", {
+            count: order.channel_expiry_blocks,
+          })}
+        />
+        <Row
+          label={t("orderDetail.params.confirmations")}
           value={String(order.required_channel_confirmations)}
         />
-        <Row label="Peer" value={order.peer_id} mono />
+        <Row label={t("orderDetail.params.peer")} value={order.peer_id} mono />
         <Row
-          label="Created"
+          label={t("orderDetail.params.created")}
           value={new Date(order.created_at).toLocaleString()}
         />
         <Row
-          label="Expires"
+          label={t("orderDetail.params.expires")}
           value={new Date(order.expires_at).toLocaleString()}
         />
       </CardContent>

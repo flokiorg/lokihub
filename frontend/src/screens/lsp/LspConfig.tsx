@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { Badge } from "src/components/ui/badge";
@@ -36,15 +37,17 @@ import { handleRequestError } from "src/utils/handleRequestError";
 // The only fields edited from the Hub: the business fee knobs. They are safe to
 // change live and arrive as strings (the NodeConfig json tags are ",string").
 // Everything else in the config is shown read-only, and secret keys are never
-// rendered (they are stripped by lspd — handlers.go configSecretFields).
-const EDITABLE_FEE_FIELDS: { key: string; label: string }[] = [
-  { key: "feeRate", label: "Fee rate (proportional)" },
-  { key: "baseFeeMloki", label: "Base fee (mloki)" },
-  { key: "channelFeePermyriad", label: "Channel fee (permyriad)" },
-  { key: "channelMinimumFeeMloki", label: "Channel minimum fee (mloki)" },
-];
+// rendered (they are stripped by lspd — handlers.go configSecretFields). Labels
+// live in the "lsp" i18n namespace under config.fields.<key>.
+const EDITABLE_FEE_FIELDS = [
+  "feeRate",
+  "baseFeeMloki",
+  "channelFeePermyriad",
+  "channelMinimumFeeMloki",
+] as const;
 
 export function LspConfig() {
+  const { t } = useTranslation("lsp");
   const { data: nodesResp, error: nodesError } = useLspNodes();
   const nodes = React.useMemo(() => nodesResp?.nodes ?? [], [nodesResp]);
   const [selected, setSelected] = React.useState<string | undefined>();
@@ -58,8 +61,8 @@ export function LspConfig() {
   return (
     <div className="space-y-4">
       <AppHeader
-        title="Config"
-        description="Node configuration and NIP-LSP announcement"
+        title={t("config.title")}
+        description={t("config.description")}
       />
 
       {nodesError ? (
@@ -68,13 +71,13 @@ export function LspConfig() {
         <Skeleton className="h-24 w-full" />
       ) : nodes.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          No nodes configured on the LSP daemon.
+          {t("config.noNodes")}
         </p>
       ) : (
         <>
           {nodes.length > 1 && (
             <div className="flex items-center gap-2">
-              <Label className="text-sm">Node</Label>
+              <Label className="text-sm">{t("config.nodeLabel")}</Label>
               <Select value={selected} onValueChange={setSelected}>
                 <SelectTrigger className="w-80">
                   <SelectValue />
@@ -124,11 +127,12 @@ function FeeEditor({
   node: string;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation("lsp");
   const initial = React.useMemo(() => {
     const m: Record<string, string> = {};
     for (const f of EDITABLE_FEE_FIELDS) {
-      const v = config[f.key];
-      m[f.key] = v === undefined || v === null ? "" : String(v);
+      const v = config[f];
+      m[f] = v === undefined || v === null ? "" : String(v);
     }
     return m;
   }, [config]);
@@ -137,7 +141,20 @@ function FeeEditor({
   const [saving, setSaving] = React.useState(false);
   React.useEffect(() => setForm(initial), [initial]);
 
-  const dirty = EDITABLE_FEE_FIELDS.some((f) => form[f.key] !== initial[f.key]);
+  const dirty = EDITABLE_FEE_FIELDS.some((f) => form[f] !== initial[f]);
+
+  const fieldLabel = (key: (typeof EDITABLE_FEE_FIELDS)[number]): string => {
+    switch (key) {
+      case "feeRate":
+        return t("config.fields.feeRate");
+      case "baseFeeMloki":
+        return t("config.fields.baseFeeMloki");
+      case "channelFeePermyriad":
+        return t("config.fields.channelFeePermyriad");
+      case "channelMinimumFeeMloki":
+        return t("config.fields.channelMinimumFeeMloki");
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -146,13 +163,13 @@ function FeeEditor({
       // overwritten; lspd re-attaches secrets and validates the whole config.
       const next: LspConfigObject = { ...config };
       for (const f of EDITABLE_FEE_FIELDS) {
-        next[f.key] = form[f.key];
+        next[f] = form[f];
       }
       await updateLspConfig(next, node);
-      toast.success("Configuration saved");
+      toast.success(t("config.fees.saved"));
       onSaved();
     } catch (error) {
-      handleRequestError("Failed to save configuration", error);
+      handleRequestError(t("config.fees.saveError"), error);
     } finally {
       setSaving(false);
     }
@@ -161,24 +178,20 @@ function FeeEditor({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Fees</CardTitle>
-        <CardDescription>
-          Business fee parameters for this node. Secret fields (node key,
-          tokens, LND credentials) are never sent to the browser and are
-          preserved on save.
-        </CardDescription>
+        <CardTitle className="text-base">{t("config.fees.title")}</CardTitle>
+        <CardDescription>{t("config.fees.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           {EDITABLE_FEE_FIELDS.map((f) => (
-            <div key={f.key} className="grid gap-1.5">
-              <Label htmlFor={f.key}>{f.label}</Label>
+            <div key={f} className="grid gap-1.5">
+              <Label htmlFor={f}>{fieldLabel(f)}</Label>
               <Input
-                id={f.key}
+                id={f}
                 inputMode="decimal"
-                value={form[f.key] ?? ""}
+                value={form[f] ?? ""}
                 onChange={(e) =>
-                  setForm((s) => ({ ...s, [f.key]: e.target.value }))
+                  setForm((s) => ({ ...s, [f]: e.target.value }))
                 }
               />
             </div>
@@ -186,7 +199,7 @@ function FeeEditor({
         </div>
         <div className="flex justify-end">
           <Button onClick={save} disabled={!dirty || saving}>
-            {saving ? "Saving…" : "Save fees"}
+            {saving ? t("config.fees.saving") : t("config.fees.save")}
           </Button>
         </div>
       </CardContent>
@@ -201,9 +214,10 @@ function ConfigViewer({
   config: LspConfigObject;
   relays: string[];
 }) {
+  const { t } = useTranslation("lsp");
   const scalars: [string, string][] = [];
   const objects: [string, unknown][] = [];
-  const editable = new Set(EDITABLE_FEE_FIELDS.map((f) => f.key));
+  const editable = new Set<string>(EDITABLE_FEE_FIELDS);
 
   for (const [key, value] of Object.entries(config)) {
     if (LSP_CONFIG_SECRET_KEYS.has(key) || editable.has(key)) {
@@ -219,10 +233,8 @@ function ConfigViewer({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Node configuration</CardTitle>
-        <CardDescription>
-          Read-only. Secrets are stripped by the daemon.
-        </CardDescription>
+        <CardTitle className="text-base">{t("config.viewer.title")}</CardTitle>
+        <CardDescription>{t("config.viewer.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
@@ -242,9 +254,13 @@ function ConfigViewer({
           </div>
         ))}
         <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">announce relays</span>
+          <span className="text-xs text-muted-foreground">
+            {t("config.viewer.announceRelays")}
+          </span>
           {relays.length === 0 ? (
-            <span className="text-sm text-muted-foreground">none</span>
+            <span className="text-sm text-muted-foreground">
+              {t("values.none")}
+            </span>
           ) : (
             <ul className="text-sm">
               {relays.map((r) => (
@@ -261,30 +277,57 @@ function ConfigViewer({
 }
 
 function AnnouncePanel({ node }: { node: string }) {
+  const { t } = useTranslation("lsp");
   const { data, error, mutate } = useLspAnnounceState(node);
   const [busy, setBusy] = React.useState(false);
 
-  const act = async (fn: () => Promise<unknown>, label: string) => {
+  const act = async (
+    fn: () => Promise<unknown>,
+    success: string,
+    failure: string
+  ) => {
     setBusy(true);
     try {
       await fn();
-      toast.success(label);
+      toast.success(success);
       await mutate();
     } catch (err) {
-      handleRequestError(label + " failed", err);
+      handleRequestError(failure, err);
     } finally {
       setBusy(false);
     }
   };
 
+  const actionToasts: Record<
+    AnnounceAction,
+    { success: string; failure: string }
+  > = {
+    pause: {
+      success: t("config.announce.toast.pauseSuccess"),
+      failure: t("config.announce.toast.pauseFailure"),
+    },
+    resume: {
+      success: t("config.announce.toast.resumeSuccess"),
+      failure: t("config.announce.toast.resumeFailure"),
+    },
+    unlist: {
+      success: t("config.announce.toast.unlistSuccess"),
+      failure: t("config.announce.toast.unlistFailure"),
+    },
+  };
+
   const doAction = (action: AnnounceAction) =>
-    act(() => setLspAnnounceState(action, node), `Announcement ${action}`);
+    act(
+      () => setLspAnnounceState(action, node),
+      actionToasts[action].success,
+      actionToasts[action].failure
+    );
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          NIP-LSP announcement
+          {t("config.announce.title")}
           {data && (
             <Badge
               variant={
@@ -299,10 +342,7 @@ function AnnouncePanel({ node }: { node: string }) {
             </Badge>
           )}
         </CardTitle>
-        <CardDescription>
-          Pause, resume or unlist this node&apos;s kind-10735 announcement, and
-          clear a failed self-check.
-        </CardDescription>
+        <CardDescription>{t("config.announce.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {error ? (
@@ -313,12 +353,14 @@ function AnnouncePanel({ node }: { node: string }) {
           <>
             <div className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
               <div className="grid gap-0.5">
-                <span className="text-xs text-muted-foreground">Enabled</span>
-                <span>{data.enabled ? "yes" : "no"}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t("config.announce.enabled")}
+                </span>
+                <span>{data.enabled ? t("values.yes") : t("values.no")}</span>
               </div>
               <div className="grid gap-0.5">
                 <span className="text-xs text-muted-foreground">
-                  Last change
+                  {t("config.announce.lastChange")}
                 </span>
                 <span className="slashed-zero">
                   {data.updated_at
@@ -332,7 +374,9 @@ function AnnouncePanel({ node }: { node: string }) {
               <div className="space-y-2 text-sm">
                 {data.publisher.blocked && (
                   <p className="text-destructive">
-                    Blocked: {data.publisher.blocked}
+                    {t("config.announce.blocked", {
+                      reason: data.publisher.blocked,
+                    })}
                   </p>
                 )}
                 {data.publisher.last_error && (
@@ -343,20 +387,22 @@ function AnnouncePanel({ node }: { node: string }) {
                 {data.publisher.self_check && (
                   <div className="grid gap-0.5">
                     <span className="text-xs text-muted-foreground">
-                      Self-check
+                      {t("config.announce.selfCheck")}
                     </span>
                     <span>
                       {data.publisher.self_check.ok
-                        ? "ok"
-                        : "failed: " +
-                          data.publisher.self_check.problems.join(", ")}
+                        ? t("values.ok")
+                        : t("config.announce.failed", {
+                            problems:
+                              data.publisher.self_check.problems.join(", "),
+                          })}
                     </span>
                   </div>
                 )}
                 {data.publisher.last_event && (
                   <div className="grid gap-1">
                     <span className="text-xs text-muted-foreground">
-                      Relays
+                      {t("config.announce.relays")}
                     </span>
                     <ul className="text-xs">
                       {data.publisher.last_event.relays.map((r) => (
@@ -378,14 +424,14 @@ function AnnouncePanel({ node }: { node: string }) {
                 disabled={busy}
                 onClick={() => doAction("pause")}
               >
-                Pause
+                {t("config.announce.pause")}
               </Button>
               <Button
                 size="sm"
                 disabled={busy}
                 onClick={() => doAction("resume")}
               >
-                Resume
+                {t("config.announce.resume")}
               </Button>
               <Button
                 size="sm"
@@ -393,17 +439,21 @@ function AnnouncePanel({ node }: { node: string }) {
                 disabled={busy}
                 onClick={() => doAction("unlist")}
               >
-                Unlist
+                {t("config.announce.unlist")}
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 disabled={busy}
                 onClick={() =>
-                  act(() => recheckLspAnnouncement(node), "Recheck")
+                  act(
+                    () => recheckLspAnnouncement(node),
+                    t("config.announce.toast.recheckSuccess"),
+                    t("config.announce.toast.recheckFailure")
+                  )
                 }
               >
-                Recheck
+                {t("config.announce.recheck")}
               </Button>
             </div>
           </>

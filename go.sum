@@ -373,8 +373,6 @@ github.com/flokiorg/lightning-onion v1.0.5-rc.1/go.mod h1:YmLRDoWEuvLNbqioLA1kF3
 github.com/flokiorg/walletd v0.2.4-rc.1 h1:EHVxapkSN199DKksjeQXADx/c2CioQ6kbJm0G74XE0Y=
 github.com/flokiorg/walletd v0.2.4-rc.1/go.mod h1:Fb9TH7sawWFYhQYi/aidFPYs3g80DjEm87Cqs5XZ3fs=
 github.com/flosch/pongo2 v0.0.0-20190707114632-bbf5a6c351f4/go.mod h1:T9YF2M40nIgbVgp3rreNmTged+9HrbNTIQf1PsaIiTA=
-github.com/flowgate-lsp/nostr-lsps5 v1.0.2 h1:Xd1G90nPMoZJ4Aq21njhpXnXtGRP4Ex+3DVtBvMCHI0=
-github.com/flowgate-lsp/nostr-lsps5 v1.0.2/go.mod h1:ZyiLDRaUNoOyckimfhygGPllURiS0lZ91xYWbKmP10E=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/fogleman/gg v1.3.0/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/frankban/quicktest v1.0.0/go.mod h1:R98jIehRai+d1/3Hv2//jOVCTJhW1VBavT6B6CuGq2k=
@@ -948,8 +946,10 @@ github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLA
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
 github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
-github.com/ohstr/nmilat v0.5.0-rc.52 h1:xvu3HirBc3QrqccGQFdY1kEwQTMeIMPO3NGBarQt5mw=
-github.com/ohstr/nmilat v0.5.0-rc.52/go.mod h1:6zZpAGg0SOT8ra6EcWL25MirNTokqDCQc0OKipl9Oaw=
+github.com/ohstr/nmilat v0.5.0-rc.53 h1:trsJ7Hp9d5l3F0rhrL67HGNNsk/tjVfbkgpNVrRIcfE=
+github.com/ohstr/nmilat v0.5.0-rc.53/go.mod h1:6zZpAGg0SOT8ra6EcWL25MirNTokqDCQc0OKipl9Oaw=
+github.com/ohstr/nostr-lsps5 v1.1.1 h1:Vka/NKXISehMs7gv+hrsnkq+OgwRmPkmSPx5uK8M/Y4=
+github.com/ohstr/nostr-lsps5 v1.1.1/go.mod h1:H3CHN6JL+7A1s9uRoXXmrulPbf/RVfAIBtiqDfhP/mg=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/olekukonko/tablewriter v0.0.5/go.mod h1:hPp6KlRPjbx+hW8ykQs1w3UBbZlj6HuIJcUGPhkA7kY=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=

@@ -123,7 +123,6 @@
     "lsp": {
       "title": "Proveedores de servicios Lightning",
       "description": "LSP que se anuncian en tus relays. Marca los que te merecen confianza; solo esos se contactan y se usan para liquidez entrante.",
-      "setupNote": "Tras la configuración, elige los LSP de confianza en Ajustes > Servicios. Puedes omitir este paso.",
       "claimsNote": "Los nombres, descripciones y webs son lo que cada LSP dice de sí mismo, no hechos verificados. Los datos del grafo vienen de tu propio nodo.",
       "filterText": "Filtrar por nombre o id de nodo",
       "allProtocols": "Todos",

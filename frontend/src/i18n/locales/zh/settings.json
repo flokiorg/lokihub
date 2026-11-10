@@ -181,5 +181,121 @@
         "cancelled": "已取消（{{reason}}）"
       }
     }
+  },
+  "sellCash": {
+    "connections": {
+      "title": "订单连接",
+      "description": "买家在这些连接上下单以购买此 Cash Hub 的现金。每个连接都是一串可再次显示的 cashorder1… 字符串；其密钥是公开的。",
+      "labelPlaceholder": "标签（可选）",
+      "create": "创建连接",
+      "createdToast": "已创建订单连接",
+      "createFailed": "无法创建订单连接",
+      "created": "创建于",
+      "retired": "已停用",
+      "retiredToast": "已停用订单连接",
+      "retireFailed": "无法停用订单连接",
+      "empty": "尚无订单连接。",
+      "unlabeled": "未标注",
+      "cannotSign": "节点当前无法为此连接签名；可签名后会再次显示其字符串。",
+      "show": "显示",
+      "hide": "隐藏",
+      "copy": "复制",
+      "retire": "停用",
+      "retireTitle": "停用此订单连接？",
+      "retireWarning": "此操作不可撤销。将无法在其上下新订单，但现有订单仍会铸造并仍可读取。",
+      "cancel": "取消",
+      "retireConfirm": "停用"
+    },
+    "terms": {
+      "title": "销售条款",
+      "selling": "此 Cash Hub 正在出售现金。",
+      "notSellingYet": "此 Cash Hub 尚未出售。请在下方设置条款以开始。",
+      "lightningTitle": "闪电网络",
+      "onchainTitle": "链上",
+      "min": "最小值（{{unit}}）",
+      "max": "最大值（{{unit}}）",
+      "feeBase": "基础手续费（{{unit}}）",
+      "feePpm": "手续费（ppm）",
+      "window": "时间窗口（秒）",
+      "ceiling": "未结订单上限（{{unit}}）",
+      "tiersTitle": "链上确认档位",
+      "tiersHint": "金额不超过各档位的付款需要相应的确认数；最后一档为开放档，覆盖所有更大的金额。",
+      "tierUpTo": "上限（{{unit}}）",
+      "tierOpen": "更大",
+      "tierN": "确认数",
+      "tierAdd": "添加档位",
+      "tierRemove": "删除档位",
+      "billTitle": "现金票据条款",
+      "redeemFeeBase": "赎回基础手续费（{{unit}}）",
+      "redeemFeePpm": "赎回手续费（ppm）",
+      "minTransfer": "最小转账额（{{unit}}）",
+      "openTitle": "未结订单限制",
+      "openOnchainMax": "最多未结链上订单数（0 = 不限）",
+      "outboundWarnTitle": "链上上限超过闪电出向容量",
+      "outboundWarn": "未结链上订单上限（{{ceiling}}）超过节点的闪电出向容量（{{outbound}}）。Hub 可能无法将每个链上订单铸造成票据。",
+      "save": "保存",
+      "saved": "销售条款已保存",
+      "saveFailed": "无法保存销售条款",
+      "errors": {
+        "lightningMin": "闪电最小值是最多三位小数的 {{unit}} 金额。",
+        "lightningMax": "闪电最大值是最多三位小数的 {{unit}} 金额。",
+        "lightningFeeBase": "闪电基础手续费是最多三位小数的 {{unit}} 金额。",
+        "lightningFeePpm": "闪电手续费是 0 到 {{max}} ppm 的整数。",
+        "lightningWindow": "闪电时间窗口是整数秒。",
+        "lightningMinAboveMax": "闪电最小值高于最大值。",
+        "lightningCeiling": "闪电未结订单上限是正的 {{unit}} 金额。",
+        "onchainMin": "链上最小值是最多三位小数的 {{unit}} 金额。",
+        "onchainMax": "链上最大值是最多三位小数的 {{unit}} 金额。",
+        "onchainFeeBase": "链上基础手续费是最多三位小数的 {{unit}} 金额。",
+        "onchainFeePpm": "链上手续费是 0 到 {{max}} ppm 的整数。",
+        "onchainWindow": "链上时间窗口是整数秒。",
+        "onchainMinAboveMax": "链上最小值高于最大值。",
+        "onchainWhole": "链上金额必须是整数 {{unit}}。",
+        "onchainCeiling": "链上未结订单上限是正的 {{unit}} 金额。",
+        "onchainCeilingWhole": "链上未结订单上限是整数 {{unit}} 金额。",
+        "tiers": "每档至少需要一次确认，金额必须递增，且只有最后一档为开放档。",
+        "redeemFeeBase": "赎回基础手续费是最多三位小数的 {{unit}} 金额。",
+        "redeemFeePpm": "赎回手续费是 0 到 {{max}} ppm 的整数。",
+        "minTransfer": "最小转账额是最多三位小数的 {{unit}} 金额。",
+        "openOnchainMax": "最多未结链上订单数是整数。"
+      }
+    },
+    "orders": {
+      "title": "订单",
+      "description": "在此 Cash Hub 上下的订单，最新在前，并附每个订单的付款。仅运营方可见信息：无现金令牌，无买家密钥。",
+      "amount": "金额",
+      "fee": "手续费",
+      "payBy": "支付截止",
+      "requiredConfirmations": "所需确认数",
+      "recipient": "收款方",
+      "confirmations": "确认数",
+      "mintedBill": "已铸造票据",
+      "keptTitle": "Hub 留存",
+      "keptDescription": "Hub 在无订单情况下留存的付款：至多为手续费，或付往某订单地址但未匹配任何有效订单的付款。",
+      "kind": {
+        "lightning": "闪电网络",
+        "onchain": "链上"
+      },
+      "state": {
+        "open": "未结",
+        "paid": "已付",
+        "minted": "已铸造",
+        "expired": "已过期",
+        "closed": "已关闭"
+      },
+      "paymentState": {
+        "seen": "已见",
+        "confirmed": "已确认",
+        "minted": "已铸造",
+        "kept": "已留存",
+        "reorged": "已重组",
+        "dropped": "已丢弃"
+      },
+      "recipientType": {
+        "pubkey": "Nostr 密钥",
+        "cash": "现金密语",
+        "connection_key": "连接密钥"
+      }
+    }
   }
 }

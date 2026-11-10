@@ -12,6 +12,7 @@ import (
 	"archive/zip"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"crypto/aes"
 	"crypto/cipher"
@@ -21,7 +22,6 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/utils"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -152,8 +152,8 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) (err error) {
 		logger.Logger.Info().Interface("lnFiles", lnFiles).Msg("Listed node storage dir")
 
 		// Avoid backing up log files.
-		lnFiles = utils.Filter(lnFiles, func(s string) bool {
-			return filepath.Ext(s) != ".log"
+		lnFiles = slices.DeleteFunc(lnFiles, func(s string) bool {
+			return filepath.Ext(s) == ".log"
 		})
 
 		filesToArchive = append(filesToArchive, lnFiles...)

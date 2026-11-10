@@ -59,7 +59,7 @@ if [ -z "$DEB_SUFFIX" ]; then
     OUTPUT_NAME="lokihub-http-${GOOS}-${GOARCH}"
     ARCHIVE_NAME="lokihub-server-${GOOS}-${GOARCH}-${TAG}"
 
-    go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'" \
+    go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=${VERSION_STRING}'" \
         -o "ops/bin/${OUTPUT_NAME}" ./cmd/http
 
     pushd ops/bin > /dev/null
@@ -80,7 +80,7 @@ rm -rf build AppDir
 mkdir -p build/bin
 
 BASENAME="lokihub-desktop-${GOOS}-${GOARCH}"
-LDFLAGS="-X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'"
+LDFLAGS="-X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=${VERSION_STRING}'"
 
 go build -trimpath -tags wails -ldflags "${LDFLAGS} -s -w" \
     -o "build/bin/${BASENAME}" .

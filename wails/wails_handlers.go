@@ -19,7 +19,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/flokiorg/lokihub/api"
-	"github.com/flokiorg/lokihub/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/http"
 	"github.com/flokiorg/lokihub/logger"
@@ -377,6 +377,19 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	}
+
+	ordersListRegex := regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/orders$`)
+	if m := ordersListRegex.FindStringSubmatch(route); len(m) == 2 && method == "GET" {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		view, err := app.api.ListOrders(dbApp)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: view, Error: ""}
 	}
 
 	circleHubDeleteRegex := regexp.MustCompile(

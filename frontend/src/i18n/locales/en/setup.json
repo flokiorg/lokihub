@@ -140,7 +140,6 @@
     "lsp": {
       "title": "Lightning Service Providers",
       "description": "LSPs that announce themselves on your relays. Tick the ones you trust; only those are contacted and used for inbound liquidity.",
-      "setupNote": "After setup, choose the LSPs you trust in Settings > Services. You can skip this.",
       "claimsNote": "Names, descriptions and websites are what each LSP says about itself, not verified facts. Graph facts come from your own node.",
       "filterText": "Filter by name or node id",
       "allProtocols": "All",

@@ -13,11 +13,11 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/atrest"
-	"github.com/flokiorg/lokihub/circlelife"
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/circle/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/atrest"
 	"github.com/flokiorg/lokihub/lnclient"
 )
 

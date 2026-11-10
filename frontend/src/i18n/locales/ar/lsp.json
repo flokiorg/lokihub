@@ -1,0 +1,248 @@
+{
+  "values": {
+    "yes": "نعم",
+    "no": "لا",
+    "none": "لا يوجد",
+    "ok": "سليم"
+  },
+  "serviceCard": {
+    "title": "خدمة LSP",
+    "description": "يصل الـ Hub إلى خادم LSP هذا عبر لوحة NIP-98 الخاصة به. يتم تقديم الواجهة الخلفية أدناه من خلال الـ Hub؛ ولا يحتفظ متصفحك أبدًا بمفتاح المسؤول.",
+    "endpoint": "نقطة النهاية",
+    "node": "العقدة",
+    "version": "إصدار lspd",
+    "adminPubkey": "المفتاح العام للمسؤول",
+    "badge": {
+      "notConfigured": "غير مُهيأ",
+      "attached": "متصل",
+      "reachable": "يمكن الوصول إليه",
+      "unreachable": "تعذّر الوصول"
+    },
+    "error": {
+      "unreachable": "تعذّر على الـ Hub الوصول إلى لوحة خادم LSP.",
+      "keyMismatch": "رفض خادم LSP مفتاح المسؤول: المفتاح العام nsec/bunker الخاص بالـ Hub ليس هو DASHBOARD_ADMIN_PUBKEY لهذه العقدة."
+    }
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "خدمة LSP غير مُهيأة",
+      "body": "لا يوجد خادم LSP متصل بهذا الـ Hub."
+    },
+    "unreachable": {
+      "title": "خدمة LSP غير متاحة",
+      "body": "تعذّر على الـ Hub الوصول إلى خادم LSP، أو تم رفض مفتاح المسؤول الخاص به."
+    },
+    "generic": {
+      "title": "تعذّر تحميل بيانات LSP",
+      "body": "حدث خطأ غير متوقع أثناء الاتصال بخدمة LSP."
+    }
+  },
+  "overview": {
+    "title": "نظرة عامة على LSP",
+    "description": "مركز مراقبة مزوّد خدمة السيولة المتصل بك",
+    "kpi": {
+      "totalLiquidity": "إجمالي السيولة",
+      "free": "{{amount}} متاح",
+      "revenue24h": "إيرادات 24 ساعة",
+      "trend": "الاتجاه {{trend}}",
+      "activeOrders": "الطلبات النشطة",
+      "createdPaid": "CREATED + PAID",
+      "successRate": "معدل النجاح",
+      "successFormula": "completed / (completed + failed)"
+    },
+    "node": {
+      "fallbackName": "العقدة",
+      "host": "المضيف",
+      "synced": "متزامن",
+      "height": "الارتفاع",
+      "peers": "الأقران",
+      "channelsActive": "القنوات النشطة",
+      "channelsPending": "القنوات المعلّقة",
+      "inbound": "وارد",
+      "outbound": "صادر",
+      "blocked": "محظور"
+    },
+    "orderStates": {
+      "title": "حالات الطلبات الأخيرة",
+      "description": "عبر آخر الطلبات التي يبلغ عنها lspd لهذه العقدة."
+    },
+    "fleet": {
+      "title": "الأسطول ({{count}} عقد)",
+      "description": "يشغّل هذا الخادم أكثر من عقدة LSP واحدة. تتم إدارة إعدادات كل عقدة والإعلان من شاشة الإعدادات.",
+      "nodeFallback": "عقدة"
+    },
+    "topPeers": {
+      "title": "أهم الأقران حسب الحجم"
+    }
+  },
+  "orders": {
+    "title": "القنوات والطلبات",
+    "description": "طلبات LSPS1 وقنوات JIT التي موّلتها",
+    "tabs": {
+      "orders": "الطلبات",
+      "jit": "قنوات JIT"
+    },
+    "filter": {
+      "placeholder": "التصفية حسب معرّف الطلب أو المفتاح العام للقرين أو الاسم المستعار",
+      "allStates": "جميع الحالات"
+    },
+    "count": "{{filtered}} من {{total}}",
+    "empty": "لا توجد طلبات مطابقة.",
+    "table": {
+      "order": "الطلب",
+      "peer": "القرين",
+      "state": "الحالة",
+      "amount": "المبلغ",
+      "fee": "الرسوم",
+      "created": "تاريخ الإنشاء"
+    },
+    "jit": {
+      "empty": "لا توجد قنوات JIT مموّلة بعد.",
+      "scid": "SCID",
+      "capacity": "السعة",
+      "status": "الحالة"
+    }
+  },
+  "orderDetail": {
+    "title": "تفاصيل الطلب",
+    "back": "العودة إلى الطلبات",
+    "paymentBadge": "الدفع: {{state}}",
+    "announced": "معلن",
+    "readOnlyNote": "تعرض واجهة برمجة تطبيقات لوحة LSP حالة الطلب للقراءة فقط. تُنفَّذ التسوية واستعادة الطلبات العالقة تلقائيًا داخل خادم LSP، لذا لا توجد هنا إجراءات يدوية للاسترداد/إعادة الفتح/الاستعادة.",
+    "timeline": {
+      "title": "الجدول الزمني"
+    },
+    "payment": {
+      "title": "الدفع",
+      "noInvoice": "لا توجد فاتورة مسجّلة لهذا الطلب."
+    },
+    "channel": {
+      "title": "القناة",
+      "fundingOutpoint": "نقطة إخراج التمويل",
+      "fundingIndex": "(الفهرس {{index}})",
+      "explorer": "المستكشف",
+      "refundAddress": "عنوان الاسترداد"
+    },
+    "params": {
+      "title": "المعاملات",
+      "lspBalance": "رصيد LSP",
+      "clientBalance": "رصيد العميل",
+      "orderTotal": "إجمالي الطلب",
+      "fee": "الرسوم",
+      "reserved": "محجوز",
+      "channelExpiry": "انتهاء صلاحية القناة",
+      "blocks": "{{count}} كتلة",
+      "confirmations": "التأكيدات",
+      "peer": "القرين",
+      "created": "تاريخ الإنشاء",
+      "expires": "تاريخ الانتهاء"
+    }
+  },
+  "clients": {
+    "title": "العملاء والأقران",
+    "description": "الأقران المتصلون بعقدة LSP هذه ونشاط طلباتهم",
+    "empty": "لا يوجد أقران متصلون.",
+    "online": "متصل",
+    "offline": "غير متصل",
+    "unknownAlias": "(غير معروف)",
+    "table": {
+      "status": "الحالة",
+      "peer": "القرين",
+      "received": "المستلم",
+      "sent": "المرسل",
+      "orders": "الطلبات"
+    }
+  },
+  "analytics": {
+    "title": "التحليلات",
+    "description": "الإيرادات وحجم الطلبات والتوزيع لمدة 14 يومًا",
+    "kpi": {
+      "totalRevenue": "إجمالي الإيرادات",
+      "successRate": "معدل النجاح",
+      "avgOrderSize": "متوسط حجم الطلب",
+      "activePeers": "الأقران النشطون"
+    },
+    "revenueChart": {
+      "title": "الإيرادات (14 يومًا)",
+      "description": "الإيرادات اليومية للطلبات بوحدة {{unit}}.",
+      "series": "الإيرادات"
+    },
+    "distributionChart": {
+      "title": "توزيع الطلبات",
+      "description": "الطلبات حسب الحالة عبر النافذة المأخوذة كعينة."
+    }
+  },
+  "config": {
+    "title": "الإعدادات",
+    "description": "إعدادات العقدة وإعلان NIP-LSP",
+    "noNodes": "لا توجد عقد مُهيأة على خادم LSP.",
+    "nodeLabel": "العقدة",
+    "fields": {
+      "feeRate": "معدل الرسوم (نسبي)",
+      "baseFeeMloki": "الرسوم الأساسية (mloki)",
+      "channelFeePermyriad": "رسوم القناة (permyriad)",
+      "channelMinimumFeeMloki": "الحد الأدنى لرسوم القناة (mloki)"
+    },
+    "fees": {
+      "title": "الرسوم",
+      "description": "معاملات الرسوم التجارية لهذه العقدة. لا تُرسَل الحقول السرية (مفتاح العقدة، tokens، بيانات اعتماد LND) إلى المتصفح أبدًا ويتم الاحتفاظ بها عند الحفظ.",
+      "save": "حفظ الرسوم",
+      "saving": "جارٍ الحفظ…",
+      "saved": "تم حفظ الإعدادات",
+      "saveError": "تعذّر حفظ الإعدادات"
+    },
+    "viewer": {
+      "title": "إعدادات العقدة",
+      "description": "للقراءة فقط. تُزال الأسرار بواسطة الخادم.",
+      "announceRelays": "مرحّلات الإعلان"
+    },
+    "announce": {
+      "title": "إعلان NIP-LSP",
+      "description": "أوقف مؤقتًا أو استأنف أو ألغِ إدراج إعلان kind-10735 لهذه العقدة، وامسح الفحص الذاتي الفاشل.",
+      "enabled": "مُفعّل",
+      "lastChange": "آخر تغيير",
+      "blocked": "محظور: {{reason}}",
+      "selfCheck": "الفحص الذاتي",
+      "failed": "فشل: {{problems}}",
+      "relays": "المرحّلات",
+      "pause": "إيقاف مؤقت",
+      "resume": "استئناف",
+      "unlist": "إلغاء الإدراج",
+      "recheck": "إعادة الفحص",
+      "toast": {
+        "pauseSuccess": "تم إيقاف الإعلان مؤقتًا",
+        "pauseFailure": "فشل إيقاف الإعلان مؤقتًا",
+        "resumeSuccess": "تم استئناف الإعلان",
+        "resumeFailure": "فشل استئناف الإعلان",
+        "unlistSuccess": "تم إلغاء إدراج الإعلان",
+        "unlistFailure": "فشل إلغاء إدراج الإعلان",
+        "recheckSuccess": "إعادة الفحص",
+        "recheckFailure": "فشلت إعادة الفحص"
+      }
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "webhooks إشعارات عملاء LSPS5",
+    "alert": {
+      "title": "تتم إدارتها بواسطة العملاء عبر بروتوكول LSPS",
+      "description": "يسجّل العملاء ويزيلون webhooks LSPS5 الخاصة بهم عبر نقل LSPS (bLIP-55). لا تعرض واجهة برمجة تطبيقات لوحة مشغّل LSP سجلًا لكل webhook، لذا لا يوجد شيء لعرضه أو تحريره هنا بعد."
+    },
+    "transports": {
+      "title": "وسائل النقل",
+      "description": "كيف تصل الإشعارات إلى العميل بعد أن يسجّل webhook.",
+      "push": {
+        "title": "push (HTTPS)",
+        "description": "طلب POST موقّع إلى عنوان https:// الخاص بالعميل. يرفض حارس SSRF وقت الاتصال العناوين الخاصة ما لم تُفعّل webhooks الاسترجاع (loopback) صراحةً على الخادم."
+      },
+      "nostr": {
+        "title": "nostr",
+        "description": "حدث مشفّر (kind 31055) إلى مرحّل nostr+lsps5:// الخاص بالعميل. يُسلَّم عبر مجمّع مرحّلات الخادم."
+      }
+    },
+    "limits": {
+      "title": "الحدود",
+      "description": "تُضبط حدود webhooks على خادم LSP عبر متغيرات البيئة (LSPD_LSPS5_MAX_WEBHOOKS، LSPD_LSPS5_ALLOW_LOOPBACK_WEBHOOKS) ولا يمكن تحريرها من الـ Hub."
+    }
+  }
+}

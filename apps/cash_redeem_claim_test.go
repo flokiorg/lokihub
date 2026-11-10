@@ -159,8 +159,8 @@ func TestClaimSliceForRedeem_PerPayeeInflightBound(t *testing.T) {
 	claim := func(h *db.App, c db.CashWalletClaim, payee string) (string, error) {
 		hash := randomHex32()
 		return hash, svc.AppsService.ClaimSliceForRedeem(apps.RedeemClaim{
-			Slice:       apps.SliceRef{ClaimID: c.ID, IdentityType: c.IdentityType, IdentityValue: c.IdentityValue, TransferCount: c.TransferCount},
-			HubAppID:    h.ID, PaymentHash: hash, InflightPerHub: 32, Payee: payee, InflightPerPayee: 2,
+			Slice:    apps.SliceRef{ClaimID: c.ID, IdentityType: c.IdentityType, IdentityValue: c.IdentityValue, TransferCount: c.TransferCount},
+			HubAppID: h.ID, PaymentHash: hash, InflightPerHub: 32, Payee: payee, InflightPerPayee: 2,
 		}, time.Now())
 	}
 	w1, s1 := redeemableSlice(t, svc, hub)

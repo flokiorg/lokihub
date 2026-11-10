@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlelife"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"

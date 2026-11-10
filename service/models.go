@@ -8,13 +8,14 @@ import (
 	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/hubinfo"
 	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/flokiorg/lokihub/ttlcache"
 )
 
 type RelayStatus struct {
@@ -29,6 +30,12 @@ type Service interface {
 
 	// TODO: remove getters (currently used by http / wails services)
 	GetHubInfoSvc() hubinfo.HubInfoService
+
+	// GetOrderInfoCache and GetListedInfoCache are the caches get_info answers
+	// public connections from. The code that changes what get_info shows
+	// (the API) must invalidate these same instances.
+	GetOrderInfoCache() *ttlcache.Cache[string]
+	GetListedInfoCache() *ttlcache.Cache[uint]
 
 	GetEventPublisher() events.EventPublisher
 	GetLNClient() lnclient.LNClient

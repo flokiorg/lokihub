@@ -15,17 +15,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flokiorg/lokihub/circlelife"
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/circle/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
-	decodepay "github.com/flokiorg/lokihub/decodepay"
 	"github.com/flokiorg/lokihub/events"
+	decodepay "github.com/flokiorg/lokihub/internal/decodepay"
+	"github.com/flokiorg/lokihub/internal/numeric"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/testknobs"
-	"github.com/flokiorg/lokihub/utils"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -717,8 +717,8 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 		preimage = hex.EncodeToString(preImageBytes)
 	}
 
-	preImageBytes, err := hex.DecodeString(preimage)
-	if err != nil || len(preImageBytes) != 32 {
+	preImageBytes, err := lnclient.DecodeHash32("preimage", preimage)
+	if err != nil {
 		svc.logger.Error().Err(err).
 			Str("preimage", preimage).
 			Msg("Invalid preimage")
@@ -1039,10 +1039,10 @@ func (svc *transactionsService) ListTransactions(ctx context.Context, from, unti
 	}
 
 	if from > 0 {
-		tx = tx.Where("updated_at >= ?", time.Unix(utils.ClampUint64ToInt64(from), 0))
+		tx = tx.Where("updated_at >= ?", time.Unix(numeric.ClampUint64ToInt64(from), 0))
 	}
 	if until > 0 {
-		tx = tx.Where("updated_at <= ?", time.Unix(utils.ClampUint64ToInt64(until), 0))
+		tx = tx.Where("updated_at <= ?", time.Unix(numeric.ClampUint64ToInt64(until), 0))
 	}
 
 	var totalCount64 int64
@@ -1056,10 +1056,10 @@ func (svc *transactionsService) ListTransactions(ctx context.Context, from, unti
 	tx = tx.Order("updated_at desc")
 
 	if limit > 0 {
-		tx = tx.Limit(utils.ClampUint64ToInt(limit))
+		tx = tx.Limit(numeric.ClampUint64ToInt(limit))
 	}
 	if offset > 0 {
-		tx = tx.Offset(utils.ClampUint64ToInt(offset))
+		tx = tx.Offset(numeric.ClampUint64ToInt(offset))
 	}
 
 	result = tx.Find(&transactions)

@@ -26,34 +26,56 @@ carries an `expiration` tag as its deadline.
 
 ## What you need before running this
 
-1. **A real, running lokihub instance** with a real (or regtest) Lightning
-   backend, and its own real balance (any amount - every ephemeral fixture
-   self-funds via an internal transfer straight from that balance, see
-   `adminClient.transfer`'s doc comment).
+**The regtest dev stack** (`just dev up`): a regtest chain node, the Hub's flnd,
+a second flnd (the payer) with a channel each way, the dev relay and lokihub
+itself. `just dev up` runs `just dev bootstrap`, which sets lokihub up, mints an
+admin JWT through `POST /api/unlock`, points the Hub's `GeneralRelay` at the dev
+relay, seeds the relay (`testdata/social_graph.json`, see `cmd/seedrelay`) and
+writes `config.local.yaml` (git-ignored) here. Hand editing is optional; see
+`config.example.yaml` for its fields. Point `INTEGRATION_CONFIG` at another path
+to use a different file.
 
-2. **An admin API token.** Mint one with `POST {base_url}/api/unlock`
-   (`unlock_password`, `permission: "full"`, an explicit
-   `token_expiry_days`) - see `http/http_service.go`'s `unlockHandler`. It's
-   a bearer JWT, not a permanent key, so refresh it in `config.local.yaml`
-   once it expires.
+**Never point this suite at a mainnet Hub.** `TestAAA_PreflightCleanup` checks
+the Hub's `get_info` `network` first and ends the whole run unless it is
+`regtest`. Never configure an LSP on the test Hub: it would buy JIT channels and
+shrink invoice amounts.
 
-3. Copy `config.example.yaml` to `config.local.yaml` (gitignored) and fill in
-   `admin_api.base_url`/`admin_api.token`/`relay_url`. `config.local.yaml` is
-   resolved relative to this directory, or point `INTEGRATION_CONFIG` at an
-   absolute path.
+What each node holds after a bootstrap: both on-chain wallets hold mature
+coinbases, and each node has opened one 5 000 000 loki channel to the other with
+half pushed across, so each side has outbound and inbound room. Fixtures are
+funded by admin transfers from the Hub's balance (see `adminClient.transfer`), and
+every invoice they pay is the Hub's own, so the existing tests settle as
+self-payments; the payer and the chain serve the order, withdraw and external
+payment cases. `just dev mine`, `just dev fund` and `just dev status` drive and
+inspect the chain (`just dev help`).
 
-4. **`relay_url` must be this instance's own relay** (e.g.
-   `docker-compose.dev.yml`'s `relay` service in dev), and that relay must
-   actually be one of this instance's `GeneralRelay` settings (`PATCH
-   /api/settings`, `generalRelay` field) - that's what the backend's
-   "follow_set" circle-policy check (`service/nostr_social_cache.go`)
-   queries follow sets from. This suite deliberately never talks to
-   a public/third-party relay for anything - a real relay this suite
-   doesn't control being slow, rate-limited, or unreachable should never be
-   why it fails. Run `just dev seed-relay` (or `just dev reset`, which
-   already calls it) once to publish `testdata/social_graph.json`'s fixed
-   identities' follow list to it - see that file and
-   `cmd/seedrelay/main.go`.
+**Test hooks.** The dev backend is built with the `testhooks` tag and runs with
+`LOKIHUB_TEST_HOOKS=1`, so it serves chain and payer hooks under `/api/test`
+behind the admin token. They refuse every call unless the Hub's own node is on
+regtest, and release builds never contain them:
+
+| Hook | Does |
+|---|---|
+| `POST /api/test/chain/mine {blocks, address?}` | mines blocks (to the payer unless `address`), leaving out withheld transactions |
+| `GET /api/test/chain/tip` | tip height and hash |
+| `GET /api/test/chain/tx/{txid}` | raw transaction and depth (0 in the mempool) |
+| `POST /api/test/chain/withhold {txid, on}` | keeps a transaction, and anything spending it, out of mined blocks |
+| `POST /api/test/payer/pay-invoice {invoice}` | the payer pays a BOLT11 invoice |
+| `POST /api/test/payer/pay-address {address, amount_millis}` | the payer pays on-chain (whole loki) |
+| `POST /api/test/payer/invoice {amount_millis}` | an invoice from the payer, for an external payment |
+| `GET /api/test/payer/invoice/{hash}` | that invoice's state |
+| `GET /api/test/payer/address` | a fresh payer address |
+| `POST /api/test/chain/reorg {depth}` | reorganises the last `depth` blocks (default 1) away and mines `depth + 1` new ones to the payer, leaving out withheld transactions |
+| `POST /api/test/circle/fund {wallet_pubkey, amount_millis}` | an invoice on that wallet's app (a Circle Wallet's Hub-settled one), paid by the payer |
+| `POST /api/test/relay/min-pow {difficulty}` | the relay enforces and announces that NIP-13 minimum (0 clears); its supervisor restarts the relay process, and the hook answers once NIP-11 shows it |
+| `POST /api/test/restart` | the backend stops and air runs it again, reloading the Hub from its store; `202` at once, back when `GET /api/info` answers |
+| `POST /api/test/flspd/fee/{raise,restore}` | worsens flspd's terms by its dashboard (opening fee rate twice plus 1 % and floor plus 1,000 loki; smallest channel plus 1,000 loki), or restores them |
+| `POST /api/test/flspd/announce/{pause,resume,unlist}` | sets flspd's NIP-LSP announcement state by its dashboard |
+
+`relay_url` is the Hub's own relay (the `RELAY` value in `.env`), and it must be
+one of the Hub's `GeneralRelay` settings, which the backend's `follow_set`
+circle-policy check (`service/nostr_social_cache.go`) queries. This suite never
+talks to a public relay.
 
 5. **`CIRCLE_MAX_DUST_MLOKI=100000000`** (or more) in the instance's
    environment. Ephemeral circles clean up after themselves through a

@@ -1,12 +1,12 @@
 package apps
 
 import (
-	"encoding/hex"
 	"fmt"
 	"strings"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 	"gorm.io/gorm"
 )
 
@@ -51,10 +51,7 @@ func (svc *appsService) CreateCircleIdentity(name, policy, providerPubkey, follo
 	// value can't slip in through this one earlier entry point and then
 	// silently never match any relay filter/allowlist lookup downstream.
 	if providerPubkey != "" {
-		if len(providerPubkey) != 64 || providerPubkey != strings.ToLower(providerPubkey) {
-			return nil, fmt.Errorf("%w: provider_pubkey must be a 64-char lowercase-hex string", constants.ErrInvalidParams)
-		}
-		if _, err := hex.DecodeString(providerPubkey); err != nil {
+		if !pubkeyhex.Valid(providerPubkey) {
 			return nil, fmt.Errorf("%w: provider_pubkey must be a 64-char lowercase-hex string", constants.ErrInvalidParams)
 		}
 	}

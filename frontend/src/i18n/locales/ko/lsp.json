@@ -1,0 +1,248 @@
+{
+  "values": {
+    "yes": "예",
+    "no": "아니요",
+    "none": "없음",
+    "ok": "정상"
+  },
+  "serviceCard": {
+    "title": "LSP 서비스",
+    "description": "Hub는 NIP-98 대시보드를 통해 이 LSP 데몬에 접근합니다. 아래 백오피스는 Hub를 통해 제공되며, 브라우저는 관리자 키를 보관하지 않습니다.",
+    "endpoint": "엔드포인트",
+    "node": "노드",
+    "version": "lspd 버전",
+    "adminPubkey": "관리자 공개키",
+    "badge": {
+      "notConfigured": "미설정",
+      "attached": "연결됨",
+      "reachable": "접근 가능",
+      "unreachable": "접근 불가"
+    },
+    "error": {
+      "unreachable": "Hub가 LSP 데몬의 대시보드에 접근할 수 없습니다.",
+      "keyMismatch": "LSP 데몬이 관리자 키를 거부했습니다: Hub의 nsec/bunker 공개키가 이 노드의 DASHBOARD_ADMIN_PUBKEY가 아닙니다."
+    }
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "LSP 서비스가 설정되지 않음",
+      "body": "이 Hub에 연결된 LSP 데몬이 없습니다."
+    },
+    "unreachable": {
+      "title": "LSP 서비스를 사용할 수 없음",
+      "body": "Hub가 LSP 데몬에 접근할 수 없거나 관리자 키가 거부되었습니다."
+    },
+    "generic": {
+      "title": "LSP 데이터를 불러올 수 없음",
+      "body": "LSP 서비스와 통신하는 중 예기치 않은 오류가 발생했습니다."
+    }
+  },
+  "overview": {
+    "title": "LSP 개요",
+    "description": "연결된 유동성 서비스 제공자의 모니터링 홈",
+    "kpi": {
+      "totalLiquidity": "총 유동성",
+      "free": "{{amount}} 사용 가능",
+      "revenue24h": "24시간 수익",
+      "trend": "추세 {{trend}}",
+      "activeOrders": "활성 주문",
+      "createdPaid": "CREATED + PAID",
+      "successRate": "성공률",
+      "successFormula": "completed / (completed + failed)"
+    },
+    "node": {
+      "fallbackName": "노드",
+      "host": "호스트",
+      "synced": "동기화됨",
+      "height": "높이",
+      "peers": "피어",
+      "channelsActive": "활성 채널",
+      "channelsPending": "대기 중 채널",
+      "inbound": "인바운드",
+      "outbound": "아웃바운드",
+      "blocked": "차단됨"
+    },
+    "orderStates": {
+      "title": "최근 주문 상태",
+      "description": "lspd가 이 노드에 대해 보고하는 최근 주문 전반."
+    },
+    "fleet": {
+      "title": "플릿 ({{count}}개 노드)",
+      "description": "이 데몬은 두 개 이상의 LSP 노드를 실행합니다. 노드별 설정과 공지는 설정 화면에서 관리합니다.",
+      "nodeFallback": "노드"
+    },
+    "topPeers": {
+      "title": "거래량 기준 상위 피어"
+    }
+  },
+  "orders": {
+    "title": "채널 및 주문",
+    "description": "LSPS1 주문과 그들이 자금을 지원한 JIT 채널",
+    "tabs": {
+      "orders": "주문",
+      "jit": "JIT 채널"
+    },
+    "filter": {
+      "placeholder": "주문 id, 피어 공개키 또는 별칭으로 필터링",
+      "allStates": "모든 상태"
+    },
+    "count": "{{total}} 중 {{filtered}}",
+    "empty": "일치하는 주문이 없습니다.",
+    "table": {
+      "order": "주문",
+      "peer": "피어",
+      "state": "상태",
+      "amount": "금액",
+      "fee": "수수료",
+      "created": "생성일"
+    },
+    "jit": {
+      "empty": "자금이 지원된 JIT 채널이 아직 없습니다.",
+      "scid": "SCID",
+      "capacity": "용량",
+      "status": "상태"
+    }
+  },
+  "orderDetail": {
+    "title": "주문 상세",
+    "back": "주문으로 돌아가기",
+    "paymentBadge": "결제: {{state}}",
+    "announced": "공지됨",
+    "readOnlyNote": "LSP 대시보드 API는 주문 상태를 읽기 전용으로 노출합니다. 정산과 멈춘 주문 복구는 LSP 데몬 내부에서 자동으로 실행되므로, 여기에는 수동 환불/재개/복구 작업이 없습니다.",
+    "timeline": {
+      "title": "타임라인"
+    },
+    "payment": {
+      "title": "결제",
+      "noInvoice": "이 주문에 기록된 인보이스가 없습니다."
+    },
+    "channel": {
+      "title": "채널",
+      "fundingOutpoint": "자금 출력점",
+      "fundingIndex": "(인덱스 {{index}})",
+      "explorer": "탐색기",
+      "refundAddress": "환불 주소"
+    },
+    "params": {
+      "title": "매개변수",
+      "lspBalance": "LSP 잔액",
+      "clientBalance": "클라이언트 잔액",
+      "orderTotal": "주문 총액",
+      "fee": "수수료",
+      "reserved": "예약됨",
+      "channelExpiry": "채널 만료",
+      "blocks": "{{count}} 블록",
+      "confirmations": "확인 수",
+      "peer": "피어",
+      "created": "생성일",
+      "expires": "만료일"
+    }
+  },
+  "clients": {
+    "title": "클라이언트 및 피어",
+    "description": "이 LSP 노드에 연결된 피어와 그들의 주문 활동",
+    "empty": "연결된 피어가 없습니다.",
+    "online": "온라인",
+    "offline": "오프라인",
+    "unknownAlias": "(알 수 없음)",
+    "table": {
+      "status": "상태",
+      "peer": "피어",
+      "received": "수신",
+      "sent": "전송",
+      "orders": "주문"
+    }
+  },
+  "analytics": {
+    "title": "분석",
+    "description": "14일 수익, 주문량 및 분포",
+    "kpi": {
+      "totalRevenue": "총 수익",
+      "successRate": "성공률",
+      "avgOrderSize": "평균 주문 규모",
+      "activePeers": "활성 피어"
+    },
+    "revenueChart": {
+      "title": "수익 (14일)",
+      "description": "{{unit}} 단위의 일별 주문 수익.",
+      "series": "수익"
+    },
+    "distributionChart": {
+      "title": "주문 분포",
+      "description": "샘플링 기간 동안 상태별 주문."
+    }
+  },
+  "config": {
+    "title": "설정",
+    "description": "노드 설정 및 NIP-LSP 공지",
+    "noNodes": "LSP 데몬에 설정된 노드가 없습니다.",
+    "nodeLabel": "노드",
+    "fields": {
+      "feeRate": "수수료율 (비례)",
+      "baseFeeMloki": "기본 수수료 (mloki)",
+      "channelFeePermyriad": "채널 수수료 (permyriad)",
+      "channelMinimumFeeMloki": "채널 최소 수수료 (mloki)"
+    },
+    "fees": {
+      "title": "수수료",
+      "description": "이 노드의 비즈니스 수수료 매개변수. 비밀 필드(노드 키, tokens, LND 자격 증명)는 브라우저로 전송되지 않으며 저장 시 유지됩니다.",
+      "save": "수수료 저장",
+      "saving": "저장 중…",
+      "saved": "설정이 저장되었습니다",
+      "saveError": "설정을 저장하지 못했습니다"
+    },
+    "viewer": {
+      "title": "노드 설정",
+      "description": "읽기 전용. 비밀은 데몬에 의해 제거됩니다.",
+      "announceRelays": "공지 릴레이"
+    },
+    "announce": {
+      "title": "NIP-LSP 공지",
+      "description": "이 노드의 kind-10735 공지를 일시 중지, 재개 또는 등록 취소하고, 실패한 자체 점검을 지웁니다.",
+      "enabled": "활성화됨",
+      "lastChange": "마지막 변경",
+      "blocked": "차단됨: {{reason}}",
+      "selfCheck": "자체 점검",
+      "failed": "실패: {{problems}}",
+      "relays": "릴레이",
+      "pause": "일시 중지",
+      "resume": "재개",
+      "unlist": "등록 취소",
+      "recheck": "재점검",
+      "toast": {
+        "pauseSuccess": "공지를 일시 중지했습니다",
+        "pauseFailure": "공지 일시 중지에 실패했습니다",
+        "resumeSuccess": "공지를 재개했습니다",
+        "resumeFailure": "공지 재개에 실패했습니다",
+        "unlistSuccess": "공지를 등록 취소했습니다",
+        "unlistFailure": "공지 등록 취소에 실패했습니다",
+        "recheckSuccess": "재점검",
+        "recheckFailure": "재점검에 실패했습니다"
+      }
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "LSPS5 클라이언트 알림 webhooks",
+    "alert": {
+      "title": "클라이언트가 LSPS 프로토콜을 통해 관리",
+      "description": "클라이언트는 LSPS 전송(bLIP-55)을 통해 자신의 LSPS5 webhooks를 등록하고 제거합니다. LSP 운영자 대시보드 API는 webhook별 레지스트리를 노출하지 않으므로, 아직 여기에서 나열하거나 편집할 항목이 없습니다."
+    },
+    "transports": {
+      "title": "전송 방식",
+      "description": "클라이언트가 webhook을 등록한 후 알림이 클라이언트에 도달하는 방법.",
+      "push": {
+        "title": "push (HTTPS)",
+        "description": "클라이언트의 https:// URL로 보내는 서명된 POST. 연결 시점의 SSRF 가드는 데몬에서 loopback webhooks가 명시적으로 활성화되지 않는 한 사설 주소를 거부합니다."
+      },
+      "nostr": {
+        "title": "nostr",
+        "description": "클라이언트의 nostr+lsps5:// 릴레이로 보내는 암호화된 이벤트(kind 31055). 데몬의 릴레이 풀을 통해 전달됩니다."
+      }
+    },
+    "limits": {
+      "title": "제한",
+      "description": "Webhook 제한은 환경 변수(LSPD_LSPS5_MAX_WEBHOOKS, LSPD_LSPS5_ALLOW_LOOPBACK_WEBHOOKS)를 통해 LSP 데몬에서 설정되며 Hub에서 편집할 수 없습니다."
+    }
+  }
+}

@@ -48,8 +48,6 @@ export interface ServiceConfigFormProps {
   // Services screen (PATCH /api/settings) persists them. Default to true.
   showGeneralRelay?: boolean;
   showSearchRelay?: boolean;
-  // The LSP catalogue needs the running node; setup shows a note instead.
-  showLSPCatalogue?: boolean;
   // The app store is a main-Settings concern (PATCH /api/settings persists it);
   // the initial setup flow doesn't save it, so it's hidden there.
   showAppStore?: boolean;
@@ -156,7 +154,6 @@ export function ServiceConfigForm({
   validationErrors = [],
   showGeneralRelay = true,
   showSearchRelay = true,
-  showLSPCatalogue = true,
   showAppStore = true,
 }: ServiceConfigFormProps) {
   const { t } = useTranslation("setup");
@@ -364,11 +361,10 @@ export function ServiceConfigForm({
         </Card>
       )}
 
-      {/* LSP catalogue (NIP-LSP announcements; WP-26) */}
-      <LSPCatalogue
-        disabled={showLSPCatalogue === false}
-        className="border-border shadow-sm"
-      />
+      {/* LSP catalogue (NIP-LSP announcements; WP-26). Shown in both setup and
+          Settings; trusting an LSP is always optional, so setup stays
+          skippable. */}
+      <LSPCatalogue className="border-border shadow-sm" />
 
       {validationErrors.length > 0 && (
         <div id="service-config-errors" className="scroll-mt-4">

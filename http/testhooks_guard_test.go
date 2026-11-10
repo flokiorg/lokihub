@@ -17,9 +17,9 @@ import (
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/testknobs"
 	"github.com/flokiorg/lokihub/tests/db"
 	"github.com/flokiorg/lokihub/tests/mocks"
 )
@@ -55,6 +55,7 @@ func newHookServerSwitch(t *testing.T, network, hooks string) *hookServer {
 	mockSvc.On("GetConfig").Return(mockConfig).Maybe()
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t)).Maybe()
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t)).Maybe()
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{}).Maybe()
 	if network == "" {
 		mockSvc.On("GetLNClient").Return(nil).Maybe()

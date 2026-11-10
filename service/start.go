@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/buildinfo"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/transactions"
-	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
+	nostrlsps5 "github.com/ohstr/nostr-lsps5"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/manager"
@@ -68,12 +70,12 @@ func (svc *service) startNostr(ctx context.Context) error {
 	logger.Logger.Info().
 		Str("npub", npub).
 		Str("hex", svc.keys.GetNostrPublicKey()).
-		Str("version", appversion.Tag).
+		Str("version", buildinfo.Tag).
 		Interface("relay_urls", relayUrls).
 		Msg("Starting Lokihub")
 
 	// To debug go-nostr, run with -tags "debug dev" (dev tag so FLND build doesn't break with debug tag set)
-	// go run -tags "debug dev" -ldflags="-X 'github.com/flokiorg/lokihub/appversion.Tag=v1.20.0'" cmd/http/main.go
+	// go run -tags "debug dev" -ldflags="-X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=v1.20.0'" cmd/http/main.go
 	if logger.Logger.GetLevel() >= 4 {
 		nostr.InfoLogger.SetOutput(logger.Writer)
 		nostr.DebugLogger.SetOutput(logger.Writer)
@@ -83,7 +85,7 @@ func (svc *service) startNostr(ctx context.Context) error {
 	pool := nostr.NewSimplePool(ctx, nostr.WithRelayOptions(
 		nostr.WithNoticeHandler(svc.noticeHandler),
 		nostr.WithRequestHeader(http.Header{
-			"User-Agent": {"Lokihub/" + appversion.Tag},
+			"User-Agent": {"Lokihub/" + buildinfo.Tag},
 		}),
 	))
 
@@ -506,8 +508,8 @@ func (svc *service) StartApp(encryptionKey string) error {
 					return "", ""
 				}
 
-				lsps5 := nostrlsps5.NewLSPS5(privKey)
-				uri, err := lsps5.GenerateLsp5Uri(svc.cfg.GetRelayUrls())
+				lsps5 := nostrlsps5.New(privKey)
+				uri, err := lsps5.URI(svc.cfg.GetRelayUrls())
 				if err == nil {
 					return uri, "nostr"
 				}
@@ -581,6 +583,11 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 		return err
 	}
 
+	if err := enforceDevStackNetwork(ctx, lnClient, config.IsDevStack()); err != nil {
+		_ = lnClient.Shutdown()
+		return err
+	}
+
 	// TODO: call a method on the LNClient here to check the LNClient is actually connectable,
 	// (e.g. lnClient.CheckConnection()) Rather than it being a side-effect
 	// in the LNClient init function
@@ -625,5 +632,32 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 		},
 	})
 
+	return nil
+}
+
+type nodeInfoGetter interface {
+	GetInfo(ctx context.Context) (*lnclient.NodeInfo, error)
+}
+
+// exitProcess is os.Exit, behind a variable so a test can observe the dev-stack refusal.
+var exitProcess = os.Exit
+
+// enforceDevStackNetwork stops the backend (exit 1) when it runs in the regtest dev
+// stack and its node is on any other network, so the dev stack and its test hooks
+// can never drive a mainnet node.
+func enforceDevStackNetwork(ctx context.Context, lnClient nodeInfoGetter, devStack bool) error {
+	if !devStack {
+		return nil
+	}
+	info, err := lnClient.GetInfo(ctx)
+	network := ""
+	if err == nil && info != nil {
+		network = info.Network
+	}
+	if err := config.CheckDevStackNode(true, network); err != nil {
+		logger.Logger.Error().Err(err).Msg("Refusing to start")
+		exitProcess(1)
+		return err
+	}
 	return nil
 }

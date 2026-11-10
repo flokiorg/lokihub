@@ -53,7 +53,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
-	decodepay "github.com/flokiorg/lokihub/decodepay"
+	decodepay "github.com/flokiorg/lokihub/internal/decodepay"
 	"github.com/flokiorg/lokihub/tests"
 )
 

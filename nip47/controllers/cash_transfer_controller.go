@@ -8,14 +8,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
-	"github.com/flokiorg/lokihub/testknobs"
+	"github.com/flokiorg/lokihub/clock"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"strconv"
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashrequest"
-	"github.com/flokiorg/lokihub/cashwallet"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -474,7 +474,7 @@ func (controller *nip47Controller) locateSlice(app *db.App, isCash bool, identit
 			}
 		}
 		return nil, constants.ERROR_RESTRICTED, message
-	case db.ExpiredAt(app.ExpiresAt, hubclock.Now()):
+	case db.ExpiredAt(app.ExpiresAt, clock.Now()):
 		return nil, constants.ERROR_RESTRICTED, "this cash wallet is past its redemption deadline"
 	}
 	return live, "", ""
@@ -604,10 +604,10 @@ func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int
 	if lineage {
 		key := strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10)
 		if testknobs.SpinOffRateSet() {
-			if !testknobs.AllowSpinOff(key, hubclock.Now()) {
+			if !testknobs.AllowSpinOff(key, clock.Now()) {
 				return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills; retry later" + usedRequestIDNote, refund
 			}
-			refund = func() { testknobs.RefundSpinOff(key, hubclock.Now()) }
+			refund = func() { testknobs.RefundSpinOff(key, clock.Now()) }
 		} else if controller.lineageLimiter != nil {
 			if !controller.lineageLimiter.Allow(key, env.CashLineageSpinOffsPerHour) {
 				return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later" + usedRequestIDNote, refund
@@ -815,7 +815,7 @@ func (controller *nip47Controller) cashDeps() cashwallet.Deps {
 		LNClient:            controller.lnClient,
 		Keys:                controller.keys,
 		DB:                  controller.db,
-		RelayURLs:           controller.cfg.GetRelayUrls(),
+		RelayURLs:           controller.cfg.GetAdvertisedRelayUrls(),
 		IAChecker:           controller.iaChecker,
 		Hooks:               controller.cashHooks,
 	}

@@ -3,7 +3,7 @@ package hubinfo
 import (
 	"context"
 
-	"github.com/flokiorg/lokihub/seed"
+	"github.com/flokiorg/lokihub/internal/seed"
 )
 
 type HubInfoService interface {
@@ -14,7 +14,7 @@ type HubInfoService interface {
 }
 
 // RateOracle supplies the latest Flokicoin fiat rate fetched from the NIP-78
-// oracle (see package ratesoracle). GetFiatRate reads through it. Latest
+// oracle (see oracle.go). GetFiatRate reads through it. Latest
 // returns an error when no rate has been fetched yet or the last-good one is
 // stale, which the UI degrades to sats/FLC on.
 type RateOracle interface {

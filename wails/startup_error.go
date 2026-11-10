@@ -6,7 +6,7 @@ import (
 	nethttp "net/http"
 	"os"
 
-	"github.com/flokiorg/lokihub/appversion"
+	"github.com/flokiorg/lokihub/internal/buildinfo"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/labstack/echo/v4"
 	"github.com/wailsapp/wails/v2"
@@ -35,7 +35,7 @@ func registerStartupErrorRoutes(startupErr error, workDir string) func(e *echo.E
 			return c.JSON(nethttp.StatusServiceUnavailable, startupErrorResponse{
 				Message: startupErr.Error(),
 				Code:    StartupErrorCode,
-				Version: appversion.Tag,
+				Version: buildinfo.Tag,
 				WorkDir: workDir,
 			})
 		})

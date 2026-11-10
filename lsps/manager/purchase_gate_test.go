@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps0"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
@@ -46,7 +47,7 @@ func gateManager(t *testing.T, edit func(l *persist.LSP)) (*LiquidityManager, *m
 	m.lsps1Client = lsps1.NewClientHandler(m.transport, m.eventQueue)
 	m.lsps2Client = lsps2.NewClientHandler(m.transport, m.eventQueue)
 	m.lsps5Client = lsps5.NewClientHandler(m.transport, m.eventQueue)
-	l := persist.LSP{NodeKey: NodeKeyOf(gateLSP), Pubkey: gateLSP, Host: "10.0.0.1:9735", Name: "gate",
+	l := persist.LSP{NodeKey: common.NodeKeyOf(gateLSP), Pubkey: gateLSP, Host: "10.0.0.1:9735", Name: "gate",
 		Trusted: true, Usable: true, Status: "open"}
 	announce(&l, announcedRow)
 	if edit != nil {
@@ -103,7 +104,7 @@ func TestPurchaseRunsTheLiveCheck(t *testing.T) {
 	result := &LiveCheck{Usable: false, Error: "list_protocols lacks 2"}
 	m.SetLiveChecker(func(_ context.Context, key string) (*LiveCheck, error) {
 		checks++
-		assert.Equal(t, NodeKeyOf(gateLSP), key)
+		assert.Equal(t, common.NodeKeyOf(gateLSP), key)
 		return result, nil
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

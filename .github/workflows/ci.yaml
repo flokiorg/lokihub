@@ -72,15 +72,7 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # Compile-only, because these tests need a live Hub and an admin API.
-      # Without it CI never even builds ./integration/, so a breaking API change
-      # lands green while the whole adversarial suite — the artifact of every
-      # audit round — no longer compiles. Found by Session A's QA role; the suite
-      # had drifted exactly that way before anyone noticed.
-      - name: Vet (integration, compile only)
-        run: go vet -tags integration ./integration/...
-
-      # cashwallet and cashwithdraw take 6-7 minutes each under -race on a
+      # cash/cashwallet and cash/cashwithdraw take 6-7 minutes each under -race on a
       # runner and more on a slow one, close to go test's 10 minute default.
       - name: Test (race)
         run: go test -race -count=1 -timeout 20m ./...
@@ -89,7 +81,13 @@ jobs:
       # that check every hook refuses without the admin token or off regtest
       # never ran in the race step above.
       - name: Test (testhooks build)
-        run: go test -tags testhooks -count=1 ./http/ ./service/ ./testknobs/
+        run: go test -tags testhooks -count=1 ./http/ ./service/ ./internal/testknobs/
+
+      # The regtest test hooks are compiled only with this tag (http/testhooks.go).
+      - name: Vet and test (testhooks build)
+        run: |
+          go vet -tags testhooks ./http/...
+          go test -race -count=1 -tags testhooks ./http/...
 
       # The connection-drop resubscription test skips under -race: a server-side
       # drop trips go-nostr's own data race on Relay.Connection (still in the

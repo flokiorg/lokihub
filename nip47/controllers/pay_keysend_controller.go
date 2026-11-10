@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -49,24 +48,21 @@ func (controller *nip47Controller) payKeysend(ctx context.Context, payKeysendPar
 		return
 	}
 
-	if transaction == nil || transaction.Preimage == nil {
+	result, err := payResultOf(transaction)
+	if err != nil {
 		logger.Logger.Error().
 			Interface("request_event_id", requestEventId).
 			Interface("appId", app.ID).
 			Msg("Keysend succeeded but transaction or preimage is nil")
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
-			Error:      mapNip47Error(errors.New("payment completed but preimage unavailable")),
+			Error:      mapNip47Error(err),
 		}, tags)
 		return
 	}
 
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
-		Result: payResponse{
-			Preimage:     *transaction.Preimage,
-			FeesPaid:     transaction.FeeMloki,
-			FeeSkimMloki: transaction.FeeSkimMloki,
-		},
+		Result:     result,
 	}, tags)
 }

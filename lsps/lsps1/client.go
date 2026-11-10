@@ -2,13 +2,11 @@ package lsps1
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps0"
 	"github.com/flokiorg/lokihub/lsps/transport"
@@ -37,16 +35,6 @@ func NewClientHandler(transport transport.Transport, eventQueue *events.EventQue
 	}
 }
 
-func generateRequestID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// crypto/rand only fails if the OS entropy source is unavailable;
-		// fall back to a timestamp-derived ID rather than blocking the request.
-		return fmt.Sprintf("%032x", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(b)
-}
-
 func (h *ClientHandler) ensurePeerState(lspPubkey string) *PeerState {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -63,7 +51,7 @@ func (h *ClientHandler) ensurePeerState(lspPubkey string) *PeerState {
 
 func (h *ClientHandler) RequestSupportedOptions(ctx context.Context, lspPubkey string) (string, error) {
 	peerState := h.ensurePeerState(lspPubkey)
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	peerState.mu.Lock()
 	peerState.PendingGetInfoRequests[requestID] = true
@@ -76,7 +64,7 @@ func (h *ClientHandler) RequestSupportedOptions(ctx context.Context, lspPubkey s
 		ID:      requestID,
 	}
 
-	if err := h.sendRequest(ctx, lspPubkey, request); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingGetInfoRequests, requestID)
 		peerState.mu.Unlock()
@@ -88,7 +76,7 @@ func (h *ClientHandler) RequestSupportedOptions(ctx context.Context, lspPubkey s
 
 func (h *ClientHandler) CreateOrder(ctx context.Context, lspPubkey string, order OrderParams, refundAddr *string) (string, error) {
 	peerState := h.ensurePeerState(lspPubkey)
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	peerState.mu.Lock()
 	peerState.PendingCreateOrderRequests[requestID] = true
@@ -104,7 +92,7 @@ func (h *ClientHandler) CreateOrder(ctx context.Context, lspPubkey string, order
 		ID: requestID,
 	}
 
-	if err := h.sendRequest(ctx, lspPubkey, request); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingCreateOrderRequests, requestID)
 		peerState.mu.Unlock()
@@ -116,7 +104,7 @@ func (h *ClientHandler) CreateOrder(ctx context.Context, lspPubkey string, order
 
 func (h *ClientHandler) CheckOrderStatus(ctx context.Context, lspPubkey string, orderID string) (string, error) {
 	peerState := h.ensurePeerState(lspPubkey)
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	peerState.mu.Lock()
 	peerState.PendingGetOrderRequests[requestID] = true
@@ -129,7 +117,7 @@ func (h *ClientHandler) CheckOrderStatus(ctx context.Context, lspPubkey string, 
 		ID:      requestID,
 	}
 
-	if err := h.sendRequest(ctx, lspPubkey, request); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingGetOrderRequests, requestID)
 		peerState.mu.Unlock()
@@ -137,18 +125,6 @@ func (h *ClientHandler) CheckOrderStatus(ctx context.Context, lspPubkey string, 
 	}
 
 	return requestID, nil
-}
-
-func (h *ClientHandler) sendRequest(ctx context.Context, peerPubkey string, request *lsps0.JsonRpcRequest) error {
-	data, err := json.Marshal(request)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	if err := h.transport.SendCustomMessage(ctx, peerPubkey, lsps0.LSPS_MESSAGE_TYPE_ID, data); err != nil {
-		return fmt.Errorf("failed to send custom message: %w", err)
-	}
-	return nil
 }
 
 func (h *ClientHandler) HandleMessage(peerPubkey string, data []byte) error {

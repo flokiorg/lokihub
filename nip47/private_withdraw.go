@@ -5,15 +5,15 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
 	"github.com/ohstr/nmilat/nipcash/transport"
 
-	"github.com/flokiorg/lokihub/cashrequest"
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -153,7 +153,7 @@ func (svc *nip47Service) maybeServeWithdrawCancel(item transport.Item, binding P
 		logger.Logger.Error().Err(err).Msg("Failed to apply a cancel request")
 		return refuse(constants.ERROR_INTERNAL, "the hub could not apply this cancel request, please retry")
 	}
-	body, err := svc.payoutResult(w, rec, hubclock.Now())
+	body, err := svc.payoutResult(w, rec, clock.Now())
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to build a payout view")
 		return refuse(constants.ERROR_INTERNAL, "the hub could not read this payout")

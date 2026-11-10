@@ -28,34 +28,36 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashwallet"
-	"github.com/flokiorg/lokihub/circlelife"
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
+	"github.com/flokiorg/lokihub/circle/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/config"
-	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/getinfocache"
-	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/hubinfo"
+	"github.com/flokiorg/lokihub/internal/connstr"
+	"github.com/flokiorg/lokihub/internal/seed"
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/manager"
-	"github.com/flokiorg/lokihub/seed"
+	"github.com/flokiorg/lokihub/ttlcache"
 	"github.com/ohstr/nmilat/nipcash"
 
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
 
-	"github.com/flokiorg/lokihub/appversion"
+	"github.com/flokiorg/lokihub/internal/buildinfo"
+	"github.com/flokiorg/lokihub/internal/netutil"
+	"github.com/flokiorg/lokihub/internal/numeric"
 	"github.com/flokiorg/lokihub/keys"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 	"github.com/flokiorg/lokihub/service"
-	"github.com/flokiorg/lokihub/utils"
 )
 
 const (
@@ -75,6 +77,10 @@ type api struct {
 	eventPublisher   events.EventPublisher
 	lspManager       *manager.LSPManager
 	iaManager        *apps.IdentityAuthorityManager
+	// orderInfo and listedInfo are the service's get_info caches; the API drops
+	// the entries its changes make stale. Nil caches nothing.
+	orderInfo  *ttlcache.Cache[string]
+	listedInfo *ttlcache.Cache[uint]
 }
 
 func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys keys.Keys, hubInfoSvc hubinfo.HubInfoService, eventPublisher events.EventPublisher) *api {
@@ -89,6 +95,8 @@ func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys key
 		eventPublisher: eventPublisher,
 		lspManager:     manager.NewLSPManager(gormDB),
 		iaManager:      apps.NewIdentityAuthorityManager(gormDB),
+		orderInfo:      svc.GetOrderInfoCache(),
+		listedInfo:     svc.GetListedInfoCache(),
 	}
 }
 
@@ -246,7 +254,9 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 		}
 	}
 
-	relayUrls := api.cfg.GetRelayUrls()
+	// Advertise the client-facing relay (NWC_RELAY_ADVERTISED), not the dialed
+	// one: this feeds the pairing URI, RelayUrls and the cash/circle tokens.
+	relayUrls := api.cfg.GetAdvertisedRelayUrls()
 
 	lightningAddress, err := api.cfg.Get("LightningAddress", "")
 	if err != nil {
@@ -1027,7 +1037,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 		logger.Logger.Error().Err(result.Error).Msg("Failed to count DB apps")
 		return nil, result.Error
 	}
-	query = query.Offset(utils.ClampUint64ToInt(offset)).Limit(utils.ClampUint64ToInt(limit))
+	query = query.Offset(numeric.ClampUint64ToInt(offset)).Limit(numeric.ClampUint64ToInt(limit))
 
 	err := query.Find(&dbApps).Error
 
@@ -1367,6 +1377,11 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 		return "", err
 	}
 
+	// No explorer serves a regtest chain, so the address is kept as is.
+	if currentAddress != "" && api.cfg.GetNetwork() == config.NetworkRegtest {
+		return currentAddress, nil
+	}
+
 	if currentAddress != "" {
 		// check if address has any transactions
 		response, err := api.RequestMempoolApi(ctx, "/address/"+currentAddress+"/txs")
@@ -1508,7 +1523,7 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 		info.StartupErrorTime = api.startupErrorTime
 	}
 	info.BackendType = backendType
-	info.Version = appversion.Tag
+	info.Version = buildinfo.Tag
 	info.AutoUnlockPasswordEnabled = autoUnlockPassword != ""
 	info.AutoUnlockPasswordSupported = true
 	info.Relays = []InfoResponseRelay{}
@@ -1537,7 +1552,7 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 		info.NodeAlias = nodeInfo.Alias
 	}
 	info.Relay = api.cfg.GetRelay()
-	info.GeneralRelay = api.cfg.GetGeneralRelay()
+	info.GeneralRelay = api.cfg.GetAdvertisedGeneralRelay()
 	info.TrustedNwcRelay = api.cfg.TrustedNwcRelay()
 	privateEnvelope := api.cfg.PrivateEnvelopeLimits()
 	info.PrivateEnvelope = PrivateEnvelopeInfo{
@@ -1685,7 +1700,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	if updateSettingsRequest.Relay != "" {
-		if err := utils.ValidateWebSocketURL(updateSettingsRequest.Relay); err != nil {
+		if err := netutil.ValidateWebSocketURL(updateSettingsRequest.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		err := api.cfg.SetRelay(updateSettingsRequest.Relay)
@@ -1703,7 +1718,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 			if u == "" {
 				continue
 			}
-			if err := utils.ValidateWebSocketURL(u); err != nil {
+			if err := netutil.ValidateWebSocketURL(u); err != nil {
 				return fmt.Errorf("invalid General Relay URL: %w", err)
 			}
 		}
@@ -1721,7 +1736,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 			if u == "" {
 				continue
 			}
-			if err := utils.ValidateWebSocketURL(u); err != nil {
+			if err := netutil.ValidateWebSocketURL(u); err != nil {
 				return fmt.Errorf("invalid Search Relay URL: %w", err)
 			}
 		}
@@ -1731,7 +1746,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	if updateSettingsRequest.MempoolApi != "" {
-		if err := utils.ValidateHTTPURL(updateSettingsRequest.MempoolApi); err != nil {
+		if err := netutil.ValidateHTTPURL(updateSettingsRequest.MempoolApi); err != nil {
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		err := api.cfg.SetMempoolApi(updateSettingsRequest.MempoolApi)
@@ -1752,7 +1767,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	if updateSettingsRequest.LokihubStoreURL != nil {
 		storeURL := strings.TrimSpace(*updateSettingsRequest.LokihubStoreURL)
 		if storeURL != "" {
-			if err := utils.ValidateHTTPURL(storeURL); err != nil {
+			if err := netutil.ValidateHTTPURL(storeURL); err != nil {
 				return fmt.Errorf("invalid App Store URL: %w", err)
 			}
 		}
@@ -1974,8 +1989,7 @@ func (api *api) discoverFlndConfig(ctx context.Context) (string, string, string,
 	address = FlndEndpoint
 
 	flndDir := chainutil.AppDataDir("flnd", false)
-	// flnd data dir structure: [DataDir]/data/chain/flokicoin/main/admin.macaroon
-	macaroonPath := filepath.Join(flndDir, "data", "chain", "flokicoin", "main", "admin.macaroon")
+	macaroonPath := flndMacaroonPath(flndDir, api.cfg.GetNetwork())
 	certPath := filepath.Join(flndDir, "tls.cert")
 
 	macaroonBytes, err := os.ReadFile(macaroonPath) //nolint:gosec // path is built from a fixed OS app-data dir + hardcoded subpath, not external input
@@ -2232,7 +2246,7 @@ func (api *api) GetLogOutput(ctx context.Context, logType string, getLogRequest 
 		if logFileName == "" {
 			logData = []byte("file log is disabled")
 		} else {
-			logData, err = utils.ReadFileTail(logFileName, getLogRequest.MaxLen)
+			logData, err = readFileTail(logFileName, getLogRequest.MaxLen)
 			if err != nil {
 				return nil, err
 			}
@@ -2326,7 +2340,7 @@ func (api *api) ExecuteCustomNodeCommand(ctx context.Context, command string) (i
 	}
 
 	// Split command line into arguments. Command name must be the first argument.
-	parsedArgs, err := utils.ParseCommandLine(command)
+	parsedArgs, err := parseCommandLine(command)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse node command: %w", err)
 	} else if len(parsedArgs) == 0 {
@@ -2480,7 +2494,7 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	if req.Relay != "" {
-		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
+		if err := netutil.ValidateWebSocketURL(req.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		if err := api.cfg.SetRelay(req.Relay); err != nil {
@@ -2489,7 +2503,7 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	if req.MempoolApi != "" {
-		if err := utils.ValidateHTTPURL(req.MempoolApi); err != nil {
+		if err := netutil.ValidateHTTPURL(req.MempoolApi); err != nil {
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
@@ -2547,7 +2561,7 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	if req.Relay != "" {
-		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
+		if err := netutil.ValidateWebSocketURL(req.Relay); err != nil {
 			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		if err := api.cfg.SetRelay(req.Relay); err != nil {
@@ -2556,7 +2570,7 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	if req.MempoolApi != "" {
-		if err := utils.ValidateHTTPURL(req.MempoolApi); err != nil {
+		if err := netutil.ValidateHTTPURL(req.MempoolApi); err != nil {
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
@@ -2633,10 +2647,7 @@ func (api *api) ReplaceCircleAllowlist(app *db.App, pubkeys []string) error {
 				continue
 			}
 			// Validate: must be a 64-char lowercase-hex 32-byte Nostr pubkey.
-			if len(pk) != 64 || pk != strings.ToLower(pk) {
-				return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pk)
-			}
-			if _, decErr := hex.DecodeString(pk); decErr != nil {
+			if !pubkeyhex.Valid(pk) {
 				return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pk)
 			}
 			if err := tx.Create(&db.CircleIdentityAllowedPubkey{CircleIdentityID: identityID, Pubkey: pk}).Error; err != nil {
@@ -2663,7 +2674,7 @@ func (api *api) applyAllowlistTx(tx *gorm.DB, identityID uint, changes *[]circle
 	for _, pk := range pubkeys {
 		members[pk] = true
 	}
-	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, hubclock.Now())
+	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, clock.Now())
 	*changes = applied
 	return err
 }
@@ -2689,10 +2700,7 @@ func (api *api) RemoveCircleAllowedPubkey(app *db.App, pubkey string) error {
 	// Same format check as ReplaceCircleAllowlist: a malformed pubkey can never
 	// match a stored row (a no-op delete either way), but validating up front
 	// gives the caller a clear error instead of a silent no-op.
-	if len(pubkey) != 64 || pubkey != strings.ToLower(pubkey) {
-		return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pubkey)
-	}
-	if _, err := hex.DecodeString(pubkey); err != nil {
+	if !pubkeyhex.Valid(pubkey) {
 		return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pubkey)
 	}
 	cfg, err := api.appsSvc.GetCircleHubConfig(app.ID)
@@ -3024,7 +3032,7 @@ func (api *api) invalidateCircleConnInfo(hubID uint) {
 		logger.Logger.Error().Err(err).Uint("app_id", hubID).Msg("Failed to list a circle's listed connections; their get_info may stay cached for its TTL")
 		return
 	}
-	getinfocache.Listed.Invalidate(ids...)
+	api.listedInfo.Invalidate(ids...)
 }
 
 // closeListings runs a listing retirement after the commit that ended an offer;
@@ -3073,7 +3081,7 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 		Offset: offset,
 		// One clock reading for both the counts and the page, so a slice
 		// cannot expire between them and be counted in one but not the other.
-		Now: db.CashExpiryCutoff(hubclock.Now()),
+		Now: db.CashExpiryCutoff(clock.Now()),
 	})
 	if err != nil {
 		return nil, 0, CashWalletClaimCounts{}, err
@@ -3388,7 +3396,7 @@ func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, 
 			r.Status = db.CashSliceStatusSplit
 		case c.ClaimedAt != nil:
 			r.Status = db.CashSliceStatusRedeemed
-		case db.ExpiredAt(app.ExpiresAt, hubclock.Now()):
+		case db.ExpiredAt(app.ExpiresAt, clock.Now()):
 			r.Status = db.CashSliceStatusExpired
 		default:
 			r.Status = db.CashSliceStatusUnclaimed
@@ -3483,7 +3491,7 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 		LNClient:            api.svc.GetLNClient(),
 		Keys:                api.keys,
 		DB:                  api.db,
-		RelayURLs:           api.cfg.GetRelayUrls(),
+		RelayURLs:           api.cfg.GetAdvertisedRelayUrls(),
 		IAChecker:           api.iaManager,
 	}
 	resolved, err := cashwallet.Resolve(context.Background(), deps, cashwallet.Params{
@@ -3612,4 +3620,14 @@ func (api *api) lnClient() lnclient.LNClient {
 		return nil
 	}
 	return api.svc.GetLNClient()
+}
+
+// flndMacaroonPath is flnd's admin macaroon under its data dir for a NETWORK value:
+// [DataDir]/data/chain/flokicoin/<main|regtest>/admin.macaroon.
+func flndMacaroonPath(flndDir, network string) string {
+	netDir := "main"
+	if network == config.NetworkRegtest {
+		netDir = "regtest"
+	}
+	return filepath.Join(flndDir, "data", "chain", "flokicoin", netDir, "admin.macaroon")
 }

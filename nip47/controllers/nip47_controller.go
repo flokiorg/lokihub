@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashwallet"
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
@@ -13,6 +13,7 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47/permissions"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/flokiorg/lokihub/ttlcache"
 	"gorm.io/gorm"
 )
 
@@ -45,6 +46,11 @@ type nip47Controller struct {
 	cashHooks *cashwallet.TestHooks
 	// withdraw serves on-chain withdrawals; nil offers none.
 	withdraw *cashwithdraw.Service
+	// orderInfo and listedInfo hold the get_info results answered on public
+	// connections: an Order connection's by client key, a listed circle
+	// connection's by app id. Nil caches nothing.
+	orderInfo  *ttlcache.Cache[string]
+	listedInfo *ttlcache.Cache[uint]
 
 	cfg config.Config
 }
@@ -83,6 +89,15 @@ func NewNip47Controller(
 // WithPrivateIdentity sets where get_info reads the Hub's private-transport identity from.
 func (controller *nip47Controller) WithPrivateIdentity(privateIdentity func() string) *nip47Controller {
 	controller.privateIdentity = privateIdentity
+	return controller
+}
+
+// WithGetInfoCaches sets the caches get_info answers public connections from.
+// They live on the service, so every per-request controller shares them, and the
+// code that changes what get_info shows invalidates the same instances.
+func (controller *nip47Controller) WithGetInfoCaches(orders *ttlcache.Cache[string], listed *ttlcache.Cache[uint]) *nip47Controller {
+	controller.orderInfo = orders
+	controller.listedInfo = listed
 	return controller
 }
 

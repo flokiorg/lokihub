@@ -61,6 +61,9 @@ import { DurationInput } from "src/components/DurationInput";
 import { CashHubConfigCard } from "src/components/CashHubConfigCard";
 import { CashHubWithdrawCard } from "src/components/withdraw/CashHubWithdrawCard";
 import { CashHubPayoutsCard } from "src/components/withdraw/CashHubPayoutsCard";
+import { CashHubOrderConnectionsCard } from "src/components/cash/CashHubOrderConnectionsCard";
+import { CashHubOrderTermsCard } from "src/components/cash/CashHubOrderTermsCard";
+import { CashHubOrdersCard } from "src/components/cash/CashHubOrdersCard";
 import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import { useAppStore } from "src/hooks/useAppStore";
 import Loading from "src/components/Loading";
@@ -989,6 +992,13 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                 <CashHubWithdrawCard hubId={app.id} />
               )}
               {app.kind === "cash_hub" && <CashHubPayoutsCard hubId={app.id} />}
+              {app.kind === "cash_hub" && (
+                <CashHubOrderConnectionsCard hubId={app.id} />
+              )}
+              {app.kind === "cash_hub" && (
+                <CashHubOrderTermsCard hubId={app.id} />
+              )}
+              {app.kind === "cash_hub" && <CashHubOrdersCard hubId={app.id} />}
               <AppTransactionList appId={app.id} />
             </>
           )}
