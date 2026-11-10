@@ -2,8 +2,7 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -11,9 +10,9 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/logger"
@@ -30,9 +29,9 @@ const (
 func (svc *service) newOrderEngine(gormDB *gorm.DB, k keys.Keys, cfg config.Config, eventPublisher events.EventPublisher) *cashorder.Engine {
 	e := &cashorder.Engine{
 		DB: gormDB, Keys: k, Apps: apps.NewAppsService(gormDB, eventPublisher, k, cfg),
-		Transactions: svc.transactionsService, LN: svc.GetLNClient, Relays: cfg.GetRelayUrls,
+		Transactions: svc.transactionsService, LN: svc.GetLNClient, Relays: cfg.GetAdvertisedRelayUrls,
 		Horizon: func() int64 {
-			h, _ := cashrequest.HorizonTx(gormDB)
+			h, _ := db.HorizonTx(gormDB)
 			return max(h, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
 		},
 	}
@@ -70,7 +69,7 @@ func (svc *service) startOrderJobs(ctx context.Context, pool *nostr.SimplePool) 
 				e.RetryMints(ctx)
 			case <-retention.C:
 				e.RunRetention()
-			case <-hubclock.Moved():
+			case <-clock.Moved():
 				e.RunPayBy(ctx)
 				e.RunRetention()
 			}
@@ -88,21 +87,9 @@ func (svc *service) publishNotice(ctx context.Context, pool *nostr.SimplePool, a
 	}
 	out := nostr.Event{ID: ev.ID, PubKey: ev.PubKey, CreatedAt: nostr.Timestamp(ev.CreatedAt), Kind: ev.Kind, //nolint:gosec // a unix time
 		Tags: tags, Content: ev.Content, Sig: ev.Sig}
-	try := func(url string) bool {
-		relay, err := pool.EnsureRelay(url)
-		if err != nil {
-			return false
-		}
-		return relay.Publish(ctx, out) == nil
+	err := publishToFirst(ctx, pool, arrivedOn, svc.cfg.GetRelayUrls(), out, "the notice")
+	if err != nil {
+		logger.Logger.Debug().Msg("No relay accepted a notice")
 	}
-	if arrivedOn != "" && try(arrivedOn) {
-		return nil
-	}
-	for _, url := range svc.cfg.GetRelayUrls() {
-		if url != arrivedOn && try(url) {
-			return nil
-		}
-	}
-	logger.Logger.Debug().Msg("No relay accepted a notice")
-	return fmt.Errorf("no relay accepted the notice")
+	return err
 }

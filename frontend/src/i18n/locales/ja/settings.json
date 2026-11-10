@@ -181,5 +181,121 @@
         "cancelled": "キャンセル済み ({{reason}})"
       }
     }
+  },
+  "sellCash": {
+    "connections": {
+      "title": "注文コネクション",
+      "description": "買い手がこの Cash Hub の現金を買う注文を出すためのコネクションです。それぞれ再表示できる cashorder1… 文字列で、秘密は公開情報です。",
+      "labelPlaceholder": "ラベル（任意）",
+      "create": "コネクションを作成",
+      "createdToast": "注文コネクションを作成しました",
+      "createFailed": "注文コネクションを作成できませんでした",
+      "created": "作成",
+      "retired": "廃止済み",
+      "retiredToast": "注文コネクションを廃止しました",
+      "retireFailed": "注文コネクションを廃止できませんでした",
+      "empty": "まだ注文コネクションはありません。",
+      "unlabeled": "ラベルなし",
+      "cannotSign": "ノードは現在このコネクションに署名できません。署名できるようになると文字列が再表示されます。",
+      "show": "表示",
+      "hide": "非表示",
+      "copy": "コピー",
+      "retire": "廃止",
+      "retireTitle": "この注文コネクションを廃止しますか？",
+      "retireWarning": "この操作は取り消せません。新しい注文は出せなくなりますが、既存の注文は引き続き発行され、読み取ることもできます。",
+      "cancel": "キャンセル",
+      "retireConfirm": "廃止"
+    },
+    "terms": {
+      "title": "販売条件",
+      "selling": "この Cash Hub は現金を販売しています。",
+      "notSellingYet": "この Cash Hub はまだ販売していません。開始するには下で条件を設定してください。",
+      "lightningTitle": "ライトニング",
+      "onchainTitle": "オンチェーン",
+      "min": "最小（{{unit}}）",
+      "max": "最大（{{unit}}）",
+      "feeBase": "基本手数料（{{unit}}）",
+      "feePpm": "手数料（ppm）",
+      "window": "ウィンドウ（秒）",
+      "ceiling": "未決注文の上限（{{unit}}）",
+      "tiersTitle": "オンチェーン承認ティア",
+      "tiersHint": "各金額までの支払いには相応の承認数が必要です。最後のティアは開放で、より大きい値をすべて対象とします。",
+      "tierUpTo": "上限（{{unit}}）",
+      "tierOpen": "それ以上",
+      "tierN": "承認数",
+      "tierAdd": "ティアを追加",
+      "tierRemove": "ティアを削除",
+      "billTitle": "ビル条件",
+      "redeemFeeBase": "償還基本手数料（{{unit}}）",
+      "redeemFeePpm": "償還手数料（ppm）",
+      "minTransfer": "最小送金額（{{unit}}）",
+      "openTitle": "未決注文の制限",
+      "openOnchainMax": "未決オンチェーン注文の最大数（0 = 無制限）",
+      "outboundWarnTitle": "オンチェーン上限がライトニング送出容量を超過",
+      "outboundWarn": "未決オンチェーン注文の上限（{{ceiling}}）がノードのライトニング送出容量（{{outbound}}）を超えています。Hub はすべてのオンチェーン注文をビルに発行できない場合があります。",
+      "save": "保存",
+      "saved": "販売条件を保存しました",
+      "saveFailed": "販売条件を保存できませんでした",
+      "errors": {
+        "lightningMin": "ライトニングの最小は小数3桁までの {{unit}} 金額です。",
+        "lightningMax": "ライトニングの最大は小数3桁までの {{unit}} 金額です。",
+        "lightningFeeBase": "ライトニングの基本手数料は小数3桁までの {{unit}} 金額です。",
+        "lightningFeePpm": "ライトニングの手数料は 0 から {{max}} ppm までの整数です。",
+        "lightningWindow": "ライトニングのウィンドウは整数秒です。",
+        "lightningMinAboveMax": "ライトニングの最小が最大を上回っています。",
+        "lightningCeiling": "ライトニングの未決注文上限は正の {{unit}} 金額です。",
+        "onchainMin": "オンチェーンの最小は小数3桁までの {{unit}} 金額です。",
+        "onchainMax": "オンチェーンの最大は小数3桁までの {{unit}} 金額です。",
+        "onchainFeeBase": "オンチェーンの基本手数料は小数3桁までの {{unit}} 金額です。",
+        "onchainFeePpm": "オンチェーンの手数料は 0 から {{max}} ppm までの整数です。",
+        "onchainWindow": "オンチェーンのウィンドウは整数秒です。",
+        "onchainMinAboveMax": "オンチェーンの最小が最大を上回っています。",
+        "onchainWhole": "オンチェーンの金額は整数 {{unit}} です。",
+        "onchainCeiling": "オンチェーンの未決注文上限は正の {{unit}} 金額です。",
+        "onchainCeilingWhole": "オンチェーンの未決注文上限は整数 {{unit}} 金額です。",
+        "tiers": "各ティアには少なくとも1承認が必要で、金額は昇順でなければならず、開放は最後のティアのみです。",
+        "redeemFeeBase": "償還基本手数料は小数3桁までの {{unit}} 金額です。",
+        "redeemFeePpm": "償還手数料は 0 から {{max}} ppm までの整数です。",
+        "minTransfer": "最小送金額は小数3桁までの {{unit}} 金額です。",
+        "openOnchainMax": "未決オンチェーン注文の最大数は整数です。"
+      }
+    },
+    "orders": {
+      "title": "注文",
+      "description": "この Cash Hub に出された注文を新しい順に、各注文の支払いとともに表示します。オペレーター向けの情報のみ：現金トークンも買い手の鍵もありません。",
+      "amount": "金額",
+      "fee": "手数料",
+      "payBy": "支払期限",
+      "requiredConfirmations": "必要な承認数",
+      "recipient": "受取人",
+      "confirmations": "承認数",
+      "mintedBill": "発行済みビル",
+      "keptTitle": "Hub による保持",
+      "keptDescription": "Hub が注文なしで保持した支払い：手数料まで、あるいは有効な注文に一致しなかった注文アドレスへの支払いです。",
+      "kind": {
+        "lightning": "ライトニング",
+        "onchain": "オンチェーン"
+      },
+      "state": {
+        "open": "未決",
+        "paid": "支払済み",
+        "minted": "発行済み",
+        "expired": "期限切れ",
+        "closed": "クローズ"
+      },
+      "paymentState": {
+        "seen": "検出",
+        "confirmed": "承認済み",
+        "minted": "発行済み",
+        "kept": "保持",
+        "reorged": "再編成",
+        "dropped": "破棄"
+      },
+      "recipientType": {
+        "pubkey": "Nostr 鍵",
+        "cash": "現金シークレット",
+        "connection_key": "接続鍵"
+      }
+    }
   }
 }

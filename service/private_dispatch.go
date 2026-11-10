@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/hubclock"
-	"github.com/flokiorg/lokihub/testknobs"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"github.com/ohstr/nmilat/nipcash"
 	"math/big"
 	"time"
@@ -121,7 +121,7 @@ func stallCommitFault(ctx context.Context, item transport.Item, notAfter int64) 
 	if err := testknobs.WaitCommit(ctx); err != nil {
 		return transport.Result{}, false
 	}
-	if nipcash.CommitAllowed(notAfter, hubclock.Now().Unix()) {
+	if nipcash.CommitAllowed(notAfter, clock.Now().Unix()) {
 		return transport.Result{}, false
 	}
 	return transport.Result{ID: item.ID, ResultType: item.Method, Error: &transport.ResultError{
@@ -232,29 +232,7 @@ func (svc *service) publishReplyEvent(ctx context.Context, pool *nostr.SimplePoo
 		return fmt.Errorf("sign: %w", err)
 	}
 
-	if arrivedOn != "" {
-		if relay, err := pool.EnsureRelay(arrivedOn); err != nil {
-			logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("Could not reach the relay a private request arrived on to reply")
-		} else if err := relay.Publish(ctx, reply); err != nil {
-			logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("The relay a private request arrived on refused its reply")
-		} else {
-			return nil
-		}
-	}
-	for _, relayURL := range svc.cfg.GetRelayUrls() {
-		if relayURL == arrivedOn {
-			continue
-		}
-		relay, err := pool.EnsureRelay(relayURL)
-		if err != nil {
-			continue
-		}
-		if err := relay.Publish(ctx, reply); err != nil {
-			continue
-		}
-		return nil
-	}
-	return fmt.Errorf("no relay accepted the reply")
+	return publishToFirst(ctx, pool, arrivedOn, svc.cfg.GetRelayUrls(), reply, "the reply")
 }
 
 // chunkResults splits results into as few replies as the limits allow.

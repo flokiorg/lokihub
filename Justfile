@@ -10,298 +10,35 @@
 
 set shell := ["bash", "-c"]
 set positional-arguments
-# Makes .env visible to both `just` recipes (via env_var_or_default below,
-# and directly in bash recipe bodies) and docker compose's own interpolation
-# (which already reads .env from the compose file's directory natively) —
-# one file, one place to set DEV_DATA_DIR (see DATA_DIR below) per checkout.
+# Makes .env visible to `just` recipes and to the tools they run; docker
+# compose reads the same .env for its own interpolation.
 set dotenv-load := true
 
 VERSION := shell('cat VERSION 2>/dev/null || echo "v0.0.1"')
-DOCKER_COMPOSE_DEV := "docker compose -f docker-compose.dev.yml"
-# flnd stores its network directory as "main" (chaincfg.Params.Name), but
-# flncli's --network flag only accepts "mainnet" and assumes the directory
-# is named to match — so it looks in .../mainnet/ and never finds the
-# macaroon there. All authenticated flncli calls need this explicit path.
-FLND_MACAROON_PATH := "/root/.flnd/data/chain/flokicoin/main/admin.macaroon"
-# Where flnd's chain/wallet state and the hub's own data live. Defaults to
-# ./data (this checkout's own, gitignored, uninitialized in a fresh clone or
-# worktree). Set DEV_DATA_DIR in .env to an absolute path — e.g. another
-# checkout's own data/ — to reuse its already-synced flnd wallet and hub DB
-# instead of syncing/setting up a second one from scratch. Only one dev
-# stack should ever be pointed at a given data dir at a time (see `just dev
-# down`/`up` — container names are fixed, so only one stack runs at once
-# anyway).
-DATA_DIR := env_var_or_default("DEV_DATA_DIR", "data")
 
 default:
     @just --list
 
-# docker-compose dev environment (flnd + hot-reloading backend/frontend) - run `just dev help` for subcommands
-[group('dev')]
-dev subcommand="" *args:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    case "$1" in
-        setup)
-            mkdir -p "{{DATA_DIR}}/flnd" "{{DATA_DIR}}/hub"
-            [ -f "{{DATA_DIR}}/flnd/flnd.conf" ] || cp "{{DATA_DIR}}/flnd/flnd.conf.sample" "{{DATA_DIR}}/flnd/flnd.conf"
-            sed -i 's/^; flokicoin.mainnet=true/flokicoin.mainnet=true/' "{{DATA_DIR}}/flnd/flnd.conf"
-            sed -i 's/^; flokicoin.node=neutrino/flokicoin.node=neutrino/' "{{DATA_DIR}}/flnd/flnd.conf"
-            [ -f .env ] || cp .env.example .env
-            ;;
-        setup-wallet)
-            if [ -f "{{DATA_DIR}}/flnd/data/chain/flokicoin/main/wallet.db" ]; then
-                echo "✅ Existing wallet detected. Skipping creation."
-            else
-                echo "🔐 Setting up FLND Wallet..."
-                {{DOCKER_COMPOSE_DEV}} rm -f flnd &> /dev/null || true
-                {{DOCKER_COMPOSE_DEV}} build flnd
-                {{DOCKER_COMPOSE_DEV}} run -d --name lokihub-flnd-setup flnd
-                echo "⏳ Waiting for FLND to initialize..."
-                MAX_RETRIES=30; COUNT=0
-                until docker exec lokihub-flnd-setup ls /root/.flnd/tls.cert &> /dev/null || [ $COUNT -eq $MAX_RETRIES ]; do
-                    sleep 1; ((COUNT++))
-                done
-                if docker exec -it lokihub-flnd-setup flncli --network=mainnet create; then
-                    echo "✅ Wallet initialized. Cleaning up..."
-                    docker stop lokihub-flnd-setup > /dev/null && docker rm lokihub-flnd-setup > /dev/null
-                else
-                    echo "❌ Wallet creation failed or was cancelled. Container lokihub-flnd-setup left running for you to retry:"
-                    echo "   docker exec -it lokihub-flnd-setup flncli --network=mainnet create"
-                    exit 1
-                fi
-            fi
-            ;;
-        unlock)
-            if [ "$(docker inspect -f '{{ "{{" }}.State.Running{{ "}}" }}' lokihub-dev-flnd 2>/dev/null)" != "true" ]; then
-                echo "❌ Error: flnd container is not running. Try 'just dev up' first."
-                exit 1
-            fi
-            if docker exec lokihub-dev-flnd flncli --network=mainnet --macaroonpath={{FLND_MACAROON_PATH}} getinfo &> /dev/null; then
-                echo "✅ Wallet is already unlocked."
-                exit 0
-            fi
-            if [ ! -f "{{DATA_DIR}}/flnd/wallet-password.txt" ]; then
-                python3 -c 'import getpass, os; p = getpass.getpass("Enter wallet password: "); f = open("{{DATA_DIR}}/flnd/wallet-password.txt", "w"); f.write(p); f.close(); os.chmod("{{DATA_DIR}}/flnd/wallet-password.txt", 0o600)'
-                if grep -q "^wallet-unlock-password-file=" "{{DATA_DIR}}/flnd/flnd.conf"; then
-                    sed -i "s|^wallet-unlock-password-file=.*|wallet-unlock-password-file=/root/.flnd/wallet-password.txt|" "{{DATA_DIR}}/flnd/flnd.conf"
-                else
-                    awk -v line="wallet-unlock-password-file=/root/.flnd/wallet-password.txt" '!done && /^\[/ { print line; done=1 } { print }' "{{DATA_DIR}}/flnd/flnd.conf" > "{{DATA_DIR}}/flnd/flnd.conf.tmp" && mv "{{DATA_DIR}}/flnd/flnd.conf.tmp" "{{DATA_DIR}}/flnd/flnd.conf"
-                fi
-                {{DOCKER_COMPOSE_DEV}} restart flnd
-            else
-                echo "🔐 Auto-unlock is configured but wallet is still locked. Check {{DATA_DIR}}/flnd/wallet-password.txt."
-            fi
-            ;;
-        up)
-            # frontend.go does //go:embed dist, so `air` can't compile the
-            # backend at all unless frontend/dist has at least one file —
-            # even though dev mode never actually serves from it (the
-            # frontend container's own Vite server does, via FRONTEND_URL).
-            # frontend/dist is git- and docker-ignored (it's a build
-            # artifact), so a fresh clone, or one where it's been deleted,
-            # has none. This placeholder exists purely to satisfy the embed;
-            # a real `frontend && yarn build:http` output overwrites it
-            # harmlessly if one's ever produced in this tree.
-            mkdir -p frontend/dist
-            [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
-            {{DOCKER_COMPOSE_DEV}} up -d --build
-            ;;
-        down)
-            {{DOCKER_COMPOSE_DEV}} down
-            ;;
-        restart)
-            shift
-            # Same frontend/dist placeholder as `up` above — the backend
-            # container bind-mounts the live host tree, so restarting it
-            # re-runs air's build against whatever's on disk right now, not
-            # whatever existed at image-build time.
-            mkdir -p frontend/dist
-            [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
-            {{DOCKER_COMPOSE_DEV}} restart "$@"
-            ;;
-        logs)
-            shift
-            {{DOCKER_COMPOSE_DEV}} logs -f "${1:-}"
-            ;;
-        status)
-            {{DOCKER_COMPOSE_DEV}} ps
-            ;;
-        reset)
-            # Restarts relay + backend (in that order - backend's own Nostr
-            # pool reconnects fresh against a relay with zero prior
-            # subscription state) so a run starts from the same server-side
-            # baseline every time, instead of whatever session/subscription
-            # state a previous run's own load left behind. `just test
-            # integration` already runs this before every invocation - this
-            # subcommand exists for manually forcing the same reset on
-            # demand (e.g. mid-investigation, without running the suite).
-            # Doesn't touch flnd/frontend/caddy or any volume - flnd's chain
-            # sync and the hub's own DB are untouched.
-            {{DOCKER_COMPOSE_DEV}} restart relay
-            {{DOCKER_COMPOSE_DEV}} restart backend
-            echo "waiting for backend to come back up..."
-            for i in $(seq 1 30); do
-                docker logs lokihub-dev-backend --since 20s 2>&1 | grep -q "http server started" && break
-                sleep 1
-            done
-            just -f "{{justfile()}}" dev seed-relay
-            ;;
-        seed-relay)
-            # Publishes integration/testdata/social_graph.json's fixed
-            # "provider"/"members" identities' follow set to the dev relay
-            # (see integration/cmd/seedrelay) - idempotent (a follow set is
-            # addressable), so this is safe to run on every `dev reset`, not
-            # just once. Keeps circle "follow_set"-policy integration tests
-            # off any real third-party relay - see integration/README.md.
-            go run ./integration/cmd/seedrelay "${RELAY:-ws://relay:5500}"
-            ;;
-        flncli)
-            shift
-            docker exec -it lokihub-dev-flnd flncli --network=mainnet --macaroonpath={{FLND_MACAROON_PATH}} "$@"
-            ;;
-        wails)
-            exec wails dev -tags wails,dev -ldflags "-X 'github.com/flokiorg/lokihub/appversion.Tag={{VERSION}}'"
-            ;;
-        ""|help)
-            cat <<'USAGE'
-    usage: just dev <subcommand> [args...]
-
-    subcommands:
-      setup                onboard the docker dev environment: create data dirs/config from samples
-      setup-wallet          initialize the FLND wallet (run once, after setup, before up)
-      unlock                ensure the FLND wallet is unlocked (sets up auto-unlock if needed)
-      up                    start the docker dev environment (flnd, backend, frontend w/ hot-reload)
-      down                  stop the docker dev environment
-      restart [service...]  restart everything, or just the service(s) named (in place - keeps volumes)
-      logs [service]        follow logs for the docker dev environment or a specific service
-      status                show status of the docker dev environment
-      reset                  restart relay + backend for a clean server-side session/subscription baseline, then reseed (`just test integration` already does this)
-      seed-relay             publish the fixed integration test identities' follow set to the dev relay (`dev reset` already does this)
-      flncli <args...>      run flncli commands against the dev flnd (e.g. `just dev flncli getinfo`)
-      wails                 run the Wails desktop app locally (native alternative to the docker dev stack)
-
-    set DEV_DATA_DIR in .env to an absolute path to point this stack's
-    flnd/hub data at another checkout's already-synced data/ (e.g. from a
-    worktree, to reuse the main checkout's wallet instead of syncing a
-    second one from scratch) — defaults to ./data. Only one dev stack can
-    be up at a time regardless (container names are fixed), so switching
-    checkouts is `just dev down` then `up` from the other one.
-
-    `restart` just restarts the existing container(s) in place - it won't
-    fix a service whose own container state is broken (e.g. an anonymous
-    volume like frontend's node_modules gone missing mid-run). For that,
-    force a clean recreation instead:
-        docker compose -f docker-compose.dev.yml up -d --force-recreate --renew-anon-volumes <service>
-    USAGE
-            ;;
-        *)
-            echo "error: unknown dev subcommand '$1'" >&2
-            echo "run 'just dev help' to see available subcommands" >&2
-            exit 1
-            ;;
-    esac
-
-# unit tests + black-box NWC integration suite (see integration/README.md) - run `just test help` for subcommands
+# unit tests: go vet + go test -race across the module (hermetic, no deps). The
+# NWC integration suite and regtest stack now live in the cash-e2e repo.
 [group('test')]
 test subcommand="unit" *args:
     #!/usr/bin/env bash
     set -euo pipefail
     case "$1" in
         ""|unit)
-            # Everything except the integration/ black-box suite below,
-            # which needs a live dev stack. Hermetic, no dependencies.
+            # go vet + race tests across the module. Hermetic, no dependencies.
             go vet ./...
             go test -race -count=1 ./...
-            ;;
-        integration)
-            # Runs against dev's default config. Skips 4 tests: the 3 that
-            # need real (nonzero) NWC rate limits (dev's .env disables them
-            # by default - see integration-ratelimits below), and the opt-in
-            # TestZZZZ_SweepLeakedEphemeralFixtures. Requires: dev stack
-            # up (`just dev up`) with a real LN backend, and
-            # integration/config.local.yaml pointing at an admin API token
-            # (see integration/README.md).
-            #
-            # `dev reset` first so every run starts from the same server-side
-            # baseline (fresh relay/backend session and subscription state)
-            # regardless of what a previous run's own load left behind - see
-            # issues.md's "too many concurrent REQs" investigation, where
-            # stale in-memory relay state (on top of a DB-level leak, now
-            # fixed - see aaa_preflight_cleanup_test.go/zz_leak_check_test.go)
-            # made re-running the suite non-reproducible.
-            just -f "{{justfile()}}" dev reset
-            go vet -tags integration ./integration/...
-            # 20m, not 8m. The timeout is a safety net against a hung test,
-            # not a performance budget — but at 8m it was the budget: three
-            # consecutive full runs took 387s, 435s and 477s against a 480s
-            # cap, and a fourth died at exactly 480.033s inside a test that
-            # deliberately sleeps. Nothing had failed; the suite simply ran
-            # out of clock. A cap that close to the real runtime fires on
-            # ordinary variance instead of on hangs, which is the opposite of
-            # what it is for, and turns a green suite red at random.
-            #
-            # Six concurrency/race tests account for roughly three quarters of
-            # the runtime (the slowest alone is ~137s), and they are meant to
-            # be slow. Speeding the suite up is a separate piece of work.
-            go test -tags integration -count=1 -timeout 20m ./integration/...
-            ;;
-        integration-ratelimits)
-            # Runs only the 3 rate-limit tests, with dev's NWC rate limits
-            # temporarily switched on (they're 0/disabled by default -
-            # handy for manual frontend testing, but it means the
-            # 11th/21st call in these tests never actually gets rejected).
-            # The backend-ready wait only accepts a "http server started"
-            # logged after the restart: an unfiltered `docker logs` matches
-            # the previous start's line at once, so it never really waited.
-            # Restores .env and restarts the backend again afterwards
-            # regardless of outcome (trap on EXIT), so dev is never left
-            # with limits on.
-            restore() {
-                sed -i \
-                    -e 's/^CASH_WALLET_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_RATE_LIMIT_PER_HOUR=0/' \
-                    -e 's/^CASH_CLAIM_CALLS_PER_HOUR=.*/CASH_CLAIM_CALLS_PER_HOUR=0/' \
-                    -e 's/^CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=.*/CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=0/' \
-                    .env
-                {{DOCKER_COMPOSE_DEV}} restart backend >/dev/null
-                echo "restored .env rate limits to disabled and restarted backend"
-            }
-            trap restore EXIT
-
-            sed -i \
-                -e 's/^CASH_WALLET_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_RATE_LIMIT_PER_HOUR=10/' \
-                -e 's/^CASH_CLAIM_CALLS_PER_HOUR=.*/CASH_CLAIM_CALLS_PER_HOUR=120/' \
-                -e 's/^CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=.*/CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=3/' \
-                .env
-            restarted_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            {{DOCKER_COMPOSE_DEV}} restart backend >/dev/null
-            echo "waiting for backend to come back up with real rate limits..."
-            for i in $(seq 1 60); do
-                docker logs lokihub-dev-backend --since "$restarted_at" 2>&1 | grep -q "http server started" && break
-                sleep 2
-            done
-
-            INTEGRATION_RUN_RATE_LIMIT_TESTS=1 go test -tags integration -count=1 -timeout 3m \
-                -run 'TestCashHubs/RateLimiting_EleventhCreateIsRateLimited|TestClaimFunds/RateLimiting_TwentyFirstClaimIsRateLimited|TestAudit_CashTransferRateLimit_PerWallet' \
-                -v ./integration/...
-            ;;
-        integration-all)
-            # Runs the full suite twice - once with dev's default config,
-            # once with NWC rate limits temporarily enabled - so every test
-            # in the suite actually runs and passes at least once, with
-            # zero skipped tests overall.
-            just -f "{{justfile()}}" test integration
-            just -f "{{justfile()}}" test integration-ratelimits
             ;;
         help)
             cat <<'USAGE'
     usage: just test <subcommand>
 
     subcommands:
-      unit                    (default) go vet + go test -race ./... - hermetic, no dependencies
-      integration             black-box NWC integration suite against dev's default config
-      integration-ratelimits  the 3 tests needing real (nonzero) NWC rate limits
-      integration-all         both integration suites back to back - zero skips overall
+      unit   (default) go vet + go test -race ./... - hermetic, no dependencies
+
+    The NWC integration suite and regtest stack have moved to the cash-e2e repo.
     USAGE
             ;;
         *)
@@ -311,7 +48,6 @@ test subcommand="unit" *args:
             ;;
     esac
 
-# static analysis + vulnerability scanning (see SECURITY_AUDIT_SCOPE.md) - run `just security help` for subcommands
 [group('security')]
 security subcommand="" *args:
     #!/usr/bin/env bash

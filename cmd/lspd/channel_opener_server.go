@@ -10,7 +10,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	ecies "github.com/ecies/go/v2"
+	ecies "github.com/flokiorg/lokihub/lspd/eciesgo"
 	btcec "github.com/flokiorg/go-flokicoin/crypto"
 	rpc "github.com/flokiorg/lokihub/lspd/api/proto/rpc"
 	"github.com/flokiorg/lokihub/lspd/common"

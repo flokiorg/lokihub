@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/flokiorg/lokihub/constants"
-	decodepay "github.com/flokiorg/lokihub/decodepay"
+	decodepay "github.com/flokiorg/lokihub/internal/decodepay"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"

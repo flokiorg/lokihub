@@ -1,0 +1,248 @@
+{
+  "values": {
+    "yes": "はい",
+    "no": "いいえ",
+    "none": "なし",
+    "ok": "OK"
+  },
+  "serviceCard": {
+    "title": "LSP サービス",
+    "description": "Hub は NIP-98 ダッシュボード経由でこの LSP デーモンにアクセスします。下のバックオフィスは Hub を通じて提供され、ブラウザが管理者キーを保持することはありません。",
+    "endpoint": "エンドポイント",
+    "node": "ノード",
+    "version": "lspd バージョン",
+    "adminPubkey": "管理者公開鍵",
+    "badge": {
+      "notConfigured": "未設定",
+      "attached": "接続済み",
+      "reachable": "到達可能",
+      "unreachable": "到達不可"
+    },
+    "error": {
+      "unreachable": "Hub は LSP デーモンのダッシュボードに到達できませんでした。",
+      "keyMismatch": "LSP デーモンが管理者キーを拒否しました：Hub の nsec/bunker 公開鍵がこのノードの DASHBOARD_ADMIN_PUBKEY ではありません。"
+    }
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "LSP サービスは未設定です",
+      "body": "この Hub には LSP デーモンが接続されていません。"
+    },
+    "unreachable": {
+      "title": "LSP サービスは利用できません",
+      "body": "Hub は LSP デーモンに到達できなかったか、管理者キーが拒否されました。"
+    },
+    "generic": {
+      "title": "LSP データを読み込めませんでした",
+      "body": "LSP サービスとの通信中に予期しないエラーが発生しました。"
+    }
+  },
+  "overview": {
+    "title": "LSP 概要",
+    "description": "接続中の流動性サービスプロバイダーの監視ホーム",
+    "kpi": {
+      "totalLiquidity": "総流動性",
+      "free": "{{amount}} 空き",
+      "revenue24h": "24時間の収益",
+      "trend": "トレンド {{trend}}",
+      "activeOrders": "アクティブな注文",
+      "createdPaid": "CREATED + PAID",
+      "successRate": "成功率",
+      "successFormula": "completed / (completed + failed)"
+    },
+    "node": {
+      "fallbackName": "ノード",
+      "host": "ホスト",
+      "synced": "同期済み",
+      "height": "高さ",
+      "peers": "ピア",
+      "channelsActive": "アクティブなチャネル",
+      "channelsPending": "保留中のチャネル",
+      "inbound": "インバウンド",
+      "outbound": "アウトバウンド",
+      "blocked": "ブロック済み"
+    },
+    "orderStates": {
+      "title": "最近の注文状態",
+      "description": "lspd がこのノードについて報告する最近の注文全体。"
+    },
+    "fleet": {
+      "title": "フリート（{{count}} ノード）",
+      "description": "このデーモンは複数の LSP ノードを実行しています。ノードごとの設定とアナウンスは「設定」画面で管理します。",
+      "nodeFallback": "ノード"
+    },
+    "topPeers": {
+      "title": "ボリューム上位のピア"
+    }
+  },
+  "orders": {
+    "title": "チャネルと注文",
+    "description": "LSPS1 注文と、それらが資金提供した JIT チャネル",
+    "tabs": {
+      "orders": "注文",
+      "jit": "JIT チャネル"
+    },
+    "filter": {
+      "placeholder": "注文 id、ピアの公開鍵、またはエイリアスで絞り込み",
+      "allStates": "すべての状態"
+    },
+    "count": "{{total}} 件中 {{filtered}} 件",
+    "empty": "一致する注文はありません。",
+    "table": {
+      "order": "注文",
+      "peer": "ピア",
+      "state": "状態",
+      "amount": "金額",
+      "fee": "手数料",
+      "created": "作成日時"
+    },
+    "jit": {
+      "empty": "資金提供された JIT チャネルはまだありません。",
+      "scid": "SCID",
+      "capacity": "容量",
+      "status": "ステータス"
+    }
+  },
+  "orderDetail": {
+    "title": "注文の詳細",
+    "back": "注文に戻る",
+    "paymentBadge": "支払い：{{state}}",
+    "announced": "アナウンス済み",
+    "readOnlyNote": "LSP ダッシュボード API は注文状態を読み取り専用で公開します。決済とスタックした注文の復旧は LSP デーモン内部で自動的に実行されるため、ここに手動の返金／再開／復旧の操作はありません。",
+    "timeline": {
+      "title": "タイムライン"
+    },
+    "payment": {
+      "title": "支払い",
+      "noInvoice": "この注文に記録されたインボイスはありません。"
+    },
+    "channel": {
+      "title": "チャネル",
+      "fundingOutpoint": "資金提供アウトポイント",
+      "fundingIndex": "（インデックス {{index}}）",
+      "explorer": "エクスプローラー",
+      "refundAddress": "返金先アドレス"
+    },
+    "params": {
+      "title": "パラメータ",
+      "lspBalance": "LSP 残高",
+      "clientBalance": "クライアント残高",
+      "orderTotal": "注文合計",
+      "fee": "手数料",
+      "reserved": "予約済み",
+      "channelExpiry": "チャネルの有効期限",
+      "blocks": "{{count}} ブロック",
+      "confirmations": "確認数",
+      "peer": "ピア",
+      "created": "作成日時",
+      "expires": "有効期限"
+    }
+  },
+  "clients": {
+    "title": "クライアントとピア",
+    "description": "この LSP ノードに接続しているピアとその注文アクティビティ",
+    "empty": "接続中のピアはありません。",
+    "online": "オンライン",
+    "offline": "オフライン",
+    "unknownAlias": "（不明）",
+    "table": {
+      "status": "ステータス",
+      "peer": "ピア",
+      "received": "受信",
+      "sent": "送信",
+      "orders": "注文"
+    }
+  },
+  "analytics": {
+    "title": "分析",
+    "description": "14日間の収益、注文量、分布",
+    "kpi": {
+      "totalRevenue": "総収益",
+      "successRate": "成功率",
+      "avgOrderSize": "平均注文サイズ",
+      "activePeers": "アクティブなピア"
+    },
+    "revenueChart": {
+      "title": "収益（14日間）",
+      "description": "{{unit}} 単位の日次注文収益。",
+      "series": "収益"
+    },
+    "distributionChart": {
+      "title": "注文の分布",
+      "description": "サンプリング期間内の状態別の注文。"
+    }
+  },
+  "config": {
+    "title": "設定",
+    "description": "ノード設定と NIP-LSP アナウンス",
+    "noNodes": "LSP デーモンにノードが設定されていません。",
+    "nodeLabel": "ノード",
+    "fields": {
+      "feeRate": "手数料率（比例）",
+      "baseFeeMloki": "基本手数料（mloki）",
+      "channelFeePermyriad": "チャネル手数料（permyriad）",
+      "channelMinimumFeeMloki": "チャネル最低手数料（mloki）"
+    },
+    "fees": {
+      "title": "手数料",
+      "description": "このノードのビジネス手数料パラメータ。秘密フィールド（ノードキー、tokens、LND 認証情報）はブラウザに送信されず、保存時に保持されます。",
+      "save": "手数料を保存",
+      "saving": "保存中…",
+      "saved": "設定を保存しました",
+      "saveError": "設定の保存に失敗しました"
+    },
+    "viewer": {
+      "title": "ノード設定",
+      "description": "読み取り専用。秘密はデーモンによって除去されます。",
+      "announceRelays": "アナウンスリレー"
+    },
+    "announce": {
+      "title": "NIP-LSP アナウンス",
+      "description": "このノードの kind-10735 アナウンスを一時停止、再開、または掲載取り消しし、失敗したセルフチェックをクリアします。",
+      "enabled": "有効",
+      "lastChange": "最終変更",
+      "blocked": "ブロック：{{reason}}",
+      "selfCheck": "セルフチェック",
+      "failed": "失敗：{{problems}}",
+      "relays": "リレー",
+      "pause": "一時停止",
+      "resume": "再開",
+      "unlist": "掲載取り消し",
+      "recheck": "再チェック",
+      "toast": {
+        "pauseSuccess": "アナウンスを一時停止しました",
+        "pauseFailure": "アナウンスの一時停止に失敗しました",
+        "resumeSuccess": "アナウンスを再開しました",
+        "resumeFailure": "アナウンスの再開に失敗しました",
+        "unlistSuccess": "アナウンスの掲載を取り消しました",
+        "unlistFailure": "アナウンスの掲載取り消しに失敗しました",
+        "recheckSuccess": "再チェック",
+        "recheckFailure": "再チェックに失敗しました"
+      }
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "LSPS5 クライアント通知 webhooks",
+    "alert": {
+      "title": "LSPS プロトコル経由でクライアントが管理",
+      "description": "クライアントは LSPS トランスポート（bLIP-55）経由で自身の LSPS5 webhooks を登録・削除します。LSP オペレーターのダッシュボード API は webhook ごとのレジストリを公開しないため、ここにはまだ一覧表示や編集するものはありません。"
+    },
+    "transports": {
+      "title": "トランスポート",
+      "description": "クライアントが webhook を登録した後、通知がどのようにクライアントに届くか。",
+      "push": {
+        "title": "push (HTTPS)",
+        "description": "クライアントの https:// URL への署名付き POST。接続時の SSRF ガードは、デーモンで loopback webhooks が明示的に有効化されていない限り、プライベートアドレスを拒否します。"
+      },
+      "nostr": {
+        "title": "nostr",
+        "description": "クライアントの nostr+lsps5:// リレーへの暗号化イベント（kind 31055）。デーモンのリレープール経由で配信されます。"
+      }
+    },
+    "limits": {
+      "title": "制限",
+      "description": "Webhook の制限は環境変数（LSPD_LSPS5_MAX_WEBHOOKS、LSPD_LSPS5_ALLOW_LOOPBACK_WEBHOOKS）経由で LSP デーモン上で設定され、Hub からは編集できません。"
+    }
+  }
+}

@@ -1,0 +1,95 @@
+# Built-in service seed shipped inside the lokihub binary.
+#
+# This replaces the former remote lokihub-services fetch: the explorer/relay
+# suggestions, currencies, FAQ, info and the fiat-rate oracle pointer are now
+# embedded at build time (internal/seed/seed.go //go:embed). Explorer/relay entries are
+# suggested defaults only — an operator's own choice (saved in user_configs)
+# always wins. Set LOKIHUB_SEED_FILE to a YAML path to override the embedded
+# seed at runtime.
+#
+# LSPs are intentionally absent: the LSP catalogue comes from NIP-LSP
+# announcements (WP-26), not from this seed.
+
+services:
+  flokicoin_explorer:
+    - name: "Lokichain.info"
+      url: "https://lokichain.info"
+      description: "Your Gateway to Explore Lokichain"
+    - name: "Flokichain.info"
+      url: "https://flokichain.info"
+      description: "Flokicoin block explorer"
+  nostr_relay:
+    - name: "Damus"
+      url: "wss://relay.damus.io"
+      description: "Popular general-purpose public relay"
+    - name: "Primal"
+      url: "wss://relay.primal.net"
+      description: "General-purpose public relay"
+    - name: "nos.lol"
+      url: "wss://nos.lol"
+      description: "General-purpose public relay"
+    - name: "Ohstr"
+      url: "wss://relay.ohstr.com"
+      description: "High availability relay"
+  # App store suggestions. These are inactive until an operator picks one under
+  # Settings → Services — nothing is fetched out of the box. This is the former
+  # hardcoded LOKIHUB_STORE_URL default, demoted to a mere suggestion.
+  lokihub_store:
+    - name: "Lokihub Store"
+      url: "https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"
+      description: "Community app store for Lokihub"
+
+currencies:
+  USD:
+    name: "United States Dollar"
+    symbol: "$"
+
+info:
+  version: "v0.1.2-alpha"
+  release_notes: "Initial release of Lokihub Services."
+
+faq:
+  - question: "What is the Flokicoin Lightning Network?"
+    answer: "The Flokicoin Lightning Network is a layer-2 payment protocol built on top of the Flokicoin blockchain (Lokichain). It enables instant, low-cost transactions between participating nodes. The next web needs a better experience than waiting for mining and confirmations which slows engagement. [Read the Web of Fun (WoF) Paper](https://docs.flokicoin.org/wof)"
+  - question: "What is a Wallet vs. Sub-wallet?"
+    answer: "Your main **Wallet** holds your primary funds and manages your Lightning channels. It is the administrative center of your Hub.\n\nA **Sub-wallet** is a separate isolated balance created within your Hub. You can use sub-wallets to organize your spending (e.g., for different apps) or create accounts for friends and family. Sub-wallets share your node's liquidity but have their own credentials."
+  - question: "What are Channels?"
+    answer: "Channels are the connections between nodes on the Lightning Network. To send or receive payments, you need to have at least one open channel with another node. Think of channels as pipes that allow liquidity (money) to flow between you and the rest of the network."
+  - question: "What is Inbound and Outbound Liquidity?"
+    answer: "**Outbound Liquidity** is the amount of Flokicoin you can send. This is the balance you own in your channels.\n\n**Inbound Liquidity** is the amount of Flokicoin you can receive. This represents the empty space in your channels (funds held by your channel partner). To receive payments, you must have sufficient inbound liquidity."
+  - question: "Can I send and receive on-chain Flokicoin?"
+    answer: "Yes, your Hub supports on-chain transactions. You can access your on-chain wallet under the **Node** menu. This is where your on-chain balance is held, which is used for opening channels and managing liquidity. Note that this is separate from your Lightning wallet balance."
+  - question: "How do I get started?"
+    answer: "1. Deposit on-chain Flokicoin to your wallet via the **Receive** screen.\n2. Go to the **Node** section to open a channel. You can use the \"Auto Channel\" feature for an easy setup.\n3. Once your channel is active, you can send and receive Lightning payments instantly.\n4. Connect apps or create sub-wallets to make the most of your Lokihub."
+
+# NIP-78 (kind 30078) fiat-rate oracle. lokihub subscribes to the newest
+# parameterized-replaceable event authored by `npub` tagged `#d == d_tag`,
+# verifies its signature and author, and reads event.content as the Flokicoin
+# fiat rate (same JSON body the old rates.json carried). Absent/stale → the UI
+# degrades to sats/FLC.
+fiat_rate_oracle:
+  npub: "npub1eywl4czqunqp69mal68as5mhy4jfzjwxwztrd63pgycelr3jhzgs0nlnt8"
+  kind: 30078
+  d_tag: "flokicoin-fiat-rate"
+  relays:
+    - "wss://relay.ohstr.com"
+  refresh_interval: "300s"
+  staleness_ttl: "3600s"
+
+# native_asset is the on-chain asset shown to users. The embedded default is
+# Flokicoin, so nothing changes unless an operator overrides it via a
+# LOKIHUB_SEED_FILE. bech32_hrp is informational in L1 (load-bearing in L2).
+native_asset:
+  name: "Flokicoin"
+  ticker: "FLC"
+  symbol: "FLC"
+  unit_name: "loki"
+  subunit_name: "mloki"
+  decimals: 8
+  subunit_per_unit: 1000
+  auto_threshold_loki: 100000
+  bech32_hrp: ""
+  explorer:
+    label: "Flokicoin Explorer"
+    url: "https://flokichain.info"
+    tx_path: "/tx/{txid}"

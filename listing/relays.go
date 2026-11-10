@@ -24,9 +24,10 @@ const ListingRelaysKey = "CashListingRelays"
 // kindRelayList is NIP-65's relay list.
 const kindRelayList = 10002
 
-// ListingRelays are the relays listings are published to and the node's kind
-// 10002 names as write relays: the setting, else the general relays, else the
-// NWC relays.
+// ListingRelays are the relays listings and the node's kind 10002 are PUBLISHED
+// to (and the hub is reached on): the setting, else the general relays, else the
+// NWC relays the hub dials. For what the 10002 ADVERTISES to other clients, see
+// advertisedListingRelays.
 func (s *Service) ListingRelays() []string {
 	if v, _ := s.d.Settings.Get(ListingRelaysKey, ""); strings.TrimSpace(v) != "" {
 		return splitRelays(v)
@@ -35,6 +36,18 @@ func (s *Service) ListingRelays() []string {
 		return general
 	}
 	return cleanRelays(s.d.Settings.GetRelayUrls())
+}
+
+// advertisedListingRelays are the client-reachable relays named in the node's
+// NIP-65 kind 10002 r tags — what OTHERS read to reach this hub: the operator's
+// listing-relay setting if set, else the advertised NWC relays. Unlike
+// ListingRelays (the publish/dial target) it never falls back to the general or
+// internal-dial relays, which need not be reachable by other clients.
+func (s *Service) advertisedListingRelays() []string {
+	if v, _ := s.d.Settings.Get(ListingRelaysKey, ""); strings.TrimSpace(v) != "" {
+		return splitRelays(v)
+	}
+	return cleanRelays(s.d.Settings.GetAdvertisedRelayUrls())
 }
 
 // ConfiguredListingRelays is the setting as stored (empty: the default).
@@ -112,11 +125,14 @@ func union(lists ...[]string) []string {
 // (NIP-CASH §Hub Rules). created_at is never post-dated and always after the
 // previous one.
 func (s *Service) ensureRelayList(ctx context.Context) error {
-	relays := s.ListingRelays()
-	if len(relays) == 0 {
+	// NIP-65: the r tags name where OTHERS reach this hub, so the CONTENT is the
+	// advertised (client-reachable) relays; the event is published to the relays
+	// we dial (the Publish call below), which may differ.
+	advertised := s.advertisedListingRelays()
+	if len(advertised) == 0 {
 		return fmt.Errorf("no listing relays")
 	}
-	encoded, _ := json.Marshal(relays)
+	encoded, _ := json.Marshal(advertised)
 	var st db.ListingNodeState
 	if err := s.d.DB.Where(db.ListingNodeState{ID: 1}).FirstOrCreate(&st).Error; err != nil {
 		return err
@@ -135,11 +151,11 @@ func (s *Service) ensureRelayList(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrCannotSign, err)
 	}
-	ev := RelayListEvent(identity, relays, createdAt)
+	ev := RelayListEvent(identity, advertised, createdAt)
 	if err := s.d.Signer.Sign(ctx, ev); err != nil {
 		return fmt.Errorf("%w: %v", ErrCannotSign, err)
 	}
-	answers := s.d.Relays.Publish(ctx, union(relays, s.d.Settings.GetGeneralRelayUrls()), ev)
+	answers := s.d.Relays.Publish(ctx, union(s.ListingRelays(), s.d.Settings.GetGeneralRelayUrls()), ev)
 	if accepted(answers) == 0 {
 		return fmt.Errorf("no relay accepted the relay list")
 	}
@@ -148,7 +164,7 @@ func (s *Service) ensureRelayList(ctx context.Context) error {
 }
 
 // RelayListEvent is the node's unsigned kind 10002: one ["r", url, "write"] per
-// listing relay.
+// advertised (client-reachable) relay.
 func RelayListEvent(identity string, relays []string, createdAt int64) *nip01.Event {
 	tags := make([][]string, 0, len(relays))
 	for _, r := range relays {

@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import { ChartCard, ChartPlot } from "src/components/charts/ChartCard";
 import { axisProps, SERIES } from "src/components/charts/chartTheme";
@@ -24,13 +25,14 @@ import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
 import { formatLoki } from "src/screens/lsp/types";
 
 export function LspAnalytics() {
+  const { t } = useTranslation("lsp");
   const { data, error } = useLspAnalytics();
 
   return (
     <div className="space-y-4">
       <AppHeader
-        title="Analytics"
-        description="14-day revenue, order volume and distribution"
+        title={t("analytics.title")}
+        description={t("analytics.description")}
       />
 
       {error ? (
@@ -40,22 +42,28 @@ export function LspAnalytics() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Kpi label="Total revenue" value={formatLoki(data.total_revenue)} />
             <Kpi
-              label="Success rate"
+              label={t("analytics.kpi.totalRevenue")}
+              value={formatLoki(data.total_revenue)}
+            />
+            <Kpi
+              label={t("analytics.kpi.successRate")}
               value={`${Math.round(data.success_rate)}%`}
             />
             <Kpi
-              label="Avg order size"
+              label={t("analytics.kpi.avgOrderSize")}
               value={formatLoki(data.avg_order_size)}
             />
-            <Kpi label="Active peers" value={String(data.active_peers)} />
+            <Kpi
+              label={t("analytics.kpi.activePeers")}
+              value={String(data.active_peers)}
+            />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <ChartCard
-              title="Revenue (14 days)"
-              description="Daily order revenue in loki."
+              title={t("analytics.revenueChart.title")}
+              description={t("analytics.revenueChart.description")}
             >
               <ChartPlot>
                 <AreaChart
@@ -101,7 +109,7 @@ export function LspAnalytics() {
                   <Area
                     type="monotone"
                     dataKey="revenue"
-                    name="Revenue"
+                    name={t("analytics.revenueChart.series")}
                     stroke={SERIES.covered}
                     fill="url(#lspRevenueFill)"
                     strokeWidth={2}
@@ -112,8 +120,8 @@ export function LspAnalytics() {
             </ChartCard>
 
             <ChartCard
-              title="Order distribution"
-              description="Orders by state across the sampled window."
+              title={t("analytics.distributionChart.title")}
+              description={t("analytics.distributionChart.description")}
             >
               <ChartPlot>
                 <BarChart

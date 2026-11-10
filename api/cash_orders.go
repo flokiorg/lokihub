@@ -3,16 +3,16 @@ package api
 import (
 	"context"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 
-	"github.com/flokiorg/lokihub/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/listing"
 )
 
 func (api *api) orderDeps() cashorder.Deps {
-	return cashorder.Deps{DB: api.db, Keys: api.keys, Apps: api.appsSvc, LN: api.lnClient(), Relays: api.cfg.GetRelayUrls()}
+	return cashorder.Deps{DB: api.db, Keys: api.keys, Apps: api.appsSvc, LN: api.lnClient(), Relays: api.cfg.GetAdvertisedRelayUrls(), InfoCache: api.orderInfo}
 }
 
 func requireCashHub(hub *db.App) error {
@@ -47,7 +47,7 @@ func (api *api) RetireOrderConnection(hub *db.App, connAppID uint) error {
 	if err := requireCashHub(hub); err != nil {
 		return err
 	}
-	if err := cashorder.RetireConnection(api.orderDeps(), hub.ID, connAppID, hubclock.Now()); err != nil {
+	if err := cashorder.RetireConnection(api.orderDeps(), hub.ID, connAppID, clock.Now()); err != nil {
 		return err
 	}
 	// The retirement is committed, so get_info answers "cash_order": {} from
@@ -74,5 +74,15 @@ func (api *api) PutOrderTerms(hub *db.App, s cashorder.Settings) error {
 	if err := requireCashHub(hub); err != nil {
 		return err
 	}
-	return cashorder.PutSettings(api.db, hub.ID, s, hubclock.Now())
+	return cashorder.PutSettings(cashorder.Deps{DB: api.db, InfoCache: api.orderInfo}, hub.ID, s, clock.Now())
+}
+
+// ListOrders lists a Cash Hub's placed orders newest first and the payments it
+// kept with no order, for the operator console (WP-19 item 8). It exposes only
+// operator facts — no cash token and no buyer key.
+func (api *api) ListOrders(hub *db.App) (*cashorder.OrdersView, error) {
+	if err := requireCashHub(hub); err != nil {
+		return nil, err
+	}
+	return cashorder.ListOrders(api.db, hub.ID, 500)
 }

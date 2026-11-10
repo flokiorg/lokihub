@@ -1,0 +1,248 @@
+{
+  "values": {
+    "yes": "sí",
+    "no": "no",
+    "none": "ninguno",
+    "ok": "ok"
+  },
+  "serviceCard": {
+    "title": "Servicio LSP",
+    "description": "El Hub se comunica con este demonio LSP a través de su panel NIP-98. El backoffice de abajo se sirve a través del Hub; tu navegador nunca guarda la clave de administrador.",
+    "endpoint": "Endpoint",
+    "node": "Nodo",
+    "version": "versión de lspd",
+    "adminPubkey": "Clave pública de administrador",
+    "badge": {
+      "notConfigured": "Sin configurar",
+      "attached": "Conectado",
+      "reachable": "Accesible",
+      "unreachable": "Inaccesible"
+    },
+    "error": {
+      "unreachable": "El Hub no pudo comunicarse con el panel del demonio LSP.",
+      "keyMismatch": "El demonio LSP rechazó la clave de administrador: la clave pública nsec/bunker del Hub no es la DASHBOARD_ADMIN_PUBKEY de este nodo."
+    }
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "Servicio LSP sin configurar",
+      "body": "No hay ningún demonio LSP conectado a este Hub."
+    },
+    "unreachable": {
+      "title": "Servicio LSP no disponible",
+      "body": "El Hub no pudo comunicarse con el demonio LSP, o su clave de administrador fue rechazada."
+    },
+    "generic": {
+      "title": "No se pudieron cargar los datos del LSP",
+      "body": "Ocurrió un error inesperado al comunicarse con el servicio LSP."
+    }
+  },
+  "overview": {
+    "title": "Resumen del LSP",
+    "description": "Centro de monitoreo de tu Proveedor de Servicios de Liquidez conectado",
+    "kpi": {
+      "totalLiquidity": "Liquidez total",
+      "free": "{{amount}} libre",
+      "revenue24h": "Ingresos 24h",
+      "trend": "tendencia {{trend}}",
+      "activeOrders": "Pedidos activos",
+      "createdPaid": "CREATED + PAID",
+      "successRate": "Tasa de éxito",
+      "successFormula": "completed / (completed + failed)"
+    },
+    "node": {
+      "fallbackName": "Nodo",
+      "host": "Host",
+      "synced": "Sincronizado",
+      "height": "Altura",
+      "peers": "Pares",
+      "channelsActive": "Canales activos",
+      "channelsPending": "Canales pendientes",
+      "inbound": "Entrante",
+      "outbound": "Saliente",
+      "blocked": "Bloqueado"
+    },
+    "orderStates": {
+      "title": "Estados de pedidos recientes",
+      "description": "A través de los últimos pedidos que lspd reporta para este nodo."
+    },
+    "fleet": {
+      "title": "Flota ({{count}} nodos)",
+      "description": "Este demonio ejecuta más de un nodo LSP. La configuración por nodo y el anuncio se gestionan en la pantalla de Configuración.",
+      "nodeFallback": "nodo"
+    },
+    "topPeers": {
+      "title": "Principales pares por volumen"
+    }
+  },
+  "orders": {
+    "title": "Canales y pedidos",
+    "description": "Pedidos LSPS1 y los canales JIT que financiaron",
+    "tabs": {
+      "orders": "Pedidos",
+      "jit": "Canales JIT"
+    },
+    "filter": {
+      "placeholder": "Filtrar por id de pedido, clave pública del par o alias",
+      "allStates": "Todos los estados"
+    },
+    "count": "{{filtered}} de {{total}}",
+    "empty": "Ningún pedido coincide.",
+    "table": {
+      "order": "Pedido",
+      "peer": "Par",
+      "state": "Estado",
+      "amount": "Monto",
+      "fee": "Comisión",
+      "created": "Creado"
+    },
+    "jit": {
+      "empty": "Aún no hay canales JIT financiados.",
+      "scid": "SCID",
+      "capacity": "Capacidad",
+      "status": "Estado"
+    }
+  },
+  "orderDetail": {
+    "title": "Detalle del pedido",
+    "back": "Volver a pedidos",
+    "paymentBadge": "pago: {{state}}",
+    "announced": "anunciado",
+    "readOnlyNote": "La API del panel LSP expone el estado del pedido en modo solo lectura. La liquidación y la recuperación de pedidos atascados se ejecutan automáticamente dentro del demonio LSP, por lo que aquí no hay acciones manuales de reembolso/reapertura/recuperación.",
+    "timeline": {
+      "title": "Cronología"
+    },
+    "payment": {
+      "title": "Pago",
+      "noInvoice": "No hay ninguna factura registrada para este pedido."
+    },
+    "channel": {
+      "title": "Canal",
+      "fundingOutpoint": "Punto de salida de financiación",
+      "fundingIndex": "(índice {{index}})",
+      "explorer": "explorador",
+      "refundAddress": "Dirección de reembolso"
+    },
+    "params": {
+      "title": "Parámetros",
+      "lspBalance": "Saldo del LSP",
+      "clientBalance": "Saldo del cliente",
+      "orderTotal": "Total del pedido",
+      "fee": "Comisión",
+      "reserved": "Reservado",
+      "channelExpiry": "Expiración del canal",
+      "blocks": "{{count}} bloques",
+      "confirmations": "Confirmaciones",
+      "peer": "Par",
+      "created": "Creado",
+      "expires": "Expira"
+    }
+  },
+  "clients": {
+    "title": "Clientes y pares",
+    "description": "Pares conectados a este nodo LSP y su actividad de pedidos",
+    "empty": "No hay pares conectados.",
+    "online": "En línea",
+    "offline": "Desconectado",
+    "unknownAlias": "(desconocido)",
+    "table": {
+      "status": "Estado",
+      "peer": "Par",
+      "received": "Recibido",
+      "sent": "Enviado",
+      "orders": "Pedidos"
+    }
+  },
+  "analytics": {
+    "title": "Analíticas",
+    "description": "Ingresos, volumen de pedidos y distribución de 14 días",
+    "kpi": {
+      "totalRevenue": "Ingresos totales",
+      "successRate": "Tasa de éxito",
+      "avgOrderSize": "Tamaño medio de pedido",
+      "activePeers": "Pares activos"
+    },
+    "revenueChart": {
+      "title": "Ingresos (14 días)",
+      "description": "Ingresos diarios de pedidos en {{unit}}.",
+      "series": "Ingresos"
+    },
+    "distributionChart": {
+      "title": "Distribución de pedidos",
+      "description": "Pedidos por estado en la ventana muestreada."
+    }
+  },
+  "config": {
+    "title": "Configuración",
+    "description": "Configuración del nodo y anuncio NIP-LSP",
+    "noNodes": "No hay nodos configurados en el demonio LSP.",
+    "nodeLabel": "Nodo",
+    "fields": {
+      "feeRate": "Tasa de comisión (proporcional)",
+      "baseFeeMloki": "Comisión base (mloki)",
+      "channelFeePermyriad": "Comisión de canal (permyriad)",
+      "channelMinimumFeeMloki": "Comisión mínima de canal (mloki)"
+    },
+    "fees": {
+      "title": "Comisiones",
+      "description": "Parámetros de comisión comercial para este nodo. Los campos secretos (clave del nodo, tokens, credenciales LND) nunca se envían al navegador y se conservan al guardar.",
+      "save": "Guardar comisiones",
+      "saving": "Guardando…",
+      "saved": "Configuración guardada",
+      "saveError": "No se pudo guardar la configuración"
+    },
+    "viewer": {
+      "title": "Configuración del nodo",
+      "description": "Solo lectura. El demonio elimina los secretos.",
+      "announceRelays": "relays de anuncio"
+    },
+    "announce": {
+      "title": "Anuncio NIP-LSP",
+      "description": "Pausa, reanuda o retira el anuncio kind-10735 de este nodo, y borra una autocomprobación fallida.",
+      "enabled": "Habilitado",
+      "lastChange": "Último cambio",
+      "blocked": "Bloqueado: {{reason}}",
+      "selfCheck": "Autocomprobación",
+      "failed": "fallida: {{problems}}",
+      "relays": "Relays",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "unlist": "Retirar",
+      "recheck": "Reverificar",
+      "toast": {
+        "pauseSuccess": "Anuncio pausado",
+        "pauseFailure": "Error al pausar el anuncio",
+        "resumeSuccess": "Anuncio reanudado",
+        "resumeFailure": "Error al reanudar el anuncio",
+        "unlistSuccess": "Anuncio retirado",
+        "unlistFailure": "Error al retirar el anuncio",
+        "recheckSuccess": "Reverificación",
+        "recheckFailure": "Error en la reverificación"
+      }
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "Webhooks de notificación para clientes LSPS5",
+    "alert": {
+      "title": "Gestionados por los clientes a través del protocolo LSPS",
+      "description": "Los clientes registran y eliminan sus propios webhooks LSPS5 a través del transporte LSPS (bLIP-55). La API del panel del operador LSP no expone un registro por webhook, por lo que todavía no hay nada que listar o editar aquí."
+    },
+    "transports": {
+      "title": "Transportes",
+      "description": "Cómo llegan las notificaciones a un cliente una vez que ha registrado un webhook.",
+      "push": {
+        "title": "push (HTTPS)",
+        "description": "Un POST firmado a la URL https:// del cliente. La protección SSRF en el momento de la conexión rechaza las direcciones privadas a menos que los webhooks de loopback estén habilitados explícitamente en el demonio."
+      },
+      "nostr": {
+        "title": "nostr",
+        "description": "Un evento cifrado (kind 31055) al relay nostr+lsps5:// del cliente. Entregado a través del grupo de relays del demonio."
+      }
+    },
+    "limits": {
+      "title": "Límites",
+      "description": "Los límites de webhooks se configuran en el demonio LSP mediante variables de entorno (LSPD_LSPS5_MAX_WEBHOOKS, LSPD_LSPS5_ALLOW_LOOPBACK_WEBHOOKS) y no se pueden editar desde el Hub."
+    }
+  }
+}

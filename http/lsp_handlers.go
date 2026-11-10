@@ -10,26 +10,26 @@ import (
 
 	"github.com/flokiorg/lokihub/api"
 	"github.com/flokiorg/lokihub/config"
-	"github.com/flokiorg/lokihub/lspservice"
+	"github.com/flokiorg/lokihub/lsps/daemonclient"
 )
 
 // newLspClient builds the Hub's lspd dashboard client from the operator env
 // (plan §3.2), or returns nil when no endpoint is configured (feature off).
-// lspservice stays decoupled from lokihub's config — the env→Config mapping
+// daemonclient stays decoupled from lokihub's config — the env→Config mapping
 // lives here.
-func newLspClient(env *config.AppConfig) *lspservice.Client {
+func newLspClient(env *config.AppConfig) *daemonclient.Client {
 	if env == nil {
 		return nil
 	}
-	return lspservice.New(lspservice.Config{
+	return daemonclient.New(daemonclient.Config{
 		Endpoint: env.LSPServiceEndpoint,
 		Nsec:     env.LSPServiceNsec,
 		Bunker:   env.LSPServiceBunker,
 	})
 }
 
-// lspStatusToInfo maps the lspservice status onto the /api/info block.
-func lspStatusToInfo(s lspservice.Status) *api.LSPServiceInfo {
+// lspStatusToInfo maps the daemonclient status onto the /api/info block.
+func lspStatusToInfo(s daemonclient.Status) *api.LSPServiceInfo {
 	info := &api.LSPServiceInfo{
 		Configured: s.Configured,
 		Reachable:  s.Reachable,
@@ -50,7 +50,7 @@ func lspStatusToInfo(s lspservice.Status) *api.LSPServiceInfo {
 // registerLspRoutes mounts the /api/lsp/* proxy. Every route is behind the
 // Hub's existing JWT full-access group (requireFullAccess): the browser
 // authenticates to the Hub over JWT, and the Hub calls lspd over NIP-98 via the
-// lspservice client. The lspd dashboard methods are proxied 1:1.
+// daemonclient client. The lspd dashboard methods are proxied 1:1.
 //
 // Single-operator v1 (audit note): all /api/lsp/* share one authz tier
 // (full-access). TODO: if a second caller identity is ever introduced, split
@@ -73,15 +73,15 @@ func (httpSvc *HttpService) registerLspRoutes(g *echo.Group) {
 	g.POST("/lsp/recheck-announcement", httpSvc.lspRecheckAnnouncementHandler)
 }
 
-// lspResult writes a proxied JSON-RPC result, translating lspservice errors to
+// lspResult writes a proxied JSON-RPC result, translating daemonclient errors to
 // HTTP status: not-configured -> 503, key mismatch / transport / rpc error ->
 // 502 (the Hub reached the browser; lspd is the upstream that failed).
 func lspResult(c echo.Context, raw json.RawMessage, err error) error {
 	if err != nil {
 		switch {
-		case errors.Is(err, lspservice.ErrNotConfigured):
+		case errors.Is(err, daemonclient.ErrNotConfigured):
 			return c.JSON(http.StatusServiceUnavailable, ErrorResponse{Message: "LSP service is not configured"})
-		case errors.Is(err, lspservice.ErrForbidden):
+		case errors.Is(err, daemonclient.ErrForbidden):
 			return c.JSON(http.StatusBadGateway, ErrorResponse{Message: "LSP rejected the request (admin key mismatch)"})
 		default:
 			return c.JSON(http.StatusBadGateway, ErrorResponse{Message: err.Error()})
@@ -91,9 +91,9 @@ func lspResult(c echo.Context, raw json.RawMessage, err error) error {
 }
 
 // client returns the configured lspd client or ErrNotConfigured.
-func (httpSvc *HttpService) lspClientOrErr() (*lspservice.Client, error) {
+func (httpSvc *HttpService) lspClientOrErr() (*daemonclient.Client, error) {
 	if httpSvc.lspClient == nil {
-		return nil, lspservice.ErrNotConfigured
+		return nil, daemonclient.ErrNotConfigured
 	}
 	return httpSvc.lspClient, nil
 }

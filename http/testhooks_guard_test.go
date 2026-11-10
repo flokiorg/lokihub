@@ -17,9 +17,9 @@ import (
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/testknobs"
 	"github.com/flokiorg/lokihub/tests/db"
 	"github.com/flokiorg/lokihub/tests/mocks"
 )
@@ -55,6 +55,7 @@ func newHookServerSwitch(t *testing.T, network, hooks string) *hookServer {
 	mockSvc.On("GetConfig").Return(mockConfig).Maybe()
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t)).Maybe()
 	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t)).Maybe()
+	stubInfoCaches(mockSvc)
 	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{}).Maybe()
 	if network == "" {
 		mockSvc.On("GetLNClient").Return(nil).Maybe()
@@ -130,6 +131,11 @@ func TestTestHooks_EveryHookNeedsTheAdminTokenAndARegtestNode(t *testing.T) {
 			assert.Equal(t, http.StatusForbidden, testnet.call(t, r.Method, r.Path, testnet.full), "a testnet node")
 			assert.Equal(t, http.StatusServiceUnavailable, stopped.call(t, r.Method, r.Path, stopped.full), "no node")
 
+			// POST /api/test/restart SIGTERMs this process (it re-execs the Hub under
+			// air); the gate assertions above are the point, so do not invoke it live.
+			if r.Path == "/api/test/restart" {
+				return
+			}
 			code := regtest.call(t, r.Method, r.Path, regtest.full)
 			assert.NotContains(t, []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound}, code,
 				"served with the full token on regtest (got %d)", code)

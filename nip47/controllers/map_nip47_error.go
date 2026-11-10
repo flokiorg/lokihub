@@ -3,7 +3,7 @@ package controllers
 import (
 	"errors"
 
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47/models"

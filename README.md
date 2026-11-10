@@ -81,6 +81,12 @@ _If you get a blank screen, try running in your normal terminal (outside of vsco
     $ cd tmp
     $ ./main
 
+### Dev stack (regtest)
+
+The end-to-end regtest stack (chain, flnd nodes, relay, Hub and frontend) and the
+NWC integration suite now live in the cash-e2e repo's `stack/`. See cash-e2e for
+bringing the stack up and running the suite against it.
+
 ### Run dockerfile locally (HTTP mode)
 
     $ docker build . -t nwc-local --progress=plain
@@ -138,13 +144,14 @@ For more information on the Go pprof library, see the [official documentation](h
 
 ### Versioning
 
-    $ go run -ldflags="-X 'github.com/flokiorg/lokihub/appversion.Tag=v0.1.0'" cmd/http/main.go
+    $ go run -ldflags="-X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=v0.1.0'" cmd/http/main.go
 
 ## Optional configuration parameters
 
 The following configuration options can be set as environment variables or in a .env file
 
-- `RELAY`: can support multiple separated by commas
+- `NWC_RELAY`: the NWC relay the Hub dials; can support multiple separated by commas
+- `NWC_RELAY_ADVERTISED`: the client-facing NWC relay advertised in pairing URIs, connection tokens and minted bills; defaults to `NWC_RELAY` when unset
 - `DATABASE_URI`: A sqlite filename or postgres URL.
 - `PORT`: The port on which the app should listen on
 - `WORK_DIR`: Directory to store NWC data files.

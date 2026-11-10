@@ -1,0 +1,248 @@
+{
+  "values": {
+    "yes": "yes",
+    "no": "no",
+    "none": "none",
+    "ok": "ok"
+  },
+  "serviceCard": {
+    "title": "LSP Service",
+    "description": "The Hub reaches this LSP daemon over its NIP-98 dashboard. The backoffice below is served through the Hub; your browser never holds the admin key.",
+    "endpoint": "Endpoint",
+    "node": "Node",
+    "version": "lspd version",
+    "adminPubkey": "Admin pubkey",
+    "badge": {
+      "notConfigured": "Not configured",
+      "attached": "Attached",
+      "reachable": "Reachable",
+      "unreachable": "Unreachable"
+    },
+    "error": {
+      "unreachable": "The Hub could not reach the LSP daemon's dashboard.",
+      "keyMismatch": "The LSP daemon rejected the admin key: the Hub's nsec/bunker pubkey is not this node's DASHBOARD_ADMIN_PUBKEY."
+    }
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "LSP service not configured",
+      "body": "No LSP daemon is attached to this Hub."
+    },
+    "unreachable": {
+      "title": "LSP service unavailable",
+      "body": "The Hub could not reach the LSP daemon, or its admin key was rejected."
+    },
+    "generic": {
+      "title": "Could not load LSP data",
+      "body": "An unexpected error occurred talking to the LSP service."
+    }
+  },
+  "overview": {
+    "title": "LSP Overview",
+    "description": "Monitoring home for your attached Liquidity Service Provider",
+    "kpi": {
+      "totalLiquidity": "Total liquidity",
+      "free": "{{amount}} free",
+      "revenue24h": "24h revenue",
+      "trend": "trend {{trend}}",
+      "activeOrders": "Active orders",
+      "createdPaid": "CREATED + PAID",
+      "successRate": "Success rate",
+      "successFormula": "completed / (completed + failed)"
+    },
+    "node": {
+      "fallbackName": "Node",
+      "host": "Host",
+      "synced": "Synced",
+      "height": "Height",
+      "peers": "Peers",
+      "channelsActive": "Channels active",
+      "channelsPending": "Channels pending",
+      "inbound": "Inbound",
+      "outbound": "Outbound",
+      "blocked": "Blocked"
+    },
+    "orderStates": {
+      "title": "Recent order states",
+      "description": "Across the last orders lspd reports for this node."
+    },
+    "fleet": {
+      "title": "Fleet ({{count}} nodes)",
+      "description": "This daemon runs more than one LSP node. Per-node config and announcement are managed on the Config screen.",
+      "nodeFallback": "node"
+    },
+    "topPeers": {
+      "title": "Top peers by volume"
+    }
+  },
+  "orders": {
+    "title": "Channels & Orders",
+    "description": "LSPS1 orders and the JIT channels they funded",
+    "tabs": {
+      "orders": "Orders",
+      "jit": "JIT channels"
+    },
+    "filter": {
+      "placeholder": "Filter by order id, peer pubkey or alias",
+      "allStates": "All states"
+    },
+    "count": "{{filtered}} of {{total}}",
+    "empty": "No orders match.",
+    "table": {
+      "order": "Order",
+      "peer": "Peer",
+      "state": "State",
+      "amount": "Amount",
+      "fee": "Fee",
+      "created": "Created"
+    },
+    "jit": {
+      "empty": "No funded JIT channels yet.",
+      "scid": "SCID",
+      "capacity": "Capacity",
+      "status": "Status"
+    }
+  },
+  "orderDetail": {
+    "title": "Order detail",
+    "back": "Back to orders",
+    "paymentBadge": "payment: {{state}}",
+    "announced": "announced",
+    "readOnlyNote": "The LSP dashboard API exposes order state read-only. Settlement and stuck-order recovery run automatically inside the LSP daemon, so there are no manual refund/reopen/recovery actions here.",
+    "timeline": {
+      "title": "Timeline"
+    },
+    "payment": {
+      "title": "Payment",
+      "noInvoice": "No invoice recorded for this order."
+    },
+    "channel": {
+      "title": "Channel",
+      "fundingOutpoint": "Funding outpoint",
+      "fundingIndex": "(index {{index}})",
+      "explorer": "explorer",
+      "refundAddress": "Refund address"
+    },
+    "params": {
+      "title": "Parameters",
+      "lspBalance": "LSP balance",
+      "clientBalance": "Client balance",
+      "orderTotal": "Order total",
+      "fee": "Fee",
+      "reserved": "Reserved",
+      "channelExpiry": "Channel expiry",
+      "blocks": "{{count}} blocks",
+      "confirmations": "Confirmations",
+      "peer": "Peer",
+      "created": "Created",
+      "expires": "Expires"
+    }
+  },
+  "clients": {
+    "title": "Clients & Peers",
+    "description": "Peers connected to this LSP node and their order activity",
+    "empty": "No connected peers.",
+    "online": "Online",
+    "offline": "Offline",
+    "unknownAlias": "(unknown)",
+    "table": {
+      "status": "Status",
+      "peer": "Peer",
+      "received": "Received",
+      "sent": "Sent",
+      "orders": "Orders"
+    }
+  },
+  "analytics": {
+    "title": "Analytics",
+    "description": "14-day revenue, order volume and distribution",
+    "kpi": {
+      "totalRevenue": "Total revenue",
+      "successRate": "Success rate",
+      "avgOrderSize": "Avg order size",
+      "activePeers": "Active peers"
+    },
+    "revenueChart": {
+      "title": "Revenue (14 days)",
+      "description": "Daily order revenue in {{unit}}.",
+      "series": "Revenue"
+    },
+    "distributionChart": {
+      "title": "Order distribution",
+      "description": "Orders by state across the sampled window."
+    }
+  },
+  "config": {
+    "title": "Config",
+    "description": "Node configuration and NIP-LSP announcement",
+    "noNodes": "No nodes configured on the LSP daemon.",
+    "nodeLabel": "Node",
+    "fields": {
+      "feeRate": "Fee rate (proportional)",
+      "baseFeeMloki": "Base fee (mloki)",
+      "channelFeePermyriad": "Channel fee (permyriad)",
+      "channelMinimumFeeMloki": "Channel minimum fee (mloki)"
+    },
+    "fees": {
+      "title": "Fees",
+      "description": "Business fee parameters for this node. Secret fields (node key, tokens, LND credentials) are never sent to the browser and are preserved on save.",
+      "save": "Save fees",
+      "saving": "Saving…",
+      "saved": "Configuration saved",
+      "saveError": "Failed to save configuration"
+    },
+    "viewer": {
+      "title": "Node configuration",
+      "description": "Read-only. Secrets are stripped by the daemon.",
+      "announceRelays": "announce relays"
+    },
+    "announce": {
+      "title": "NIP-LSP announcement",
+      "description": "Pause, resume or unlist this node's kind-10735 announcement, and clear a failed self-check.",
+      "enabled": "Enabled",
+      "lastChange": "Last change",
+      "blocked": "Blocked: {{reason}}",
+      "selfCheck": "Self-check",
+      "failed": "failed: {{problems}}",
+      "relays": "Relays",
+      "pause": "Pause",
+      "resume": "Resume",
+      "unlist": "Unlist",
+      "recheck": "Recheck",
+      "toast": {
+        "pauseSuccess": "Announcement pause",
+        "pauseFailure": "Announcement pause failed",
+        "resumeSuccess": "Announcement resume",
+        "resumeFailure": "Announcement resume failed",
+        "unlistSuccess": "Announcement unlist",
+        "unlistFailure": "Announcement unlist failed",
+        "recheckSuccess": "Recheck",
+        "recheckFailure": "Recheck failed"
+      }
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "LSPS5 client notification webhooks",
+    "alert": {
+      "title": "Managed by clients over the LSPS protocol",
+      "description": "Clients register and remove their own LSPS5 webhooks over the LSPS transport (bLIP-55). The LSP operator dashboard API does not expose a per-webhook registry, so there is nothing to list or edit here yet."
+    },
+    "transports": {
+      "title": "Transports",
+      "description": "How notifications reach a client once it has registered a webhook.",
+      "push": {
+        "title": "push (HTTPS)",
+        "description": "A signed POST to the client's https:// URL. Dial-time SSRF guard rejects private addresses unless loopback webhooks are explicitly enabled on the daemon."
+      },
+      "nostr": {
+        "title": "nostr",
+        "description": "An encrypted event (kind 31055) to the client's nostr+lsps5:// relay. Delivered through the daemon's relay pool."
+      }
+    },
+    "limits": {
+      "title": "Limits",
+      "description": "Webhook limits are configured on the LSP daemon via environment (LSPD_LSPS5_MAX_WEBHOOKS, LSPD_LSPS5_ALLOW_LOOPBACK_WEBHOOKS) and are not editable from the Hub."
+    }
+  }
+}

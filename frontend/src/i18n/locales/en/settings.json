@@ -210,5 +210,121 @@
         "cancelled": "cancelled ({{reason}})"
       }
     }
+  },
+  "sellCash": {
+    "connections": {
+      "title": "Order connections",
+      "description": "Connections buyers place orders on to buy this Cash Hub's cash. Each is a cashorder1… string you can show again; its secret is public.",
+      "labelPlaceholder": "Label (optional)",
+      "create": "Create connection",
+      "createdToast": "Order connection created",
+      "createFailed": "Could not create the order connection",
+      "created": "Created",
+      "retired": "Retired",
+      "retiredToast": "Order connection retired",
+      "retireFailed": "Could not retire the order connection",
+      "empty": "No order connections yet.",
+      "unlabeled": "Unlabeled",
+      "cannotSign": "The node cannot sign this connection right now; its string will show again once it can.",
+      "show": "Show",
+      "hide": "Hide",
+      "copy": "Copy",
+      "retire": "Retire",
+      "retireTitle": "Retire this order connection?",
+      "retireWarning": "This cannot be undone. No new orders can be placed on it, but its existing orders still mint and can still be read.",
+      "cancel": "Cancel",
+      "retireConfirm": "Retire"
+    },
+    "terms": {
+      "title": "Selling terms",
+      "selling": "This Cash Hub is selling cash.",
+      "notSellingYet": "This Cash Hub is not selling yet. Set terms below to start.",
+      "lightningTitle": "Lightning",
+      "onchainTitle": "On-chain",
+      "min": "Minimum ({{unit}})",
+      "max": "Maximum ({{unit}})",
+      "feeBase": "Fee base ({{unit}})",
+      "feePpm": "Fee (ppm)",
+      "window": "Window (seconds)",
+      "ceiling": "Open-order ceiling ({{unit}})",
+      "tiersTitle": "On-chain confirmation tiers",
+      "tiersHint": "A payment up to each amount needs its confirmations; the last tier is open and covers every larger value.",
+      "tierUpTo": "Up to ({{unit}})",
+      "tierOpen": "Larger",
+      "tierN": "Confirmations",
+      "tierAdd": "Add tier",
+      "tierRemove": "Remove tier",
+      "billTitle": "Bill terms",
+      "redeemFeeBase": "Redeem fee base ({{unit}})",
+      "redeemFeePpm": "Redeem fee (ppm)",
+      "minTransfer": "Minimum transfer ({{unit}})",
+      "openTitle": "Open-order limits",
+      "openOnchainMax": "Most open on-chain orders (0 = no limit)",
+      "outboundWarnTitle": "On-chain ceiling above Lightning outbound",
+      "outboundWarn": "The on-chain open-order ceiling ({{ceiling}}) is above the node's Lightning outbound capacity ({{outbound}}). The Hub may not be able to mint every on-chain order into a bill.",
+      "save": "Save",
+      "saved": "Selling terms saved",
+      "saveFailed": "Could not save the selling terms",
+      "errors": {
+        "lightningMin": "The Lightning minimum is a {{unit}} amount of at most three decimals.",
+        "lightningMax": "The Lightning maximum is a {{unit}} amount of at most three decimals.",
+        "lightningFeeBase": "The Lightning fee base is a {{unit}} amount of at most three decimals.",
+        "lightningFeePpm": "The Lightning fee rate is a whole number from 0 to {{max}} ppm.",
+        "lightningWindow": "The Lightning window is a whole number of seconds.",
+        "lightningMinAboveMax": "The Lightning minimum is above the maximum.",
+        "lightningCeiling": "The Lightning open-order ceiling is a positive {{unit}} amount.",
+        "onchainMin": "The on-chain minimum is a {{unit}} amount of at most three decimals.",
+        "onchainMax": "The on-chain maximum is a {{unit}} amount of at most three decimals.",
+        "onchainFeeBase": "The on-chain fee base is a {{unit}} amount of at most three decimals.",
+        "onchainFeePpm": "The on-chain fee rate is a whole number from 0 to {{max}} ppm.",
+        "onchainWindow": "The on-chain window is a whole number of seconds.",
+        "onchainMinAboveMax": "The on-chain minimum is above the maximum.",
+        "onchainWhole": "On-chain amounts are whole {{unit}}.",
+        "onchainCeiling": "The on-chain open-order ceiling is a positive {{unit}} amount.",
+        "onchainCeilingWhole": "The on-chain open-order ceiling is a whole {{unit}} amount.",
+        "tiers": "Each tier needs at least one confirmation, amounts must ascend, and only the last tier is open.",
+        "redeemFeeBase": "The redeem fee base is a {{unit}} amount of at most three decimals.",
+        "redeemFeePpm": "The redeem fee rate is a whole number from 0 to {{max}} ppm.",
+        "minTransfer": "The minimum transfer is a {{unit}} amount of at most three decimals.",
+        "openOnchainMax": "The most open on-chain orders is a whole number."
+      }
+    },
+    "orders": {
+      "title": "Orders",
+      "description": "Orders placed on this Cash Hub, newest first, with the payments to each. Operator facts only: no cash token and no buyer key.",
+      "amount": "Amount",
+      "fee": "Fee",
+      "payBy": "Pay by",
+      "requiredConfirmations": "Confirmations needed",
+      "recipient": "Recipient",
+      "confirmations": "Confirmations",
+      "mintedBill": "Minted bill",
+      "keptTitle": "Kept by the Hub",
+      "keptDescription": "Payments the Hub kept with no order: at most the fee, or a payment to an order address that matched no live order.",
+      "kind": {
+        "lightning": "Lightning",
+        "onchain": "On-chain"
+      },
+      "state": {
+        "open": "open",
+        "paid": "paid",
+        "minted": "minted",
+        "expired": "expired",
+        "closed": "closed"
+      },
+      "paymentState": {
+        "seen": "seen",
+        "confirmed": "confirmed",
+        "minted": "minted",
+        "kept": "kept",
+        "reorged": "reorged",
+        "dropped": "dropped"
+      },
+      "recipientType": {
+        "pubkey": "Nostr key",
+        "cash": "cash secret",
+        "connection_key": "connection key"
+      }
+    }
   }
 }

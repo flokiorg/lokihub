@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"slices"
 	"strings"
 	"time"
@@ -15,8 +15,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/flokiorg/lokihub/cashrequest"
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -389,7 +389,8 @@ func (svc *nip47Service) servePrivateItem(
 		lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService,
 		svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter,
 		svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr,
-	).WithPrivateIdentity(svc.privateIdentity).WithLineageLimiter(svc.cashLineageLimiter)
+	).WithPrivateIdentity(svc.privateIdentity).WithLineageLimiter(svc.cashLineageLimiter).
+		WithGetInfoCaches(svc.getInfoOrders, svc.getInfoListed)
 
 	switch item.Method {
 	case constants.NIP47MethodCashStatus:
@@ -469,7 +470,7 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 	// wrote the comparison itself.
 	// The record was read by the caller, for every cash_status item (see ServePrivateItem).
 	retainedUntil := tombstone.RetainedUntil
-	if !ok || !db.RetentionWindowOpen(retainedUntil, hubclock.Now()) {
+	if !ok || !db.RetentionWindowOpen(retainedUntil, clock.Now()) {
 		return transport.Result{}, false
 	}
 
@@ -984,7 +985,7 @@ func (svc *nip47Service) cashStatusConnKeyScope(item transport.Item, claims []db
 	if err := json.Unmarshal(item.Params, &p); err != nil || p.IdentityValue == "" || p.IAPubkey == "" || p.AttestationEvent == "" {
 		return "", false
 	}
-	now := hubclock.Now().Unix()
+	now := clock.Now().Unix()
 	for i := range claims {
 		cl := &claims[i]
 		if cl.IdentityType != db.CashIdentityConnectionKey || cl.IdentityValue != p.IdentityValue || cl.IAPubkey != p.IAPubkey {

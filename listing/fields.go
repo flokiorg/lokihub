@@ -9,6 +9,8 @@ import (
 	"github.com/rivo/uniseg"
 
 	nmlisting "github.com/ohstr/nmilat/nipcash/listing"
+
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 )
 
 // Fields are what the operator enters for a listing (WP-19 item 13 caps).
@@ -32,7 +34,6 @@ type Fields struct {
 }
 
 var (
-	reHex64    = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	reLanguage = regexp.MustCompile(`^[a-z]{2}$`)
 	reGeohash  = regexp.MustCompile(`^[0-9bcdefghjkmnpqrstuvwxyz]{3,4}$`)
 )
@@ -85,7 +86,7 @@ func (f *Fields) validate(circleFollowSet bool, isCircle bool) error {
 	}
 	f.OperatorPubkey = strings.TrimSpace(f.OperatorPubkey)
 	f.OperatorRelay = strings.TrimSpace(f.OperatorRelay)
-	if f.OperatorPubkey != "" && !reHex64.MatchString(f.OperatorPubkey) {
+	if f.OperatorPubkey != "" && !pubkeyhex.Valid(f.OperatorPubkey) {
 		return refused("operator must be a 64-character lowercase hex pubkey")
 	}
 	if f.OperatorRelay != "" {

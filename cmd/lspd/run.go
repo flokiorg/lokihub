@@ -17,7 +17,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
 
-	ecies "github.com/ecies/go/v2"
+	ecies "github.com/flokiorg/lokihub/lspd/eciesgo"
 	btcec "github.com/flokiorg/go-flokicoin/crypto"
 	"github.com/flokiorg/lokihub/lspd/adapters/lnd"
 	"github.com/flokiorg/lokihub/lspd/adapters/mempool"

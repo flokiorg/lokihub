@@ -1,13 +1,14 @@
 package apps
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
+
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
 )
 
 var (
@@ -62,8 +63,8 @@ func (m *IdentityAuthorityManager) List() ([]IdentityAuthority, error) {
 // Add registers a new Identity Authority. pubkey must be a 64-character lowercase
 // hex nostr pubkey; relayURLs is stored as informational/documentation metadata only.
 func (m *IdentityAuthorityManager) Add(pubkey, name string, relayURLs []string) (*IdentityAuthority, error) {
-	pubkey = strings.ToLower(strings.TrimSpace(pubkey))
-	if decoded, err := hex.DecodeString(pubkey); err != nil || len(decoded) != 32 {
+	pubkey = pubkeyhex.Normalize(pubkey)
+	if !pubkeyhex.Valid(pubkey) {
 		return nil, ErrInvalidIdentityAuthorityPubkey
 	}
 

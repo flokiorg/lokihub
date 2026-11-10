@@ -6,6 +6,7 @@ import (
 
 	"github.com/ohstr/nmilat/niplsp"
 
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/persist"
 )
 
@@ -24,7 +25,7 @@ func announce(l *persist.LSP, fees ...niplsp.FeeRow) {
 // open announcement, with the node id already resolved.
 func (m *LSPManager) addTestLSP(name, nodeID, host string, trusted bool) (*persist.LSP, error) {
 	nodeID = strings.ToLower(nodeID)
-	lsp := persist.LSP{NodeKey: NodeKeyOf(nodeID), Pubkey: nodeID, Host: host, Name: name,
+	lsp := persist.LSP{NodeKey: common.NodeKeyOf(nodeID), Pubkey: nodeID, Host: host, Name: name,
 		Trusted: trusted, Usable: true, Status: "open"}
 	announce(&lsp, lenientFees...)
 	return &lsp, m.db.Create(&lsp).Error

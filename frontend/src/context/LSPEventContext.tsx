@@ -59,8 +59,6 @@ export function LSPEventProvider({ children }: { children: ReactNode }) {
         LSPS1EventType.Notification,
       ];
 
-      // @ts-ignore
-      const cleanupFns: (() => void)[] = [];
 
       eventTypes.forEach((eventType) => {
         // @ts-ignore

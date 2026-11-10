@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/persist"
 )
 
@@ -35,7 +36,7 @@ func TestUnusableTrustedLSPNotConnectedNorZeroConf(t *testing.T) {
 			db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
 			require.NoError(t, err)
 			require.NoError(t, db.AutoMigrate(&persist.LSP{}))
-			require.NoError(t, db.Create(&persist.LSP{NodeKey: NodeKeyOf(gatedLSP), Pubkey: gatedLSP, Host: "10.0.0.1:9735",
+			require.NoError(t, db.Create(&persist.LSP{NodeKey: common.NodeKeyOf(gatedLSP), Pubkey: gatedLSP, Host: "10.0.0.1:9735",
 				Trusted: true, Usable: c.usable, Status: c.status}).Error)
 			conn := &mockLNClientConnection{connectedPeers: map[string]string{}, peerRequests: map[string]*lnclient.ConnectPeerRequest{}}
 			cfg := &ManagerConfig{LNClient: conn, LSPManager: NewLSPManager(db)}

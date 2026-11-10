@@ -20,28 +20,27 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
-	"github.com/flokiorg/lokihub/appversion"
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/hubinfo"
+	"github.com/flokiorg/lokihub/internal/buildinfo"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/flokiorg/lokihub/ttlcache"
 
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/cashrequest"
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/seed"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
 	"github.com/flokiorg/lokihub/nip47"
-	"github.com/flokiorg/lokihub/ratesoracle"
-	"github.com/flokiorg/lokihub/seed"
 )
 
 type service struct {
@@ -51,7 +50,7 @@ type service struct {
 	lnClient            lnclient.LNClient
 	transactionsService transactions.TransactionsService
 	hubInfoSvc          hubinfo.HubInfoService
-	rateOracle          *ratesoracle.Oracle
+	rateOracle          *hubinfo.Oracle
 	appStoreSvc         appstore.Service
 	eventPublisher      events.EventPublisher
 	ctx                 context.Context
@@ -64,6 +63,10 @@ type service struct {
 	// timer rather than logged per event.
 	droppedRequestEvents atomic.Int64
 	nip47Service         nip47.Nip47Service
+	// orderInfo and listedInfo are the caches get_info answers public
+	// connections from (see GetOrderInfoCache, GetListedInfoCache).
+	orderInfo  *ttlcache.Cache[string]
+	listedInfo *ttlcache.Cache[uint]
 	// withdraw serves on-chain withdrawals (service/withdraw.go).
 	withdraw *cashwithdraw.Service
 	// withdrawEngine pays the payouts (service/withdraw.go).
@@ -111,7 +114,12 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 
 	logger.Init(appConfig.LogLevel)
-	logger.Logger.Info().Msg("Lokihub " + appversion.Tag)
+	logger.Logger.Info().Msg("Lokihub " + buildinfo.Tag)
+
+	if err := config.ValidateNetwork(appConfig.Network); err != nil {
+		logger.Logger.Error().Err(err).Msg("Refusing to start")
+		return nil, err
+	}
 
 	if appConfig.Workdir == "" {
 		appConfig.Workdir = filepath.Join(xdg.DataHome, "/lokihub")
@@ -163,7 +171,7 @@ func NewService(ctx context.Context) (*service, error) {
 
 	// The horizon H only ever increases (NIP-CASH §Deadlines): the stored H is
 	// raised to the configured one, and a lower configured H is ignored.
-	horizon, err := cashrequest.RaiseHorizon(gormDB, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds, time.Now())
+	horizon, err := db.RaiseHorizon(gormDB, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("failed to store the horizon: %w", err)
 	}
@@ -194,7 +202,7 @@ func NewService(ctx context.Context) (*service, error) {
 	// under Settings > Services (GetGeneralRelayUrls) — never the seed's own
 	// relay list. With no selected relays it is effectively disabled and the UI
 	// degrades to sats/FLC. Its npub/kind/d-tag still come from the seed.
-	rateOracle := ratesoracle.FromSeed(seed.Get(), cfg.GetGeneralRelayUrls)
+	rateOracle := hubinfo.FromSeed(seed.Get(), cfg.GetGeneralRelayUrls)
 	hubInfoSvc := hubinfo.NewHubInfoService(cfg, rateOracle)
 
 	transactionsSvc := transactions.NewTransactionsService(gormDB, eventPublisher)
@@ -209,7 +217,7 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 	socialCache.retiredInboxKeys = func() []string { return retiredInboxKeys(gormDB, keys) }
 	socialCache.onResolved = func(provider, d string, set *FollowSet) {
-		ApplyFollowSetResolution(gormDB, eventPublisher, provider, d, set.IsMember, hubclock.Now())
+		ApplyFollowSetResolution(gormDB, eventPublisher, provider, d, set.IsMember, clock.Now())
 	}
 
 	svc := &service{
@@ -224,9 +232,12 @@ func NewService(ctx context.Context) (*service, error) {
 		transactionsService: transactionsSvc,
 		db:                  gormDB,
 		keys:                keys,
+		orderInfo:           ttlcache.New[string](getInfoCacheTTL),
+		listedInfo:          ttlcache.New[uint](getInfoCacheTTL),
 	}
 
 	svc.nip47Service.SetPrivateIdentity(svc.privateJoinIdentity)
+	svc.nip47Service.SetGetInfoCaches(svc.orderInfo, svc.listedInfo)
 	// A Circle Wallet payment the node reports accepted is settled by the Hub
 	// once re-checked, which needs the node.
 	svc.transactionsService.SetLNClientProvider(svc.GetLNClient)
@@ -251,7 +262,7 @@ func NewService(ctx context.Context) (*service, error) {
 	eventPublisher.Publish(&events.Event{
 		Event: "nwc_started",
 		Properties: map[string]interface{}{
-			"version": appversion.Tag,
+			"version": buildinfo.Tag,
 		},
 	})
 
@@ -352,6 +363,18 @@ func (svc *service) GetConfig() config.Config {
 
 func (svc *service) GetHubInfoSvc() hubinfo.HubInfoService {
 	return svc.hubInfoSvc
+}
+
+// getInfoCacheTTL is the most a cached get_info result on a public connection is
+// reused (NIP-CASH §Hub Rules MAY, OQ-47); a change drops it at once.
+const getInfoCacheTTL = 5 * time.Second
+
+func (svc *service) GetOrderInfoCache() *ttlcache.Cache[string] {
+	return svc.orderInfo
+}
+
+func (svc *service) GetListedInfoCache() *ttlcache.Cache[uint] {
+	return svc.listedInfo
 }
 
 func (svc *service) GetNip47Service() nip47.Nip47Service {

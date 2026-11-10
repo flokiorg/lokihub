@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/testknobs"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 	"math"
 	"slices"
 	"sort"
@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/go-flokicoin/chaincfg/chainhash"
-	"github.com/flokiorg/lokihub/decodepay"
+	"github.com/flokiorg/lokihub/internal/decodepay"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -650,8 +650,8 @@ func (svc *FLNDService) SendKeysendWithFeeLimit(amount uint64, destination strin
 			Msg("Failed to decode payee pubkey")
 		return nil, err
 	}
-	preImageBytes, err := hex.DecodeString(preimage)
-	if err != nil || len(preImageBytes) != 32 {
+	preImageBytes, err := lnclient.DecodeHash32("preimage", preimage)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payee_pubkey", destination).
 			Str("preimage", preimage).
@@ -832,11 +832,8 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 	var descriptionHashBytes []byte
 
 	if descriptionHash != "" {
-		descriptionHashBytes, err = hex.DecodeString(descriptionHash)
-		if err != nil || len(descriptionHashBytes) != 32 {
-			if err == nil {
-				err = errors.New("description hash must be 32 bytes hex")
-			}
+		descriptionHashBytes, err = lnclient.DecodeHash32("description hash", descriptionHash)
+		if err != nil {
 			logger.Logger.Error().Err(err).
 				Str("descriptionHash", descriptionHash).
 				Msg("Invalid description hash")
@@ -1059,11 +1056,8 @@ func (svc *FLNDService) MakeHoldInvoice(ctx context.Context, amount int64, descr
 	var paymentHashBytes []byte
 
 	if descriptionHash != "" {
-		descriptionHashBytes, err = hex.DecodeString(descriptionHash)
-		if err != nil || len(descriptionHashBytes) != 32 {
-			if err == nil {
-				err = errors.New("description hash must be 32 bytes hex")
-			}
+		descriptionHashBytes, err = lnclient.DecodeHash32("description hash", descriptionHash)
+		if err != nil {
 			logger.Logger.Error().Err(err).
 				Str("descriptionHash", descriptionHash).
 				Msg("Invalid description hash")
@@ -1071,11 +1065,8 @@ func (svc *FLNDService) MakeHoldInvoice(ctx context.Context, amount int64, descr
 		}
 	}
 
-	paymentHashBytes, err = hex.DecodeString(paymentHash)
-	if err != nil || len(paymentHashBytes) != 32 {
-		if err == nil {
-			err = errors.New("payment hash must be 32 bytes hex")
-		}
+	paymentHashBytes, err = lnclient.DecodeHash32("payment hash", paymentHash)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
 			Msg("Invalid payment hash")
@@ -1128,11 +1119,8 @@ func (svc *FLNDService) MakeHoldInvoice(ctx context.Context, amount int64, descr
 }
 
 func (svc *FLNDService) SettleHoldInvoice(ctx context.Context, preimage string) (err error) {
-	preimageBytes, err := hex.DecodeString(preimage)
-	if err != nil || len(preimageBytes) != 32 {
-		if err == nil {
-			err = errors.New("preimage must be 32 bytes hex")
-		}
+	preimageBytes, err := lnclient.DecodeHash32("preimage", preimage)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("preimage", preimage).
 			Msg("Invalid preimage")
@@ -1152,11 +1140,8 @@ func (svc *FLNDService) SettleHoldInvoice(ctx context.Context, preimage string) 
 }
 
 func (svc *FLNDService) CancelHoldInvoice(ctx context.Context, paymentHash string) (err error) {
-	paymentHashBytes, err := hex.DecodeString(paymentHash)
-	if err != nil || len(paymentHashBytes) != 32 {
-		if err == nil {
-			err = errors.New("payment hash must be 32 bytes hex")
-		}
+	paymentHashBytes, err := lnclient.DecodeHash32("payment hash", paymentHash)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
 			Msg("Invalid payment hash")
@@ -1182,11 +1167,8 @@ func (svc *FLNDService) CancelHoldInvoice(ctx context.Context, paymentHash strin
 }
 
 func (svc *FLNDService) LookupInvoice(ctx context.Context, paymentHash string) (transaction *lnclient.Transaction, err error) {
-	paymentHashBytes, err := hex.DecodeString(paymentHash)
-	if err != nil || len(paymentHashBytes) != 32 {
-		if err == nil {
-			err = errors.New("payment hash must be 32 bytes hex")
-		}
+	paymentHashBytes, err := lnclient.DecodeHash32("payment hash", paymentHash)
+	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
 			Msg("Invalid payment hash")
@@ -2388,4 +2370,19 @@ func invoiceUnknown(err error) bool {
 // cancelledAlready reports a cancel of an invoice the node already cancelled.
 func cancelledAlready(err error) bool {
 	return strings.Contains(err.Error(), "invoice already canceled")
+}
+
+// channelClosedProperties are the nwc_channel_closed event's properties. The explorer
+// link is given only on mainnet (flnd's "mainnet", reported as "bitcoin"): no public
+// explorer shows a test network's nodes.
+func channelClosedProperties(nodeInfo *lnclient.NodeInfo, counterpartyNodeId, reason string) map[string]interface{} {
+	props := map[string]interface{}{
+		"counterparty_node_id": counterpartyNodeId,
+		"reason":               reason,
+		"node_type":            config.FLNDBackendType,
+	}
+	if nodeInfo != nil && nodeInfo.Network == "bitcoin" {
+		props["counterparty_node_url"] = "https://flokichain.info/lightning/node/" + counterpartyNodeId
+	}
+	return props
 }

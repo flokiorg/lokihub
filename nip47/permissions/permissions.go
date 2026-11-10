@@ -5,14 +5,13 @@ import (
 	"slices"
 	"time"
 
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
-	"github.com/flokiorg/lokihub/utils"
 	"gorm.io/gorm"
 )
 
@@ -49,7 +48,7 @@ func (svc *permissionsService) HasPermission(app *db.App, scope string) (result 
 		return false, constants.ERROR_RESTRICTED, fmt.Sprintf("This app does not have the %s scope", scope)
 	}
 	expiresAt := appPermission.ExpiresAt
-	if db.ExpiredAt(expiresAt, hubclock.Now()) {
+	if db.ExpiredAt(expiresAt, clock.Now()) {
 		logger.Logger.Info().
 			Str("scope", scope).
 			Int64("expiresAt", expiresAt.Unix()).
@@ -115,24 +114,25 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 	// the private transport (RequestMethodToScope + HasPermission per item) — this filter
 	// changes what a bill ADVERTISES, never what it permits. Removing the scopes instead
 	// would have refused every real call.
-	requestMethods = utils.Filter(requestMethods, func(requestMethod string) bool {
-		return !privateOnlyMethods[requestMethod]
-	})
-
-	// only return methods supported by the lnClient
+	//
+	// Then keep only the methods supported by the lnClient. The result stays nil
+	// when nothing is left (callers serialise it), not an empty slice.
 	lnClientSupportedMethods := lnClient.GetSupportedNIP47Methods()
-	requestMethods = utils.Filter(requestMethods, func(requestMethod string) bool {
+	var advertised []string
+	for _, requestMethod := range requestMethods {
+		if privateOnlyMethods[requestMethod] {
+			continue
+		}
 		// TODO: better way to exclude methods unrelated to the lnclient
 		if requestMethod == models.CREATE_CONNECTION_METHOD ||
 			requestMethod == constants.NIP47MethodMintCash ||
-			requestMethod == constants.NIP47MethodCreateCircleWallet {
-			return true
+			requestMethod == constants.NIP47MethodCreateCircleWallet ||
+			slices.Contains(lnClientSupportedMethods, requestMethod) {
+			advertised = append(advertised, requestMethod)
 		}
+	}
 
-		return slices.Contains(lnClientSupportedMethods, requestMethod)
-	})
-
-	return requestMethods
+	return advertised
 }
 
 // privateOnlyMethods are served over the private transport only, so get_info — which

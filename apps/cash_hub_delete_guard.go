@@ -2,7 +2,7 @@ package apps
 
 import (
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"sort"
 	"strings"
 	"sync"
@@ -10,7 +10,6 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 )
@@ -152,7 +151,7 @@ func CashHubDeleteCheckTx(tx *gorm.DB, hubID uint, now time.Time) (CashHubDelete
 		}
 		check.Blockers = append(check.Blockers, blocker)
 	}
-	h, err := cashrequest.HorizonTx(tx)
+	h, err := db.HorizonTx(tx)
 	if err != nil {
 		return check, err
 	}
@@ -234,5 +233,5 @@ func earliestDelete(blockers []CashHubDeleteBlocker, now time.Time) *int64 {
 // CashHubDeleteCheck is CashHubDeleteCheckTx outside a transaction, for the
 // delete-check endpoint.
 func (svc *appsService) CashHubDeleteCheck(hubID uint) (CashHubDeleteCheck, error) {
-	return CashHubDeleteCheckTx(svc.db, hubID, hubclock.Now())
+	return CashHubDeleteCheckTx(svc.db, hubID, clock.Now())
 }

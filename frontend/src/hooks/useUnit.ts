@@ -9,6 +9,9 @@ import {
   lokiToDisplay,
 } from "src/utils/flokicoinFormatting";
 
+/** InputUnit is the user's persisted FLC/loki choice for an editable amount field. */
+export type InputUnit = "FLC" | "loki";
+
 /**
  * Hook to get the current Flokicoin unit and conversion functions
  */
@@ -26,9 +29,9 @@ export function useUnit() {
       lokiToDisplay(amountLoki, displayFormat, asset),
     parseAmount: (amountDisplay: number) =>
       displayToLoki(amountDisplay, displayFormat, asset),
-    scaleInputAmount: (amountLoki: number, inputUnit: "FLC" | "loki") =>
+    scaleInputAmount: (amountLoki: number, inputUnit: InputUnit) =>
       lokiToDisplay(amountLoki, inputUnit === "FLC" ? "flc" : "loki", asset),
-    parseInputAmount: (amountDisplay: number, inputUnit: "FLC" | "loki") =>
+    parseInputAmount: (amountDisplay: number, inputUnit: InputUnit) =>
       displayToLoki(amountDisplay, inputUnit === "FLC" ? "flc" : "loki", asset),
     displayFormat,
   };
@@ -43,7 +46,7 @@ export function useUnit() {
  */
 export function useInputUnit(referenceAmountLoki: number | undefined) {
   const { displayFormat } = useUnit();
-  const [inputUnit, setInputUnitState] = React.useState<"FLC" | "loki">(() => {
+  const [inputUnit, setInputUnitState] = React.useState<InputUnit>(() => {
     const stored = localStorage.getItem(localStorageKeys.preferredInputUnit);
     if (stored === "FLC" || stored === "loki") {
       return stored;
@@ -51,12 +54,10 @@ export function useInputUnit(referenceAmountLoki: number | undefined) {
     if (referenceAmountLoki === undefined) {
       return "FLC";
     }
-    return getFlokicoinUnit(displayFormat, referenceAmountLoki) as
-      | "FLC"
-      | "loki";
+    return getFlokicoinUnit(displayFormat, referenceAmountLoki) as InputUnit;
   });
 
-  const setInputUnit = React.useCallback((unit: "FLC" | "loki") => {
+  const setInputUnit = React.useCallback((unit: InputUnit) => {
     setInputUnitState(unit);
     localStorage.setItem(localStorageKeys.preferredInputUnit, unit);
   }, []);

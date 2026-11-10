@@ -12,14 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/clock"
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/hubclock"
-	"github.com/flokiorg/lokihub/testknobs"
+	"github.com/flokiorg/lokihub/internal/testknobs"
 )
 
 func TestStallCommitFault(t *testing.T) {
 	on := true
-	t.Cleanup(func() { testknobs.SetFaults(testknobs.Faults{}, true); hubclock.SetOffset(0) })
+	t.Cleanup(func() { testknobs.SetFaults(testknobs.Faults{}, true); clock.SetOffset(0) })
 	transfer := transport.Item{ID: "1", Method: nipcash.MethodCashTransfer}
 	notAfter := time.Now().Add(time.Minute).Unix()
 
@@ -45,7 +45,7 @@ func TestStallCommitFault(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 	// The Hub's clock passes the deadline while the commit is held.
-	hubclock.SetOffset(120)
+	clock.SetOffset(120)
 	testknobs.SetFaults(testknobs.Faults{}, true)
 	got := <-done
 	require.True(t, got.held)
@@ -54,7 +54,7 @@ func TestStallCommitFault(t *testing.T) {
 	assert.Equal(t, "1", got.res.ID)
 
 	// Released inside its deadline, the item is served.
-	hubclock.SetOffset(0)
+	clock.SetOffset(0)
 	testknobs.SetFaults(testknobs.Faults{StallCommit: &on}, false)
 	go func() {
 		res, held := stallCommitFault(context.Background(), transfer, notAfter)

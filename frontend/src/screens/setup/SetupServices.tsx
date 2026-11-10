@@ -109,7 +109,6 @@ export function SetupServices() {
               validationErrors={validationErrors}
               showGeneralRelay={false}
               showSearchRelay={false}
-              showLSPCatalogue={false}
               showAppStore={false}
             />
           )}

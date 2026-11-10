@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"gorm.io/gorm"
 	"slices"
 	"time"
 
-	"github.com/flokiorg/lokihub/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
@@ -19,14 +19,14 @@ import (
 	"github.com/flokiorg/lokihub/nip47/controllers"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nip47/permissions"
-	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
+	nostrpool "github.com/flokiorg/lokihub/nostr/pool"
 	"github.com/nbd-wtf/go-nostr"
 	nmilatnip01 "github.com/ohstr/nmilat/nip01"
 	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"github.com/ohstr/nmilat/nipcw"
 )
 
-func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
+func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrpool.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
 	// Arrival is taken before any decryption (NIP-CASH §Deadlines).
 	meta := standardCallMeta(event, time.Now())
 	var nip47Response *models.Response
@@ -424,7 +424,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 			}, nostr.Tags{})
 			return
 		}
-		notices, err := circlelife.CancelPendingRotation(svc.db, app.ID, hubclock.Now())
+		notices, err := circlelife.CancelPendingRotation(svc.db, app.ID, clock.Now())
 		if err != nil {
 			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to cancel a pending rotation")
 		}
@@ -480,7 +480,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 
 	// A Circle Wallet serves only the methods its state allows, before any scope
 	// is read; delete_circle_wallet needs no scope (NIP-CW §Methods).
-	if ok, code, message := circleWalletGate(&app, nip47Request.Method, hubclock.Now()); !ok {
+	if ok, code, message := circleWalletGate(&app, nip47Request.Method, clock.Now()); !ok {
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error:      &models.Error{Code: code, Message: message},
@@ -552,7 +552,8 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	}
 
 	controller := controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr).
-		WithPrivateIdentity(svc.privateIdentity)
+		WithPrivateIdentity(svc.privateIdentity).
+		WithGetInfoCaches(svc.getInfoOrders, svc.getInfoListed)
 
 	switch nip47Request.Method {
 	case models.MULTI_PAY_INVOICE_METHOD:
@@ -648,7 +649,7 @@ func (svc *nip47Service) CreateResponse(initialEvent *nostr.Event, content inter
 	return resp, nil
 }
 
-func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrmodels.SimplePool, requestEvent *db.RequestEvent, resp *nostr.Event, app *db.App) error {
+func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrpool.SimplePool, requestEvent *db.RequestEvent, resp *nostr.Event, app *db.App) error {
 	var appId *uint
 	if app != nil {
 		appId = &app.ID
@@ -739,7 +740,7 @@ func standardCallMeta(event *nostr.Event, arrived time.Time) models.CallMeta {
 // key (NIP-CW §Recovering a Lost Connection: lazily, by the request of either
 // key at or after completes_at; the job does the rest).
 func (svc *nip47Service) completeDueRotationsFor(key string) {
-	now := hubclock.Now()
+	now := clock.Now()
 	filter := func(q *gorm.DB) *gorm.DB {
 		return q.Where("new_connection_pubkey = ? OR wallet_app_id IN (?)", key,
 			svc.db.Model(&db.App{}).Select("id").Where("app_pubkey = ? AND kind = ?", key, db.AppKindCircleWallet))

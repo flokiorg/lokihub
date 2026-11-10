@@ -1,3 +1,5 @@
+import { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { Badge } from "src/components/ui/badge";
 import {
   Card,
@@ -20,31 +22,37 @@ export function LspServiceStatusCard({
   status: LSPServiceInfo;
   className?: string;
 }) {
-  const { label, variant } = badgeFor(status);
+  const { t } = useTranslation("lsp");
+  const { label, variant } = badgeFor(status, t);
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
-          LSP Service
+          {t("serviceCard.title")}
           <Badge variant={variant}>{label}</Badge>
         </CardTitle>
-        <CardDescription>
-          The Hub reaches this LSP daemon over its NIP-98 dashboard. The
-          backoffice below is served through the Hub; your browser never holds
-          the admin key.
-        </CardDescription>
+        <CardDescription>{t("serviceCard.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         {status.endpoint && (
-          <Row label="Endpoint" value={status.endpoint} mono />
+          <Row label={t("serviceCard.endpoint")} value={status.endpoint} mono />
         )}
-        {status.alias && <Row label="Node" value={status.alias} />}
-        {status.version && <Row label="lspd version" value={status.version} />}
+        {status.alias && (
+          <Row label={t("serviceCard.node")} value={status.alias} />
+        )}
+        {status.version && (
+          <Row label={t("serviceCard.version")} value={status.version} />
+        )}
         {status.pubkey && (
-          <Row label="Admin pubkey" value={status.pubkey} mono truncate />
+          <Row
+            label={t("serviceCard.adminPubkey")}
+            value={status.pubkey}
+            mono
+            truncate
+          />
         )}
         {status.error && (
-          <p className="text-destructive">{errorText(status.error)}</p>
+          <p className="text-destructive">{errorText(status.error, t)}</p>
         )}
       </CardContent>
     </Card>
@@ -77,28 +85,34 @@ function Row({
   );
 }
 
-function badgeFor(status: LSPServiceInfo): {
+function badgeFor(
+  status: LSPServiceInfo,
+  t: TFunction<"lsp">
+): {
   label: string;
   variant: "positive" | "destructive" | "secondary" | "warning";
 } {
   if (!status.configured) {
-    return { label: "Not configured", variant: "secondary" };
+    return {
+      label: t("serviceCard.badge.notConfigured"),
+      variant: "secondary",
+    };
   }
   if (status.attached) {
-    return { label: "Attached", variant: "positive" };
+    return { label: t("serviceCard.badge.attached"), variant: "positive" };
   }
   if (status.reachable) {
-    return { label: "Reachable", variant: "warning" };
+    return { label: t("serviceCard.badge.reachable"), variant: "warning" };
   }
-  return { label: "Unreachable", variant: "destructive" };
+  return { label: t("serviceCard.badge.unreachable"), variant: "destructive" };
 }
 
-function errorText(error: string): string {
+function errorText(error: string, t: TFunction<"lsp">): string {
   if (error === "unreachable") {
-    return "The Hub could not reach the LSP daemon's dashboard.";
+    return t("serviceCard.error.unreachable");
   }
   if (error === "key mismatch (403)") {
-    return "The LSP daemon rejected the admin key: the Hub's nsec/bunker pubkey is not this node's DASHBOARD_ADMIN_PUBKEY.";
+    return t("serviceCard.error.keyMismatch");
   }
   return error;
 }

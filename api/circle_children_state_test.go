@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlelife"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/getinfocache"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/flokiorg/lokihub/ttlcache"
 )
 
 // WP-19 item 3: the wallet list shows each wallet's state, grace, dust, freeze
@@ -90,15 +90,16 @@ func TestSetCircleAccepting_DropsTheListedConnectionsCachedGetInfo(t *testing.T)
 	require.NoError(t, svc.DB.Create(conn).Error)
 	require.NoError(t, svc.DB.Create(otherConn).Error)
 	theAPI := newTestAPIForCircleDelete(svc)
+	theAPI.listedInfo = ttlcache.New[uint](5 * time.Second)
 
 	for _, accepting := range []bool{false, true} {
-		stamp := getinfocache.Listed.Begin()
-		require.True(t, getinfocache.Listed.Put(conn.ID, stamp, "cached"))
-		require.True(t, getinfocache.Listed.Put(otherConn.ID, stamp, "cached"))
+		stamp := theAPI.listedInfo.Begin()
+		require.True(t, theAPI.listedInfo.Put(conn.ID, stamp, "cached"))
+		require.True(t, theAPI.listedInfo.Put(otherConn.ID, stamp, "cached"))
 		require.NoError(t, theAPI.SetCircleAccepting(hub, accepting))
-		_, ok := getinfocache.Listed.Get(conn.ID)
+		_, ok := theAPI.listedInfo.Get(conn.ID)
 		assert.False(t, ok, "accepting %v", accepting)
-		_, ok = getinfocache.Listed.Get(otherConn.ID)
+		_, ok = theAPI.listedInfo.Get(otherConn.ID)
 		assert.True(t, ok, "another circle's connection keeps its result")
 	}
 }

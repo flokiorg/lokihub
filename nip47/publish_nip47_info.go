@@ -11,7 +11,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"
-	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
+	nostrpool "github.com/flokiorg/lokihub/nostr/pool"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -52,7 +52,7 @@ func (q *nip47InfoPublishQueue) Channel() <-chan *Nip47InfoPublishRequest {
 	return q.channel
 }
 
-func (svc *nip47Service) GetNip47Info(ctx context.Context, pool nostrmodels.SimplePool, appWalletPubKey string) (*nostr.Event, error) {
+func (svc *nip47Service) GetNip47Info(ctx context.Context, pool nostrpool.SimplePool, appWalletPubKey string) (*nostr.Event, error) {
 	filter := nostr.Filter{
 		Kinds:   []int{models.INFO_EVENT_KIND},
 		Authors: []string{appWalletPubKey},
@@ -67,7 +67,7 @@ func (svc *nip47Service) GetNip47Info(ctx context.Context, pool nostrmodels.Simp
 	return relayEvent.Event, nil
 }
 
-func (svc *nip47Service) PublishNip47Info(ctx context.Context, pool nostrmodels.SimplePool, appId uint, appWalletPubKey string, appWalletPrivKey string, relayUrl string, lnClient lnclient.LNClient) (*nostr.Event, error) {
+func (svc *nip47Service) PublishNip47Info(ctx context.Context, pool nostrpool.SimplePool, appId uint, appWalletPubKey string, appWalletPrivKey string, relayUrl string, lnClient lnclient.LNClient) (*nostr.Event, error) {
 	var capabilities []string
 	var permitsNotifications bool
 	tags := nostr.Tags{[]string{"encryption", cipher.SUPPORTED_ENCRYPTIONS}}
@@ -130,7 +130,7 @@ func (svc *nip47Service) PublishNip47Info(ctx context.Context, pool nostrmodels.
 	return ev, nil
 }
 
-func (svc *nip47Service) PublishNip47InfoDeletion(ctx context.Context, pool nostrmodels.SimplePool, appWalletPubKey string, appWalletPrivKey string, infoEventId string) error {
+func (svc *nip47Service) PublishNip47InfoDeletion(ctx context.Context, pool nostrpool.SimplePool, appWalletPubKey string, appWalletPrivKey string, infoEventId string) error {
 	ev := &nostr.Event{}
 	ev.Kind = nostr.KindDeletion
 	ev.Content = "deleting nip47 info since app connection for this key was deleted"

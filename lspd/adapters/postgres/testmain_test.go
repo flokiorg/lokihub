@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 }
 
 func runWithTestPostgres(m *testing.M) int {
-	containerID, hostPort, err := startTestPostgres()
+	containerID, dbURLs, err := startTestPostgres()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to start test postgres: %v\n", err)
 		return 1
@@ -38,9 +38,8 @@ func runWithTestPostgres(m *testing.M) int {
 		_ = exec.Command("docker", "rm", "-f", containerID).Run()
 	}()
 
-	databaseUrl := fmt.Sprintf("postgres://postgres:postgres@localhost:%s/postgres?sslmode=disable", hostPort)
-
-	if err := waitForPostgres(databaseUrl, 30*time.Second); err != nil {
+	databaseUrl, err := waitForPostgres(dbURLs, 30*time.Second)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "test postgres never became ready: %v\n", err)
 		return 1
 	}
@@ -61,47 +60,86 @@ func runWithTestPostgres(m *testing.M) int {
 	return m.Run()
 }
 
-// startTestPostgres runs a disposable postgres container on a
-// Docker-assigned random host port (so parallel test runs don't collide
-// on a fixed port) and returns its container ID and the assigned port.
-func startTestPostgres() (containerID string, hostPort string, err error) {
+// startTestPostgres runs a disposable postgres container and returns its
+// container ID together with the candidate connection URLs to try, in
+// preference order:
+//
+//   - localhost on the Docker-assigned random host port (random so parallel
+//     runs don't collide on a fixed port), which is reachable when the test
+//     process shares the daemon's network namespace — running directly on the
+//     host, in CI, or on Docker Desktop;
+//   - the container's own bridge IP on 5432, which is reachable when the test
+//     runs inside a sibling container talking to the daemon over a mounted
+//     socket (docker-out-of-docker), where the host-published port is not on
+//     the test process's loopback.
+//
+// waitForPostgres picks whichever address becomes reachable first, so the same
+// test passes in both environments.
+func startTestPostgres() (containerID string, dbURLs []string, err error) {
 	out, err := exec.Command("docker", "run", "-d",
 		"-e", "POSTGRES_PASSWORD=postgres",
 		"-p", "127.0.0.1::5432",
 		"postgres:15-alpine",
 	).Output()
 	if err != nil {
-		return "", "", fmt.Errorf("docker run: %w", err)
+		return "", nil, fmt.Errorf("docker run: %w", err)
 	}
 	containerID = strings.TrimSpace(string(out))
 
-	portOut, err := exec.Command("docker", "port", containerID, "5432/tcp").Output()
-	if err != nil {
-		_ = exec.Command("docker", "rm", "-f", containerID).Run()
-		return "", "", fmt.Errorf("docker port: %w", err)
+	removeContainer := func() { _ = exec.Command("docker", "rm", "-f", containerID).Run() }
+
+	var urls []string
+	if portOut, portErr := exec.Command("docker", "port", containerID, "5432/tcp").Output(); portErr == nil {
+		// portOut looks like "127.0.0.1:54321"; take the last colon-field.
+		parts := strings.Split(strings.TrimSpace(string(portOut)), ":")
+		if hostPort := parts[len(parts)-1]; hostPort != "" {
+			urls = append(urls, postgresDSN("localhost", hostPort))
+		}
 	}
-	// portOut looks like "127.0.0.1:54321"
-	parts := strings.Split(strings.TrimSpace(string(portOut)), ":")
-	hostPort = parts[len(parts)-1]
-	return containerID, hostPort, nil
+
+	ipOut, err := exec.Command("docker", "inspect", "-f",
+		"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", containerID).Output()
+	if err != nil {
+		removeContainer()
+		return "", nil, fmt.Errorf("docker inspect: %w", err)
+	}
+	if ip := strings.TrimSpace(string(ipOut)); ip != "" {
+		urls = append(urls, postgresDSN(ip, "5432"))
+	}
+
+	if len(urls) == 0 {
+		removeContainer()
+		return "", nil, fmt.Errorf("no reachable address for test postgres container %s", containerID)
+	}
+	return containerID, urls, nil
 }
 
-func waitForPostgres(databaseUrl string, timeout time.Duration) error {
+func postgresDSN(host, port string) string {
+	return fmt.Sprintf("postgres://postgres:postgres@%s:%s/postgres?sslmode=disable", host, port)
+}
+
+// waitForPostgres polls the candidate URLs until one accepts a connection and
+// answers a ping, then returns that URL. Trying each candidate every round is
+// how the harness discovers which address is actually routable from here
+// without caring which environment it runs in.
+func waitForPostgres(dbURLs []string, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for time.Now().Before(deadline) {
-		pool, err := pgxpool.New(context.Background(), databaseUrl)
-		if err == nil {
+		for _, databaseUrl := range dbURLs {
+			pool, err := pgxpool.New(context.Background(), databaseUrl)
+			if err != nil {
+				lastErr = err
+				continue
+			}
 			pingErr := pool.Ping(context.Background())
 			pool.Close()
 			if pingErr == nil {
-				return nil
+				return databaseUrl, nil
 			}
 			lastErr = pingErr
-		} else {
-			lastErr = err
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	return fmt.Errorf("timed out waiting for postgres: %w", lastErr)
+	return "", fmt.Errorf("timed out waiting for postgres: %w", lastErr)
 }

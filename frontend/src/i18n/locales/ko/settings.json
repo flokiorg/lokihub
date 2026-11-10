@@ -181,5 +181,121 @@
         "cancelled": "취소됨 ({{reason}})"
       }
     }
+  },
+  "sellCash": {
+    "connections": {
+      "title": "주문 연결",
+      "description": "구매자가 이 Cash Hub의 현금을 사기 위해 주문을 넣는 연결입니다. 각 연결은 다시 표시할 수 있는 cashorder1… 문자열이며, 그 비밀은 공개 정보입니다.",
+      "labelPlaceholder": "라벨 (선택)",
+      "create": "연결 생성",
+      "createdToast": "주문 연결을 생성했습니다",
+      "createFailed": "주문 연결을 생성하지 못했습니다",
+      "created": "생성",
+      "retired": "폐기됨",
+      "retiredToast": "주문 연결을 폐기했습니다",
+      "retireFailed": "주문 연결을 폐기하지 못했습니다",
+      "empty": "아직 주문 연결이 없습니다.",
+      "unlabeled": "라벨 없음",
+      "cannotSign": "노드가 지금 이 연결에 서명할 수 없습니다. 서명이 가능해지면 문자열이 다시 표시됩니다.",
+      "show": "표시",
+      "hide": "숨기기",
+      "copy": "복사",
+      "retire": "폐기",
+      "retireTitle": "이 주문 연결을 폐기하시겠어요?",
+      "retireWarning": "되돌릴 수 없습니다. 새 주문은 넣을 수 없지만 기존 주문은 계속 발행되고 읽을 수 있습니다.",
+      "cancel": "취소",
+      "retireConfirm": "폐기"
+    },
+    "terms": {
+      "title": "판매 조건",
+      "selling": "이 Cash Hub가 현금을 판매하고 있습니다.",
+      "notSellingYet": "이 Cash Hub는 아직 판매하지 않습니다. 시작하려면 아래에서 조건을 설정하세요.",
+      "lightningTitle": "라이트닝",
+      "onchainTitle": "온체인",
+      "min": "최소 ({{unit}})",
+      "max": "최대 ({{unit}})",
+      "feeBase": "기본 수수료 ({{unit}})",
+      "feePpm": "수수료 (ppm)",
+      "window": "유효 시간 (초)",
+      "ceiling": "미결 주문 상한 ({{unit}})",
+      "tiersTitle": "온체인 확인 단계",
+      "tiersHint": "각 금액까지의 결제는 해당 확인 수가 필요합니다. 마지막 단계는 개방형으로 더 큰 모든 금액을 포함합니다.",
+      "tierUpTo": "상한 ({{unit}})",
+      "tierOpen": "초과",
+      "tierN": "확인 수",
+      "tierAdd": "단계 추가",
+      "tierRemove": "단계 삭제",
+      "billTitle": "지폐 조건",
+      "redeemFeeBase": "상환 기본 수수료 ({{unit}})",
+      "redeemFeePpm": "상환 수수료 (ppm)",
+      "minTransfer": "최소 전송액 ({{unit}})",
+      "openTitle": "미결 주문 제한",
+      "openOnchainMax": "최대 미결 온체인 주문 수 (0 = 무제한)",
+      "outboundWarnTitle": "온체인 상한이 라이트닝 출력 용량을 초과",
+      "outboundWarn": "미결 온체인 주문 상한({{ceiling}})이 노드의 라이트닝 출력 용량({{outbound}})을 초과합니다. Hub가 모든 온체인 주문을 지폐로 발행하지 못할 수 있습니다.",
+      "save": "저장",
+      "saved": "판매 조건을 저장했습니다",
+      "saveFailed": "판매 조건을 저장하지 못했습니다",
+      "errors": {
+        "lightningMin": "라이트닝 최소는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "lightningMax": "라이트닝 최대는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "lightningFeeBase": "라이트닝 기본 수수료는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "lightningFeePpm": "라이트닝 수수료는 0에서 {{max}} ppm 사이의 정수입니다.",
+        "lightningWindow": "라이트닝 유효 시간은 정수 초입니다.",
+        "lightningMinAboveMax": "라이트닝 최소가 최대보다 큽니다.",
+        "lightningCeiling": "라이트닝 미결 주문 상한은 양수 {{unit}} 금액입니다.",
+        "onchainMin": "온체인 최소는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "onchainMax": "온체인 최대는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "onchainFeeBase": "온체인 기본 수수료는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "onchainFeePpm": "온체인 수수료는 0에서 {{max}} ppm 사이의 정수입니다.",
+        "onchainWindow": "온체인 유효 시간은 정수 초입니다.",
+        "onchainMinAboveMax": "온체인 최소가 최대보다 큽니다.",
+        "onchainWhole": "온체인 금액은 정수 {{unit}}입니다.",
+        "onchainCeiling": "온체인 미결 주문 상한은 양수 {{unit}} 금액입니다.",
+        "onchainCeilingWhole": "온체인 미결 주문 상한은 정수 {{unit}} 금액입니다.",
+        "tiers": "각 단계는 최소 1회 확인이 필요하고 금액은 오름차순이어야 하며 마지막 단계만 개방형입니다.",
+        "redeemFeeBase": "상환 기본 수수료는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "redeemFeePpm": "상환 수수료는 0에서 {{max}} ppm 사이의 정수입니다.",
+        "minTransfer": "최소 전송액은 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "openOnchainMax": "최대 미결 온체인 주문 수는 정수입니다."
+      }
+    },
+    "orders": {
+      "title": "주문",
+      "description": "이 Cash Hub에 들어온 주문을 최신순으로, 각 주문의 결제와 함께 표시합니다. 운영자 정보만: 현금 토큰도 구매자 키도 없습니다.",
+      "amount": "금액",
+      "fee": "수수료",
+      "payBy": "결제 기한",
+      "requiredConfirmations": "필요한 확인 수",
+      "recipient": "수령인",
+      "confirmations": "확인 수",
+      "mintedBill": "발행된 지폐",
+      "keptTitle": "Hub 보유",
+      "keptDescription": "Hub가 주문 없이 보유한 결제: 최대 수수료, 또는 유효한 주문과 일치하지 않은 주문 주소로의 결제입니다.",
+      "kind": {
+        "lightning": "라이트닝",
+        "onchain": "온체인"
+      },
+      "state": {
+        "open": "미결",
+        "paid": "결제됨",
+        "minted": "발행됨",
+        "expired": "만료됨",
+        "closed": "종료됨"
+      },
+      "paymentState": {
+        "seen": "감지됨",
+        "confirmed": "확인됨",
+        "minted": "발행됨",
+        "kept": "보유됨",
+        "reorged": "재구성됨",
+        "dropped": "폐기됨"
+      },
+      "recipientType": {
+        "pubkey": "Nostr 키",
+        "cash": "현금 시크릿",
+        "connection_key": "연결 키"
+      }
+    }
   }
 }

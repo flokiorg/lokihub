@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"math"
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashrequest"
-	"github.com/flokiorg/lokihub/cashwallet"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -174,7 +174,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 
 	// Step 3: each source's state.
 	hubID := sources[0].bill.ParentAppID
-	now := hubclock.Now()
+	now := clock.Now()
 	for i, s := range sources {
 		switch {
 		case s.claim.ClaimedAt != nil:

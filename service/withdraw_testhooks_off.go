@@ -2,7 +2,7 @@
 
 package service
 
-import "github.com/flokiorg/lokihub/cashwithdraw"
+import "github.com/flokiorg/lokihub/cash/cashwithdraw"
 
 // withdrawEngineHooks: a production build's payout engine has no test seams.
 func withdrawEngineHooks() *cashwithdraw.EngineHooks { return nil }

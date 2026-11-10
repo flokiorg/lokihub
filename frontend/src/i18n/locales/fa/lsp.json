@@ -1,0 +1,248 @@
+{
+  "values": {
+    "yes": "بله",
+    "no": "خیر",
+    "none": "هیچ‌کدام",
+    "ok": "سالم"
+  },
+  "serviceCard": {
+    "title": "سرویس LSP",
+    "description": "Hub از طریق داشبورد NIP-98 خود به این دیمن LSP دسترسی دارد. بک‌آفیس زیر از طریق Hub ارائه می‌شود؛ و مرورگر شما هرگز کلید مدیر را نگه نمی‌دارد.",
+    "endpoint": "نقطه پایانی",
+    "node": "گره",
+    "version": "نسخه lspd",
+    "adminPubkey": "کلید عمومی مدیر",
+    "badge": {
+      "notConfigured": "پیکربندی‌نشده",
+      "attached": "متصل",
+      "reachable": "در دسترس",
+      "unreachable": "دور از دسترس"
+    },
+    "error": {
+      "unreachable": "Hub نتوانست به داشبورد دیمن LSP دسترسی پیدا کند.",
+      "keyMismatch": "دیمن LSP کلید مدیر را رد کرد: کلید عمومی nsec/bunker مربوط به Hub همان DASHBOARD_ADMIN_PUBKEY این گره نیست."
+    }
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "سرویس LSP پیکربندی نشده است",
+      "body": "هیچ دیمن LSP‌ای به این Hub متصل نیست."
+    },
+    "unreachable": {
+      "title": "سرویس LSP در دسترس نیست",
+      "body": "Hub نتوانست به دیمن LSP دسترسی پیدا کند، یا کلید مدیر آن رد شد."
+    },
+    "generic": {
+      "title": "بارگیری داده‌های LSP ممکن نشد",
+      "body": "هنگام ارتباط با سرویس LSP خطای غیرمنتظره‌ای رخ داد."
+    }
+  },
+  "overview": {
+    "title": "نمای کلی LSP",
+    "description": "مرکز نظارت برای ارائه‌دهنده خدمات نقدینگی متصل شما",
+    "kpi": {
+      "totalLiquidity": "کل نقدینگی",
+      "free": "{{amount}} آزاد",
+      "revenue24h": "درآمد ۲۴ ساعت",
+      "trend": "روند {{trend}}",
+      "activeOrders": "سفارش‌های فعال",
+      "createdPaid": "CREATED + PAID",
+      "successRate": "نرخ موفقیت",
+      "successFormula": "completed / (completed + failed)"
+    },
+    "node": {
+      "fallbackName": "گره",
+      "host": "میزبان",
+      "synced": "همگام‌شده",
+      "height": "ارتفاع",
+      "peers": "همتاها",
+      "channelsActive": "کانال‌های فعال",
+      "channelsPending": "کانال‌های در انتظار",
+      "inbound": "ورودی",
+      "outbound": "خروجی",
+      "blocked": "مسدود"
+    },
+    "orderStates": {
+      "title": "وضعیت سفارش‌های اخیر",
+      "description": "در میان آخرین سفارش‌هایی که lspd برای این گره گزارش می‌کند."
+    },
+    "fleet": {
+      "title": "ناوگان ({{count}} گره)",
+      "description": "این دیمن بیش از یک گره LSP را اجرا می‌کند. پیکربندی و اعلان هر گره در صفحه پیکربندی مدیریت می‌شود.",
+      "nodeFallback": "گره"
+    },
+    "topPeers": {
+      "title": "همتاهای برتر بر اساس حجم"
+    }
+  },
+  "orders": {
+    "title": "کانال‌ها و سفارش‌ها",
+    "description": "سفارش‌های LSPS1 و کانال‌های JIT که آنها را تأمین مالی کردند",
+    "tabs": {
+      "orders": "سفارش‌ها",
+      "jit": "کانال‌های JIT"
+    },
+    "filter": {
+      "placeholder": "فیلتر بر اساس شناسه سفارش، کلید عمومی همتا یا نام مستعار",
+      "allStates": "همه وضعیت‌ها"
+    },
+    "count": "{{filtered}} از {{total}}",
+    "empty": "هیچ سفارشی مطابقت ندارد.",
+    "table": {
+      "order": "سفارش",
+      "peer": "همتا",
+      "state": "وضعیت",
+      "amount": "مبلغ",
+      "fee": "کارمزد",
+      "created": "ایجادشده"
+    },
+    "jit": {
+      "empty": "هنوز هیچ کانال JIT تأمین‌مالی‌شده‌ای وجود ندارد.",
+      "scid": "SCID",
+      "capacity": "ظرفیت",
+      "status": "وضعیت"
+    }
+  },
+  "orderDetail": {
+    "title": "جزئیات سفارش",
+    "back": "بازگشت به سفارش‌ها",
+    "paymentBadge": "پرداخت: {{state}}",
+    "announced": "اعلان‌شده",
+    "readOnlyNote": "API داشبورد LSP وضعیت سفارش را فقط‌خواندنی نمایش می‌دهد. تسویه و بازیابی سفارش‌های گیرکرده به‌طور خودکار درون دیمن LSP اجرا می‌شوند، بنابراین هیچ عملیات دستی بازپرداخت/بازگشایی/بازیابی در اینجا وجود ندارد.",
+    "timeline": {
+      "title": "خط زمانی"
+    },
+    "payment": {
+      "title": "پرداخت",
+      "noInvoice": "هیچ فاکتوری برای این سفارش ثبت نشده است."
+    },
+    "channel": {
+      "title": "کانال",
+      "fundingOutpoint": "نقطه خروجی تأمین مالی",
+      "fundingIndex": "(اندیس {{index}})",
+      "explorer": "کاوشگر",
+      "refundAddress": "آدرس بازپرداخت"
+    },
+    "params": {
+      "title": "پارامترها",
+      "lspBalance": "موجودی LSP",
+      "clientBalance": "موجودی کلاینت",
+      "orderTotal": "مجموع سفارش",
+      "fee": "کارمزد",
+      "reserved": "رزروشده",
+      "channelExpiry": "انقضای کانال",
+      "blocks": "{{count}} بلاک",
+      "confirmations": "تأییدها",
+      "peer": "همتا",
+      "created": "ایجادشده",
+      "expires": "انقضا"
+    }
+  },
+  "clients": {
+    "title": "کلاینت‌ها و همتاها",
+    "description": "همتاهای متصل به این گره LSP و فعالیت سفارش‌های آنها",
+    "empty": "هیچ همتای متصلی وجود ندارد.",
+    "online": "آنلاین",
+    "offline": "آفلاین",
+    "unknownAlias": "(ناشناخته)",
+    "table": {
+      "status": "وضعیت",
+      "peer": "همتا",
+      "received": "دریافت‌شده",
+      "sent": "ارسال‌شده",
+      "orders": "سفارش‌ها"
+    }
+  },
+  "analytics": {
+    "title": "تحلیل‌ها",
+    "description": "درآمد، حجم سفارش و توزیع ۱۴ روزه",
+    "kpi": {
+      "totalRevenue": "کل درآمد",
+      "successRate": "نرخ موفقیت",
+      "avgOrderSize": "میانگین اندازه سفارش",
+      "activePeers": "همتاهای فعال"
+    },
+    "revenueChart": {
+      "title": "درآمد (۱۴ روز)",
+      "description": "درآمد روزانه سفارش‌ها به {{unit}}.",
+      "series": "درآمد"
+    },
+    "distributionChart": {
+      "title": "توزیع سفارش",
+      "description": "سفارش‌ها بر اساس وضعیت در بازه نمونه‌گیری‌شده."
+    }
+  },
+  "config": {
+    "title": "پیکربندی",
+    "description": "پیکربندی گره و اعلان NIP-LSP",
+    "noNodes": "هیچ گره‌ای روی دیمن LSP پیکربندی نشده است.",
+    "nodeLabel": "گره",
+    "fields": {
+      "feeRate": "نرخ کارمزد (نسبی)",
+      "baseFeeMloki": "کارمزد پایه (mloki)",
+      "channelFeePermyriad": "کارمزد کانال (permyriad)",
+      "channelMinimumFeeMloki": "حداقل کارمزد کانال (mloki)"
+    },
+    "fees": {
+      "title": "کارمزدها",
+      "description": "پارامترهای کارمزد تجاری این گره. فیلدهای محرمانه (کلید گره، tokens، اطلاعات ورود LND) هرگز به مرورگر ارسال نمی‌شوند و هنگام ذخیره حفظ می‌شوند.",
+      "save": "ذخیره کارمزدها",
+      "saving": "در حال ذخیره…",
+      "saved": "پیکربندی ذخیره شد",
+      "saveError": "ذخیره پیکربندی ناموفق بود"
+    },
+    "viewer": {
+      "title": "پیکربندی گره",
+      "description": "فقط‌خواندنی. اسرار توسط دیمن حذف می‌شوند.",
+      "announceRelays": "رله‌های اعلان"
+    },
+    "announce": {
+      "title": "اعلان NIP-LSP",
+      "description": "اعلان kind-10735 این گره را موقتاً متوقف، ازسرگیری یا از فهرست خارج کنید و یک خودآزمایی ناموفق را پاک کنید.",
+      "enabled": "فعال",
+      "lastChange": "آخرین تغییر",
+      "blocked": "مسدود: {{reason}}",
+      "selfCheck": "خودآزمایی",
+      "failed": "ناموفق: {{problems}}",
+      "relays": "رله‌ها",
+      "pause": "توقف موقت",
+      "resume": "ازسرگیری",
+      "unlist": "خارج‌کردن از فهرست",
+      "recheck": "بررسی مجدد",
+      "toast": {
+        "pauseSuccess": "اعلان موقتاً متوقف شد",
+        "pauseFailure": "توقف موقت اعلان ناموفق بود",
+        "resumeSuccess": "اعلان ازسر گرفته شد",
+        "resumeFailure": "ازسرگیری اعلان ناموفق بود",
+        "unlistSuccess": "اعلان از فهرست خارج شد",
+        "unlistFailure": "خارج‌کردن اعلان از فهرست ناموفق بود",
+        "recheckSuccess": "بررسی مجدد",
+        "recheckFailure": "بررسی مجدد ناموفق بود"
+      }
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "webhooks اعلان‌های کلاینت LSPS5",
+    "alert": {
+      "title": "توسط کلاینت‌ها از طریق پروتکل LSPS مدیریت می‌شود",
+      "description": "کلاینت‌ها webhooks LSPS5 خود را از طریق انتقال LSPS (bLIP-55) ثبت و حذف می‌کنند. API داشبورد اپراتور LSP رجیستری per-webhook ارائه نمی‌دهد، بنابراین هنوز چیزی برای فهرست‌کردن یا ویرایش در اینجا وجود ندارد."
+    },
+    "transports": {
+      "title": "روش‌های انتقال",
+      "description": "اینکه پس از ثبت یک webhook توسط کلاینت، اعلان‌ها چگونه به او می‌رسند.",
+      "push": {
+        "title": "push (HTTPS)",
+        "description": "یک درخواست POST امضاشده به آدرس https:// کلاینت. محافظ SSRF هنگام اتصال، آدرس‌های خصوصی را رد می‌کند مگر اینکه webhookهای loopback صراحتاً روی دیمن فعال شده باشند."
+      },
+      "nostr": {
+        "title": "nostr",
+        "description": "یک رویداد رمزگذاری‌شده (kind 31055) به رله nostr+lsps5:// کلاینت. از طریق استخر رله‌های دیمن تحویل داده می‌شود."
+      }
+    },
+    "limits": {
+      "title": "محدودیت‌ها",
+      "description": "محدودیت‌های webhook روی دیمن LSP از طریق متغیرهای محیطی (LSPD_LSPS5_MAX_WEBHOOKS، LSPD_LSPS5_ALLOW_LOOPBACK_WEBHOOKS) پیکربندی می‌شوند و از Hub قابل ویرایش نیستند."
+    }
+  }
+}

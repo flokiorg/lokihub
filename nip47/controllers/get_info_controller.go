@@ -3,13 +3,12 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/circlemoney"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/getinfocache"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nodesign"
@@ -79,17 +78,17 @@ type getInfoResponse struct {
 
 func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
 	// An Order connection is public (its string may be listed): its get_info is
-	// answered from a result at most listedGetInfoTTL old, dropped at once when
+	// answered from a result at most the service's get_info cache TTL old, dropped at once when
 	// its terms or retirement change (NIP-CASH §Hub Rules MAY, OQ-47; U-25.10).
 	if app != nil && app.Kind == db.AppKindCashOrder && app.AppPubkey != "" {
-		if result, ok := getinfocache.Orders.Get(app.AppPubkey); ok {
+		if result, ok := controller.orderInfo.Get(app.AppPubkey); ok {
 			publishResponse(&models.Response{ResultType: nip47Request.Method, Result: result}, nostr.Tags{})
 			return
 		}
-		publish, key, stamp := publishResponse, app.AppPubkey, getinfocache.Orders.Begin()
+		publish, key, stamp := publishResponse, app.AppPubkey, controller.orderInfo.Begin()
 		publishResponse = func(resp *models.Response, tags nostr.Tags) {
 			if result, ok := resp.Result.(*getInfoResponse); ok && resp.Error == nil {
-				getinfocache.Orders.Put(key, stamp, result)
+				controller.orderInfo.Put(key, stamp, result)
 			}
 			publish(resp, tags)
 		}
@@ -244,7 +243,7 @@ func (controller *nip47Controller) circleWalletTerms(app *db.App, identity strin
 	if err != nil {
 		return nil, err
 	}
-	available, err := circlemoney.Available(controller.db, app.ID, providerConfig, hubclock.Now())
+	available, err := circlemoney.Available(controller.db, app.ID, providerConfig, clock.Now())
 	if err != nil {
 		return nil, err
 	}

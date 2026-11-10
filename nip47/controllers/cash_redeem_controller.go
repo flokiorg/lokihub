@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"strings"
 	"time"
 
@@ -15,10 +15,10 @@ import (
 	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	decodepay "github.com/flokiorg/lokihub/decodepay"
+	decodepay "github.com/flokiorg/lokihub/internal/decodepay"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -245,7 +245,7 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 
 	// Step 4: the late-failure cool-down, then the in-flight bound and the claim,
 	// in one transaction with the consumed proof.
-	now := hubclock.Now()
+	now := clock.Now()
 	if claim.RedeemCooldownUntil != nil && now.Before(*claim.RedeemCooldownUntil) {
 		refuse(constants.ERROR_RATE_LIMITED, "this slice's last payout failed; try later")
 		return

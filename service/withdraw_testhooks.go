@@ -5,7 +5,7 @@ package service
 import (
 	"os"
 
-	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/cash/cashwithdraw"
 )
 
 // withdrawEngineHooks gives a testhooks build's payout engine its holds when

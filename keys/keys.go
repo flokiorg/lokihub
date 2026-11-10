@@ -6,8 +6,8 @@ import (
 
 	btcec "github.com/flokiorg/go-flokicoin/crypto"
 
-	"github.com/flokiorg/lokihub/atrest"
 	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/internal/atrest"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/tyler-smith/go-bip32"

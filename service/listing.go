@@ -2,14 +2,13 @@ package service
 
 import (
 	"context"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"time"
 
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/connstr"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/internal/connstr"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/nip47/controllers"
 )
 
 // GetListingService is the offer-listing service (WP-25), nil until the node is
@@ -38,13 +37,13 @@ func (svc *service) startListings(ctx context.Context) {
 		},
 		Relays: listing.NostrRelays{},
 		Orders: cashorder.ListingSource{Deps: func() cashorder.Deps {
-			return cashorder.Deps{DB: svc.db, Keys: svc.keys, LN: svc.lnClient, Relays: svc.cfg.GetRelayUrls()}
+			return cashorder.Deps{DB: svc.db, Keys: svc.keys, LN: svc.lnClient, Relays: svc.cfg.GetAdvertisedRelayUrls(), InfoCache: svc.orderInfo}
 		}},
-		InvalidateGetInfo: controllers.InvalidateListedGetInfo,
+		InvalidateGetInfo: func(appID uint) { svc.listedInfo.Invalidate(appID) },
 		// The listing clock: the Hub's, moved further only by a testhooks
 		// build's clock hook (scope "listing"); 0 otherwise.
 		Now: func() time.Time {
-			return hubclock.Now().Add(time.Duration(svc.listingClockOffset.Load()) * time.Second)
+			return clock.Now().Add(time.Duration(svc.listingClockOffset.Load()) * time.Second)
 		},
 	})
 	svc.shutdownGroup.Go(func() error {

@@ -1,4 +1,5 @@
 import { ActivityIcon, CoinsIcon, ServerIcon, UsersIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import { LspServiceStatusCard } from "src/components/lsp/LspServiceStatusCard";
 import { Badge } from "src/components/ui/badge";
@@ -22,6 +23,7 @@ import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
 import { formatLoki, orderStateVariant } from "src/screens/lsp/types";
 
 export function LspOverview() {
+  const { t } = useTranslation("lsp");
   const { data: status } = useLspStatus();
   const { data: summary, error: summaryError } = useLspSummary();
   const { data: analytics } = useLspAnalytics();
@@ -31,8 +33,8 @@ export function LspOverview() {
   return (
     <div className="space-y-4">
       <AppHeader
-        title="LSP Overview"
-        description="Monitoring home for your attached Liquidity Service Provider"
+        title={t("overview.title")}
+        description={t("overview.description")}
       />
 
       {status && <LspServiceStatusCard status={status} />}
@@ -46,7 +48,7 @@ export function LspOverview() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi
               icon={<CoinsIcon className="size-4" />}
-              label="Total liquidity"
+              label={t("overview.kpi.totalLiquidity")}
               value={
                 summary.liquidity_available
                   ? formatLoki(summary.liquidity_total)
@@ -54,24 +56,26 @@ export function LspOverview() {
               }
               sub={
                 summary.liquidity_available
-                  ? `${formatLoki(summary.liquidity_free)} free`
+                  ? t("overview.kpi.free", {
+                      amount: formatLoki(summary.liquidity_free),
+                    })
                   : undefined
               }
             />
             <Kpi
               icon={<CoinsIcon className="size-4" />}
-              label="24h revenue"
+              label={t("overview.kpi.revenue24h")}
               value={formatLoki(summary.revenue_24h)}
-              sub={`trend ${summary.revenue_trend}`}
+              sub={t("overview.kpi.trend", { trend: summary.revenue_trend })}
             />
             <Kpi
               icon={<ActivityIcon className="size-4" />}
-              label="Active orders"
+              label={t("overview.kpi.activeOrders")}
               value={String(
                 (summary.active_orders?.CREATED ?? 0) +
                   (summary.active_orders?.PAID ?? 0)
               )}
-              sub="CREATED + PAID"
+              sub={t("overview.kpi.createdPaid")}
             />
             <SuccessKpi rate={analytics?.success_rate} />
           </div>
@@ -119,19 +123,20 @@ function Kpi({
 }
 
 function SuccessKpi({ rate }: { rate: number | undefined }) {
+  const { t } = useTranslation("lsp");
   const pct = Math.round(rate ?? 0);
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardDescription className="flex items-center gap-2">
           <ActivityIcon className="size-4" />
-          Success rate
+          {t("overview.kpi.successRate")}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex items-center gap-3 pt-0">
         <CircleProgress value={pct} className="h-16 w-16 text-sm" />
         <span className="text-xs text-muted-foreground">
-          completed / (completed + failed)
+          {t("overview.kpi.successFormula")}
         </span>
       </CardContent>
     </Card>
@@ -143,12 +148,13 @@ function NodeCard({
 }: {
   summary: NonNullable<ReturnType<typeof useLspSummary>["data"]>;
 }) {
+  const { t } = useTranslation("lsp");
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <ServerIcon className="size-4" />
-          {summary.node_name || "Node"}
+          {summary.node_name || t("overview.node.fallbackName")}
           <Badge
             variant={
               summary.node_status === "online"
@@ -166,31 +172,58 @@ function NodeCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
-        <Stat label="Host" value={summary.node_host || "—"} />
-        <Stat label="Synced" value={summary.synced_to_chain ? "yes" : "no"} />
-        <Stat label="Height" value={String(summary.sync_height)} />
-        <Stat label="Peers" value={String(summary.peers_connected)} />
-        <Stat label="Channels active" value={String(summary.channels_active)} />
         <Stat
-          label="Channels pending"
+          label={t("overview.node.host")}
+          value={summary.node_host || "—"}
+        />
+        <Stat
+          label={t("overview.node.synced")}
+          value={summary.synced_to_chain ? t("values.yes") : t("values.no")}
+        />
+        <Stat
+          label={t("overview.node.height")}
+          value={String(summary.sync_height)}
+        />
+        <Stat
+          label={t("overview.node.peers")}
+          value={String(summary.peers_connected)}
+        />
+        <Stat
+          label={t("overview.node.channelsActive")}
+          value={String(summary.channels_active)}
+        />
+        <Stat
+          label={t("overview.node.channelsPending")}
           value={String(summary.channels_pending)}
         />
-        <Stat label="Inbound" value={formatLoki(summary.liquidity_inbound)} />
-        <Stat label="Outbound" value={formatLoki(summary.liquidity_outbound)} />
-        <Stat label="Blocked" value={formatLoki(summary.liquidity_blocked)} />
+        <Stat
+          label={t("overview.node.inbound")}
+          value={formatLoki(summary.liquidity_inbound)}
+        />
+        <Stat
+          label={t("overview.node.outbound")}
+          value={formatLoki(summary.liquidity_outbound)}
+        />
+        <Stat
+          label={t("overview.node.blocked")}
+          value={formatLoki(summary.liquidity_blocked)}
+        />
       </CardContent>
     </Card>
   );
 }
 
 function OrderStateCard({ counts }: { counts: Record<string, number> }) {
+  const { t } = useTranslation("lsp");
   const states = ["CREATED", "PAID", "COMPLETED", "FAILED", "EXPIRED"];
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Recent order states</CardTitle>
+        <CardTitle className="text-base">
+          {t("overview.orderStates.title")}
+        </CardTitle>
         <CardDescription>
-          Across the last orders lspd reports for this node.
+          {t("overview.orderStates.description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
@@ -209,6 +242,7 @@ function FleetCard({
 }: {
   nodes: { node_id: string; name: string }[] | undefined;
 }) {
+  const { t } = useTranslation("lsp");
   if (!nodes || nodes.length <= 1) {
     return null;
   }
@@ -217,17 +251,16 @@ function FleetCard({
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <ServerIcon className="size-4" />
-          Fleet ({nodes.length} nodes)
+          {t("overview.fleet.title", { count: nodes.length })}
         </CardTitle>
-        <CardDescription>
-          This daemon runs more than one LSP node. Per-node config and
-          announcement are managed on the Config screen.
-        </CardDescription>
+        <CardDescription>{t("overview.fleet.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         {nodes.map((n) => (
           <div key={n.node_id} className="grid gap-0.5">
-            <span className="font-medium">{n.name || "node"}</span>
+            <span className="font-medium">
+              {n.name || t("overview.fleet.nodeFallback")}
+            </span>
             <span className="font-mono text-xs text-muted-foreground break-all">
               {n.node_id}
             </span>
@@ -245,6 +278,7 @@ function TopPeersCard({
     | { pub_key: string; alias: string; in_loki: number; out_loki: number }[]
     | undefined;
 }) {
+  const { t } = useTranslation("lsp");
   if (!peers || peers.length === 0) {
     return null;
   }
@@ -256,7 +290,7 @@ function TopPeersCard({
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <UsersIcon className="size-4" />
-          Top peers by volume
+          {t("overview.topPeers.title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">

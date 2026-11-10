@@ -34,13 +34,7 @@ const PROTOCOLS = [1, 2, 5];
 // for this node's chain and network, unranked; the user ticks the ones they
 // trust (LP-1, LP-12). Titles, descriptions and websites are the LSP's claims;
 // whether the node is in this node's graph is this node's own fact.
-export function LSPCatalogue({
-  className,
-  disabled,
-}: {
-  className?: string;
-  disabled?: boolean;
-}) {
+export function LSPCatalogue({ className }: { className?: string }) {
   const { t } = useTranslation("setup");
   const { data, mutate } = useLSPCatalogue();
   const { mutate: reloadInfo } = useInfo();
@@ -49,20 +43,6 @@ export function LSPCatalogue({
   const [showOthers, setShowOthers] = React.useState(false);
   const [adding, setAdding] = React.useState("");
   const [busy, setBusy] = React.useState<string | undefined>();
-
-  if (disabled) {
-    return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Network className="w-5 h-5 text-primary" />
-            {t("services.lsp.title")}
-          </CardTitle>
-          <CardDescription>{t("services.lsp.setupNote")}</CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
 
   const all = data ?? [];
   const { inGraph, notInGraph } = visibleCatalogue(all, { protocol, text });

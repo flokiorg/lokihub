@@ -2,18 +2,16 @@ package lsps5
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"sync"
-	"time"
 
+	"github.com/flokiorg/lokihub/lsps/common"
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps0"
 	"github.com/flokiorg/lokihub/lsps/transport"
-	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
+	nostrlsps5 "github.com/ohstr/nostr-lsps5"
 )
 
 // ClientHandler handles LSPS5 client-side operations
@@ -48,16 +46,6 @@ func NewClientHandler(transport transport.Transport, eventQueue *events.EventQue
 	}
 }
 
-func generateRequestID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// crypto/rand only fails if the OS entropy source is unavailable;
-		// fall back to a timestamp-derived ID rather than blocking the request.
-		return fmt.Sprintf("%032x", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(b)
-}
-
 func (h *ClientHandler) ensurePeerState(lspPubkey string) *PeerState {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -78,7 +66,7 @@ func (h *ClientHandler) SetWebhook(ctx context.Context, lspPubkey string, appNam
 	}
 
 	peerState := h.ensurePeerState(lspPubkey)
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	peerState.mu.Lock()
 	peerState.PendingSetWebhookRequests[requestID] = SetWebhookReqInfo{
@@ -98,7 +86,7 @@ func (h *ClientHandler) SetWebhook(ctx context.Context, lspPubkey string, appNam
 		ID: requestID,
 	}
 
-	if err := h.sendRequest(ctx, lspPubkey, request); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingSetWebhookRequests, requestID)
 		peerState.mu.Unlock()
@@ -110,7 +98,7 @@ func (h *ClientHandler) SetWebhook(ctx context.Context, lspPubkey string, appNam
 
 func (h *ClientHandler) ListWebhooks(ctx context.Context, lspPubkey string) (string, error) {
 	peerState := h.ensurePeerState(lspPubkey)
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	peerState.mu.Lock()
 	peerState.PendingListWebhooksRequests[requestID] = true
@@ -123,7 +111,7 @@ func (h *ClientHandler) ListWebhooks(ctx context.Context, lspPubkey string) (str
 		ID:      requestID,
 	}
 
-	if err := h.sendRequest(ctx, lspPubkey, request); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingListWebhooksRequests, requestID)
 		peerState.mu.Unlock()
@@ -135,7 +123,7 @@ func (h *ClientHandler) ListWebhooks(ctx context.Context, lspPubkey string) (str
 
 func (h *ClientHandler) RemoveWebhook(ctx context.Context, lspPubkey string, appName string) (string, error) {
 	peerState := h.ensurePeerState(lspPubkey)
-	requestID := generateRequestID()
+	requestID := common.NewRequestID()
 
 	peerState.mu.Lock()
 	peerState.PendingRemoveWebhookRequests[requestID] = RemoveWebhookReqInfo{
@@ -152,7 +140,7 @@ func (h *ClientHandler) RemoveWebhook(ctx context.Context, lspPubkey string, app
 		ID: requestID,
 	}
 
-	if err := h.sendRequest(ctx, lspPubkey, request); err != nil {
+	if err := lsps0.SendRequest(ctx, h.transport, lspPubkey, request); err != nil {
 		peerState.mu.Lock()
 		delete(peerState.PendingRemoveWebhookRequests, requestID)
 		peerState.mu.Unlock()
@@ -160,18 +148,6 @@ func (h *ClientHandler) RemoveWebhook(ctx context.Context, lspPubkey string, app
 	}
 
 	return requestID, nil
-}
-
-func (h *ClientHandler) sendRequest(ctx context.Context, peerPubkey string, request *lsps0.JsonRpcRequest) error {
-	data, err := json.Marshal(request)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	if err := h.transport.SendCustomMessage(ctx, peerPubkey, lsps0.LSPS_MESSAGE_TYPE_ID, data); err != nil {
-		return fmt.Errorf("failed to send custom message: %w", err)
-	}
-	return nil
 }
 
 func (h *ClientHandler) HandleMessage(peerPubkey string, data []byte) error {
@@ -291,7 +267,7 @@ func validateWebhookURL(rawURL string) error {
 	}
 
 	if parsed.Scheme == "nostr+lsps5" {
-		if _, _, err := nostrlsps5.ParseLsp5Uri(rawURL); err != nil {
+		if _, _, err := nostrlsps5.ParseURI(rawURL); err != nil {
 			return fmt.Errorf("invalid nostr+lsps5 URI: %w", err)
 		}
 		return nil

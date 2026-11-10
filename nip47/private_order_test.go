@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashorder"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/decodepay"
+	"github.com/flokiorg/lokihub/internal/decodepay"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -68,7 +68,7 @@ func newOrderFixture(t *testing.T) *orderFixture {
 	deps := cashorder.Deps{DB: svc.DB, Keys: svc.Keys, Apps: svc.AppsService, LN: ln, Relays: []string{"wss://relay.example.com"}}
 	conn, err := cashorder.CreateConnection(context.TODO(), deps, hub.ID, "shop")
 	require.NoError(t, err)
-	require.NoError(t, cashorder.PutSettings(svc.DB, hub.ID, orderTermsFixture(), time.Now()))
+	require.NoError(t, cashorder.PutSettings(cashorder.Deps{DB: svc.DB}, hub.ID, orderTermsFixture(), time.Now()))
 	var connApp db.App
 	require.NoError(t, svc.DB.First(&connApp, conn.AppID).Error)
 	decoded, err := nipCO.DecodeOrderConnection(conn.ConnectionString)
@@ -246,7 +246,7 @@ func TestCashOrder_RetiredAndNotOffered(t *testing.T) {
 	f := newOrderFixture(t)
 	s := orderTermsFixture()
 	s.Terms.Onchain = nil
-	require.NoError(t, cashorder.PutSettings(f.svc.DB, f.hub.ID, s, time.Now()))
+	require.NoError(t, cashorder.PutSettings(cashorder.Deps{DB: f.svc.DB}, f.hub.ID, s, time.Now()))
 	res, _, _ := f.order(t, nipCO.PaymentOnchain, 10_000, nil)
 	require.NotNil(t, res.Error)
 	assert.Equal(t, constants.ERROR_RESTRICTED, res.Error.Code, "on-chain is not sold")
@@ -387,7 +387,7 @@ func TestCashOrder_TermsBounds(t *testing.T) {
 	} {
 		s := orderTermsFixture()
 		mutate(&s)
-		err := cashorder.PutSettings(f.svc.DB, f.hub.ID, s, time.Now())
+		err := cashorder.PutSettings(cashorder.Deps{DB: f.svc.DB}, f.hub.ID, s, time.Now())
 		assert.ErrorIs(t, err, constants.ErrInvalidParams, name)
 	}
 	lower := 999_999

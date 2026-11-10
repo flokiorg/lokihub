@@ -18,9 +18,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/connstr"
 	"github.com/flokiorg/lokihub/tests"
 )
 

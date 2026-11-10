@@ -26,15 +26,15 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	lokidb "github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/daemonclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
-	"github.com/flokiorg/lokihub/lspservice"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -56,7 +56,7 @@ type jwtCustomClaims struct {
 
 type HttpService struct {
 	api            api.API
-	hubInfoHttpSvc    *HubInfoHttpService
+	hubInfoHttpSvc *HubInfoHttpService
 	cfg            config.Config
 	eventPublisher events.EventPublisher
 	db             *gorm.DB
@@ -73,7 +73,7 @@ type HttpService struct {
 
 	// lspClient is the Hub's client to an attached lspd daemon (plan §3), or
 	// nil when no LSP service endpoint is configured (feature off).
-	lspClient *lspservice.Client
+	lspClient *daemonclient.Client
 
 	// lsps5Replay drops stale/replayed LSPS5 webhook notifications (LOKIHUB-0020).
 	lsps5Replay *lsps5ReplayGuard
@@ -85,7 +85,7 @@ type HttpService struct {
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
 	return &HttpService{
 		api:             api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetHubInfoSvc(), eventPublisher),
-		hubInfoHttpSvc:     NewHubInfoHttpService(svc, svc.GetHubInfoSvc(), svc.GetConfig().GetEnv()),
+		hubInfoHttpSvc:  NewHubInfoHttpService(svc, svc.GetHubInfoSvc(), svc.GetConfig().GetEnv()),
 		cfg:             svc.GetConfig(),
 		eventPublisher:  eventPublisher,
 		db:              svc.GetDB(),
@@ -319,6 +319,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.POST("/cash-hubs/:id/order-connections/:conn/retire", httpSvc.orderConnectionRetireHandler)
 	fullAccessApiGroup.GET("/cash-hubs/:id/order-terms", httpSvc.orderTermsGetHandler)
 	fullAccessApiGroup.PUT("/cash-hubs/:id/order-terms", httpSvc.orderTermsPutHandler)
+	fullAccessApiGroup.GET("/cash-hubs/:id/orders", httpSvc.ordersListHandler)
 	fullAccessApiGroup.GET("/apps/:id/circle-stats", httpSvc.circleHubStatsHandler)
 	fullAccessApiGroup.POST("/apps/:id/cash-wallets", httpSvc.cashWalletsCreateHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId", httpSvc.cashWalletDeleteHandler)
@@ -386,6 +387,10 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessSSEGroup.GET("/lsps5/events", httpSvc.lsps5EventsSSEHandler)
 
 	httpSvc.hubInfoHttpSvc.RegisterSharedRoutes(readOnlyApiGroup, fullAccessApiGroup, e)
+
+	// Chain and payer hooks for the regtest dev stack; compiled in only with the
+	// testhooks build tag (testhooks.go).
+	httpSvc.registerTestHooks(fullAccessApiGroup)
 }
 
 func (httpSvc *HttpService) infoHandler(c echo.Context) error {
@@ -2315,6 +2320,20 @@ func (httpSvc *HttpService) orderTermsPutHandler(c echo.Context) error {
 		return httpSvc.orderError(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// ordersListHandler lists a Cash Hub's placed orders and the payments it kept
+// with no order (WP-19 item 8). It returns operator facts only, no secret.
+func (httpSvc *HttpService) ordersListHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	view, err := httpSvc.api.ListOrders(dbApp)
+	if err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.JSON(http.StatusOK, view)
 }
 
 // circleIdentitiesListHandler lists every CircleIdentity, for the

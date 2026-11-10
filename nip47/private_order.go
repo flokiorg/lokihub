@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/clock"
 	"time"
 
 	"github.com/ohstr/nmilat/nipCO"
 	"github.com/ohstr/nmilat/nipcash/transport"
 
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/cash/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -41,7 +41,7 @@ func (svc *nip47Service) servePrivateOrder(ctx context.Context, lnClient lnclien
 		return refuse(constants.ERROR_INTERNAL, "the hub could not record this order, please retry")
 	}
 
-	deps := cashorder.PlaceDeps{Deps: cashorder.Deps{DB: svc.db, Keys: svc.keys, Apps: svc.appsService, LN: lnClient,
+	deps := cashorder.PlaceDeps{Deps: cashorder.Deps{InfoCache: svc.getInfoOrders, DB: svc.db, Keys: svc.keys, Apps: svc.appsService, LN: lnClient,
 		Relays: svc.cfg.GetRelayUrls()}}
 	if svc.identityAuthorityMgr != nil {
 		deps.IA = svc.identityAuthorityMgr
@@ -86,7 +86,7 @@ func (svc *nip47Service) orderView(rec *db.CashRequestRecord) (json.RawMessage, 
 		return nil, err
 	}
 	// Never "open" past pay_by, whether or not a window-ending hook is set.
-	if cashorder.WindowNotEnded(&order, hubclock.Now().Unix()) {
+	if cashorder.WindowNotEnded(&order, clock.Now().Unix()) {
 		return nil, cashorder.ErrWindowNotEnded
 	}
 	bills, err := svc.orderBills(rec)
@@ -105,7 +105,7 @@ func (svc *nip47Service) orderBills(rec *db.CashRequestRecord) ([]nipCO.OrderBil
 	if err != nil {
 		return nil, err
 	}
-	now := hubclock.Now()
+	now := clock.Now()
 	out := make([]nipCO.OrderBill, 0, len(rows))
 	for i := range rows {
 		b := &rows[i]

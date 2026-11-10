@@ -1,8 +1,6 @@
 package config
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -10,6 +8,8 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/argon2"
+
+	"github.com/flokiorg/lokihub/internal/seal"
 )
 
 // At-rest KEK (key-encryption key) parameters. This KEK wraps the Mnemonic and
@@ -61,7 +61,7 @@ func AesGcmEncryptWithPassword(plaintext string, password string) (string, error
 		return "", err
 	}
 
-	ciphertext, err := AesGcmEncryptWithKey(plaintext, secretKey)
+	ciphertext, err := seal.EncryptWithKey(plaintext, secretKey)
 	if err != nil {
 		return "", err
 	}
@@ -84,7 +84,7 @@ func AesGcmDecryptWithPassword(ciphertext string, password string) (string, erro
 		return "", err
 	}
 
-	return AesGcmDecryptWithKey(arr[1]+"-"+arr[2], secretKey)
+	return seal.DecryptWithKey(arr[1]+"-"+arr[2], secretKey)
 }
 
 // deriveKEKForBlob derives the KEK for an encrypted blob from its salt field.
@@ -130,61 +130,4 @@ func deriveKEKForBlob(saltField string, password string) ([]byte, error) {
 // is a candidate for re-wrapping on unlock.
 func isLegacyWrappedSecret(storedValue string) bool {
 	return storedValue != "" && !strings.HasPrefix(storedValue, kekArgon2idTag+"$")
-}
-
-func AesGcmEncryptWithKey(plaintext string, key []byte) (string, error) {
-	// require a 32 bytes key (256 bits)
-	if len(key) != 32 {
-		return "", fmt.Errorf("key must be at least 32 bytes, got %d", len(key))
-	}
-
-	plaintextBytes := []byte(plaintext)
-
-	aes, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-
-	aesgcm, err := cipher.NewGCM(aes)
-	if err != nil {
-		return "", err
-	}
-
-	nonce := make([]byte, aesgcm.NonceSize())
-	_, err = rand.Read(nonce)
-	if err != nil {
-		return "", err
-	}
-
-	ciphertext := aesgcm.Seal(nil, nonce, plaintextBytes, nil)
-
-	return hex.EncodeToString(nonce) + "-" + hex.EncodeToString(ciphertext), nil
-}
-
-func AesGcmDecryptWithKey(ciphertext string, key []byte) (string, error) {
-	// require a 32 bytes key (256 bits)
-	if len(key) != 32 {
-		return "", fmt.Errorf("key must be at least 32 bytes, got %d", len(key))
-	}
-
-	arr := strings.Split(ciphertext, "-")
-	nonce, _ := hex.DecodeString(arr[0])
-	data, _ := hex.DecodeString(arr[1])
-
-	aes, err := aes.NewCipher([]byte(key))
-	if err != nil {
-		return "", err
-	}
-
-	aesgcm, err := cipher.NewGCM(aes)
-	if err != nil {
-		return "", err
-	}
-
-	plaintext, err := aesgcm.Open(nil, nonce, data, nil)
-	if err != nil {
-		return "", err
-	}
-
-	return string(plaintext), nil
 }

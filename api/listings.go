@@ -10,9 +10,9 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"gorm.io/gorm"
 
-	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/internal/connstr"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/logger"
 )
@@ -173,7 +173,7 @@ func (api *api) RegenerateCashHubConnection(ctx context.Context, hubAppID uint) 
 	}
 	// Signed before anything changes: a node that cannot sign leaves the old
 	// connection in place rather than the Hub with none.
-	token, err := connstr.CashHub(ctx, api.lnClient(), *hub.WalletPubkey, api.cfg.GetRelayUrls(), secret, hubLabel(hub.Name))
+	token, err := connstr.CashHub(ctx, api.lnClient(), *hub.WalletPubkey, api.cfg.GetAdvertisedRelayUrls(), secret, hubLabel(hub.Name))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", listing.ErrCannotSign, err)
 	}

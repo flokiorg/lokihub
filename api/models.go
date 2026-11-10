@@ -6,8 +6,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/flokiorg/lokihub/cashorder"
-	"github.com/flokiorg/lokihub/circlelife"
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/circle/circlelife"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
@@ -48,6 +48,9 @@ type API interface {
 	RetireOrderConnection(hub *db.App, connAppID uint) error
 	GetOrderTerms(hub *db.App) (*cashorder.Settings, error)
 	PutOrderTerms(hub *db.App, s cashorder.Settings) error
+	// ListOrders lists a Cash Hub's placed orders and the payments it kept with
+	// no order, for the operator console (WP-19 item 8). It exposes no secret.
+	ListOrders(hub *db.App) (*cashorder.OrdersView, error)
 	// SetCircleAccepting opens or closes a circle hub to new members (NIP-CW
 	// §The Circle Wallet Hub Connection, accepting).
 	SetCircleAccepting(app *db.App, accepting bool) error
