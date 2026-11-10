@@ -1,144 +1,100 @@
 name: Release
 
+# Build every platform and publish -- in ONE run, from ONE commit.
+#
+# macOS is MANDATORY. `publish` depends on linux AND macos AND windows, so the
+# release cannot be created unless the .dmg exists. If the GitHub-hosted macOS
+# runner is capacity-cancelled, the macos job is cancelled, publish is skipped,
+# and NO release is produced (the old "degrade gracefully without macOS" posture
+# is deliberately gone).
+#
+# Recover WITHOUT rebuilding Linux/Windows by re-running only the failed jobs:
+#
+#     gh run rerun --failed <run-id>        (or the "Re-run failed jobs" button)
+#
+# That re-runs just the cancelled macos job + publish and reuses the Linux/
+# Windows artifacts already attached to the run. release-retry.yaml does this
+# automatically, a bounded number of times, when a Release run fails on a macOS
+# *cancellation* (a genuine macOS build *failure* is left for a human).
+#
+# Because build and publish share one run, the binaries, tag, release notes and
+# commit are the same commit by construction. There is no cross-run artifact
+# scavenging and no version-string run-selection -- the whole class of "released
+# rc.8 with rc.7 binaries" staleness bug is structurally impossible here, so the
+# guards the old decoupled design needed are gone with it.
+#
+# dry_run=true builds every platform but skips publish (a release-less test build
+# -- this replaces the former build-all.yaml).
+
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build all platforms but do not publish a release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
-  release:
-    name: Create Release
+  linux:
+    name: Linux
+    uses: ./.github/workflows/linux.yaml
+    secrets: inherit
+
+  macos:
+    name: macOS
+    uses: ./.github/workflows/macos.yaml
+    secrets: inherit
+
+  windows:
+    name: Windows
+    uses: ./.github/workflows/windows.yaml
+    secrets: inherit
+
+  publish:
+    name: Publish Release
+    # macOS is in this list on purpose: no .dmg => this job never runs => no
+    # release. Re-run failed jobs to retry macOS without rebuilding Linux/Windows.
+    needs: [linux, macos, windows]
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select the build-all run with artifacts for this version
-        id: get_run_ids
-        uses: actions/github-script@v7
-        with:
-          script: |
-            // linux.yaml/macos.yaml/windows.yaml are invoked as reusable
-            // workflows (workflow_call) from build-all.yaml, so their runs
-            // don't show up under their own workflow_id via listWorkflowRuns
-            // - the whole thing is one run, owned by build-all.yaml, with
-            // each platform's artifacts attached to that single run.
-            //
-            // Pick the NEWEST completed build-all run that produced the REQUIRED
-            // platform artifacts (Linux AND Windows) for the VERSION being
-            // released - NOT merely the latest fully-successful run. A single
-            // platform's runner being unavailable (e.g. macOS capacity) cancels
-            // the whole build-all run, and "latest successful" would then silently
-            // fall back to an older run that built a DIFFERENT version (the
-            // staleness the verify step guards against).
-            //
-            // The required-platform check lives HERE, not only in verify, so a
-            // newer PARTIAL run (e.g. Windows flaked on a recovery re-run - which
-            // is exactly when partials happen) is skipped and selection falls
-            // through to an older COMPLETE run, instead of locking onto the broken
-            // newer run and hard-blocking a releasable version.
-            //
-            // Selection is keyed on the version string, not the commit: binaries
-            // come from whichever run most-recently built artifacts for this
-            // VERSION, which may be an earlier commit than the one being tagged
-            // (that is fine only while VERSION is bumped on every source-affecting
-            // commit - so a version maps to one set of binaries). Keep that
-            // invariant; do not land a source change under an unchanged VERSION.
-            const fs = require('fs');
-            const tag = fs.readFileSync('VERSION', 'utf8').trim();
-            // Anchor the match so "0.5.0-rc.2" never matches a "0.5.0-rc.21"
-            // artifact: the tag must not be immediately followed by another digit.
-            const tagRe = new RegExp(tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![0-9])');
-            const runs = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'build-all.yaml',
-              per_page: 100,
-            });
-            let runId = null;
-            let macos = 'absent';
-            for (const run of runs.data.workflow_runs) {
-              if (run.status !== 'completed') continue;
-              let names;
-              try {
-                const arts = await github.rest.actions.listWorkflowRunArtifacts({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  run_id: run.id,
-                  per_page: 100,
-                });
-                names = arts.data.artifacts.map(a => a.name).filter(n => tagRe.test(n));
-              } catch (e) {
-                console.log(`skip run ${run.id}: cannot list artifacts (${e.message})`);
-                continue;
-              }
-              const hasLinux = names.some(n => /linux/i.test(n));
-              const hasWindows = names.some(n => /windows/i.test(n));
-              if (hasLinux && hasWindows) {
-                runId = run.id;
-                macos = names.some(n => /macos/i.test(n)) ? 'present' : 'absent';
-                break;
-              }
-            }
-            if (!runId) {
-              core.setFailed(`No completed build-all.yaml run has Linux+Windows artifacts for ${tag} - run build-all.yaml on this commit first.`);
-              return;
-            }
-            // Distinguish a benign macOS capacity cancellation from a real macOS
-            // build failure (both leave no artifact) so verify can be loud about
-            // a regression instead of silently shipping without macOS forever.
-            if (macos === 'absent') {
-              try {
-                const jobs = await github.rest.actions.listJobsForWorkflowRun({
-                  owner: context.repo.owner, repo: context.repo.repo,
-                  run_id: runId, per_page: 100,
-                });
-                const mj = jobs.data.jobs.find(j => /macos/i.test(j.name));
-                macos = mj ? `absent:${mj.conclusion}` : 'absent:unknown';
-              } catch (e) {
-                macos = 'absent:unknown';
-              }
-            }
-            console.log(`Selected build-all.yaml run ${runId} for ${tag} (macOS: ${macos})`);
-            core.setOutput('run_id', runId);
-            core.setOutput('macos', macos);
-
       - name: Read Version
-        id: version
         shell: bash
         run: |
           if [ ! -f VERSION ]; then
-            echo "Error: VERSION file not found"
+            echo "::error::VERSION file not found"
             exit 1
           fi
           TAG=$(cat VERSION | tr -d '[:space:]')
           if [ -z "$TAG" ]; then
-            echo "Error: VERSION file is empty"
+            echo "::error::VERSION file is empty"
             exit 1
           fi
-          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
           if [[ "$TAG" == *-* ]]; then
-            echo "PRERELEASE=true" >> $GITHUB_ENV
+            echo "PRERELEASE=true" >> "$GITHUB_ENV"
           else
-            echo "PRERELEASE=false" >> $GITHUB_ENV
+            echo "PRERELEASE=false" >> "$GITHUB_ENV"
           fi
 
-      # A missing note used to set exists=false, which if:-gated off every
-      # remaining step -- so the job reported success having published
-      # nothing. That actually happened: releases/0.5.0-rc.4.md was committed
-      # and never released, and nobody noticed. Fail instead.
-      #
-      # A pre-release (0.5.0-rc.9) documents the version it is a candidate
-      # for, so the notes live under that open "## [0.5.0]" section rather
-      # than one heading per candidate -- mirrors how nmilat's CHANGELOG.md
-      # accumulates an unreleased version across its own rc's.
+      # A pre-release (e.g. 0.5.0-rc.34) documents the version it is a candidate
+      # for, so the notes live under that open "## [0.5.0]" section rather than
+      # one heading per candidate -- mirrors how nmilat's CHANGELOG.md
+      # accumulates an unreleased version across its rc's. A missing section is a
+      # hard error: a release with no notes is a mistake, not a success.
       - name: Resolve Release Notes from CHANGELOG.md
         id: notes
         shell: bash
         run: |
           NOTES_VERSION="${TAG%%-*}"
-
           NOTES=$(awk -v ver="$NOTES_VERSION" '
             /^## \[/ {
               if (found) exit
@@ -147,12 +103,10 @@ jobs:
             found { print }
           ' CHANGELOG.md)
           NOTES=$(printf '%s\n' "$NOTES" | sed -e '/./,$!d' -e ':a' -e '/^\n*$/{$d;N;ba' -e '}')
-
           if [ -z "$NOTES" ]; then
             echo "::error::no CHANGELOG.md section found for [$NOTES_VERSION] - write the release note and commit it before running this workflow"
             exit 1
           fi
-
           {
             echo "notes<<RELEASE_NOTES_EOF"
             echo "$NOTES"
@@ -160,65 +114,51 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Release note found for [$NOTES_VERSION] in CHANGELOG.md"
 
-      - name: Download Build Artifacts
+      # No run-id hunting: the platform jobs above are part of THIS run, so their
+      # artifacts download straight from it. download-artifact with no `name`
+      # fetches every artifact of the current run into artifacts/<name>/.
+      - name: Download this run's build artifacts
         uses: actions/download-artifact@v4.3.0
         with:
-          run-id: ${{ steps.get_run_ids.outputs.run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           path: artifacts
 
       - name: Display Artifacts
         run: ls -R artifacts
 
-      # build-all.yaml is harvested by "latest successful run", which says
-      # nothing about which commit it built. Releasing 0.5.0-rc.8 once attached
-      # 18 files all named 0.5.0-rc.7, built ten days earlier: the notes
-      # described changes the binaries did not contain. Every asset carries the
-      # version in its filename, so the check is cheap.
-      - name: Verify artifacts match the version being released
+      - name: Verify artifacts (version + all platforms present)
         shell: bash
-        env:
-          MACOS: ${{ steps.get_run_ids.outputs.macos }}
         run: |
           set -euo pipefail
-          # Staleness guard (kept): every downloaded file must carry the version.
-          # Releasing 0.5.0-rc.8 once attached 18 files all named 0.5.0-rc.7; the
-          # version is in every asset's filename, so the check is cheap. The
-          # "! TAG followed by a digit" exclusion anchors the match so a rc.2
-          # release never accepts rc.21 binaries (selection anchors the same way).
-          wrong=$(find artifacts -type f ! \( -name "*${{ env.TAG }}*" -a ! -name "*${{ env.TAG }}[0-9]*" \) | head -20 || true)
+          # Staleness guard: every file must carry exactly $TAG and NOT
+          # $TAG-followed-by-a-digit, so an rc.2 release never accepts rc.21
+          # binaries. (Cheap -- the version is in every asset's filename.)
+          wrong=$(find artifacts -type f ! \( -name "*${TAG}*" -a ! -name "*${TAG}[0-9]*" \) | head -20 || true)
           if [ -n "$wrong" ]; then
-            echo "::error::artifacts not carrying exactly ${{ env.TAG }} were downloaded (wrong version/run):"
+            echo "::error::artifacts not carrying exactly ${TAG} were produced (wrong version):"
             echo "$wrong"
             exit 1
           fi
-          versioned=$(find artifacts -type f -name "*${{ env.TAG }}*" ! -name "*${{ env.TAG }}[0-9]*")
+          versioned=$(find artifacts -type f -name "*${TAG}*" ! -name "*${TAG}[0-9]*")
           if [ -z "$versioned" ]; then
-            echo "::error::no artifacts for ${{ env.TAG }} were downloaded"
+            echo "::error::no artifacts for ${TAG} were produced"
             exit 1
           fi
-          # Linux + Windows are required (also enforced in selection so it can
-          # fall through to a complete run); macOS is best-effort. A macOS runner
-          # outage must degrade the release gracefully, not halt it.
-          for plat in linux windows; do
+          # All three platforms are REQUIRED -- macOS included. `needs` already
+          # guarantees each job succeeded; this is the belt-and-suspenders check
+          # that each actually produced its named asset.
+          for plat in linux macos windows; do
             if ! grep -qi "$plat" <<<"$versioned"; then
-              echo "::error::no $plat artifacts for ${{ env.TAG }} - cannot release without a required platform"
+              echo "::error::no $plat artifacts for ${TAG} - cannot release; re-run failed jobs"
               exit 1
             fi
           done
-          # macOS note, attributed by the selected run's macOS job conclusion so a
-          # genuine build regression is loud, not disguised as a capacity blip.
-          case "${MACOS:-}" in
-            present) ;;
-            absent:failure)
-              echo "::error::macOS BUILD FAILED for ${{ env.TAG }} (not a capacity cancellation) - shipping Linux/Windows, but the macOS build is BROKEN and must be fixed; it will keep missing until then." ;;
-            absent:cancelled|absent:|absent:null)
-              echo "::warning::no macOS artifacts for ${{ env.TAG }} - macOS job was cancelled (runner capacity/minutes). Releasing Linux/Windows; re-run build-all.yaml when macOS capacity returns, then re-run this workflow to attach it." ;;
-            *)
-              echo "::warning::no macOS artifacts for ${{ env.TAG }} (macOS job: ${MACOS:-unknown}). Releasing Linux/Windows; re-run build-all.yaml to attach macOS." ;;
-          esac
-          echo "artifacts OK for ${{ env.TAG }} ($(grep -c . <<<"$versioned") files)"
-
+          # macOS must include the desktop .dmg specifically (the one mandatory
+          # asset this whole gate exists to protect).
+          if ! grep -qiE 'desktop-macos.*\.dmg' <<<"$versioned"; then
+            echo "::error::macOS desktop .dmg missing for ${TAG} - cannot release"
+            exit 1
+          fi
+          echo "artifacts OK for ${TAG} ($(grep -c . <<<"$versioned") files)"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

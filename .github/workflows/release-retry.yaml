@@ -1,0 +1,46 @@
+name: Release retry (macOS capacity)
+
+# macOS is a MANDATORY release artifact, but GitHub-hosted macOS runners can be
+# capacity-cancelled at any time -- outside our control. When a Release run
+# fails because the macOS job was *cancelled* (not because it genuinely failed
+# to build), re-run ONLY the failed jobs: that re-runs macos + publish and
+# reuses the Linux/Windows artifacts already on the run, so nothing is rebuilt.
+#
+# Bounded by run_attempt so a real macOS BUILD failure (conclusion=failure, not
+# cancelled) is NOT retried -- that needs a human -- and a persistently
+# unavailable runner stops after a few tries instead of looping forever.
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+permissions:
+  actions: write   # required to re-run a workflow run
+  contents: read
+
+jobs:
+  retry:
+    # Only consider runs that did not succeed, and cap the attempts.
+    if: >-
+      github.event.workflow_run.conclusion != 'success' &&
+      github.event.workflow_run.run_attempt < 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-run failed jobs only if macOS was CANCELLED (capacity), not FAILED
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          macos_conclusion=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs" \
+            --jq '.jobs[] | select(.name | test("macos"; "i")) | .conclusion' | head -1)
+          echo "Release run $RUN_ID (attempt $ATTEMPT): macOS job conclusion = ${macos_conclusion:-none}"
+          if [ "$macos_conclusion" = "cancelled" ]; then
+            echo "macOS was cancelled (runner capacity) - re-running failed jobs; Linux/Windows artifacts are reused."
+            gh run rerun "$RUN_ID" --failed
+          else
+            echo "macOS conclusion is '${macos_conclusion:-none}', not a capacity cancellation - NOT retrying (needs attention if it is a build failure)."
+          fi
