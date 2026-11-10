@@ -62,12 +62,13 @@ func NewDBWithURI(t testing.TB, uri string) (*gorm.DB, error) {
 		dbName := strings.TrimPrefix(parsedURI.Path, "/")
 
 		config := pgtestdb.Custom(t, pgtestdb.Config{
-			DriverName: "pgx",
-			Host:       parsedURI.Hostname(),
-			Port:       parsedURI.Port(),
-			User:       user,
-			Password:   password,
-			Database:   dbName,
+			DriverName:                "pgx",
+			Host:                      parsedURI.Hostname(),
+			Port:                      parsedURI.Port(),
+			User:                      user,
+			Password:                  password,
+			Database:                  dbName,
+			ForceTerminateConnections: true,
 		}, pgtestdb.NoopMigrator{})
 
 		uri = config.URL()
