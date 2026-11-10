@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	ecies "github.com/ecies/go/v2"
+	ecies "github.com/flokiorg/lokihub/internal/eciesgo"
 	pb "github.com/flokiorg/lokihub/lspd/api/proto/notifications"
 	rpc "github.com/flokiorg/lokihub/lspd/api/proto/rpc"
 	"github.com/flokiorg/lokihub/lspd/lightning"

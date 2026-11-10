@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -35,11 +36,12 @@ func NewDB(t testing.TB) (*gorm.DB, error) {
 	dbUri := GetTestDatabaseURI()
 
 	if dbUri == defaultTestDB {
-		//in case the file was not removed in the last run, remove it before starting the test
-		logger.Logger.Info().Str("uri", defaultTestDB).Msg("removing test db")
-		if err := os.Remove(defaultTestDB); err != nil && !os.IsNotExist(err) {
-			logger.Logger.Warn().Err(err).Str("uri", defaultTestDB).Msg("failed to remove test db")
-		}
+		// Give each test its own sqlite file under a temp dir (auto-removed at
+		// test end) instead of a shared "test.db". A prior test's hub can keep
+		// connections open past CloseDB; on a shared file those accumulate across
+		// the suite and deadlock the next test's open/migrate (seen hanging the
+		// full -tags testhooks http suite). A per-test path isolates them.
+		dbUri = filepath.Join(t.TempDir(), defaultTestDB)
 	}
 
 	logger.Logger.Info().Str("uri", dbUri).Msg("Creating new test DB with URI")

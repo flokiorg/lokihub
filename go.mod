@@ -38,7 +38,6 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.8.2
-	github.com/ecies/go/v2 v2.0.8
 	github.com/flokiorg/flnd v0.2.6-rc.1
 	github.com/flokiorg/flndecodepay v1.0.6-rc.1
 	github.com/godbus/dbus/v5 v5.1.0
@@ -86,6 +85,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
+	github.com/cockroachdb/datadriven v1.0.3-0.20230413201302-be42291fc80f // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
@@ -98,7 +98,6 @@ require (
 	github.com/docker/cli v29.2.0+incompatible // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ethereum/go-ethereum v1.13.5 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fergusstrange/embedded-postgres v1.33.0 // indirect
 	github.com/flokiorg/flokicoin-neutrino v0.17.3-rc.1 // indirect
@@ -141,7 +140,7 @@ require (
 	github.com/jrick/logrotate v1.1.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kkdai/bstream v1.0.0 // indirect
-	github.com/klauspost/compress v1.19.2 // indirect
+	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/leaanthony/go-ansi-parser v1.6.1 // indirect
@@ -250,7 +249,7 @@ require (
 
 require (
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1

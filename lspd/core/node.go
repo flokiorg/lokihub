@@ -1,7 +1,7 @@
 package core
 
 import (
-	ecies "github.com/ecies/go/v2"
+	ecies "github.com/flokiorg/lokihub/internal/eciesgo"
 	btcec "github.com/flokiorg/go-flokicoin/crypto"
 	"github.com/flokiorg/lokihub/lspd/lightning"
 	"github.com/flokiorg/lokihub/lspd/platform/config"
