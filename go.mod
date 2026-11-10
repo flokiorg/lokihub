@@ -47,7 +47,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.9.2
-	github.com/ohstr/nmilat v0.5.0-rc.53
+	github.com/ohstr/nmilat v0.5.0-rc.54
 	github.com/rivo/uniseg v0.4.7
 	github.com/rs/zerolog v1.35.1
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
