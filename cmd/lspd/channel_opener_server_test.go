@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	ecies "github.com/flokiorg/lokihub/internal/eciesgo"
+	ecies "github.com/flokiorg/lokihub/lspd/eciesgo"
 	btcec "github.com/flokiorg/go-flokicoin/crypto"
 	rpc "github.com/flokiorg/lokihub/lspd/api/proto/rpc"
 	"github.com/flokiorg/lokihub/lspd/core"
