@@ -33,7 +33,7 @@ func hooksServer(t *testing.T, network string) (*echo.Echo, string) {
 	t.Cleanup(func() { db.CloseDB(gormDb) })
 
 	mockConfig := mocks.NewMockConfig(t)
-	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+	mockConfig.On("GetEnv").Return(&config.AppConfig{}).Maybe()
 	mockConfig.On("CheckUnlockPassword", "123").Return(true).Maybe()
 	mockConfig.On("GetJWTSecret").Return("dummy secret", nil).Maybe()
 
@@ -41,8 +41,8 @@ func hooksServer(t *testing.T, network string) (*echo.Echo, string) {
 	mockSvc.On("GetDB").Return(gormDb)
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
-	mockSvc.On("GetLokiSvc").Return(mocks.NewMockHubInfoService(t))
-	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{}).Maybe()
 	if network == "" {
 		mockSvc.On("GetLNClient").Return(nil).Maybe()
 	} else {
@@ -51,6 +51,7 @@ func hooksServer(t *testing.T, network string) (*echo.Echo, string) {
 		mockSvc.On("GetLNClient").Return(ln).Maybe()
 	}
 
+	stubInfoCaches(mockSvc)
 	httpSvc := NewHttpService(mockSvc, events.NewEventPublisher())
 	httpSvc.RegisterSharedRoutes(e)
 
