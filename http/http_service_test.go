@@ -277,7 +277,7 @@ func TestCreateApp_FullPermission(t *testing.T) {
 	mockConfig.On("GetEnv").Return(&config.AppConfig{})
 	mockConfig.On("CheckUnlockPassword", "123").Return(true)
 	mockConfig.On("GetJWTSecret").Return("dummy secret", nil)
-	mockConfig.On("GetRelayUrls").Return([]string{})
+	mockConfig.On("GetAdvertisedRelayUrls").Return([]string{})
 	mockConfig.On("Get", "LightningAddress", "").Return("test@loki", nil)
 
 	mockKeys := mocks.NewMockKeys(t)
