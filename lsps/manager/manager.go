@@ -785,6 +785,38 @@ func (m *LiquidityManager) processInternalEvents(ctx context.Context) {
 			requestID = e.RequestID
 		case *lsps1.OrderStatusEvent:
 			requestID = e.RequestID
+		// LSPS5 webhook responses: publish to the event bus so the SSE stream
+		// (/api/lsps5/events) and dashboards can observe set/list/remove outcomes.
+		// Previously these hit the default case and were silently dropped, so no
+		// hub surface ever reported a webhook registration/list/removal. (LOKIHUB-0054)
+		case *lsps5.WebhookRegisteredEvent:
+			m.publishLSPS5Event(e.EventType(), map[string]interface{}{
+				"request_id": e.RequestID, "lsp_pubkey": e.CounterpartyNodeID, "app_name": e.AppName,
+				"url": e.WebhookURL, "num_webhooks": e.NumWebhooks, "max_webhooks": e.MaxWebhooks, "no_change": e.NoChange,
+			})
+			continue
+		case *lsps5.WebhookRegistrationFailedEvent:
+			m.publishLSPS5Event(e.EventType(), map[string]interface{}{
+				"request_id": e.RequestID, "lsp_pubkey": e.CounterpartyNodeID, "app_name": e.AppName,
+				"url": e.WebhookURL, "error": e.Error,
+			})
+			continue
+		case *lsps5.WebhooksListedEvent:
+			m.publishLSPS5Event(e.EventType(), map[string]interface{}{
+				"request_id": e.RequestID, "lsp_pubkey": e.CounterpartyNodeID,
+				"app_names": e.AppNames, "max_webhooks": e.MaxWebhooks,
+			})
+			continue
+		case *lsps5.WebhookRemovedEvent:
+			m.publishLSPS5Event(e.EventType(), map[string]interface{}{
+				"request_id": e.RequestID, "lsp_pubkey": e.CounterpartyNodeID, "app_name": e.AppName,
+			})
+			continue
+		case *lsps5.WebhookRemovalFailedEvent:
+			m.publishLSPS5Event(e.EventType(), map[string]interface{}{
+				"request_id": e.RequestID, "lsp_pubkey": e.CounterpartyNodeID, "app_name": e.AppName, "error": e.Error,
+			})
+			continue
 		default:
 			// Unhandled event type
 			continue
@@ -799,6 +831,17 @@ func (m *LiquidityManager) processInternalEvents(ctx context.Context) {
 			// Optional: Clean up old unclaimed events?
 		}
 		m.mu.Unlock()
+	}
+}
+
+// publishLSPS5Event forwards an LSPS5 webhook response (set/list/remove outcome)
+// to the global event bus, which the SSE stream at /api/lsps5/events and any
+// dashboard subscriber consume. Without this these responses are unobservable
+// from the hub (LOKIHUB-0054). Best-effort: the SSE handler drops events when
+// its buffer is full, which is acceptable for this UI surface.
+func (m *LiquidityManager) publishLSPS5Event(eventType string, props map[string]interface{}) {
+	if m.cfg.EventPublisher != nil {
+		m.cfg.EventPublisher.Publish(&globalevents.Event{Event: eventType, Properties: props})
 	}
 }
 

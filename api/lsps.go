@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/manager"
@@ -267,18 +268,17 @@ func (api *api) LSPS5SetWebhook(ctx context.Context, req *LSPS5SetWebhookRequest
 		return nil, fmt.Errorf("LSPS5 client not available")
 	}
 
-	// Assuming appName is "lokihub" or part of the request?
-	// The LSPS5SetWebhookRequest has URL, Events, Signature (optional?)
-	// The client.SetWebhook signature might strictly match.
-
-	// Assume https if not specified? Or maybe allow empty if inferred?
-	// The struct now has Transport field
+	// Default to the "push" transport (bLIP-55): an LSP rejects "https" as
+	// unsupported_transport, so defaulting to it silently fails to register the
+	// webhook. A caller can still override via req.Transport. (LOKIHUB-0052)
 	transport := req.Transport
 	if transport == "" {
-		transport = "https"
+		transport = "push"
 	}
 
-	reqID, err := client.SetWebhook(ctx, req.LSPPubkey, "lokihub", req.URL, transport)
+	// The webhook is registered under this hub's app identifier; remove_webhook
+	// must use the SAME identifier (see LSPS5RemoveWebhook / LOKIHUB-0053).
+	reqID, err := client.SetWebhook(ctx, req.LSPPubkey, constants.APP_IDENTIFIER, req.URL, transport)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Str("url", req.URL).Msg("LSPS5 SetWebhook failed")
 		return nil, err
@@ -316,7 +316,12 @@ func (api *api) LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookR
 		return nil, fmt.Errorf("LSPS5 client not available")
 	}
 
-	reqID, err := client.RemoveWebhook(ctx, req.LSPPubkey, req.URL)
+	// Remove by the SAME app_name set_webhook registered under (constants.APP_IDENTIFIER),
+	// NOT the URL: the LSP keys webhooks by app_name, so passing the URL here never
+	// matched the registered "lokihub" entry and the webhook could not be removed.
+	// (LOKIHUB-0053. req.URL stays advisory; app_name is hub-wide, so webhooks are
+	// not individually addressable per-URL today.)
+	reqID, err := client.RemoveWebhook(ctx, req.LSPPubkey, constants.APP_IDENTIFIER)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Str("url", req.URL).Msg("LSPS5 RemoveWebhook failed")
 		return nil, err
