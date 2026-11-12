@@ -31,6 +31,11 @@ workflows:
           corepack enable
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
           echo "PATH=$HOME/go/bin:$PATH" >> "$CM_ENV"
+          # yarn 4 defaults to immutable installs under CI, but the Linux-generated
+          # yarn.lock lacks the macOS/arm64 optional deps this Apple-silicon runner
+          # resolves — let this build's install add them (Linux CI still enforces
+          # lockfile integrity).
+          echo "YARN_ENABLE_IMMUTABLE_INSTALLS=false" >> "$CM_ENV"
       - name: Build macOS .dmg
         script: |
           set -e
