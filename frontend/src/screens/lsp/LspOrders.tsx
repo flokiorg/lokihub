@@ -29,11 +29,11 @@ import {
 import { useLspJitChannels, useLspOrders } from "src/hooks/useLsp";
 import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
 import {
-  formatLoki,
   LspJitChannel,
   LspOrder,
   orderStateVariant,
 } from "src/screens/lsp/types";
+import { useFormatLoki } from "src/screens/lsp/useFormatLoki";
 
 const STATES = ["ALL", "CREATED", "PAID", "COMPLETED", "FAILED", "EXPIRED"];
 
@@ -63,6 +63,7 @@ export function LspOrders() {
 
 function OrdersTab() {
   const { t } = useTranslation("lsp");
+  const formatLoki = useFormatLoki();
   const { data: orders, error } = useLspOrders();
   const [query, setQuery] = React.useState("");
   const [state, setState] = React.useState("ALL");
@@ -177,6 +178,7 @@ function OrdersTab() {
 
 function JitTab() {
   const { t } = useTranslation("lsp");
+  const formatLoki = useFormatLoki();
   const { data: channels, error } = useLspJitChannels();
   if (error) {
     return <LspUnavailable error={error} />;

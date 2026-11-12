@@ -15,6 +15,7 @@ import {
   fieldName,
   formatValue,
 } from "src/components/lsps/terms";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { cn } from "src/lib/utils";
 import type { LSPAcceptedTerm, LSPTerms } from "src/types";
 
@@ -29,6 +30,9 @@ type Props = {
 // when they are worse, and asks again before buying (NIP-LSP live check).
 export function TermsChangedDialog({ terms, onConfirm, onCancel }: Props) {
   const { t } = useTranslation("channels");
+  const { data: hubInfo } = useHubInfo();
+  const unit = hubInfo?.nativeAsset?.unitName ?? "loki";
+  const subUnit = hubInfo?.nativeAsset?.subunitName ?? "mloki";
   return (
     <AlertDialog
       open={!!terms}
@@ -64,7 +68,9 @@ export function TermsChangedDialog({ terms, onConfirm, onCancel }: Props) {
                   <td className="font-mono break-all pe-2">
                     {fieldName(f.field)}
                   </td>
-                  <td className="pe-2">{formatValue(f.field, f.announced)}</td>
+                  <td className="pe-2">
+                    {formatValue(f.field, f.announced, unit, subUnit)}
+                  </td>
                   <td
                     className={cn(
                       f.verdict === "worse"
@@ -72,7 +78,7 @@ export function TermsChangedDialog({ terms, onConfirm, onCancel }: Props) {
                         : "text-muted-foreground"
                     )}
                   >
-                    {formatValue(f.field, f.live)}{" "}
+                    {formatValue(f.field, f.live, unit, subUnit)}{" "}
                     <span className="text-xs">
                       ({t(`lspTerms.verdict.${f.verdict}`)})
                     </span>

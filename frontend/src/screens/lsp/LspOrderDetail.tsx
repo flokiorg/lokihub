@@ -17,10 +17,10 @@ import { useInfo } from "src/hooks/useInfo";
 import { useLspOrderDetail } from "src/hooks/useLsp";
 import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
 import {
-  formatLoki,
   LspOrderTimelineEvent,
   orderStateVariant,
 } from "src/screens/lsp/types";
+import { useFormatLoki } from "src/screens/lsp/useFormatLoki";
 
 export function LspOrderDetail() {
   const { t } = useTranslation("lsp");
@@ -207,6 +207,7 @@ function ParamsCard({
   order: NonNullable<ReturnType<typeof useLspOrderDetail>["data"]>["order"];
 }) {
   const { t } = useTranslation("lsp");
+  const formatLoki = useFormatLoki();
   return (
     <Card>
       <CardHeader className="pb-3">

@@ -186,21 +186,24 @@ export type StatusKey =
   | "invariantFailures";
 
 // statusRows are the status panel's lines, as an i18n key and a value with
-// its unit; a non-zero failure counter is flagged.
+// its unit; a non-zero failure counter is flagged. The base-unit label defaults
+// to the embedded Flokicoin "loki"; callers pass the hub's nativeAsset.unitName
+// so a non-Flokicoin chain renders e.g. "sat" with byte-for-byte Flokicoin output.
 export function statusRows(
-  st: WithdrawEngineStatus
+  st: WithdrawEngineStatus,
+  unit: string = "loki"
 ): { key: StatusKey; value: string; alert?: boolean }[] {
   const payouts = Object.entries(st.payouts ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([state, n]) => `${state} ${n}`)
     .join(", ");
   return [
-    { key: "eligible", value: `${st.eligible_sat} loki` },
-    { key: "setAside", value: `${st.set_aside_sat} loki` },
-    { key: "floor", value: `${st.floor_sat} loki` },
+    { key: "eligible", value: `${st.eligible_sat} ${unit}` },
+    { key: "setAside", value: `${st.set_aside_sat} ${unit}` },
+    { key: "floor", value: `${st.floor_sat} ${unit}` },
     {
       key: "unconfirmed",
-      value: `${millisToLoki(st.unconfirmed_millis)} loki`,
+      value: `${millisToLoki(st.unconfirmed_millis)} ${unit}`,
     },
     { key: "oldestUnbroadcast", value: `${st.oldest_unbroadcast_secs} s` },
     { key: "payouts", value: payouts || "0" },

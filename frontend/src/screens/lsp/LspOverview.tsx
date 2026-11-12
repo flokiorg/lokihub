@@ -20,10 +20,12 @@ import {
   useLspSummary,
 } from "src/hooks/useLsp";
 import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
-import { formatLoki, orderStateVariant } from "src/screens/lsp/types";
+import { orderStateVariant } from "src/screens/lsp/types";
+import { useFormatLoki } from "src/screens/lsp/useFormatLoki";
 
 export function LspOverview() {
   const { t } = useTranslation("lsp");
+  const formatLoki = useFormatLoki();
   const { data: status } = useLspStatus();
   const { data: summary, error: summaryError } = useLspSummary();
   const { data: analytics } = useLspAnalytics();
@@ -149,6 +151,7 @@ function NodeCard({
   summary: NonNullable<ReturnType<typeof useLspSummary>["data"]>;
 }) {
   const { t } = useTranslation("lsp");
+  const formatLoki = useFormatLoki();
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -279,6 +282,7 @@ function TopPeersCard({
     | undefined;
 }) {
   const { t } = useTranslation("lsp");
+  const formatLoki = useFormatLoki();
   if (!peers || peers.length === 0) {
     return null;
   }

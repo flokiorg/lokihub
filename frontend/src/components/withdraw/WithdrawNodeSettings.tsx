@@ -5,6 +5,7 @@ import { statusRows } from "src/components/withdraw/withdraw";
 import { Label } from "src/components/ui/label";
 import { Switch } from "src/components/ui/switch";
 import { useWithdrawNode, useWithdrawStatus } from "src/hooks/useCashWithdraw";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { cn } from "src/lib/utils";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
@@ -14,6 +15,8 @@ import { request } from "src/utils/request";
 // (WP-19 item 10).
 export function WithdrawNodeSettings() {
   const { t } = useTranslation("settings");
+  const { data: hubInfo } = useHubInfo();
+  const unitName = hubInfo?.nativeAsset?.unitName ?? "loki";
   const { data: node, error, mutate } = useWithdrawNode();
   const { data: status, mutate: reloadStatus } = useWithdrawStatus(
     !!node?.capable
@@ -64,7 +67,7 @@ export function WithdrawNodeSettings() {
             {status.ready ? t("withdraw.ready") : t("withdraw.notReady")}
           </p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            {statusRows(status).map((r) => (
+            {statusRows(status, unitName).map((r) => (
               <div key={r.key} className="contents">
                 <dt className="text-muted-foreground">
                   {t(`withdraw.status.${r.key}`)}

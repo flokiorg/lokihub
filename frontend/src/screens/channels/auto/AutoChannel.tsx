@@ -11,6 +11,7 @@ import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Label } from "src/components/ui/label";
 import { Separator } from "src/components/ui/separator";
 import { useChannels } from "src/hooks/useChannels";
+import { useHubInfo } from "src/hooks/useHubInfo";
 
 import { useInfo } from "src/hooks/useInfo";
 import { AutoChannelRequest, AutoChannelResponse } from "src/types";
@@ -26,6 +27,9 @@ import { LinkButton } from "src/components/ui/custom/link-button";
 
 export function AutoChannel() {
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const chainName = hubInfo?.nativeAsset?.name ?? "Flokicoin";
+  const chainNameLower = chainName.toLowerCase();
   const { data: channels } = useChannels(true);
   const [isLoading, setLoading] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
@@ -123,7 +127,7 @@ export function AutoChannel() {
             variant="secondary"
             className="w-full"
           >
-            Open Channel with On-Chain Flokicoin
+            Open Channel with On-Chain {chainName}
           </LinkButton>
         </div>
       )}
@@ -136,14 +140,14 @@ export function AutoChannel() {
             <>
               <p>
                 You're now going to open a new lightning channel that you can
-                use to send and receive payments using your Hub in the booming
-                flokicoin economy! To make things easy, Loki has picked a
+                use to send and receive payments using your Hub in the booming{" "}
+                {chainNameLower} economy! To make things easy, Loki has picked a
                 channel partner for you from one of our recommended channel
                 partners.
               </p>
               <p>
                 After paying a lightning invoice to cover on-chain fees, you'll
-                immediately be able to receive and send flokicoin through this
+                immediately be able to receive and send {chainNameLower} through this
                 channel with your Hub.
               </p>
               <p className="text-muted-foreground">

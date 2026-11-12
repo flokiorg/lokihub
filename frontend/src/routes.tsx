@@ -32,7 +32,9 @@ import { OpenedFirstChannel } from "src/screens/channels/first/OpenedFirstChanne
 import { OpeningFirstChannel } from "src/screens/channels/first/OpeningFirstChannel";
 import { FAQ } from "src/screens/help/FAQ";
 
-import DepositFlokicoin from "src/screens/onchain/DepositFlokicoin";
+import DepositFlokicoin, {
+  DepositFlokicoinCrumb,
+} from "src/screens/onchain/DepositFlokicoin";
 import ConnectPeer from "src/screens/peers/ConnectPeer";
 import Peers from "src/screens/peers/Peers";
 import { About } from "src/screens/settings/About";
@@ -446,7 +448,7 @@ const routes: RouteObject[] = [
               {
                 path: "onchain/deposit-flokicoin",
                 element: <DepositFlokicoin />,
-                handle: { crumb: () => "Deposit Flokicoin" },
+                handle: { crumb: () => <DepositFlokicoinCrumb /> },
               },
             ],
           },
