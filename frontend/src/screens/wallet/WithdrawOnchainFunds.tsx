@@ -46,6 +46,7 @@ export default function WithdrawOnchainFunds() {
   const explorerLabel =
     hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
   const feeUnit = hubInfo?.nativeAsset?.unitName ?? "loki";
+  const chainNameLower = (hubInfo?.nativeAsset?.name ?? "Flokicoin").toLowerCase();
   const { data: balances } = useBalances();
   const { parseInputAmount, scaleInputAmount, inputUnitLabel } = useUnit();
 
@@ -192,13 +193,13 @@ export default function WithdrawOnchainFunds() {
     <div className="grid gap-5">
       <AppHeader
         title="Withdraw On-Chain Balance"
-        description="Withdraw your onchain funds to another flokicoin wallet"
+        description={`Withdraw your onchain funds to another ${chainNameLower} wallet`}
       />
 
       <div className="max-w-lg">
         <p>
-          Your on-chain balance will be withdrawn to the onchain flokicoin
-          wallet address you specify below.
+          Your on-chain balance will be withdrawn to the onchain {chainNameLower}
+          {" "}wallet address you specify below.
         </p>
         <form
           onSubmit={(e) => {

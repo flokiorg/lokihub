@@ -206,7 +206,7 @@ function PayFlokicoinChannelOrderWaitingDepositConfirmation() {
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-row items-center gap-2">
-            {t("orderChannel.deposited", "Flokicoin deposited")}
+            {t("orderChannel.deposited", "{{chain}} deposited")}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center gap-2">
@@ -283,7 +283,7 @@ function PayFlokicoinChannelOrderTopup({ order }: { order: NewChannelOrder }) {
         title={t("onchain.depositTitle")}
         description={t(
           "orderChannel.notEnough",
-          "You don't have enough Flokicoin to open your intended channel"
+          "You don't have enough {{chain}} to open your intended channel"
         )}
       />
       <div className="grid gap-5 max-w-lg">
@@ -380,7 +380,7 @@ function PayFlokicoinChannelOrderTopup({ order }: { order: NewChannelOrder }) {
             <CardDescription>
               {t(
                 "orderChannel.sendFloki",
-                "Send a flokicoin transaction to the address provided above. You'll be redirected as soon as the transaction is seen in the mempool."
+                "Send a {{chain}} transaction to the address provided above. You'll be redirected as soon as the transaction is seen in the mempool."
               )}
             </CardDescription>
           </CardHeader>

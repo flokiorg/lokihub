@@ -230,7 +230,7 @@ function NewChannelInternal({
                 <TooltipContent>
                   {t(
                     "increaseCapacity.increaseSpendingTooltip",
-                    "Configure the amount of spending capacity you need. You will need to deposit on-chain flokicoin to cover the entire channel size, plus on-chain fees."
+                    "Configure the amount of spending capacity you need. You will need to deposit on-chain {{chain}} to cover the entire channel size, plus on-chain fees."
                   )}
                 </TooltipContent>
               </Tooltip>

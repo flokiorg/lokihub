@@ -27,11 +27,15 @@ import { LinkButton } from "src/components/ui/custom/link-button";
 import { LIST_APPS_LIMIT, SUBWALLET_APPSTORE_APP_ID } from "src/constants";
 import { useApps } from "src/hooks/useApps";
 import { useBalances } from "src/hooks/useBalances";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { SubwalletIntro } from "src/screens/subwallets/SubwalletIntro";
 
 export function SubwalletList() {
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const chainName = hubInfo?.nativeAsset?.name ?? "Flokicoin";
+  const chainNameLower = chainName.toLowerCase();
   const [page, setPage] = useState(1);
   const appsListRef = useRef<HTMLDivElement>(null);
   const { data: appsData } = useApps(
@@ -103,12 +107,12 @@ export function SubwalletList() {
           </AlertTitle>
           <AlertDescription className="flex flex-col gap-3">
             <div className="flex flex-row flex-wrap items-center gap-x-2">
-              There's not enough flokicoin in your spending balance to honor all
+              There's not enough {chainNameLower} in your spending balance to honor all
               balances of sub-wallets under your management. Increase spending
               capacity by opening a channel or review your channel statuses to
               back them up again.
               <LinkButton to="/wallet/receive" variant="secondary">
-                Deposit Flokicoin
+                Deposit {chainName}
               </LinkButton>
             </div>
             <div className="text-sm">

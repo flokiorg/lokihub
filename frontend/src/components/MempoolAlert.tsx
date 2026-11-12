@@ -1,11 +1,14 @@
 import { TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
+import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { ExternalLinkButton } from "./ui/custom/external-link-button";
 
 export function MempoolAlert({ className }: { className?: string }) {
   const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+  const chainName = hubInfo?.nativeAsset?.name ?? "Flokicoin";
   const { data: recommendedFees } = useMempoolApi<{ fastestFee: number }>(
     "/v1/fees/recommended",
     true
@@ -34,7 +37,7 @@ export function MempoolAlert({ className }: { className?: string }) {
         <span className="font-semibold">{matchedFee[0]}</span>
       </AlertTitle>
       <AlertDescription>
-        <p>Flokicoin transactions may be uneconomical at this time.</p>
+        <p>{chainName} transactions may be uneconomical at this time.</p>
         <div className="flex gap-2 mt-2">
           <ExternalLinkButton
             to={info.mempoolUrl}

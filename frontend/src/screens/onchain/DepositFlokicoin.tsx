@@ -130,6 +130,15 @@ export default function DepositFlokicoin() {
   );
 }
 
+// DepositFlokicoinCrumb renders the deposit breadcrumb label with the hub's
+// native asset name (falling back to the embedded Flokicoin default), so the
+// crumb de-brands alongside the page title without changing Flokicoin output.
+export function DepositFlokicoinCrumb() {
+  const { data: hubInfo } = useHubInfo();
+  const chainName = hubInfo?.nativeAsset?.name ?? "Flokicoin";
+  return <>Deposit {chainName}</>;
+}
+
 function DepositPending({
   amount,
   txId,
