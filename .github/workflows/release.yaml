@@ -63,8 +63,57 @@ jobs:
     secrets: inherit
 
   macos:
-    name: macOS (Codemagic)
+    name: macOS (GitHub)
     if: ${{ inputs.include_macos }}
+    runs-on: macos-14
+    # A GitHub macOS runner can be capacity-cancelled or fail; that must fall
+    # through to the Codemagic fallback below, not block the release.
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Read Version
+        shell: bash
+        run: |
+          TAG=$(cat VERSION | tr -d '[:space:]')
+          [ -n "$TAG" ] || { echo "::error::VERSION empty"; exit 1; }
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install Wails + create-dmg
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          brew install create-dmg || true
+      - name: Build .dmg
+        shell: bash
+        run: |
+          chmod +x ops/scripts/build-ci-macos.sh
+          ./ops/scripts/build-ci-macos.sh
+      - name: Upload Artifacts (macOS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-macos-${{ env.TAG }}
+          path: ops/bin/*.dmg
+          if-no-files-found: error
+
+  macos_codemagic:
+    name: macOS (Codemagic fallback)
+    needs: [macos]
+    # Only when the GitHub macOS runner did not succeed (capacity-cancelled or
+    # failed): build the .dmg externally on Codemagic.
+    if: ${{ always() && inputs.include_macos && needs.macos.result != 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -142,7 +191,7 @@ jobs:
 
   publish:
     name: Publish Release
-    needs: [linux-server, linux-desktop, windows, macos]
+    needs: [linux-server, linux-desktop, windows, macos, macos_codemagic]
     # Run unless cancelled, as long as the always-on Linux server succeeded and
     # every OTHER platform either succeeded or was skipped (i.e. not opted in).
     # An opted-in platform that failed leaves its result = 'failure' and blocks.
@@ -151,7 +200,9 @@ jobs:
           needs.linux-server.result == 'success' &&
           needs.linux-desktop.result != 'failure' &&
           needs.windows.result != 'failure' &&
-          needs.macos.result != 'failure' }}
+          (!inputs.include_macos ||
+           needs.macos.result == 'success' ||
+           needs.macos_codemagic.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
