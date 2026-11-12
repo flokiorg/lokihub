@@ -18,6 +18,7 @@ import (
 
 	"github.com/flokiorg/go-flokicoin/chaincfg/chainhash"
 	"github.com/flokiorg/lokihub/internal/decodepay"
+	"github.com/flokiorg/lokihub/internal/seed"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -2382,7 +2383,11 @@ func channelClosedProperties(nodeInfo *lnclient.NodeInfo, counterpartyNodeId, re
 		"node_type":            config.FLNDBackendType,
 	}
 	if nodeInfo != nil && nodeInfo.Network == "bitcoin" {
-		props["counterparty_node_url"] = "https://flokichain.info/lightning/node/" + counterpartyNodeId
+		// Base the explorer deep-link on the configured native_asset explorer,
+		// never a hardcoded host. The embedded Flokicoin default keeps this
+		// byte-for-byte ("https://flokichain.info/lightning/node/<id>").
+		base := strings.TrimRight(seed.Get().NativeAsset.Explorer.URL, "/")
+		props["counterparty_node_url"] = base + "/lightning/node/" + counterpartyNodeId
 	}
 	return props
 }

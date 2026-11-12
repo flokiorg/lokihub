@@ -1464,8 +1464,11 @@ func (api *api) GetBalances(ctx context.Context) (*BalancesResponse, error) {
 	return balances, nil
 }
 
-// ErrNoExplorer: no explorer is configured, so nothing is asked of one.
-var ErrNoExplorer = errors.New("no Flokicoin Explorer is configured")
+// ErrNoExplorer: no explorer is configured, so nothing is asked of one. The
+// label is read from the configured native_asset (seed) so a rebranded chain
+// names its own explorer; the embedded Flokicoin default keeps the message
+// identical ("no Flokicoin Explorer is configured").
+var ErrNoExplorer = errors.New("no " + seed.Get().NativeAsset.Explorer.Label + " is configured")
 
 // TODO: remove dependency on this endpoint
 func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interface{}, error) {
@@ -1747,7 +1750,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 
 	if updateSettingsRequest.MempoolApi != "" {
 		if err := netutil.ValidateHTTPURL(updateSettingsRequest.MempoolApi); err != nil {
-			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
+			return fmt.Errorf("invalid %s URL: %w", seed.Get().NativeAsset.Explorer.Label, err)
 		}
 		err := api.cfg.SetMempoolApi(updateSettingsRequest.MempoolApi)
 		if err != nil {
@@ -2504,7 +2507,7 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 
 	if req.MempoolApi != "" {
 		if err := netutil.ValidateHTTPURL(req.MempoolApi); err != nil {
-			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
+			return fmt.Errorf("invalid %s URL: %w", seed.Get().NativeAsset.Explorer.Label, err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
 			return err
@@ -2571,7 +2574,7 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 
 	if req.MempoolApi != "" {
 		if err := netutil.ValidateHTTPURL(req.MempoolApi); err != nil {
-			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
+			return fmt.Errorf("invalid %s URL: %w", seed.Get().NativeAsset.Explorer.Label, err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
 			return err
