@@ -34,7 +34,13 @@ workflows:
           corepack disable 2>/dev/null || true
           npm install -g yarn@1.22.22
           echo "COREPACK_ENABLE_PROJECT_SPEC=0" >> "$CM_ENV"
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+          # Pin the Go toolchain to the version the project builds with (brew's
+          # latest can break the CGO darwin/amd64 cross-compile), and match the
+          # Wails CLI to go.mod's wails v2.13.0 — a 2.11.0 CLI mis-drives the
+          # cross-compile (internal "package math without types" error).
+          echo "GOTOOLCHAIN=go1.26.11" >> "$CM_ENV"
+          export GOTOOLCHAIN=go1.26.11
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
           echo "PATH=$HOME/go/bin:$PATH" >> "$CM_ENV"
       - name: Build macOS .dmg
         script: |
