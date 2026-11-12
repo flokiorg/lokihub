@@ -76,7 +76,7 @@ hub to services the user has explicitly selected.
   unchanged (Flokicoin). (#228)
 - Completes that de-hardcoding across the remaining non-i18n screens, the
   LSP/withdraw unit labels and the non-English locale strings, so no user-facing
-  chain identity stays hardcoded (#206 L1 done). (#NNN)
+  chain identity stays hardcoded (#206 L1 done). (#230)
 - Reorganizes the Cash Hub creation form into clearer sections — the per-bill
   cap and expiry stay prominent while the economics knobs (min transfer, redeem
   fee, retention) move under one Advanced section — and keeps the Create button
