@@ -58,19 +58,26 @@ export function fieldName(field: string): string {
   return field.replace(/^lsps2_fee\[\d+\]\./, "");
 }
 
-// fieldUnit is the unit a value is shown in: LSPS2 amounts in mloki, LSPS1
-// balances in loki, ppm, blocks or none.
-export function fieldUnit(field: string): string {
+// fieldUnit is the unit a value is shown in: LSPS2 amounts in the native
+// sub-unit, LSPS1 balances in the native base unit, ppm, blocks or none. The
+// unit/subUnit labels default to the embedded Flokicoin "loki"/"mloki"; callers
+// pass the hub's nativeAsset so a non-Flokicoin chain renders e.g. "sat"/"msat"
+// with byte-for-byte-identical Flokicoin output.
+export function fieldUnit(
+  field: string,
+  unit: string = "loki",
+  subUnit: string = "mloki"
+): string {
   const name = fieldName(field);
   const lsps2 = field.startsWith("lsps2_fee[");
   if (name === "proportional") {
     return "ppm";
   }
   if (/(fee|size)$/.test(name) && lsps2) {
-    return "mloki";
+    return subUnit;
   }
   if (/balance$/.test(name)) {
-    return "loki";
+    return unit;
   }
   if (/(blocks|lifetime|delay)$/.test(name)) {
     return "blocks";
@@ -79,12 +86,17 @@ export function fieldUnit(field: string): string {
 }
 
 // formatValue shows a value with its unit; an absent one as an em dash.
-export function formatValue(field: string, value: string): string {
+export function formatValue(
+  field: string,
+  value: string,
+  unit: string = "loki",
+  subUnit: string = "mloki"
+): string {
   if (value === "") {
     return "—";
   }
-  const unit = fieldUnit(field);
-  return unit ? `${value} ${unit}` : value;
+  const fieldUnitLabel = fieldUnit(field, unit, subUnit);
+  return fieldUnitLabel ? `${value} ${fieldUnitLabel}` : value;
 }
 
 // withoutTerms is the fee params as the buy sends them back.

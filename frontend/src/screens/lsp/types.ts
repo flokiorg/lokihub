@@ -182,14 +182,20 @@ export const LSP_CONFIG_SECRET_KEYS = new Set([
   "flnd",
 ]);
 
-// formatLoki renders a loki integer with thousands separators. lspd amounts are
-// already whole loki (not mloki), so they are shown as-is rather than routed
-// through the Hub's mloki formatter, which would misread the unit.
-export function formatLoki(value: number | undefined | null): string {
+// formatLoki renders a native-unit integer with thousands separators. lspd
+// amounts are already whole base units (not sub-units), so they are shown as-is
+// rather than routed through the Hub's sub-unit formatter, which would misread
+// the unit. The unit label defaults to the embedded Flokicoin "loki"; callers
+// render the hub's nativeAsset.unitName via useFormatLoki so a non-Flokicoin
+// chain shows e.g. "sat" with byte-for-byte-identical Flokicoin output.
+export function formatLoki(
+  value: number | undefined | null,
+  unitName: string = "loki"
+): string {
   if (value === undefined || value === null || Number.isNaN(value)) {
-    return "0 loki";
+    return `0 ${unitName}`;
   }
-  return `${value.toLocaleString()} loki`;
+  return `${value.toLocaleString()} ${unitName}`;
 }
 
 // A small palette for LSPS1 order/payment states, mapped onto the shadcn Badge

@@ -12,10 +12,12 @@ import {
 } from "src/components/ui/table";
 import { useLspPeers } from "src/hooks/useLsp";
 import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
-import { formatLoki, LspPeer } from "src/screens/lsp/types";
+import { LspPeer } from "src/screens/lsp/types";
+import { useFormatLoki } from "src/screens/lsp/useFormatLoki";
 
 export function LspClients() {
   const { t } = useTranslation("lsp");
+  const formatLoki = useFormatLoki();
   const { data: peers, error } = useLspPeers();
 
   return (

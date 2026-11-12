@@ -22,10 +22,11 @@ import {
 import { Skeleton } from "src/components/ui/skeleton";
 import { useLspAnalytics } from "src/hooks/useLsp";
 import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
-import { formatLoki } from "src/screens/lsp/types";
+import { useFormatLoki } from "src/screens/lsp/useFormatLoki";
 
 export function LspAnalytics() {
   const { t } = useTranslation("lsp");
+  const formatLoki = useFormatLoki();
   const { data, error } = useLspAnalytics();
 
   return (
