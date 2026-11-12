@@ -113,11 +113,24 @@ jobs:
             esac
           done
           [ "$status" = "finished" ] || { echo "::error::Codemagic build did not finish in time (last status: $status)"; exit 1; }
-          dmg_url=$(echo "$resp" | jq -r '.build.artefacts[]? | select(.name|endswith(".dmg")) | .url' | head -1)
-          [ -n "$dmg_url" ] && [ "$dmg_url" != "null" ] || { echo "::error::no .dmg artifact in Codemagic build"; exit 1; }
           mkdir -p ops/bin
-          echo "Downloading $dmg_url"
-          curl -sSL -H "x-auth-token: $CM_TOKEN" -o "ops/bin/lokihub-desktop-macos-${TAG}.dmg" "$dmg_url"
+          out="ops/bin/lokihub-desktop-macos-${TAG}.dmg"
+          # Codemagic may expose the .dmg directly, or inside its artifacts bundle
+          # zip (<project>_<n>_artifacts.zip). Handle both.
+          dmg_url=$(echo "$resp" | jq -r '.build.artefacts[]? | select(.name|endswith(".dmg")) | .url' | head -1)
+          if [ -n "$dmg_url" ] && [ "$dmg_url" != "null" ]; then
+            echo "Downloading .dmg: $dmg_url"
+            curl -sSL -H "x-auth-token: $CM_TOKEN" -o "$out" "$dmg_url"
+          else
+            bundle_url=$(echo "$resp" | jq -r '.build.artefacts[]? | select(.name|endswith(".zip")) | .url' | head -1)
+            [ -n "$bundle_url" ] && [ "$bundle_url" != "null" ] || { echo "::error::no .dmg or bundle artifact in Codemagic build"; exit 1; }
+            echo "Downloading bundle: $bundle_url"
+            curl -sSL -H "x-auth-token: $CM_TOKEN" -o /tmp/cm-bundle.zip "$bundle_url"
+            unzip -o -j /tmp/cm-bundle.zip '*.dmg' -d ops/bin/
+            found=$(ls ops/bin/*.dmg 2>/dev/null | head -1)
+            [ -n "$found" ] || { echo "::error::Codemagic bundle contained no .dmg"; exit 1; }
+            [ "$found" = "$out" ] || mv "$found" "$out"
+          fi
           ls -lh ops/bin/*.dmg
 
       - name: Upload Artifacts (macOS)
