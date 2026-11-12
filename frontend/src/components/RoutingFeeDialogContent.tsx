@@ -4,7 +4,7 @@ import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { useChannels } from "src/hooks/useChannels";
-import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit, type InputUnit } from "src/hooks/useUnit";
 import { Channel, UpdateChannelRequest } from "src/types";
 import { request } from "src/utils/request";
 import {
@@ -22,7 +22,8 @@ type Props = {
 };
 
 export function RoutingFeeDialogContent({ channel }: Props) {
-  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+  const { displayFormat, scaleInputAmount, parseInputAmount, inputUnitLabel } =
+    useUnit();
   const currentBaseFeeLoki: number = channel.forwardingFeeBaseMloki / 1000;
   const currentFeePPM: number = channel.forwardingFeeProportionalMillionths;
 
@@ -31,11 +32,11 @@ export function RoutingFeeDialogContent({ channel }: Props) {
   const [baseFeeDisplay, setBaseFeeDisplay] = React.useState(
     scaleInputAmount(
       currentBaseFeeLoki,
-      displayFormat === "loki" ? "loki" : "FLC"
+      displayFormat === "loki" ? "unit" : "ticker"
     ).toString()
   );
 
-  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+  const handleInputUnitChange = (newUnit: InputUnit) => {
     if (baseFeeDisplay) {
       const amountLoki = parseInputAmount(
         parseFloat(baseFeeDisplay),
@@ -99,8 +100,8 @@ export function RoutingFeeDialogContent({ channel }: Props) {
           <p className="mb-4 text-foreground">
             Adjust the fee you charge for each payment routed through this
             channel. A high fee (e.g. {scaleInputAmount(100_000, inputUnit)}{" "}
-            {inputUnit}) can be set to prevent unwanted routing. No matter the
-            fee, you can still receive payments.{" "}
+            {inputUnitLabel(inputUnit)}) can be set to prevent unwanted routing.
+            No matter the fee, you can still receive payments.{" "}
           </p>
           <Label htmlFor="fee" className="block mb-2">
             Base Routing Fee

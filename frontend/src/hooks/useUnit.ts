@@ -9,8 +9,14 @@ import {
   lokiToDisplay,
 } from "src/utils/flokicoinFormatting";
 
-/** InputUnit is the user's persisted FLC/loki choice for an editable amount field. */
-export type InputUnit = "FLC" | "loki";
+/**
+ * InputUnit is the user's persisted toggle for an editable amount field:
+ * "ticker" edits in the unit of account (FLC by default), "unit" edits in the
+ * base on-chain unit (loki by default). These are semantic discriminants — the
+ * labels actually shown come from the configured native asset
+ * (useHubInfo().nativeAsset), never from the chain-identity strings here.
+ */
+export type InputUnit = "ticker" | "unit";
 
 /**
  * Hook to get the current Flokicoin unit and conversion functions
@@ -29,10 +35,19 @@ export function useUnit() {
       lokiToDisplay(amountLoki, displayFormat, asset),
     parseAmount: (amountDisplay: number) =>
       displayToLoki(amountDisplay, displayFormat, asset),
+    // Resolve an InputUnit discriminant to the label actually shown to the
+    // user, from the configured native asset (FLC/loki by default). Display
+    // sites must render this, never the raw "ticker"/"unit" discriminant.
+    inputUnitLabel: (inputUnit: InputUnit) =>
+      inputUnit === "ticker" ? asset.ticker : asset.unitName,
     scaleInputAmount: (amountLoki: number, inputUnit: InputUnit) =>
-      lokiToDisplay(amountLoki, inputUnit === "FLC" ? "flc" : "loki", asset),
+      lokiToDisplay(amountLoki, inputUnit === "ticker" ? "flc" : "loki", asset),
     parseInputAmount: (amountDisplay: number, inputUnit: InputUnit) =>
-      displayToLoki(amountDisplay, inputUnit === "FLC" ? "flc" : "loki", asset),
+      displayToLoki(
+        amountDisplay,
+        inputUnit === "ticker" ? "flc" : "loki",
+        asset
+      ),
     displayFormat,
   };
 }
@@ -48,13 +63,16 @@ export function useInputUnit(referenceAmountLoki: number | undefined) {
   const { displayFormat } = useUnit();
   const [inputUnit, setInputUnitState] = React.useState<InputUnit>(() => {
     const stored = localStorage.getItem(localStorageKeys.preferredInputUnit);
-    if (stored === "FLC" || stored === "loki") {
+    if (stored === "ticker" || stored === "unit") {
       return stored;
     }
     if (referenceAmountLoki === undefined) {
-      return "FLC";
+      return "ticker";
     }
-    return getFlokicoinUnit(displayFormat, referenceAmountLoki) as InputUnit;
+    return getFlokicoinUnit(displayFormat, referenceAmountLoki) ===
+      FLOKICOIN_NATIVE_ASSET.ticker
+      ? "ticker"
+      : "unit";
   });
 
   const setInputUnit = React.useCallback((unit: InputUnit) => {
@@ -64,9 +82,9 @@ export function useInputUnit(referenceAmountLoki: number | undefined) {
 
   React.useEffect(() => {
     if (displayFormat === "flc") {
-      setInputUnitState("FLC");
+      setInputUnitState("ticker");
     } else if (displayFormat === "loki") {
-      setInputUnitState("loki");
+      setInputUnitState("unit");
     }
   }, [displayFormat]);
 

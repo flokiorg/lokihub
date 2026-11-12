@@ -48,7 +48,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useChannels } from "src/hooks/useChannels";
 import { useInfo } from "src/hooks/useInfo";
 import { usePeers } from "src/hooks/usePeers";
-import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit, type InputUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import useChannelOrderStore from "src/state/ChannelOrderStore";
 import { Channel, Network, NewChannelOrder, OnchainOrder } from "src/types";
@@ -82,7 +82,7 @@ function NewChannelInternal({
 
   const [inputUnit, setInputUnit] = useInputUnit(undefined);
 
-  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+  const handleInputUnitChange = (newUnit: InputUnit) => {
     if (order.amount) {
       const amountLoki = parseInputAmount(parseFloat(order.amount), inputUnit);
       if (!isNaN(amountLoki)) {
@@ -255,10 +255,10 @@ function NewChannelInternal({
               />
             </div>
             <div className="grid grid-cols-3 gap-1.5 text-muted-foreground text-xs">
-              {(inputUnit === "FLC" ? flcPresets : lokiPresets).map(
+              {(inputUnit === "ticker" ? flcPresets : lokiPresets).map(
                 (amount) => {
                   let displayLabel = amount.toString();
-                  if (inputUnit === "loki") {
+                  if (inputUnit === "unit") {
                     if (amount >= 1000000)
                       displayLabel = amount / 1000000 + "M";
                     else if (amount >= 1000) displayLabel = amount / 1000 + "k";

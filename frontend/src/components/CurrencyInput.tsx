@@ -1,7 +1,7 @@
 import React from "react";
 import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
 import { useHubInfo } from "src/hooks/useHubInfo";
-import { useUnit } from "src/hooks/useUnit";
+import { useUnit, type InputUnit } from "src/hooks/useUnit";
 import { FLOKICOIN_NATIVE_ASSET } from "src/utils/flokicoinFormatting";
 import { cn } from "src/lib/utils";
 
@@ -9,8 +9,8 @@ interface CurrencyInputProps
   extends Omit<React.ComponentProps<"input">, "value" | "onChange"> {
   amount: string;
   onAmountChange: (val: string) => void;
-  inputUnit: "FLC" | "loki";
-  onInputUnitChange: (unit: "FLC" | "loki") => void;
+  inputUnit: InputUnit;
+  onInputUnitChange: (unit: InputUnit) => void;
 }
 
 export function CurrencyInput({
@@ -56,13 +56,13 @@ export function CurrencyInput({
           type="button"
           className={cn(
             "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
-            inputUnit === "FLC"
+            inputUnit === "ticker"
               ? "bg-background shadow-sm text-foreground"
               : "text-muted-foreground hover:text-foreground"
           )}
           onClick={(e) => {
             e.preventDefault();
-            onInputUnitChange("FLC");
+            onInputUnitChange("ticker");
           }}
         >
           {asset.ticker}
@@ -71,13 +71,13 @@ export function CurrencyInput({
           type="button"
           className={cn(
             "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
-            inputUnit === "loki"
+            inputUnit === "unit"
               ? "bg-background shadow-sm text-foreground"
               : "text-muted-foreground hover:text-foreground"
           )}
           onClick={(e) => {
             e.preventDefault();
-            onInputUnitChange("loki");
+            onInputUnitChange("unit");
           }}
         >
           {asset.unitName}

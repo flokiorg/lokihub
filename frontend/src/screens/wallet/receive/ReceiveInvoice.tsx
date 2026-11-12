@@ -53,7 +53,7 @@ import {
   SelectValue,
 } from "src/components/ui/select";
 import { useBalances } from "src/hooks/useBalances";
-import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit, type InputUnit } from "src/hooks/useUnit";
 
 import { useInfo } from "src/hooks/useInfo";
 import { useTransaction } from "src/hooks/useTransaction";
@@ -82,11 +82,15 @@ export default function ReceiveInvoice() {
   const { t: tc } = useTranslation("channels");
   const { data: info, hasChannelManagement } = useInfo();
   const { data: balances } = useBalances();
-  const { parseAmount, scaleInputAmount, parseInputAmount } = useUnit();
+  const { parseAmount, scaleInputAmount, parseInputAmount, inputUnitLabel } =
+    useUnit();
 
   const [inputUnit, setInputUnit] = useInputUnit(undefined);
+  // Plain label snapshot (FLC/loki by default) for use inside memoized blocks,
+  // so the fresh inputUnitLabel function reference doesn't break memoization.
+  const unitLabel = inputUnitLabel(inputUnit);
 
-  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+  const handleInputUnitChange = (newUnit: InputUnit) => {
     if (amountDisplay) {
       const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       if (!isNaN(amountLoki)) {
@@ -169,10 +173,10 @@ export default function ReceiveInvoice() {
     const maxSize = parseInt(jitFeeParams.max_payment_size_mloki);
 
     if (grossAmt < minSize) {
-      return `Below min limit (${scaleInputAmount(minSize / 1000, inputUnit)} ${inputUnit}).`;
+      return `Below min limit (${scaleInputAmount(minSize / 1000, inputUnit)} ${unitLabel}).`;
     }
     if (maxSize > 0 && grossAmt > maxSize) {
-      return `Exceeds max limit (${scaleInputAmount(maxSize / 1000, inputUnit)} ${inputUnit}).`;
+      return `Exceeds max limit (${scaleInputAmount(maxSize / 1000, inputUnit)} ${unitLabel}).`;
     }
     return null;
   }, [
@@ -183,6 +187,7 @@ export default function ReceiveInvoice() {
     parseInputAmount,
     scaleInputAmount,
     inputUnit,
+    unitLabel,
   ]);
 
   const fetchJitFees = React.useCallback(async () => {
@@ -309,7 +314,7 @@ export default function ReceiveInvoice() {
           toast.error(
             t("wallet:receive.amountTooSmall", {
               amount: scaleInputAmount(minPaymentSize / 1000, inputUnit),
-              unit: inputUnit,
+              unit: inputUnitLabel(inputUnit),
             })
           );
           setLoading(false);
@@ -320,7 +325,7 @@ export default function ReceiveInvoice() {
           toast.error(
             t("wallet:receive.amountTooLarge", {
               amount: scaleInputAmount(maxPaymentSize / 1000, inputUnit),
-              unit: inputUnit,
+              unit: inputUnitLabel(inputUnit),
             })
           );
           setLoading(false);
@@ -530,7 +535,7 @@ export default function ReceiveInvoice() {
                     inputUnit={inputUnit}
                     onInputUnitChange={handleInputUnitChange}
                     placeholder={t("wallet:receive.amountPlaceholder", {
-                      unit: inputUnit,
+                      unit: inputUnitLabel(inputUnit),
                     })}
                     min={1}
                     autoFocus

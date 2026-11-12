@@ -27,7 +27,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
-import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit, type InputUnit } from "src/hooks/useUnit";
 import { RedeemOnchainFundsResponse } from "src/types";
 import { request } from "src/utils/request";
 
@@ -103,7 +103,8 @@ function OnchainForm({
   const explorerLabel =
     hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
   const { data: balances } = useBalances();
-  const { unit, scaleInputAmount, parseInputAmount } = useUnit();
+  const { unit, scaleInputAmount, parseInputAmount, inputUnitLabel } =
+    useUnit();
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -113,7 +114,7 @@ function OnchainForm({
 
   const [inputUnit, setInputUnit] = useInputUnit(balances?.onchain.spendable);
 
-  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+  const handleInputUnitChange = (newUnit: InputUnit) => {
     if (amountDisplay) {
       const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       if (!isNaN(amountLoki)) {
@@ -292,7 +293,7 @@ function OnchainForm({
             <AlertDescription>
               Small amounts can become unspendable when mempool fees increase.
               Consider using Lightning instead or sending at least{" "}
-              {scaleInputAmount(10_000, inputUnit)} {inputUnit}.
+              {scaleInputAmount(10_000, inputUnit)} {inputUnitLabel(inputUnit)}.
             </AlertDescription>
           </Alert>
         )}
