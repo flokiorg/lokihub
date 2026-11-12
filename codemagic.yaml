@@ -25,17 +25,17 @@ workflows:
         script: |
           set -e
           brew install go create-dmg || true
-          # The frontend pins yarn 4.9.2 via package.json "packageManager" +
-          # Corepack; brew's yarn 1.x is rejected, so enable Corepack instead of
-          # installing a conflicting global yarn.
-          corepack enable
+          # Build the frontend exactly like .github/workflows/ci.yaml: yarn
+          # CLASSIC (v1) against the committed v1 yarn.lock, on node 20. The
+          # Codemagic macOS image's node ships Corepack, which otherwise hijacks
+          # `yarn` to a packageManager pin that does NOT exist in this repo and
+          # rewrites the lockfile — so disable Corepack's project-spec enforcement
+          # and pin yarn 1.22.x explicitly.
+          corepack disable 2>/dev/null || true
+          npm install -g yarn@1.22.22
+          echo "COREPACK_ENABLE_PROJECT_SPEC=0" >> "$CM_ENV"
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
           echo "PATH=$HOME/go/bin:$PATH" >> "$CM_ENV"
-          # yarn 4 defaults to immutable installs under CI, but the Linux-generated
-          # yarn.lock lacks the macOS/arm64 optional deps this Apple-silicon runner
-          # resolves — let this build's install add them (Linux CI still enforces
-          # lockfile integrity).
-          echo "YARN_ENABLE_IMMUTABLE_INSTALLS=false" >> "$CM_ENV"
       - name: Build macOS .dmg
         script: |
           set -e
