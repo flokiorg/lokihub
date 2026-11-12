@@ -24,7 +24,11 @@ workflows:
       - name: Install toolchain
         script: |
           set -e
-          brew install go yarn create-dmg || true
+          brew install go create-dmg || true
+          # The frontend pins yarn 4.9.2 via package.json "packageManager" +
+          # Corepack; brew's yarn 1.x is rejected, so enable Corepack instead of
+          # installing a conflicting global yarn.
+          corepack enable
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
           echo "PATH=$HOME/go/bin:$PATH" >> "$CM_ENV"
       - name: Build macOS .dmg
