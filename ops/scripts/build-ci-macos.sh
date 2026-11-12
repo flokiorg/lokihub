@@ -129,18 +129,31 @@ build_macos_desktop() {
         touch "$APP_DEST"
 
         if [ -d "$APP_DEST" ]; then
-              create-dmg \
-                --volname "Lokihub" \
-                --volicon "ops/darwin/icon.icns" \
-                --background "ops/darwin/dmg-background.png" \
-                --window-pos 200 120 \
-                --window-size 800 400 \
-                --icon-size 100 \
-                --icon "lokihub.app" 200 190 \
-                --hide-extension "lokihub.app" \
-                --app-drop-link 600 185 \
-                "$DMG_Path" \
-                "$APP_DEST"
+              # create-dmg styles the DMG window via a Finder AppleScript, which
+              # times out (-1712) on a headless CI builder. Try the styled dmg a
+              # couple of times, then fall back to a plain but fully functional
+              # dmg so a Finder hiccup never blocks the release.
+              styled_dmg() {
+                rm -f "$DMG_Path" ops/bin/rw.*.dmg
+                create-dmg \
+                  --volname "Lokihub" \
+                  --volicon "ops/darwin/icon.icns" \
+                  --background "ops/darwin/dmg-background.png" \
+                  --window-pos 200 120 \
+                  --window-size 800 400 \
+                  --icon-size 100 \
+                  --icon "lokihub.app" 200 190 \
+                  --hide-extension "lokihub.app" \
+                  --app-drop-link 600 185 \
+                  "$DMG_Path" \
+                  "$APP_DEST"
+              }
+              if ! styled_dmg && ! { sleep 10; styled_dmg; }; then
+                echo "Warning: styled create-dmg failed (Finder automation); building a plain dmg"
+                rm -f "$DMG_Path" ops/bin/rw.*.dmg
+                hdiutil create -volname "Lokihub" -srcfolder "$APP_DEST" -ov -format UDZO "$DMG_Path"
+              fi
+              rm -f ops/bin/rw.*.dmg
         fi
         
         # Cleanup .app
