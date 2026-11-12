@@ -32,7 +32,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useHubInfo } from "src/hooks/useHubInfo";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
-import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit, type InputUnit } from "src/hooks/useUnit";
 import { copyToClipboard } from "src/lib/clipboard";
 import { RedeemOnchainFundsResponse } from "src/types";
 import { CurrencyInput } from "src/components/CurrencyInput";
@@ -47,11 +47,11 @@ export default function WithdrawOnchainFunds() {
     hubInfo?.nativeAsset?.explorer.label ?? "Flokicoin Explorer";
   const feeUnit = hubInfo?.nativeAsset?.unitName ?? "loki";
   const { data: balances } = useBalances();
-  const { parseInputAmount, scaleInputAmount } = useUnit();
+  const { parseInputAmount, scaleInputAmount, inputUnitLabel } = useUnit();
 
   const [inputUnit, setInputUnit] = useInputUnit(balances?.onchain.spendable);
 
-  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+  const handleInputUnitChange = (newUnit: InputUnit) => {
     if (amountDisplay) {
       const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       if (!isNaN(amountLoki)) {
@@ -182,8 +182,8 @@ export default function WithdrawOnchainFunds() {
   if (balances.onchain.spendable <= ONCHAIN_DUST_LOKI) {
     return (
       <p>
-        You currently don't have enough {inputUnit} to pay for an onchain
-        transaction.
+        You currently don't have enough {inputUnitLabel(inputUnit)} to pay for
+        an onchain transaction.
       </p>
     );
   }
@@ -353,7 +353,9 @@ export default function WithdrawOnchainFunds() {
                 <div className="mt-2 text-muted-foreground text-sm flex gap-1 items-center justify-center">
                   <InfoIcon className="h-4 w-4" />
                   On-chain payment will be made with{" "}
-                  <span className="font-semibold">{feeRate} {feeUnit}/vB</span>{" "}
+                  <span className="font-semibold">
+                    {feeRate} {feeUnit}/vB
+                  </span>{" "}
                   fee
                 </div>
               )}

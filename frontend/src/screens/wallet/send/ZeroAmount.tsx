@@ -16,7 +16,7 @@ import { CurrencyInput } from "src/components/CurrencyInput";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { useBalances } from "src/hooks/useBalances";
-import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit, type InputUnit } from "src/hooks/useUnit";
 import { PayInvoiceResponse } from "src/types";
 import { request } from "src/utils/request";
 
@@ -35,7 +35,7 @@ export default function ZeroAmount() {
     balances?.lightning.totalSpendable
   );
 
-  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+  const handleInputUnitChange = (newUnit: InputUnit) => {
     if (amountDisplay) {
       const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       if (!isNaN(amountLoki)) {

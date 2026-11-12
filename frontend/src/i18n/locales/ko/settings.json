@@ -54,7 +54,7 @@
   },
   "shutdown": {
     "dialogTitle": "Lokihub를 끄시겠습니까?",
-    "dialogDesc": "이렇게 하면 Lokihub가 꺼지고 노드가 오프라인 상태가 됩니다. 잠금을 해제할 때까지 flokicoin을 보내거나 받을 수 없습니다.",
+    "dialogDesc": "이렇게 하면 Lokihub가 꺼지고 노드가 오프라인 상태가 됩니다. 잠금을 해제할 때까지 {{chain}}을 보내거나 받을 수 없습니다.",
     "cancel": "취소",
     "confirm": "계속",
     "toast": "노드가 꺼졌습니다.",

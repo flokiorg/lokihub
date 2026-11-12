@@ -58,13 +58,16 @@ i18n
     },
     interpolation: {
       escapeValue: false, // React already escapes
-      // Native-asset unit tokens, resolved globally so locale strings can use
-      // {{unit}}/{{ticker}}/{{subunit}} without every call site passing them.
-      // Updated at runtime from the hub's nativeAsset (see useNativeAssetI18n).
+      // Native-asset identity tokens, resolved globally so locale strings can
+      // use {{unit}}/{{ticker}}/{{subunit}}/{{chain}} without every call site
+      // passing them. These embedded Flokicoin defaults keep output byte-for-byte
+      // until the hub's nativeAsset loads and overrides them (see
+      // useNativeAssetI18n).
       defaultVariables: {
         unit: "loki",
         ticker: "FLC",
         subunit: "mloki",
+        chain: "Flokicoin",
       },
     },
     react: {

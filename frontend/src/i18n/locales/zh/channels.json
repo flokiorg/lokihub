@@ -102,7 +102,7 @@
     "peer": "节点",
     "hostPort": "主机:端口",
     "increaseSpendingLabel": "增加可用余额",
-    "increaseSpendingTooltip": "配置您需要的可用容量。您将需要在链上存入 flokicoin 以覆盖整个通道大小，外加链上费用。",
+    "increaseSpendingTooltip": "配置您需要的可用容量。您将需要在链上存入 {{chain}} 以覆盖整个通道大小，外加链上费用。",
     "currentBalance": "当前链上余额：",
     "noLsps": "没有配置 LSP",
     "selectProvider": "选择提供商",

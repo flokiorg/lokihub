@@ -188,17 +188,20 @@ func (s *PostgresOpeningStore) GetLsps1Order(orderId string) (*core.Lsps1Order, 
 	row := s.pool.QueryRow(context.Background(),
 		`SELECT order_id, peer_id, lsp_balance_loki, client_balance_loki,
 			funding_confirms_within_blocks, required_channel_confirmations,
-			channel_expiry_blocks, token, announce_channel, created_at,
+			channel_expiry_blocks, token, announce_channel, created_at, expires_at,
 			order_state, payment_state, payment_invoice, payment_preimage, funding_txid, funding_outpoint,
 			COALESCE(refund_onchain_address, ''), COALESCE(order_total_loki, 0), COALESCE(fee_total_loki, 0),
 			paid_at, funded_at, completed_at
 		FROM lsps1.orders WHERE order_id=$1`, orderId)
 
 	var order core.Lsps1Order
+	// expires_at MUST be scanned: get_order checks isOrderExpired(order.ExpiresAt),
+	// and a zero (unloaded) ExpiresAt is always "expired", wrongly reporting every
+	// unpaid CREATED order as FAILED. (LOKIHUB-0051)
 	err := row.Scan(
 		&order.OrderId, &order.PeerId, &order.LspBalanceLoki, &order.ClientBalanceLoki,
 		&order.FundingConfirmsWithinBlocks, &order.RequiredChannelConfirmations,
-		&order.ChannelExpiryBlocks, &order.Token, &order.AnnounceChannel, &order.CreatedAt,
+		&order.ChannelExpiryBlocks, &order.Token, &order.AnnounceChannel, &order.CreatedAt, &order.ExpiresAt,
 		&order.OrderState, &order.PaymentState, &order.PaymentInvoice, &order.PaymentPreimage, &order.FundingTxid, &order.FundingOutpoint,
 		&order.RefundOnchainAddress, &order.OrderTotalLoki, &order.FeeTotalLoki,
 		&order.PaidAt, &order.FundedAt, &order.CompletedAt,
@@ -216,7 +219,7 @@ func (s *PostgresOpeningStore) ListLsps1Orders(limit, offset int) ([]*core.Lsps1
 	rows, err := s.pool.Query(context.Background(),
 		`SELECT order_id, peer_id, lsp_balance_loki, client_balance_loki,
 			funding_confirms_within_blocks, required_channel_confirmations,
-			channel_expiry_blocks, token, announce_channel, created_at,
+			channel_expiry_blocks, token, announce_channel, created_at, expires_at,
 			order_state, payment_state, payment_invoice, payment_preimage, funding_txid, funding_outpoint,
 			COALESCE(refund_onchain_address, ''), COALESCE(order_total_loki, 0), COALESCE(fee_total_loki, 0),
 			paid_at, funded_at, completed_at
@@ -234,7 +237,7 @@ func (s *PostgresOpeningStore) ListLsps1Orders(limit, offset int) ([]*core.Lsps1
 		err := rows.Scan(
 			&o.OrderId, &o.PeerId, &o.LspBalanceLoki, &o.ClientBalanceLoki,
 			&o.FundingConfirmsWithinBlocks, &o.RequiredChannelConfirmations,
-			&o.ChannelExpiryBlocks, &o.Token, &o.AnnounceChannel, &o.CreatedAt,
+			&o.ChannelExpiryBlocks, &o.Token, &o.AnnounceChannel, &o.CreatedAt, &o.ExpiresAt,
 			&o.OrderState, &o.PaymentState, &o.PaymentInvoice, &o.PaymentPreimage, &o.FundingTxid, &o.FundingOutpoint,
 			&o.RefundOnchainAddress, &o.OrderTotalLoki, &o.FeeTotalLoki,
 			&o.PaidAt, &o.FundedAt, &o.CompletedAt,

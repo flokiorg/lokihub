@@ -61,7 +61,7 @@
       "waiting": "في انتظار الدفع...",
       "newAddress": "عنوان جديد",
       "waitingConfirm": "في انتظار تأكيد على السلسلة...",
-      "viewExplorer": "عرض في مستكشف فلوكيكوين",
+      "viewExplorer": "عرض في مستكشف {{chain}}",
       "received": "تم استلام المعاملة!",
       "receiveAnother": "استلام دفعة أخرى",
       "backToWallet": "العودة إلى المحفظة"

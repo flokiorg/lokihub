@@ -33,7 +33,7 @@
       "waiting": "در انتظار پرداخت...",
       "newAddress": "آدرس جدید",
       "waitingConfirm": "در انتظار تایید بلاکچین...",
-      "viewExplorer": "مشاهده در اکسپلورر فلوکیکوین",
+      "viewExplorer": "مشاهده در اکسپلورر {{chain}}",
       "received": "تراکنش دریافت شد!",
       "receiveAnother": "دریافت پرداخت دیگر",
       "backToWallet": "بازگشت به کیف پول"

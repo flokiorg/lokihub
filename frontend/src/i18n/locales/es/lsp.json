@@ -179,9 +179,9 @@
     "nodeLabel": "Nodo",
     "fields": {
       "feeRate": "Tasa de comisión (proporcional)",
-      "baseFeeMloki": "Comisión base (mloki)",
+      "baseFeeMloki": "Comisión base ({{subunit}})",
       "channelFeePermyriad": "Comisión de canal (permyriad)",
-      "channelMinimumFeeMloki": "Comisión mínima de canal (mloki)"
+      "channelMinimumFeeMloki": "Comisión mínima de canal ({{subunit}})"
     },
     "fees": {
       "title": "Comisiones",

@@ -3,7 +3,7 @@
     "title": "Frequently Asked Questions",
     "description": "Learn about {{chain}}, Lightning Network, and how to use your Hub.",
     "stillHaveQuestions": "Still have questions?",
-    "communityDesc": "Join our community on Discord to get help, ask questions, and chat with other Flokicoin users.",
-    "joinDiscord": "Join Flokicoin Discord"
+    "communityDesc": "Join our community on Discord to get help, ask questions, and chat with other {{chain}} users.",
+    "joinDiscord": "Join {{chain}} Discord"
   }
 }

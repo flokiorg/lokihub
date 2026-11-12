@@ -36,7 +36,7 @@ import { useLSPEventContext } from "src/context/LSPEventContext"; // Use global 
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useLSPS1 } from "src/hooks/useLSPS1";
-import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit, type InputUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import {
   LSPAcceptedTerm,
@@ -72,11 +72,14 @@ export default function OrderChannel() {
     error: lsps1Error,
   } = useLSPS1(selectedLSP);
   const { lastEvent } = useLSPEventContext();
-  const { parseInputAmount, scaleInputAmount } = useUnit();
+  const { parseInputAmount, scaleInputAmount, inputUnitLabel } = useUnit();
 
   const [inputUnit, setInputUnit] = useInputUnit(undefined);
+  // Plain label snapshot (FLC/loki by default) for use inside memoized blocks,
+  // so the fresh inputUnitLabel function reference doesn't break memoization.
+  const unitLabel = inputUnitLabel(inputUnit);
 
-  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+  const handleInputUnitChange = (newUnit: InputUnit) => {
     if (amountDisplay) {
       const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       if (!isNaN(amountLoki)) {
@@ -147,14 +150,21 @@ export default function OrderChannel() {
     const maxNum = Number(lsps1Info.max_initial_lsp_balance_loki);
 
     if (!isNaN(minNum) && amtLoki < minNum) {
-      return `Amount below minimum of ${scaleInputAmount(minNum, inputUnit)} ${inputUnit}`;
+      return `Amount below minimum of ${scaleInputAmount(minNum, inputUnit)} ${unitLabel}`;
     }
     if (!isNaN(maxNum) && maxNum > 0 && amtLoki > maxNum) {
-      return `Amount exceeds maximum of ${scaleInputAmount(maxNum, inputUnit)} ${inputUnit}`;
+      return `Amount exceeds maximum of ${scaleInputAmount(maxNum, inputUnit)} ${unitLabel}`;
     }
 
     return null;
-  }, [amountDisplay, lsps1Info, inputUnit, parseInputAmount, scaleInputAmount]);
+  }, [
+    amountDisplay,
+    lsps1Info,
+    inputUnit,
+    parseInputAmount,
+    scaleInputAmount,
+    unitLabel,
+  ]);
 
   const estimatedFee = React.useMemo(() => {
     if (!amountDisplay || !lsps1Info?.opening_fee_params?.length) return 0;
@@ -436,10 +446,10 @@ export default function OrderChannel() {
               )}
 
               <div className="grid grid-cols-3 gap-1.5 text-muted-foreground text-xs">
-                {(inputUnit === "FLC" ? flcPresets : lokiPresets).map(
+                {(inputUnit === "ticker" ? flcPresets : lokiPresets).map(
                   (preset) => {
                     let displayLabel = preset.toString();
-                    if (inputUnit === "loki") {
+                    if (inputUnit === "unit") {
                       if (preset >= 1000000)
                         displayLabel = preset / 1000000 + "M";
                       else if (preset >= 1000)

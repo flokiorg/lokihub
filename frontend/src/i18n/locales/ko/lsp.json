@@ -179,9 +179,9 @@
     "nodeLabel": "노드",
     "fields": {
       "feeRate": "수수료율 (비례)",
-      "baseFeeMloki": "기본 수수료 (mloki)",
+      "baseFeeMloki": "기본 수수료 ({{subunit}})",
       "channelFeePermyriad": "채널 수수료 (permyriad)",
-      "channelMinimumFeeMloki": "채널 최소 수수료 (mloki)"
+      "channelMinimumFeeMloki": "채널 최소 수수료 ({{subunit}})"
     },
     "fees": {
       "title": "수수료",

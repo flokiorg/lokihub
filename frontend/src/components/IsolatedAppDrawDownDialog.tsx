@@ -14,7 +14,7 @@ import {
 import { Label } from "src/components/ui/label";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { useApp } from "src/hooks/useApp";
-import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit, type InputUnit } from "src/hooks/useUnit";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
 import { useSWRConfig } from "swr";
@@ -30,14 +30,14 @@ export function IsolatedAppDrawDownDialog({
   const { t } = useTranslation("wallet");
   const { mutate: reloadApp } = useApp(appId);
   const { mutate } = useSWRConfig();
-  const { scaleInputAmount, parseInputAmount } = useUnit();
+  const { scaleInputAmount, parseInputAmount, inputUnitLabel } = useUnit();
   const [amountDisplay, setAmountDisplay] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
 
   const [inputUnit, setInputUnit] = useInputUnit(undefined);
 
-  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+  const handleInputUnitChange = (newUnit: InputUnit) => {
     if (amountDisplay) {
       const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       if (!isNaN(amountLoki)) {
@@ -76,7 +76,7 @@ export function IsolatedAppDrawDownDialog({
       toast(
         t("subwallets.decreaseBalance.successToast", {
           amount: amountDisplay,
-          unit: inputUnit,
+          unit: inputUnitLabel(inputUnit),
         })
       );
       reset();

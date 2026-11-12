@@ -54,7 +54,7 @@
   },
   "shutdown": {
     "dialogTitle": "Lokihubをオフにしますか？",
-    "dialogDesc": "これによりLokihubがオフになり、ノードがオフラインになります。ロックを解除するまでflokicoinの送受信ができません。",
+    "dialogDesc": "これによりLokihubがオフになり、ノードがオフラインになります。ロックを解除するまで{{chain}}の送受信ができません。",
     "cancel": "キャンセル",
     "confirm": "続行",
     "toast": "ノードがオフになりました。",

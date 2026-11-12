@@ -179,9 +179,9 @@
     "nodeLabel": "گره",
     "fields": {
       "feeRate": "نرخ کارمزد (نسبی)",
-      "baseFeeMloki": "کارمزد پایه (mloki)",
+      "baseFeeMloki": "کارمزد پایه ({{subunit}})",
       "channelFeePermyriad": "کارمزد کانال (permyriad)",
-      "channelMinimumFeeMloki": "حداقل کارمزد کانال (mloki)"
+      "channelMinimumFeeMloki": "حداقل کارمزد کانال ({{subunit}})"
     },
     "fees": {
       "title": "کارمزدها",

@@ -19,7 +19,7 @@ function BudgetAmountSelect({
   const flcPresets = [21, 500, 2100];
   const lokiPresets = [21000, 500000, 21000000];
 
-  const presets = inputUnit === "FLC" ? flcPresets : lokiPresets;
+  const presets = inputUnit === "ticker" ? flcPresets : lokiPresets;
 
   // Whether the current value matches a preset (fills the input)
   const isPresetActive = (preset: number) =>
@@ -32,7 +32,7 @@ function BudgetAmountSelect({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-4">
         {presets.map((preset) => {
           let label = preset.toString();
-          if (inputUnit === "loki") {
+          if (inputUnit === "unit") {
             if (preset >= 1000000) label = preset / 1000000 + "M";
             else if (preset >= 1000) label = preset / 1000 + "k";
           }

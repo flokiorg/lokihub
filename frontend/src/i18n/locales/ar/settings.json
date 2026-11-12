@@ -37,7 +37,7 @@
     "themeUpdated": "تم تحديث السمة.",
     "appearanceUpdated": "تم تحديث المظهر.",
     "currencyUpdated": "تم ضبط العملة على {{currency}}",
-    "formatUpdated": "تم تحديث تنسيق عرض فلوكيكوين",
+    "formatUpdated": "تم تحديث تنسيق عرض {{chain}}",
     "currencyFetchFailed": "فشل جلب العملات: {{error}}",
     "updateFailed": "فشل تحديث الإعدادات"
   },
@@ -54,7 +54,7 @@
   },
   "shutdown": {
     "dialogTitle": "هل تريد إيقاف تشغيل Lokihub؟",
-    "dialogDesc": "سيؤدي هذا إلى إيقاف تشغيل Lokihub وجعل العقدة غير متصلة. لن تتمكن من إرسال أو استقبال flokicoin حتى تقوم بفتحه.",
+    "dialogDesc": "سيؤدي هذا إلى إيقاف تشغيل Lokihub وجعل العقدة غير متصلة. لن تتمكن من إرسال أو استقبال {{chain}} حتى تقوم بفتحه.",
     "cancel": "إلغاء",
     "confirm": "متابعة",
     "toast": "تم إيقاف تشغيل العقدة الخاصة بك.",
