@@ -54,7 +54,7 @@
   },
   "shutdown": {
     "dialogTitle": "您想关闭 Lokihub 吗？",
-    "dialogDesc": "这会关闭您的 Lokihub 并使节点离线。在您解锁之前，您将无法发送或接收 flokicoin。",
+    "dialogDesc": "这会关闭您的 Lokihub 并使节点离线。在您解锁之前，您将无法发送或接收 {{chain}}。",
     "cancel": "取消",
     "confirm": "继续",
     "toast": "您的节点已关闭。",

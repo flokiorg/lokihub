@@ -179,9 +179,9 @@
     "nodeLabel": "العقدة",
     "fields": {
       "feeRate": "معدل الرسوم (نسبي)",
-      "baseFeeMloki": "الرسوم الأساسية (mloki)",
+      "baseFeeMloki": "الرسوم الأساسية ({{subunit}})",
       "channelFeePermyriad": "رسوم القناة (permyriad)",
-      "channelMinimumFeeMloki": "الحد الأدنى لرسوم القناة (mloki)"
+      "channelMinimumFeeMloki": "الحد الأدنى لرسوم القناة ({{subunit}})"
     },
     "fees": {
       "title": "الرسوم",

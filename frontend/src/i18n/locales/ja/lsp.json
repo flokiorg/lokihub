@@ -179,9 +179,9 @@
     "nodeLabel": "ノード",
     "fields": {
       "feeRate": "手数料率（比例）",
-      "baseFeeMloki": "基本手数料（mloki）",
+      "baseFeeMloki": "基本手数料（{{subunit}}）",
       "channelFeePermyriad": "チャネル手数料（permyriad）",
-      "channelMinimumFeeMloki": "チャネル最低手数料（mloki）"
+      "channelMinimumFeeMloki": "チャネル最低手数料（{{subunit}}）"
     },
     "fees": {
       "title": "手数料",

@@ -102,7 +102,7 @@
     "peer": "Nodo",
     "hostPort": "Host:Puerto",
     "increaseSpendingLabel": "Aumentar saldo de gasto",
-    "increaseSpendingTooltip": "Configure la capacidad de gasto que necesita. Deberá depositar flokicoin en la cadena para cubrir el tamaño completo del canal, más las tarifas de la cadena.",
+    "increaseSpendingTooltip": "Configure la capacidad de gasto que necesita. Deberá depositar {{chain}} en la cadena para cubrir el tamaño completo del canal, más las tarifas de la cadena.",
     "currentBalance": "Saldo actual en la cadena:",
     "noLsps": "No hay LSPs configurados",
     "selectProvider": "Seleccione un proveedor",

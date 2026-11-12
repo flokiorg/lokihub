@@ -39,7 +39,7 @@
   "intro": {
     "slide1": {
       "title": "Lokihubへようこそ",
-      "subtitle": "次世代のエンゲージメントウェブを支えるフロキコインの Lightning ウォレット。",
+      "subtitle": "次世代のエンゲージメントウェブを支える{{chain}}の Lightning ウォレット。",
       "next": "次へ"
     },
     "slide2": {

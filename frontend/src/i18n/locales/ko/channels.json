@@ -102,7 +102,7 @@
     "peer": "피어",
     "hostPort": "호스트:포트",
     "increaseSpendingLabel": "지출 잔액 늘리기",
-    "increaseSpendingTooltip": "필요한 지출 용량을 설정합니다. 채널 전체 크기에 더하여 온체인 수수료를 충당하기 위해 온체인 flokicoin을 입금해야 합니다.",
+    "increaseSpendingTooltip": "필요한 지출 용량을 설정합니다. 채널 전체 크기에 더하여 온체인 수수료를 충당하기 위해 온체인 {{chain}}을 입금해야 합니다.",
     "currentBalance": "현재 온체인 잔액:",
     "noLsps": "LSP가 구성되지 않았습니다",
     "selectProvider": "제공업체 선택",

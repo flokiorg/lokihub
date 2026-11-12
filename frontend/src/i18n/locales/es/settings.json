@@ -54,7 +54,7 @@
   },
   "shutdown": {
     "dialogTitle": "¿Desea apagar su Lokihub?",
-    "dialogDesc": "Esto apagará su Lokihub y desconectará su nodo. No podrá enviar ni recibir flokicoin hasta que lo desbloquee.",
+    "dialogDesc": "Esto apagará su Lokihub y desconectará su nodo. No podrá enviar ni recibir {{chain}} hasta que lo desbloquee.",
     "cancel": "Cancelar",
     "confirm": "Continuar",
     "toast": "Su nodo ha sido apagado.",

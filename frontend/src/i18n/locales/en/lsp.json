@@ -179,9 +179,9 @@
     "nodeLabel": "Node",
     "fields": {
       "feeRate": "Fee rate (proportional)",
-      "baseFeeMloki": "Base fee (mloki)",
+      "baseFeeMloki": "Base fee ({{subunit}})",
       "channelFeePermyriad": "Channel fee (permyriad)",
-      "channelMinimumFeeMloki": "Channel minimum fee (mloki)"
+      "channelMinimumFeeMloki": "Channel minimum fee ({{subunit}})"
     },
     "fees": {
       "title": "Fees",

@@ -179,9 +179,9 @@
     "nodeLabel": "节点",
     "fields": {
       "feeRate": "费率（比例）",
-      "baseFeeMloki": "基础费用（mloki）",
+      "baseFeeMloki": "基础费用（{{subunit}}）",
       "channelFeePermyriad": "通道费用（permyriad）",
-      "channelMinimumFeeMloki": "通道最低费用（mloki）"
+      "channelMinimumFeeMloki": "通道最低费用（{{subunit}}）"
     },
     "fees": {
       "title": "费用",

@@ -102,7 +102,7 @@
     "peer": "ピア",
     "hostPort": "ホスト:ポート",
     "increaseSpendingLabel": "支出残高を増やす",
-    "increaseSpendingTooltip": "必要な支出容量を設定します。チャンネルサイズ全体をカバーするためにオンチェーンflokicoinを入金する必要があります。",
+    "increaseSpendingTooltip": "必要な支出容量を設定します。チャンネルサイズ全体をカバーするためにオンチェーン{{chain}}を入金する必要があります。",
     "currentBalance": "現在のオンチェーン残高：",
     "noLsps": "LSPが設定されていません",
     "selectProvider": "プロバイダーを選択",

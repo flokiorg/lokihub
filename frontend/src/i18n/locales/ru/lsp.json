@@ -179,9 +179,9 @@
     "nodeLabel": "Узел",
     "fields": {
       "feeRate": "Ставка комиссии (пропорциональная)",
-      "baseFeeMloki": "Базовая комиссия (mloki)",
+      "baseFeeMloki": "Базовая комиссия ({{subunit}})",
       "channelFeePermyriad": "Комиссия канала (permyriad)",
-      "channelMinimumFeeMloki": "Минимальная комиссия канала (mloki)"
+      "channelMinimumFeeMloki": "Минимальная комиссия канала ({{subunit}})"
     },
     "fees": {
       "title": "Комиссии",
