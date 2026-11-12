@@ -70,6 +70,10 @@ hub to services the user has explicitly selected.
 
 ### Changed
 
+- Reads the native chain identity — unit, ticker and block-explorer label/URL —
+  from the configured `native_asset` instead of hardcoded Flokicoin values, so a
+  fork can retarget the chain with no code change; the embedded default is
+  unchanged (Flokicoin). (#228)
 - Reorganizes the Cash Hub creation form into clearer sections — the per-bill
   cap and expiry stay prominent while the economics knobs (min transfer, redeem
   fee, retention) move under one Advanced section — and keeps the Create button
@@ -136,6 +140,12 @@ hub to services the user has explicitly selected.
 
 ### Fixed
 
+- Fixes an unpaid LSPS1 `get_order` reporting FAILED on a still-CREATED order: the
+  order's `expires_at` was never loaded, so every unpaid order looked expired. (#228)
+- Fixes LSPS5 webhooks: `set_webhook` no longer defaults to the LSP-rejected `https`
+  transport (it uses `push`), `remove_webhook` matches the registering app name so a
+  webhook can be removed, and set/list/remove responses are published to the SSE
+  event bus. (#228)
 - Lets a `connection_key` (web-identity) recipient read its own `cash_status`
   row: the hub now scopes "mine" to that slice via the item's verified
   attestation, as `cash_withdraw_quote` already does, instead of returning
