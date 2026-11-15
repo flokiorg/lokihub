@@ -1,0 +1,68 @@
+name: Linux Server Build
+
+# The lean default shipped on every rc: the headless HTTP server for amd64 and
+# arm64, built natively (no cross-compile). No GTK/webkit/nfpm/appimage — those
+# belong to the opt-in desktop build (linux-desktop.yaml). Fast and cheap, so a
+# routine rc is just this.
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build-linux-server:
+    name: Build Linux server (${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: amd64
+            runner: ubuntu-22.04
+          - goarch: arm64
+            runner: ubuntu-22.04-arm
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Read Version
+        shell: bash
+        run: |
+          if [ ! -f VERSION ]; then echo "::error::VERSION file not found"; exit 1; fi
+          TAG=$(cat VERSION | tr -d '[:space:]')
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "BUILD_TAG=${TAG}-$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Build Linux server (frontend + ./cmd/http)
+        env:
+          TAG: ${{ env.TAG }}
+          BUILD_TAG: ${{ env.BUILD_TAG }}
+          GOARCH: ${{ matrix.goarch }}
+          BUILD_MODE: server
+        run: |
+          chmod +x ops/scripts/build-ci-linux.sh
+          ./ops/scripts/build-ci-linux.sh
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-linux-server-${{ matrix.goarch }}-${{ env.TAG }}
+          path: ops/bin/*
+          if-no-files-found: error
