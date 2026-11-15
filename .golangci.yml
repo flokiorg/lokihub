@@ -1,0 +1,28 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - unused
+    - staticcheck
+    - gosec
+    - bodyclose
+    - sqlclosecheck
+    - rowserrcheck
+    - noctx
+    - exhaustive
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+  exclusions:
+    paths:
+      - frontend
+      - build
+      - data
+      - ops

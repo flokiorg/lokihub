@@ -1,0 +1,68 @@
+package controllers
+
+import (
+	"context"
+
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
+)
+
+type signMessageParams struct {
+	Message string `json:"message"`
+}
+
+type signMessageResponse struct {
+	Message   string `json:"message"`
+	Signature string `json:"signature"`
+}
+
+func (controller *nip47Controller) HandleSignMessageEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, publishResponse publishFunc) {
+	signParams := &signMessageParams{}
+	resp := decodeRequest(nip47Request, signParams)
+	if resp != nil {
+		publishResponse(resp, nostr.Tags{})
+		return
+	}
+
+	// The node key signs bills, connection strings and listings with the same
+	// signed-message convention, so a text starting with one of those labels would
+	// come back as a valid signature over Hub data (NIP-CASH §Security
+	// Considerations). Refused with RESTRICTED, any case.
+	if nipcash.IsReservedSignText(signParams.Message) {
+		logger.Logger.Warn().
+			Interface("request_event_id", requestEventId).
+			Msg("Refusing to sign a text with a reserved cash prefix via sign_message")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED,
+			"text with a reserved cash prefix cannot be signed")
+		return
+	}
+
+	logger.Logger.Info().
+		Interface("request_event_id", requestEventId).
+		Msg("Signing message")
+
+	signature, err := controller.lnClient.SignMessage(ctx, signParams.Message)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Interface("request_event_id", requestEventId).
+			Msg("Failed to sign message")
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error:      mapNip47Error(err),
+		}, nostr.Tags{})
+		return
+	}
+
+	responsePayload := signMessageResponse{
+		Message:   signParams.Message,
+		Signature: signature,
+	}
+
+	publishResponse(&models.Response{
+		ResultType: nip47Request.Method,
+		Result:     responsePayload,
+	}, nostr.Tags{})
+}

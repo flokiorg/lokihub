@@ -1,0 +1,182 @@
+{
+  "balance": {
+    "lightning": "Lightning 残高",
+    "onchain": "オンチェーン残高",
+    "total": "合計残高",
+    "available": "利用可能",
+    "reserved": "予約済み",
+    "pending": "保留中"
+  },
+  "transactions": {
+    "title": "取引履歴",
+    "empty": "取引はまだありません",
+    "sent": "送信済み",
+    "received": "受信済み",
+    "pending": "保留中",
+    "failed": "失敗",
+    "viewAll": "すべて表示",
+    "emptyDescription": "最近の受取・送金がここに表示されます。",
+    "receiveFirst": "最初の支払いを受け取る"
+  },
+  "receive": {
+    "title": "受け取る",
+    "invoice": "Lightning インボイス",
+    "address": "ビットコインアドレス",
+    "amount": "金額",
+    "description": "説明",
+    "generate": "インボイスを生成",
+    "copyInvoice": "インボイスをコピー",
+    "copyAddress": "アドレスをコピー",
+    "shareInvoice": "インボイスを共有",
+    "onchain": {
+      "title": "オンチェーンで受け取る",
+      "waiting": "支払いを待っています...",
+      "newAddress": "新しいアドレス",
+      "waitingConfirm": "オンチェーン確認を待っています...",
+      "viewExplorer": "{{chain}}エクスプローラーで表示",
+      "received": "取引を受信しました！",
+      "receiveAnother": "別の支払いを受け取る",
+      "backToWallet": "ウォレットに戻る"
+    },
+    "lightning": {
+      "title": "Lightning で受け取る"
+    },
+    "buyingLiquidity": "インバウンド流動性を購入中...",
+    "amountTooSmall": "JIT支払いには金額が少なすぎます。最小値：{{amount}} {{unit}}。",
+    "amountTooLarge": "JIT支払いには金額が多すぎます。最大値：{{amount}} {{unit}}。",
+    "failedToBuyLiquidity": "流動性の購入に失敗しました",
+    "successCreated": "インボイスが正常に作成されました",
+    "failedToCreate": "インボイスの作成に失敗しました",
+    "lightningInvoice": "Lightning インボイス",
+    "createInvoice": "インボイスを作成",
+    "waiting": "支払いを待っています",
+    "paymentReceived": "支払いを受け取りました",
+    "createAnother": "別のインボイスを作成",
+    "backToWallet": "ウォレットに戻る",
+    "amountPlaceholder": "{{unit}}での金額...",
+    "liquidityProvider": "流動性プロバイダー",
+    "selectLSP": "LSPを選択",
+    "jitPayment": "JIT支払い",
+    "jitExplainedTitle": "JIT支払いの説明",
+    "jitWhyNeededTitle": "なぜ必要なのですか？",
+    "jitWhyNeededDesc": "Lightning 支払いには<strong>インバウンド流動性</strong>（受信容量）が必要です。現在、この金額を直接受け取るのに十分な容量がありません。",
+    "jitHowWorksTitle": "仕組み",
+    "jitHowWorksDesc": "LSPは支払いが到着したときに自動的に新しいチャンネルを<strong>ジャストインタイム（JIT）</strong>で開きます。これにより、チャンネルを手動で管理することなく、支払いが即座に成功します。",
+    "feeStructure": "手数料体系",
+    "minFee": "最低手数料：",
+    "propRate": "比例率：",
+    "min": "最小：",
+    "max": "最大：",
+    "feeLogic": "手数料は最低手数料と計算された比例手数料の<strong>高い方</strong>です。",
+    "whoPays": "手数料は誰が払いますか？",
+    "receiverPays": "受取人が払う：",
+    "receiverPaysDesc": "（デフォルト）手数料は受け取る金額から差し引かれます。",
+    "senderPays": "送金人が払う：",
+    "senderPaysDesc": "手数料はインボイス合計に追加されます。送金人が追加費用を負担します。",
+    "loadingJit": "JIT詳細を読み込み中...",
+    "estimatedFee": "推定手数料",
+    "totalToSend": "送金合計",
+    "youReceive": "受け取る金額",
+    "retry": "再試行",
+    "paymentRange": "支払い範囲：",
+    "includeFee": "手数料をインボイスに含める（送金人が払う）",
+    "descriptionPlaceholder": "例：この支払いを送るのは誰ですか？",
+    "receiveOnchain": "オンチェーンから受け取る",
+    "unknownError": "不明なエラー"
+  },
+  "send": {
+    "title": "送る",
+    "destination": "送り先",
+    "amount": "金額",
+    "description": "説明",
+    "confirm": "支払いを確認",
+    "pay": "支払う",
+    "scanQr": "QRコードをスキャン",
+    "zeroAmount": {
+      "title": "金額を入力",
+      "description": "このインボイスには金額が設定されていません。送金額を入力してください。"
+    },
+    "success": {
+      "title": "支払い完了！",
+      "description": "支払いが正常に送信されました。"
+    },
+    "lnurl": {
+      "title": "LNURLで送金"
+    },
+    "onchain": {
+      "title": "オンチェーンで送金",
+      "amountLabel": "金額",
+      "feeRateLabel": "手数料率（{{unit}}/vB）",
+      "addressLabel": "オンチェーンアドレス",
+      "amountNotIdeal": "オンチェーン取引に適さない金額です",
+      "cancel": "キャンセル"
+    }
+  },
+  "header": {
+    "title": "ウォレット",
+    "receive": "受け取る",
+    "send": "送る",
+    "swap": "スワップ"
+  },
+  "alerts": {
+    "channelReservesUnmet": "チャンネル準備金未充足",
+    "channelReservesDesc": "チャンネル準備金を補充するまで支払いができません。",
+    "viewChannelReserves": "チャンネル準備金を表示",
+    "openFirstChannel": "最初のチャンネルを開く",
+    "openFirstChannelDesc": "最初のチャンネルを開くまで支払いや受け取りができません",
+    "openFirstChannelLink": "最初のチャンネルを開く",
+    "onchainShownOnNode": "オンチェーン取引はノードページに表示されます",
+    "viewOnchain": "オンチェーン取引を表示"
+  },
+  "onboarding": {
+    "title": "Lokihubを使い始めましょう",
+    "description": "以下の初期設定を行い、Loki Hubを最大限に活用してください。"
+  },
+  "signMessage": {
+    "title": "メッセージに署名",
+    "label": "メッセージ",
+    "sign": "署名"
+  },
+  "nodeAlias": {
+    "title": "ノードエイリアス",
+    "label": "ノードエイリアス",
+    "save": "保存"
+  },
+  "withdraw": {
+    "title": "オンチェーン資金を引き出す",
+    "amountLabel": "金額",
+    "addressLabel": "オンチェーンアドレス",
+    "feeRateLabel": "手数料率（{{unit}}/vB）",
+    "sendAllAlert": "ウォレットの残高すべてが送金されます",
+    "cancel": "キャンセル"
+  },
+  "subwallets": {
+    "title": "サブウォレット",
+    "new": "新しいサブウォレット",
+    "empty": "サブウォレットはまだありません",
+    "about": {
+      "title": "サブウォレットについて",
+      "close": "閉じる"
+    },
+    "typeChooser": {
+      "title": "新しいサブウォレット",
+      "description": "作成するサブウォレットの種類を選択してください"
+    },
+    "walletTypes": {
+      "simple": {
+        "title": "シンプルなサブウォレット",
+        "description": "独自の残高を持つ独立したウォレットで、ハブから資金提供され、送受信の権限を完全に備えています。"
+      },
+      "circle": {
+        "title": "サークルウォレットハブ",
+        "description": "あなたの Nostr サークルの認証済みメンバーは、あなたのフォローリストまたは許可リストに基づいて検証された Lightning ウォレットをリクエストできます。"
+      }
+    }
+  },
+  "onchain": {
+    "awaitingConfirm": "確認待ち",
+    "backToNode": "ノードに戻る",
+    "received": "受信済み",
+    "viewExplorer": "エクスプローラーで表示"
+  }
+}

@@ -1,0 +1,119 @@
+package controllers
+
+import (
+	"testing"
+	"time"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/tests"
+)
+
+// NIP-CASH §Redeeming a Slice: for an identity-bound slice, identity_type,
+// identity_value and identity_event are REQUIRED together
+// (CASH-redeeming-a-slice-05). Each one missing on its own is refused.
+func TestHandleCashRedeemEvent_IdentityFieldsRequiredTogether(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
+	claimantPriv := nostr.GeneratePrivateKey()
+	claimant, _ := nostr.GetPublicKey(claimantPriv)
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimant, AmountMloki: 1000},
+	}))
+	proof := mustMarshal(t, buildClaimProofEvent(t, claimantPriv, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now()))
+
+	for name, request := range map[string]nipcash.CashRedeemRequest{
+		"no identity_value": {Invoice: tests.MockZeroAmountInvoice, Amount: ptrUint64(1000), IdentityType: db.CashIdentityPubkey, IdentityEvent: proof},
+		"no identity_event": {Invoice: tests.MockZeroAmountInvoice, Amount: ptrUint64(1000), IdentityType: db.CashIdentityPubkey, IdentityValue: claimant},
+	} {
+		response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, request)
+		require.NotNil(t, response.Error, name)
+		assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code, name)
+	}
+	assert.Empty(t, svc.LNClient.(*tests.MockLn).SendPaymentSyncCalls(), "nothing is paid")
+}
+
+// NIP-CASH §Consolidating Tokens: a request that fails steps 1-6 MUST be
+// rejected before step 7 (CASH-consolidating-tokens-10), so a refusal leaves
+// every source exactly as it was: unclaimed, and with its proof still unused.
+func TestConsolidate_OverTheCeiling_RefusedBeforeAnySourceIsClaimed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600) // per-wallet ceiling 100,000
+	caller := guardCashWallet(t, svc, hub)
+	ownerPriv := nostr.GeneratePrivateKey()
+	ownerPub, _ := nostr.GetPublicKey(ownerPriv)
+	_, secretHash, err := tests.GenerateCashSecret()
+	require.NoError(t, err)
+
+	const amount1, amount2 = uint64(60_000), uint64(50_000) // 110,000 merged
+	s1 := guardSource(t, svc, hub, ownerPub, amount1, 0, 0)
+	tests.FundApp(svc, s1.ID, 200_000, "s1-fund")
+	s2 := guardSource(t, svc, hub, ownerPub, amount2, 0, 0)
+	tests.FundApp(svc, s2.ID, 200_000, "s2-fund")
+
+	proof1 := buildTransferProofEvent(t, ownerPriv, *s1.WalletPubkey, db.CashIdentityCash, secretHash, "", amount1, nil, time.Now())
+	proof2 := buildTransferProofEvent(t, ownerPriv, *s2.WalletPubkey, db.CashIdentityCash, secretHash, "", amount2, nil, time.Now())
+	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), caller, cashConsolidateParams{
+		Sources: []consolidateSourceParam{
+			{WalletPubkey: *s1.WalletPubkey, IdentityType: db.CashIdentityPubkey, IdentityValue: ownerPub, IdentityEvent: mustMarshal(t, proof1)},
+			{WalletPubkey: *s2.WalletPubkey, IdentityType: db.CashIdentityPubkey, IdentityValue: ownerPub, IdentityEvent: mustMarshal(t, proof2)},
+		},
+		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: secretHash},
+	})
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, resp.Error.Code, "a sum over the ceiling is QUOTA_EXCEEDED (NIP-CASH §Consolidating Tokens, step 5)")
+
+	for _, source := range []*db.App{s1, s2} {
+		assert.Nil(t, cashWalletClaimByIdentity(t, svc, source.ID, db.CashIdentityPubkey, ownerPub).ClaimedAt)
+	}
+	var used int64
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Count(&used).Error)
+	assert.Zero(t, used)
+}
+
+// NIP-CASH §Security Considerations for Cash-Mode Slices: a throttled call MUST
+// get a distinct rate-limit error (CASH-security-considerations-for-cash-12).
+// Redeem's is pinned by TestHandleCashRedeemEvent_RateLimited; these are
+// transfer and consolidate, which share its limiter, keyed by the verified signer.
+func TestCashTransferAndConsolidate_ThrottledCallsAreRateLimited(t *testing.T) {
+	f := newConsolidateFixture(t)
+	controller := NewTestNip47Controller(f.svc)
+	limit := f.svc.Cfg.GetEnv().CashClaimCallsPerHour
+	require.Positive(t, limit)
+	for i := 0; i < limit; i++ {
+		controller.cashClaimLimiter.Allow("claim:"+f.ownerPub, limit)
+	}
+
+	// The rate limit is checked AFTER the request_id is marked used, so a call
+	// refused RATE_LIMITED past authorization has still spent its id — a retry
+	// is REQUEST_REUSED and needs a fresh one, matching cash_withdraw and the
+	// §request_id rule (used once the call passes authorization).
+	proof := buildTransferProofEvent(t, f.ownerPriv, *f.s1.WalletPubkey, db.CashIdentityPubkey, f.newPub, "", 3000, nil, time.Now())
+	transferID := testRequestID()
+	transfer := handleCashTransferFor(t, f.svc, controller, f.s1, cashTransferParams{
+		IdentityType: db.CashIdentityPubkey, IdentityValue: f.ownerPub, IdentityEvent: mustMarshal(t, proof),
+		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: f.newPub},
+		RequestID:   transferID,
+	})
+	require.NotNil(t, transfer.Error)
+	assert.Equal(t, constants.ERROR_RATE_LIMITED, transfer.Error.Code)
+	assert.True(t, isUsed(t, f.svc, transferID), "a rate-limited transfer past authorization has spent its request_id")
+
+	consolidateParams := f.params(t)
+	consolidate := handleCashConsolidateFor(t, f.svc, controller, f.s1, consolidateParams)
+	require.NotNil(t, consolidate.Error)
+	assert.Equal(t, constants.ERROR_RATE_LIMITED, consolidate.Error.Code)
+	assert.True(t, isUsed(t, f.svc, consolidateParams.RequestID), "a rate-limited consolidate past authorization has spent its request_id")
+}

@@ -1,0 +1,176 @@
+{
+  "steps": {
+    "welcome": "Bienvenido",
+    "nodeSetup": "Configuración del nodo",
+    "unlockPassword": "Establecer contraseña de desbloqueo",
+    "backup": "Respaldo",
+    "complete": "Configuración completa"
+  },
+  "welcome": {
+    "title": "Bienvenido a Lokihub",
+    "subtitle": "Tu interfaz de gestión de nodo Lightning",
+    "getStarted": "Comenzar"
+  },
+  "password": {
+    "title": "Establece tu contraseña de desbloqueo",
+    "description": "Esta contraseña protege el acceso a tu nodo. Guárdala en un lugar seguro.",
+    "label": "Contraseña",
+    "confirm": "Confirmar contraseña",
+    "mismatch": "Las contraseñas no coinciden",
+    "tooShort": "La contraseña debe tener al menos 8 caracteres",
+    "repeatLabel": "Repetir contraseña",
+    "repeatPlaceholder": "Vuelva a introducir la contraseña",
+    "securedConfirm": "He guardado esta contraseña en un lugar seguro",
+    "irrecoverableConfirm": "Entiendo que esta contraseña no se puede recuperar",
+    "createButton": "Crear contraseña",
+    "notConfirmed": "Por favor, confirme que ha guardado su contraseña"
+  },
+  "backup": {
+    "title": "Respalda tu frase de recuperación",
+    "description": "Escribe estas palabras en orden y guárdalas en un lugar seguro. Las necesitarás para recuperar tu cartera.",
+    "confirmed": "He escrito mi frase de recuperación",
+    "warning": "Nunca compartas tu frase de recuperación con nadie."
+  },
+  "complete": {
+    "title": "¡Todo listo!",
+    "description": "Tu nodo está listo para usarse.",
+    "goHome": "Ir al panel"
+  },
+  "intro": {
+    "slide1": {
+      "title": "Bienvenido a Lokihub",
+      "subtitle": "Una poderosa billetera Lightning de {{chain}} todo en uno que impulsa la próxima web de interacción.",
+      "next": "Siguiente"
+    },
+    "slide2": {
+      "title": "Siempre listo",
+      "description": "Su billetera está en línea y lista para usar en cualquier dispositivo, en cualquier momento."
+    },
+    "slide3": {
+      "title": "Seguro y privado",
+      "description": "Cifrado por su contraseña. Solo usted puede acceder a sus fondos."
+    },
+    "slide4": {
+      "title": "Conectar aplicaciones",
+      "description": "Conéctese con aplicaciones y únase a la Web de la Diversión."
+    },
+    "slideAriaLabel": "Ir a la diapositiva {{index}}"
+  },
+  "start": {
+    "title": "Inicio",
+    "description": "Ingrese su contraseña para desbloquear y comenzar Lokihub.",
+    "passwordLabel": "Contraseña",
+    "pleaseWait": "Por favor espere...",
+    "starting": "Iniciar Lokihub puede tardar unos minutos.",
+    "failedToStart": "Error al iniciar",
+    "failedToConnect": "Error al conectar"
+  },
+  "unlock": {
+    "title": "Iniciar sesión",
+    "description": "Ingrese su contraseña de desbloqueo para continuar",
+    "passwordLabel": "Contraseña",
+    "login": "Iniciar sesión",
+    "failedToConnect": "Error al conectar"
+  },
+  "finish": {
+    "loading": "Configurando su Hub...",
+    "connectionTimeout": "Tiempo de espera de conexión agotado. Por favor, revise su nodo.",
+    "failedToConnect": "Error al conectar"
+  },
+  "security": {
+    "title": "Seguridad y recuperación",
+    "description": "Tómese su tiempo para comprender cómo asegurar y recuperar sus fondos en Lokihub.",
+    "confirmed": "Entiendo cómo asegurar y recuperar fondos"
+  },
+  "restore": {
+    "title": "Importar billetera desde archivo de migración",
+    "description": "Cargue su archivo de migración de billetera cifrado.",
+    "import": "Importar billetera",
+    "restartingTitle": "Reinicie su Hub",
+    "restartingDesc": "Lokihub necesita reiniciarse para terminar de restaurar su nodo",
+    "restartingMessage": "Si se ejecuta en la nube, su Lokihub se reiniciará automáticamente. De lo contrario, reinicie manualmente su Lokihub para finalizar el proceso de restauración.",
+    "waitingForRestart": "Esperando reinicio...",
+    "warning1": "Como parte del proceso de restauración del nodo, su Lokihub se apagará.",
+    "warning2": "Si se ejecuta en la nube, su Lokihub se reiniciará automáticamente. De lo contrario, reinicie manualmente su Lokihub para finalizar el proceso de restauración."
+  },
+  "services": {
+    "title": "Configuración del Hub",
+    "description": "Configure los servicios externos para su nodo.",
+    "loading": "Cargando...",
+    "continue": "Continuar",
+    "fetchError": "Error al obtener la configuración del Hub. Verifique su conexión.",
+    "communityNote": "Estas sugerencias de exploradores y relés son valores predeterminados integrados. Puede seleccionar una o introducir el explorador o relé que prefiera.",
+    "warning": "Advertencia",
+    "warningText": "Usted es responsable de los servicios a los que se conecta. Asegúrese de confiar en los proveedores de estas URLs.",
+    "configErrors": "Errores de configuración",
+    "unsavedChanges": {
+      "title": "Cambios sin guardar",
+      "description": "Has realizado cambios en la configuración de servicios que no se han guardado. Si sales ahora, estos cambios se perderán.",
+      "stay": "Seguir editando",
+      "discard": "Salir sin guardar",
+      "save": "Guardar y salir",
+      "saving": "Guardando..."
+    },
+    "explorer": {
+      "title": "Explorador {{chain}}",
+      "description": "Usado para estimación de comisiones y detalles de transacciones.",
+      "custom": "Explorador personalizado"
+    },
+    "relay": {
+      "title": "Relés Nostr",
+      "description": "Conéctese a múltiples relés Nostr para la comunicación Wallet Connect (NWC). Múltiples relés mejoran la disponibilidad."
+    },
+    "lsp": {
+      "title": "Proveedores de servicios Lightning",
+      "description": "LSP que se anuncian en tus relays. Marca los que te merecen confianza; solo esos se contactan y se usan para liquidez entrante.",
+      "claimsNote": "Los nombres, descripciones y webs son lo que cada LSP dice de sí mismo, no hechos verificados. Los datos del grafo vienen de tu propio nodo.",
+      "filterText": "Filtrar por nombre o id de nodo",
+      "allProtocols": "Todos",
+      "addPlaceholder": "Añadir por clave o id de nodo",
+      "add": "Añadir",
+      "notFound": "No se encontró un anuncio utilizable para este nodo",
+      "trust": "Confiar en este LSP",
+      "trustError": "No se pudo cambiar la confianza",
+      "untitled": "LSP sin nombre",
+      "sameTitle": "Mismo nombre que otro LSP",
+      "status": {
+        "open": "Abierto",
+        "paused": "En pausa",
+        "closed": "Cerrado"
+      },
+      "notAnnounced": "Sin anuncio utilizable",
+      "claimedWebsite": "Web (declarada)",
+      "feeHint": "Comisión del canal JIT desde {{min}} {{unit}} + {{ppm}} ppm",
+      "inGraph": "En el grafo de tu nodo: {{channels}} canales, {{capacity}} {{unit}}",
+      "notInGraphFact": "No está en el grafo de tu nodo",
+      "notInGraph": "{{count}} fuera del grafo de tu nodo",
+      "checkOk": "Comprobación en vivo: coincide con el anuncio",
+      "checkWorse": "Comprobación en vivo: peor de lo anunciado; se te preguntará de nuevo antes de comprar",
+      "checkMissing": "Comprobación en vivo: falta un servicio anunciado; no se usa",
+      "checkUnreachable": "Comprobación en vivo: no se pudo contactar con el LSP",
+      "recheck": "Comprobar de nuevo",
+      "details": "Detalles",
+      "showImage": "Mostrar imagen",
+      "empty": "Aún no hay anuncios de LSP en tus relays.",
+      "noTrusted": "Ningún LSP de confianza: elige uno en Ajustes",
+      "reason": {
+        "paused": "en pausa",
+        "closed": "cerrado",
+        "notAnnounced": "ya no se anuncia",
+        "unreachable": "inalcanzable"
+      }
+    },
+    "swap": {
+      "title": "Servicio de intercambio",
+      "description": "Habilita intercambios de Lightning a on-chain (y viceversa).",
+      "custom": "Servicio de intercambio personalizado"
+    },
+    "validation": {
+      "relayRequired": "Se requiere al menos un relé",
+      "explorerRequired": "La URL del Explorador {{chain}} es obligatoria",
+      "swapRequired": "La URL del servicio de intercambio es obligatoria cuando está habilitado",
+      "invalidUrl": "{{field}}: formato de URL inválido"
+    },
+    "connectHint": "Conectar un servicio de confianza"
+  }
+}

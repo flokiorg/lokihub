@@ -1,0 +1,360 @@
+//go:build integration
+
+package integration
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+
+	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/flokiorg/lokihub/nip47/models"
+)
+
+// The structs below mirror the unexported request/response param shapes
+// defined in nip47/controllers (which can't be imported directly from an
+// external black-box test package) — kept intentionally minimal, matching
+// only the JSON wire format actual NWC clients rely on.
+
+// --- mint_cash ---
+//
+// A bill's connection is shared by every recipient named in one mint_cash
+// call, and its cash_token is the whole credential: the reply carries no other
+// connection form.
+
+type CashWalletRecipientParam struct {
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "cash"
+	IdentityValue string `json:"identity_value,omitempty"`
+	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
+	AmountMillis  uint64 `json:"amount_millis"`
+}
+
+type MintCashParams struct {
+	Recipients []CashWalletRecipientParam `json:"recipients"`
+	Expiry     int                        `json:"expiry,omitempty"`
+}
+
+type CashWalletRecipientResult struct {
+	IdentityType  string `json:"identity_type"`
+	IdentityValue string `json:"identity_value,omitempty"`
+	AmountMillis  uint64 `json:"amount_millis"`
+	CashSecret    string `json:"cash_secret,omitempty"`
+}
+
+type MintCashResult struct {
+	WalletPubkey string                      `json:"wallet_pubkey"`
+	CashToken    string                      `json:"cash_token"`
+	ExpiresAt    int64                       `json:"expires_at"`
+	Recipients   []CashWalletRecipientResult `json:"recipients"`
+}
+
+// --- cash_redeem ---
+//
+// Replaces the old mint_cash/claim_cash_wallet two-step reveal flow:
+// since the connection is already shared/known, a recipient just proves who
+// they are (identity_event, bound to this wallet + this invoice — see
+// nip47/controllers/cash_redeem_controller.go) and pays out their own slice
+// in one call.
+
+type ClaimFundsParams struct {
+	Invoice          string  `json:"invoice"`
+	Amount           *uint64 `json:"amount,omitempty"`
+	IdentityType     string  `json:"identity_type,omitempty"`
+	IdentityValue    string  `json:"identity_value,omitempty"`
+	IdentityEvent    string  `json:"identity_event,omitempty"`
+	AttestationEvent string  `json:"attestation_event,omitempty"`
+	// CashSecret redeems a cash-mode slice in place of every other field
+	// above (NIP-CASH §Cash-Mode Slices).
+	CashSecret string `json:"cash_secret,omitempty"`
+}
+
+type ClaimFundsResult struct {
+	Preimage string `json:"preimage"`
+	FeesPaid uint64 `json:"fees_paid"`
+}
+
+// --- cash_transfer ---
+//
+// Reassigns an unclaimed slice's registered identity without redeeming it
+// (NIP-CASH §Transferring and Splitting a Slice). Proof scheme mirrors cash_redeem: an
+// identity-bound caller proves who they currently are via IdentityEvent
+// (bound to the wallet + the target new_identity, not an invoice); a cash-mode
+// caller instead presents CashSecret, since a cash-mode slice has no
+// identity capable of signing a proof event.
+//
+// A cash-mode NewIdentity's IdentityValue is REQUIRED and caller-supplied — the
+// commitment (sha256) of a secret the caller generates and keeps locally.
+// The wallet never mints or returns a cash secret here: this response
+// travels over the shared cash_wallet connection, decryptable by every
+// recipient who ever held it, so a server-generated secret returned in it
+// would leak to all of them (see NIP-CASH.md's Security Considerations).
+
+type CashTransferNewIdentityParam struct {
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "cash"
+	IdentityValue string `json:"identity_value,omitempty"`
+	IAPubkey      string `json:"ia_pubkey,omitempty"`
+}
+
+type CashTransferParams struct {
+	IdentityType     string `json:"identity_type,omitempty"`
+	IdentityValue    string `json:"identity_value,omitempty"`
+	IdentityEvent    string `json:"identity_event,omitempty"`
+	AttestationEvent string `json:"attestation_event,omitempty"`
+	CashSecret       string `json:"cash_secret,omitempty"`
+
+	NewIdentity CashTransferNewIdentityParam `json:"new_identity"`
+
+	// AmountMillis is OPTIONAL — omitted, or equal to the slice's current full
+	// amount, means "transfer it all". A value less than the slice's current
+	// amount splits off exactly that much into a brand-new dedicated
+	// cash_wallet, leaving the remainder behind under the SAME current
+	// identity — see NIP-CASH §Transferring and Splitting a Slice.
+	AmountMillis *uint64 `json:"amount_millis,omitempty"`
+}
+
+// NewWalletPubkey/NewWalletToken are populated only when the transfer spun
+// the slice off into a brand-new dedicated cash_wallet, rather than
+// reassigning identity in place — see NIP-CASH "Spinning a slice off into a
+// dedicated wallet". NewWalletToken is a lokicash1... connection token,
+// itself NIP-44 encrypted to the caller's own pubkey (the one that signed
+// this call's IdentityEvent) using the new wallet's own keypair
+// (NewWalletPubkey plus its matching server-held privkey) — a second, inner
+// encryption layer nested inside this response's own normal per-connection
+// encryption.
+type CashTransferResult struct {
+	AmountMillis  uint64 `json:"amount_millis"`
+	IdentityType  string `json:"identity_type"`
+	IdentityValue string `json:"identity_value,omitempty"`
+	// RemainingAmountMillis is populated only when this call went through the
+	// split path: 0 for a full split, >0 for a partial one. Never populated
+	// for an in-place reassignment.
+	RemainingAmountMillis *uint64 `json:"remaining_amount_millis,omitempty"`
+	NewWalletPubkey       string  `json:"new_wallet_pubkey,omitempty"`
+	NewWalletToken        string  `json:"new_wallet_token,omitempty"`
+	// RemainderWalletPubkey/RemainderWalletToken carry the caller's own change,
+	// now in its own fresh dedicated wallet, for a PARTIAL split (NIP-CASH
+	// §Transferring and Splitting a Slice — the remainder is no longer left on the source
+	// connection). Delivered the same nested-encrypted way as NewWalletToken.
+	RemainderWalletPubkey string `json:"remainder_wallet_pubkey,omitempty"`
+	RemainderWalletToken  string `json:"remainder_wallet_token,omitempty"`
+}
+
+// --- cash_consolidate ---
+//
+// Combines several same-hub slices this node custodies into one new cash token
+// (NIP-CASH §Consolidating Tokens). Each source carries the same proof shapes
+// cash_transfer accepts. Sources: pubkey or connection_key (cash-mode sources
+// remain rejected). new_identity: pubkey, connection_key, or cash.
+
+type ConsolidateSourceParam struct {
+	WalletPubkey     string `json:"wallet_pubkey"`
+	IdentityType     string `json:"identity_type,omitempty"`
+	IdentityValue    string `json:"identity_value,omitempty"`
+	IdentityEvent    string `json:"identity_event,omitempty"`
+	AttestationEvent string `json:"attestation_event,omitempty"`
+	CashSecret       string `json:"cash_secret,omitempty"`
+}
+
+type CashConsolidateParams struct {
+	Sources     []ConsolidateSourceParam     `json:"sources"`
+	NewIdentity CashTransferNewIdentityParam `json:"new_identity"`
+}
+
+// CashConsolidateResult's NewWalletToken is the merged lokicash1... token,
+// NIP-44 encrypted to new_identity using the merged wallet's own keypair
+// (NewWalletPubkey + matching server-held privkey) — the same nested delivery a
+// split uses.
+type CashConsolidateResult struct {
+	AmountMillis    uint64 `json:"amount_millis"`
+	NewWalletPubkey string `json:"new_wallet_pubkey"`
+	NewWalletToken  string `json:"new_wallet_token"`
+	ExpiresAt       int64  `json:"expires_at,omitempty"`
+}
+
+// --- cash_status ---
+
+type RecipientStatus struct {
+	IdentityType  string `json:"identity_type"`
+	IdentityValue string `json:"identity_value"`
+	AmountMillis  int64  `json:"amount_millis"`
+	Claimed       bool   `json:"claimed"`
+	ClaimedAt     *int64 `json:"claimed_at,omitempty"`
+	// RedeemFeeMillis/NetRedeemableMillis are this slice's cash_redeem quote —
+	// the worst-case (external) fee and net payout, see NIP-CASH.md §Listing
+	// Recipients.
+	RedeemFeeMillis     int64  `json:"redeem_fee_millis"`
+	NetRedeemableMillis int64  `json:"net_redeemable_millis"`
+	MinTransferMillis   int64  `json:"min_transfer_millis"`
+	ExpiresAt           *int64 `json:"expires_at,omitempty"`
+}
+
+// CashStatusParams is cash_status's request body. `scope` selects how much of the roster
+// comes back (NIP-CASH §Scoping the Roster): absent means "mine" — the calling
+// recipient's own row — and "all" asks for the shared roster.
+//
+// Spelled out here because the default changed what an empty request means. A test that
+// wants every recipient's row MUST now ask for it; sending `{}` and expecting the full
+// roster reads as a passing assertion about one row.
+type CashStatusParams struct {
+	Scope string `json:"scope,omitempty"`
+}
+
+type CashStatusResult struct {
+	Recipients []RecipientStatus `json:"recipients"`
+	// Status/Reason/RetainedUntil carry the spent-bill tombstone instead of a
+	// roster: a bill this hub has destroyed, still inside its retention window,
+	// answers {"status":"spent","reason":…,"retained_until":<unix>} (NIP-CASH
+	// §Answering About a Destroyed Bill). All are absent on a roster response.
+	Status        string `json:"status,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+	RetainedUntil *int64 `json:"retained_until,omitempty"`
+}
+
+// --- create_circle_wallet ---
+
+type CreateCircleWalletParams struct {
+	Pubkey string `json:"pubkey"`
+	// ConnectionPubkey is the member-generated connection key (NIP-CW §Request).
+	// Left empty, it is sent as circleConnectionPubkey(Pubkey), the key the
+	// proof helpers in shared_test.go also tag, so a test sets it only to send
+	// something else.
+	ConnectionPubkey string `json:"connection_pubkey"`
+	MaxAmount        uint64 `json:"max_amount"`
+	// MaxReceive is sent as max_amount when left 0 (bindJoinProof).
+	MaxReceive    uint64 `json:"max_receive,omitempty"`
+	Expiry        int    `json:"expiry"`
+	BudgetRenewal string `json:"budget_renewal,omitempty"`
+	// IdentityEvent is a JSON-encoded, freshly-signed kind-23199 proof that
+	// the caller controls Pubkey, bound to this specific hub via its d-tag
+	// and to ConnectionPubkey via its connection tag (see
+	// nip47/controllers/create_circle_wallet_identity.go).
+	IdentityEvent string `json:"identity_event"`
+}
+
+func (p CreateCircleWalletParams) MarshalJSON() ([]byte, error) {
+	type wire CreateCircleWalletParams
+	if p.ConnectionPubkey == "" {
+		p.ConnectionPubkey = circleConnectionPubkey(p.Pubkey)
+	}
+	return json.Marshal(wire(p))
+}
+
+// circleConnectionSecret and circleConnectionPubkey are the connection key this
+// suite generates for a member: derived from the member's pubkey so a request,
+// its proof and the later connection all agree without passing it around.
+func circleConnectionSecret(memberPubkey string) string {
+	sum := sha256.Sum256([]byte("connection:" + memberPubkey))
+	return hex.EncodeToString(sum[:])
+}
+
+func circleConnectionPubkey(memberPubkey string) string {
+	pub, err := nostr.GetPublicKey(circleConnectionSecret(memberPubkey))
+	if err != nil {
+		panic(err)
+	}
+	return pub
+}
+
+// circleWalletConnection is what a member connects through: the wallet pubkey
+// and relays from the join's details and its own secret (NIP-CW §Response); the
+// Hub sends neither a URI nor the secret.
+type circleWalletConnection struct {
+	WalletPubkey string
+	Relays       []string
+	Secret       string
+}
+
+// CircleWalletConnection is the member's connection to its circle wallet.
+func CircleWalletConnection(details CircleWalletDetails, memberPubkey string) circleWalletConnection {
+	return circleWalletConnection{WalletPubkey: details.WalletPubkey, Relays: details.Relays, Secret: circleConnectionSecret(memberPubkey)}
+}
+
+// CreateCircleWalletResult carries exactly one field on purpose: the join is
+// made over the shared circlehub connection, so anything outside the nested
+// encryption is readable by every other member of the circle. Decrypt with
+// nwcclient.DecryptPayload and unmarshal into CircleWalletDetails.
+type CreateCircleWalletResult struct {
+	EncryptedDetails string `json:"encrypted_details"`
+}
+
+// CircleWalletDetails is the plaintext inside CreateCircleWalletResult's
+// encrypted_details — the joining member's own wallet identity and terms.
+type CircleWalletDetails struct {
+	WalletPubkey  string   `json:"wallet_pubkey"`
+	Relays        []string `json:"relays"`
+	MaxAmount     uint64   `json:"max_amount"`
+	ExpiresAt     int64    `json:"expires_at"`
+	FeesPpm       int      `json:"fees_ppm"`
+	BudgetRenewal string   `json:"budget_renewal"`
+}
+
+// --- generic NWC methods ---
+
+type GetBalanceResult struct {
+	Balance int64 `json:"balance"`
+}
+
+type GetBudgetResult struct {
+	UsedBudget    uint64  `json:"used_budget"`
+	TotalBudget   uint64  `json:"total_budget"`
+	RenewsAt      *uint64 `json:"renews_at,omitempty"`
+	RenewalPeriod string  `json:"renewal_period"`
+	// A Circle Wallet's receive cap and what counts against it this period.
+	TotalReceiveBudget *uint64 `json:"total_receive_budget,omitempty"`
+	UsedReceiveBudget  *uint64 `json:"used_receive_budget,omitempty"`
+}
+
+type GetInfoResult struct {
+	Alias          *string           `json:"alias"`
+	Pubkey         *string           `json:"pubkey"`
+	Network        *string           `json:"network"`
+	Methods        []string          `json:"methods"`
+	PrivateMethods []string          `json:"private_methods"`
+	Notifications  []string          `json:"notifications"`
+	CircleWallet   *CircleWalletInfo `json:"circle_wallet,omitempty"`
+}
+
+// CircleWalletInfo mirrors nip47/controllers/get_info_controller.go's
+// circleWalletInfo — only present on a circle_hub's own get_info response.
+type CircleWalletInfo struct {
+	AvailableMillis int64  `json:"available_millis"`
+	MaxExpSecs      int    `json:"max_exp_secs"`
+	FeesPpm         int    `json:"fees_ppm"`
+	CirclePolicy    string `json:"circle_policy"`
+
+	PerWalletMaxMillis int64  `json:"per_wallet_max_millis,omitempty"`
+	MinBudgetRenewal   string `json:"min_budget_renewal,omitempty"`
+}
+
+type MakeInvoiceParams struct {
+	Amount          uint64                 `json:"amount"`
+	Description     string                 `json:"description,omitempty"`
+	DescriptionHash string                 `json:"description_hash,omitempty"`
+	Expiry          uint64                 `json:"expiry,omitempty"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+}
+
+type MakeInvoiceResult = models.Transaction
+
+type PayInvoiceParams struct {
+	Invoice string  `json:"invoice"`
+	Amount  *uint64 `json:"amount,omitempty"`
+}
+
+type PayInvoiceResult struct {
+	Preimage string `json:"preimage"`
+	FeesPaid uint64 `json:"fees_paid"`
+}
+
+type ListTransactionsParams struct {
+	From   uint64 `json:"from,omitempty"`
+	Until  uint64 `json:"until,omitempty"`
+	Limit  uint64 `json:"limit,omitempty"`
+	Offset uint64 `json:"offset,omitempty"`
+}
+
+type ListTransactionsResult struct {
+	Transactions []models.Transaction `json:"transactions"`
+	TotalCount   uint64               `json:"total_count"`
+}

@@ -1,0 +1,559 @@
+import { Navigate, RouteObject } from "react-router";
+import AppLayout from "src/components/layouts/AppLayout";
+import SettingsLayout from "src/components/layouts/SettingsLayout";
+import TwoColumnFullScreenLayout from "src/components/layouts/TwoColumnFullScreenLayout";
+import { DefaultRedirect } from "src/components/redirects/DefaultRedirect";
+import { HomeRedirect } from "src/components/redirects/HomeRedirect";
+import { SetupRedirect } from "src/components/redirects/SetupRedirect";
+import { StartRedirect } from "src/components/redirects/StartRedirect";
+import { CreateNodeMigrationFileSuccess } from "src/screens/CreateNodeMigrationFileSuccess";
+import Home from "src/screens/Home";
+import { Intro } from "src/screens/Intro";
+import { MigrateNode } from "src/screens/MigrateNode";
+import NotFound from "src/screens/NotFound";
+import Start from "src/screens/Start";
+import Unlock from "src/screens/Unlock";
+import { Welcome } from "src/screens/Welcome";
+import AppDetails from "src/screens/apps/AppDetails";
+import { AppsCleanup } from "src/screens/apps/AppsCleanup";
+import { Connections } from "src/screens/apps/Connections";
+import NewApp from "src/screens/apps/NewApp";
+import { AppStoreDetail } from "src/screens/appstore/AppStoreDetail";
+import Channels from "src/screens/channels/Channels";
+import { CurrentChannelOrder } from "src/screens/channels/CurrentChannelOrder";
+import IncreaseOutgoingCapacity from "src/screens/channels/IncreaseOutgoingCapacity";
+import OrderChannel from "src/screens/channels/OrderChannel";
+import OrderHistory from "src/screens/channels/OrderHistory";
+import { AutoChannel } from "src/screens/channels/auto/AutoChannel";
+import { OpenedAutoChannel } from "src/screens/channels/auto/OpenedAutoChannel";
+import { OpeningAutoChannel } from "src/screens/channels/auto/OpeningAutoChannel";
+import { FirstChannel } from "src/screens/channels/first/FirstChannel";
+import { OpenedFirstChannel } from "src/screens/channels/first/OpenedFirstChannel";
+import { OpeningFirstChannel } from "src/screens/channels/first/OpeningFirstChannel";
+import { FAQ } from "src/screens/help/FAQ";
+
+import DepositFlokicoin, {
+  DepositFlokicoinCrumb,
+} from "src/screens/onchain/DepositFlokicoin";
+import ConnectPeer from "src/screens/peers/ConnectPeer";
+import Peers from "src/screens/peers/Peers";
+import { About } from "src/screens/settings/About";
+import { AutoUnlock } from "src/screens/settings/AutoUnlock";
+import Backup from "src/screens/settings/Backup";
+import { ChangeUnlockPassword } from "src/screens/settings/ChangeUnlockPassword";
+import DebugTools from "src/screens/settings/DebugTools";
+import DeveloperSettings from "src/screens/settings/DeveloperSettings";
+import { Services } from "src/screens/settings/Services";
+import Settings from "src/screens/settings/Settings";
+
+import { RestoreNode } from "src/screens/setup/RestoreNode";
+import { SetupFinish } from "src/screens/setup/SetupFinish";
+import { SetupPassword } from "src/screens/setup/SetupPassword";
+import { SetupSecurity } from "src/screens/setup/SetupSecurity";
+import { SetupServices } from "src/screens/setup/SetupServices";
+import { FLNDForm } from "src/screens/setup/node/FLNDForm";
+import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
+import { Listings } from "src/screens/listings/Listings";
+import { LspAnalytics } from "src/screens/lsp/LspAnalytics";
+import { LspClients } from "src/screens/lsp/LspClients";
+import { LspConfig } from "src/screens/lsp/LspConfig";
+import { LspOrderDetail } from "src/screens/lsp/LspOrderDetail";
+import { LspOrders } from "src/screens/lsp/LspOrders";
+import { LspOverview } from "src/screens/lsp/LspOverview";
+import { LspWebhooks } from "src/screens/lsp/LspWebhooks";
+import { CashHubDashboard } from "src/screens/subwallets/CashHubDashboard";
+import { CashHubList } from "src/screens/subwallets/CashHubList";
+import { NewCircleHub } from "src/screens/subwallets/NewCircleHub";
+import { NewCashHub } from "src/screens/subwallets/NewCashHub";
+import { NewSimpleSubwallet } from "src/screens/subwallets/NewSimpleSubwallet";
+import { NewSubwallet } from "src/screens/subwallets/NewSubwallet";
+import { SubwalletCreated } from "src/screens/subwallets/SubwalletCreated";
+import { SubwalletList } from "src/screens/subwallets/SubwalletList";
+import Wallet from "src/screens/wallet";
+import NodeAlias from "src/screens/wallet/NodeAlias";
+import NodeProfile from "src/screens/wallet/NodeProfile";
+import Receive from "src/screens/wallet/Receive";
+import Send from "src/screens/wallet/Send";
+import SignMessage from "src/screens/wallet/SignMessage";
+import WithdrawOnchainFunds from "src/screens/wallet/WithdrawOnchainFunds";
+import ReceiveInvoice from "src/screens/wallet/receive/ReceiveInvoice";
+
+import ReceiveOnchain from "src/screens/wallet/receive/ReceiveOnchain";
+import ConfirmPayment from "src/screens/wallet/send/ConfirmPayment";
+import LnurlPay from "src/screens/wallet/send/LnurlPay";
+import Onchain from "src/screens/wallet/send/Onchain";
+import OnchainSuccess from "src/screens/wallet/send/OnchainSuccess";
+import PaymentSuccess from "src/screens/wallet/send/PaymentSuccess";
+import ZeroAmount from "src/screens/wallet/send/ZeroAmount";
+
+const routes: RouteObject[] = [
+  {
+    path: "/",
+    children: [
+      {
+        index: true,
+        element: <HomeRedirect />,
+      },
+      {
+        element: <AppLayout />,
+        handle: { crumb: () => "Home" },
+        children: [
+          {
+            path: "home",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Dashboard" },
+            children: [
+              {
+                index: true,
+                element: <Home />,
+              },
+            ],
+          },
+          {
+            path: "wallet",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Wallet" },
+            children: [
+              {
+                index: true,
+                element: <Wallet />,
+              },
+              {
+                path: "receive",
+                handle: { crumb: () => "Receive" },
+                children: [
+                  {
+                    index: true,
+                    element: <Receive />,
+                  },
+                  {
+                    handle: { crumb: () => "Receive On-chain" },
+                    path: "onchain",
+                    element: <ReceiveOnchain />,
+                  },
+                  {
+                    handle: { crumb: () => "Invoice" },
+                    path: "invoice",
+                    element: <ReceiveInvoice />,
+                  },
+                ],
+              },
+              {
+                path: "send",
+                handle: { crumb: () => "Send" },
+                children: [
+                  {
+                    index: true,
+                    element: <Send />,
+                  },
+                  {
+                    path: "onchain",
+                    element: <Onchain />,
+                  },
+                  {
+                    path: "lnurl-pay",
+                    element: <LnurlPay />,
+                  },
+                  {
+                    path: "0-amount",
+                    element: <ZeroAmount />,
+                  },
+                  {
+                    path: "confirm-payment",
+                    element: <ConfirmPayment />,
+                  },
+                  {
+                    path: "onchain-success",
+                    element: <OnchainSuccess />,
+                  },
+                  {
+                    path: "success",
+                    element: <PaymentSuccess />,
+                  },
+                ],
+              },
+              {
+                path: "sign-message",
+                element: <SignMessage />,
+                handle: { crumb: () => "Sign Message" },
+              },
+              {
+                path: "node-alias",
+                element: <NodeAlias />,
+                handle: { crumb: () => "Node Alias" },
+              },
+              {
+                path: "node-profile",
+                element: <NodeProfile />,
+                handle: { crumb: () => "Profile" },
+              },
+              {
+                path: "withdraw",
+                element: <WithdrawOnchainFunds />,
+                handle: { crumb: () => "Withdraw On-Chain Balance" },
+              },
+            ],
+          },
+          {
+            path: "settings",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Settings" },
+            children: [
+              {
+                path: "",
+                element: <SettingsLayout />,
+                children: [
+                  {
+                    index: true,
+                    element: <Settings />,
+                  },
+                  {
+                    path: "services",
+                    element: <Services />,
+                    handle: { crumb: () => "Services" },
+                  },
+                  {
+                    path: "identity-authorities",
+                    element: <Navigate to="/settings/services" replace />,
+                  },
+                  {
+                    path: "about",
+                    element: <About />,
+                    handle: { crumb: () => "About" },
+                  },
+                  {
+                    path: "auto-unlock",
+                    element: <AutoUnlock />,
+                    handle: { crumb: () => "Auto Unlock" },
+                  },
+                  {
+                    path: "change-unlock-password",
+                    element: <ChangeUnlockPassword />,
+                    handle: { crumb: () => "Unlock Password" },
+                  },
+                  {
+                    path: "backup",
+                    element: <Backup />,
+                    handle: { crumb: () => "Backup" },
+                  },
+                  {
+                    path: "node-migrate",
+                    element: <MigrateNode />,
+                  },
+                  {
+                    path: "developer",
+                    element: <DeveloperSettings />,
+                  },
+                  {
+                    path: "debug-tools",
+                    element: <DebugTools />,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            path: "apps",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Connections" },
+            children: [
+              {
+                index: true,
+                element: <Connections />,
+              },
+              {
+                path: ":id",
+                element: <AppDetails />,
+              },
+              {
+                path: "new",
+                element: <NewApp />,
+                handle: { crumb: () => "New App" },
+              },
+              {
+                path: "cleanup",
+                element: <AppsCleanup />,
+              },
+            ],
+          },
+          {
+            path: "sub-wallets",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Sub-wallets" },
+
+            children: [
+              {
+                index: true,
+                element: <SubwalletList />,
+              },
+              {
+                path: "new",
+                element: <NewSubwallet />,
+              },
+              {
+                path: "new/simple",
+                element: <NewSimpleSubwallet />,
+              },
+              {
+                path: "new/circle",
+                element: <NewCircleHub />,
+              },
+              {
+                path: "created",
+                element: <SubwalletCreated />,
+              },
+            ],
+          },
+          {
+            path: "cash-hub",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Cash Hub" },
+            children: [
+              {
+                index: true,
+                element: <CashHubList />,
+              },
+              {
+                path: "new",
+                element: <NewCashHub />,
+              },
+              {
+                path: "created",
+                element: <SubwalletCreated />,
+              },
+              {
+                // One hub's own dashboard. A hub row used to lead to /apps/:id,
+                // where the cash list sat below three unrelated cards with no
+                // room for totals or charts. Last, so it cannot shadow the
+                // literal "new"/"created" siblings above.
+                path: ":id",
+                element: <CashHubDashboard />,
+              },
+            ],
+          },
+          {
+            path: "listings",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Listings" },
+            children: [{ index: true, element: <Listings /> }],
+          },
+          {
+            path: "lsp",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "LSP" },
+            children: [
+              { index: true, element: <LspOverview /> },
+              {
+                path: "orders",
+                handle: { crumb: () => "Orders" },
+                children: [
+                  { index: true, element: <LspOrders /> },
+                  { path: ":orderId", element: <LspOrderDetail /> },
+                ],
+              },
+              { path: "peers", element: <LspClients /> },
+              { path: "webhooks", element: <LspWebhooks /> },
+              { path: "analytics", element: <LspAnalytics /> },
+              { path: "config", element: <LspConfig /> },
+            ],
+          },
+          {
+            path: "internal-apps",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Connections" },
+            children: [
+              {
+                path: ":id",
+                element: <InternalAppDetail />,
+              },
+            ],
+          },
+          {
+            path: "appstore",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "App Store" },
+            children: [
+              {
+                path: ":appStoreId",
+                element: <AppStoreDetail />,
+              },
+            ],
+          },
+          {
+            path: "channels",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Node" },
+            children: [
+              {
+                index: true,
+                element: <Channels />,
+              },
+              {
+                path: "first",
+                handle: { crumb: () => "Your First Channel" },
+                children: [
+                  {
+                    index: true,
+                    element: <FirstChannel />,
+                  },
+                  {
+                    path: "opening",
+                    element: <OpeningFirstChannel />,
+                  },
+                  {
+                    path: "opened",
+                    element: <OpenedFirstChannel />,
+                  },
+                ],
+              },
+              {
+                path: "auto",
+                handle: { crumb: () => "New Channel" },
+                children: [
+                  {
+                    index: true,
+                    element: <AutoChannel />,
+                  },
+                  {
+                    path: "opening",
+                    element: <OpeningAutoChannel />,
+                  },
+                  {
+                    path: "opened",
+                    element: <OpenedAutoChannel />,
+                  },
+                ],
+              },
+              {
+                path: "outgoing",
+                element: <IncreaseOutgoingCapacity />,
+                handle: { crumb: () => "Open Channel with On-Chain" },
+              },
+
+              {
+                path: "order",
+                element: <CurrentChannelOrder />,
+                handle: { crumb: () => "Current Order" },
+              },
+              {
+                path: "inbound",
+                element: <OrderChannel />,
+                handle: { crumb: () => "Increase Inbound Liquidity" },
+              },
+              {
+                path: "history",
+                element: <OrderHistory />,
+                handle: { crumb: () => "Liquidity Orders" },
+              },
+              {
+                path: "onchain/deposit-flokicoin",
+                element: <DepositFlokicoin />,
+                handle: { crumb: () => <DepositFlokicoinCrumb /> },
+              },
+            ],
+          },
+          {
+            path: "peers",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Peers" },
+            children: [
+              {
+                index: true,
+                element: <Peers />,
+              },
+              {
+                path: "new",
+                element: <ConnectPeer />,
+                handle: { crumb: () => "Connect Peer" },
+              },
+            ],
+          },
+          {
+            path: "help",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "FAQ" },
+            children: [
+              {
+                index: true,
+                element: <FAQ />,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    element: <TwoColumnFullScreenLayout />,
+    children: [
+      {
+        path: "start",
+        element: (
+          <StartRedirect>
+            <Start />
+          </StartRedirect>
+        ),
+      },
+      {
+        path: "unlock",
+        element: <Unlock />,
+      },
+      {
+        path: "welcome",
+        element: <Welcome />,
+      },
+      {
+        path: "setup",
+        element: <SetupRedirect />,
+        children: [
+          {
+            element: <Navigate to="password" replace />,
+          },
+          {
+            path: "password",
+            element: <SetupPassword />,
+          },
+          {
+            path: "services",
+            element: <SetupServices />,
+          },
+          {
+            path: "security",
+            element: <SetupSecurity />,
+          },
+          {
+            path: "node",
+            children: [
+              {
+                index: true,
+                element: <FLNDForm />,
+              },
+            ],
+          },
+          {
+            path: "node-restore",
+            element: <RestoreNode />,
+          },
+          {
+            path: "finish",
+            element: <SetupFinish />,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    path: "create-node-migration-file-success",
+    element: <CreateNodeMigrationFileSuccess />,
+  },
+  {
+    path: "intro",
+    element: <Intro />,
+  },
+  {
+    path: "/*",
+    element: <NotFound />,
+  },
+];
+
+export default routes;

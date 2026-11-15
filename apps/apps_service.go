@@ -1,0 +1,720 @@
+package apps
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/flokiorg/lokihub/clock"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/internal/numeric"
+	"github.com/flokiorg/lokihub/keys"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nostr/pubkeyhex"
+	"github.com/nbd-wtf/go-nostr"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
+)
+
+type AppsService interface {
+	// CreateApp creates a new NWC app connection.
+	// kind must be one of the db.AppKind* constants.
+	// parentAppID / parentKind are set for sub-wallets (cash_wallet, circle_child).
+	CreateApp(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+		expiresAt *time.Time, scopes []string, kind string,
+		parentAppID *uint, parentKind string,
+		metadata map[string]interface{}) (*db.App, string, error)
+	// CreateAppTx is CreateApp run inside a caller-provided transaction instead of
+	// opening its own. Use this when app creation must be atomic with another
+	// check made in the same transaction (e.g. a Postgres advisory lock guarding
+	// a budget-commitment check) — see create_circle_wallet_controller.go and
+	// mint_cash_controller.go's allocation-claim path.
+	//
+	// Unlike CreateApp, this does NOT publish "nwc_app_created" itself — the
+	// caller's transaction is not guaranteed committed yet when CreateAppTx
+	// returns (there may be more work left in the same transaction, e.g. a
+	// membership-uniqueness insert), and createAppConsumer's event handler
+	// looks the new app up via a separate, non-transactional connection. If
+	// the event fired before commit, that lookup would race the commit and
+	// could miss it, permanently skipping the new app's relay subscription
+	// setup with no retry. The caller MUST call NotifyAppCreated(app) itself,
+	// once its own transaction has successfully committed.
+	CreateAppTx(tx *gorm.DB, name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+		expiresAt *time.Time, scopes []string, kind string,
+		parentAppID *uint, parentKind string,
+		metadata map[string]interface{}) (*db.App, string, error)
+	// NotifyAppCreated publishes the "nwc_app_created" event for app, which
+	// (among other things) triggers the new app's relay subscription setup.
+	// CreateApp calls this itself, after its own transaction commits. Callers
+	// of CreateAppTx must call this explicitly once their own outer
+	// transaction has committed — see CreateAppTx's doc comment.
+	NotifyAppCreated(app *db.App)
+	// CreateCashHub creates a cash_hub app and persists its CashHubConfig.
+	CreateCashHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+		expiresAt *time.Time, scopes []string, metadata map[string]interface{},
+		config db.CashHubConfig) (*db.App, string, error)
+	// GetCashHubConfig returns the CashHubConfig for a cash_hub app.
+	GetCashHubConfig(appID uint) (*db.CashHubConfig, error)
+	// UpdateCashHubConfig updates a cash_hub's PerWalletMaxMloki, MaxExpSecs,
+	// MinTransferMloki, RedeemFeePpm and/or SpentRetentionSecs (0 there
+	// disables the spent-bill tombstone rather than meaning "unset"). A nil pointer leaves that field
+	// unchanged; PerWalletMaxMloki must be positive when non-nil; MaxExpSecs
+	// must be within 0..constants.MAX_EXPIRY_SECS, where 0 means "never" —
+	// a Hub with no ceiling on how long its cash may stay unredeemed, which
+	// NIP-CASH §Data Model explicitly allows; MinTransferMloki must only be
+	// non-negative (0 = no floor is valid); RedeemFeePpm must be within
+	// 0..constants.MAX_FEES_PPM (0 = free).
+	UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, redeemFeeBaseMloki *int64, spentRetentionSecs *int) error
+	// ValidateCashHubConfigUpdate runs UpdateCashHubConfig's checks without
+	// saving, so a caller can refuse a request before changing anything else.
+	ValidateCashHubConfigUpdate(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, redeemFeeBaseMloki *int64, spentRetentionSecs *int) error
+	// CreateCircleHub creates a circle_hub app and persists its CircleHubConfig,
+	// attaching it to either an existing CircleIdentity (identityRef.ExistingID) or a
+	// brand-new one created from identityRef's remaining fields.
+	CreateCircleHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+		expiresAt *time.Time, scopes []string, metadata map[string]interface{},
+		identityRef CircleIdentityRef, config db.CircleHubConfig) (*db.App, string, error)
+	// CashHubDeleteCheck reports what keeps a Cash Hub from being deleted.
+	CashHubDeleteCheck(hubID uint) (CashHubDeleteCheck, error)
+	// GetCircleHubConfig returns the CircleHubConfig (with CircleIdentity preloaded)
+	// for a circle_hub app.
+	GetCircleHubConfig(appID uint) (*db.CircleHubConfig, error)
+	// UpdateCircleHubConfig applies a settings patch to a circle_hub's
+	// CircleHubConfig, checking the result as a whole. A nil field leaves that
+	// setting unchanged.
+	UpdateCircleHubConfig(appID uint, patch CircleHubConfigPatch) error
+	// ValidateCircleHubConfigUpdate runs UpdateCircleHubConfig's checks without
+	// saving, so a caller can refuse a request before changing anything else.
+	ValidateCircleHubConfigUpdate(appID uint, patch CircleHubConfigPatch) error
+	// CreateCircleIdentity creates a standalone, reusable CircleIdentity.
+	// followSetD is the set's `d` identifier, required for follow_set only.
+	CreateCircleIdentity(name, policy, providerPubkey, followSetD string) (*db.CircleIdentity, error)
+	// GetCircleIdentity returns a CircleIdentity by ID.
+	GetCircleIdentity(id uint) (*db.CircleIdentity, error)
+	// ListCircleIdentities returns every CircleIdentity, ordered by ID.
+	ListCircleIdentities() ([]db.CircleIdentity, error)
+	// DeleteCircleIdentity refuses (ErrInvalidParams) if any circle_hub still
+	// references the identity; otherwise deletes it (cascading its allowlist).
+	DeleteCircleIdentity(id uint) error
+	DeleteApp(app *db.App) error
+	// DeleteCashHub is DeleteApp for a Cash Hub; confirmWatchEnd is the owner's
+	// confirmation that the delete ends the watch on paid on-chain order
+	// addresses, required while any is watched (ErrWatchEndUnconfirmed).
+	DeleteCashHub(app *db.App, confirmWatchEnd bool) error
+	GetAppByPubkey(pubkey string) *db.App
+	GetAppById(id uint) *db.App
+	SetAppMetadata(appId uint, metadata map[string]interface{}) error
+	HasLightningAddress(app *db.App) bool
+
+	// CreateCashWalletClaims batch-inserts one CashWalletClaim row per recipient
+	// of a freshly-created, shared cash_wallet app. Called once by
+	// cashwallet.Commit right after the wallet app itself is created.
+	CreateCashWalletClaims(walletAppID uint, entries []db.CashWalletClaim) error
+	// CreateCashWalletClaimsTx is CreateCashWalletClaims run inside a
+	// caller-provided transaction instead of opening its own — see CreateAppTx's
+	// own doc comment for why this pattern exists. cashwallet.Commit uses this
+	// to make wallet-app creation and claim-row insertion atomic with each
+	// other: either both land, or (on any failure) neither does, no separate
+	// compensating delete needed for this part of wallet creation.
+	CreateCashWalletClaimsTx(tx *gorm.DB, walletAppID uint, entries []db.CashWalletClaim) error
+	// ListClaimsForWallet returns every recipient slice (claimed or not) of a
+	// single cash_wallet app — the roster the cash_status NIP-47 method
+	// exposes. Ordered by created_at asc.
+	ListClaimsForWallet(walletAppID uint) ([]db.CashWalletClaim, error)
+	// HasArchivedSliceForWallet reports whether any slice of this cash_wallet has
+	// already been archived away — which today means exactly one thing: an
+	// operator removed a recipient via DeleteCashClaim, since that is the only
+	// path that deletes a live claim row (a redeem or a full split sets
+	// ClaimedAt and keeps the row).
+	//
+	// It exists because "how many recipients has this wallet EVER had" cannot be
+	// answered from cash_wallet_claims alone. DeleteCashClaim hard-deletes the
+	// row and writes its archive row in the SAME transaction, so live rows and
+	// archive rows are disjoint and their union is the lifetime set — the
+	// invariant db/archive/archive_cash_bill.go already depends on when it sums
+	// a dying bill's total from the archive rather than from its claims.
+	//
+	// Existence, not a count: every caller only needs to know whether the
+	// lifetime set is larger than the live one.
+	HasArchivedSliceForWallet(walletAppID uint) (bool, error)
+	// ListCashHubWalletChildren returns every cash_wallet app that is a child of
+	// hubID, queried directly from apps. Ordered by created_at asc.
+	ListCashHubWalletChildren(hubID uint) ([]db.App, error)
+	// ListCashWalletClaims returns one page of a hub's slices — live claims and
+	// archived ones merged into a single newest-first set — plus the count
+	// matching the filter and the counts over the whole unfiltered set.
+	// Filtering, counting and paging all happen in SQL, since the archive is
+	// retained forever.
+	ListCashWalletClaims(f CashClaimFilter) ([]CashClaimRow, uint64, map[string]uint64, error)
+	// GetCashHubStats totals one hub's cash activity in money rather than row
+	// counts — outstanding liability, issued/redeemed/returned, fees earned,
+	// median time to redeem, and a bounded daily series. Spans live and
+	// archived slices alike, which is only possible because a spent bill's
+	// history outlives its deletion.
+	GetCashHubStats(hubID uint, now time.Time) (*CashHubStats, error)
+	// GetAllCashHubStats is the same figures across every cash hub on the
+	// node, for the Cash Hubs list's own overview.
+	GetAllCashHubStats(now time.Time) (*CashHubStats, error)
+	// GetCircleHubStats totals one circle_hub's member activity.
+	GetCircleHubStats(hubID uint, now time.Time) (*CircleHubStats, error)
+	// GetCashWalletClaim is a read-only lookup of one recipient's still-unclaimed
+	// slice, used by cash_redeem to verify identity/attestation proof (which
+	// needs the row's IAPubkey for connection_key mode) BEFORE attempting the
+	// atomic claim — so an invalid/unverifiable proof never touches the atomic
+	// slot at all, which would otherwise let anyone who merely knows a
+	// recipient's identity_value (exposed via cash_status) briefly grief a
+	// legitimate concurrent claimer without ever proving ownership. Returns
+	// nil, nil if no unclaimed row matches.
+	GetCashWalletClaim(walletAppID uint, identityType, identityValue string) (*db.CashWalletClaim, error)
+	// ClaimCashSlice atomically marks one recipient's slice claimed, guarded
+	// by "WHERE claimed_at IS NULL" so concurrent/replayed claims can't double-pay,
+	// AND by an optimistic lock on the slice's current TransferCount, which every
+	// in-place cash_transfer bumps — so a claim can't commit against a row a
+	// concurrent transfer changed between the read and the update. A slice's
+	// AmountMloki is never rewritten in place. Returns the claimed row's AmountMloki, or a
+	// constants.ErrNotFound-wrapped error if no matching unclaimed row exists
+	// (never existed, wrong identity, already claimed, or raced against a
+	// concurrent split/transfer — all look identical to the caller by design).
+	ClaimCashSlice(walletAppID uint, identityType, identityValue string) (amountMloki int64, err error)
+	// ReassignCashSliceIdentity atomically reassigns one unclaimed slice's
+	// registered identity from (currentIdentityType, currentIdentityValue) to
+	// (newIdentityType, newIdentityValue, newIAPubkey), guarded by
+	// "claimed_at IS NULL" and an optimistic lock on the slice's current
+	// TransferCount — so two concurrent transfers of the same slice can never
+	// both succeed. Returns the slice's unchanged AmountMloki on success. Used
+	// ONLY for the narrow "lifetime-solo wallet, full-amount transfer" fast
+	// path (cash_transfer_controller.go) — every other outcome claims the slice
+	// (ClaimCashSlice) and re-issues its value as new bills (cashwallet.SplitInTwo).
+	ReassignCashSliceIdentity(walletAppID uint, currentIdentityType, currentIdentityValue,
+		newIdentityType, newIdentityValue, newIAPubkey string) (amountMloki int64, err error)
+	// SetCashSliceRedeemPayment records the payout facts for a slice just
+	// redeemed over Lightning. Purely informational. Call only after
+	// SendPaymentSync has returned a settled transaction.
+	SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error
+	// ReleaseCashSliceForFailedPayment reopens a slice whose redeem payment has
+	// definitely failed. A no-op unless walletAppID has a claimed slice whose
+	// payment carries paymentHash and recorded no preimage.
+	ReleaseCashSliceForFailedPayment(walletAppID uint, paymentHash string) (released bool, err error)
+	// ClaimSliceForRedeem claims a slice for a cash_redeem: in-flight bound,
+	// first-wins claim, payment hash and consumed claim proof in one transaction.
+	ClaimSliceForRedeem(c RedeemClaim, now time.Time) error
+	// ReleaseRedeemClaim reopens a slice whose redeem payment did not happen or
+	// definitely failed, forgetting its consumed proof in the same transaction.
+	ReleaseRedeemClaim(walletAppID uint, paymentHash string, cooldownUntil *time.Time) (released bool, err error)
+	// ResolveOrphanRedeemClaims settles or releases claimed slices whose redeem
+	// payout has no preimage and no pending ledger row, asking lookup when the
+	// ledger cannot tell. Returns the bills a settlement was recorded on.
+	ResolveOrphanRedeemClaims(claimedBefore time.Time, lookup PayoutLookup) ([]uint, error)
+	// LateFailureCooldown is when a slice whose payout failed after its redeem
+	// answered may be redeemed again; nil when the cool-down is off.
+	LateFailureCooldown(now time.Time) *time.Time
+	// DeleteCashBill archives a cash bill's history and hard-deletes it in one
+	// transaction, then publishes nwc_app_deleted. This is the ONLY way to
+	// delete a cash_wallet — DeleteApp refuses that kind — so no delete path
+	// can quietly destroy a bill's history. outcome is a db.CashBillOutcome*
+	// value. Callers that must first reclaim a balance should go through
+	// service.ReclaimAndDeleteSubWallet, which delegates here.
+	DeleteCashBill(app *db.App, outcome string) error
+	// SetCashWalletSplitSource records, on the NEW wallet's own App row, which
+	// source cash_wallet it was split from — purely informational (see
+	// db.App.SplitFromWalletAppID), the reverse of the source slice's
+	// spun_off_to_wallet_app_id.
+	// Call only after the new wallet has been created and funded.
+	SetCashWalletSplitSource(newWalletAppID, sourceWalletAppID uint) error
+	// DeleteCashClaim removes an unclaimed slice from a cash_wallet, calling
+	// sweep (if non-nil) to return its amount to the hub while the slice is
+	// held; if sweep fails the slice is released untouched. Returns an error if
+	// the claim is not found, belongs to a different wallet, or has already
+	// been claimed.
+	DeleteCashClaim(walletAppID uint, claimID uint, sweep CashSweepTx) (*db.CashWalletClaim, error)
+	// RecordCashSliceRedeemSettlement records a late-settling redeem payout's
+	// facts on its slice, found by payment hash; a slice already recorded is
+	// left alone.
+	RecordCashSliceRedeemSettlement(walletAppID uint, payment CashSliceRedeemPayment) error
+}
+
+// CashSliceRedeemPayment carries the payout facts SetCashSliceRedeemPayment
+// stores on a just-redeemed slice. Grouped into a struct rather than passed as
+// five positional arguments because two of them are fees that differ only in
+// who bore them, and a caller swapping those silently would be invisible.
+type CashSliceRedeemPayment struct {
+	PaymentHash string
+	Preimage    string
+	// RedeemFeeMloki is the hub's own cut, deducted from the recipient's
+	// payout. RoutingFeeMloki is what the hub paid the network to deliver it.
+	RedeemFeeMloki  int64
+	RoutingFeeMloki int64
+	SettledAt       *time.Time
+}
+
+// CashWalletClaimRow is one row of ListCashWalletClaims' result — a
+// CashWalletClaim joined with its wallet's ExpiresAt and WalletPubkey (the
+// latter lets the caller derive/encode a lokicash token for the page it
+// actually renders, without a second per-wallet query).
+type CashWalletClaimRow struct {
+	db.CashWalletClaim
+	WalletExpiresAt *time.Time
+	WalletPubkey    *string
+}
+
+type appsService struct {
+	db             *gorm.DB
+	eventPublisher events.EventPublisher
+	keys           keys.Keys
+	cfg            config.Config
+}
+
+func NewAppsService(db *gorm.DB, eventPublisher events.EventPublisher, keys keys.Keys, cfg config.Config) *appsService {
+	return &appsService{
+		db:             db,
+		eventPublisher: eventPublisher,
+		keys:           keys,
+		cfg:            cfg,
+	}
+}
+
+func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+	expiresAt *time.Time, scopes []string, kind string,
+	parentAppID *uint, parentKind string,
+	metadata map[string]interface{}) (*db.App, string, error) {
+
+	app, pairingSecretKey, err := svc.prepareApp(svc.db, name, pubkey, budgetRenewal, scopes, kind, parentAppID, parentKind, expiresAt, metadata)
+	if err != nil {
+		return nil, "", err
+	}
+
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		return svc.saveAppTx(tx, app, scopes, maxAmountLoki, budgetRenewal, expiresAt)
+	})
+
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to save app")
+		return nil, "", err
+	}
+
+	svc.NotifyAppCreated(app)
+
+	return app, pairingSecretKey, nil
+}
+
+// CreateAppTx is CreateApp run inside a caller-provided transaction. See the
+// interface doc comment for why this exists (atomicity with an advisory lock
+// held by the caller) and why, unlike CreateApp, it does not call
+// NotifyAppCreated itself.
+func (svc *appsService) CreateAppTx(tx *gorm.DB, name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+	expiresAt *time.Time, scopes []string, kind string,
+	parentAppID *uint, parentKind string,
+	metadata map[string]interface{}) (*db.App, string, error) {
+
+	app, pairingSecretKey, err := svc.prepareApp(tx, name, pubkey, budgetRenewal, scopes, kind, parentAppID, parentKind, expiresAt, metadata)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if err := svc.saveAppTx(tx, app, scopes, maxAmountLoki, budgetRenewal, expiresAt); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to save app")
+		return nil, "", err
+	}
+
+	return app, pairingSecretKey, nil
+}
+
+// NotifyAppCreated publishes "nwc_app_created" for app. See the AppsService
+// interface doc comment on CreateAppTx for why this is a separate method
+// rather than something CreateAppTx calls itself.
+func (svc *appsService) NotifyAppCreated(app *db.App) {
+	svc.eventPublisher.Publish(&events.Event{
+		Event: "nwc_app_created",
+		Properties: map[string]interface{}{
+			"name": app.Name,
+			"id":   app.ID,
+		},
+	})
+}
+
+// ErrDuplicateAppPubkey is returned when the requested client pubkey is already
+// authorized for another connection on this node.
+var ErrDuplicateAppPubkey = errors.New("duplicated key not allowed")
+
+// prepareApp validates inputs, resolves the pairing keypair and a free name,
+// and builds the App row — everything that doesn't need to happen inside the
+// eventual save transaction. Shared by CreateApp and CreateAppTx. queryDB is
+// the handle its two uniqueness-check reads run against — CreateApp passes
+// svc.db (no transaction open yet), CreateAppTx passes the caller's tx. This
+// must be the caller's own transaction handle when called from CreateAppTx,
+// not svc.db: an independent read via svc.db while the caller's tx is still
+// open raced that open transaction (both contending on the same underlying
+// SQLite file lock) and could stall indefinitely — found via
+// create_circle_wallet_controller.go, the only CreateAppTx caller,
+// deadlocking inside its own outer transaction.
+func (svc *appsService) prepareApp(queryDB *gorm.DB, name string, pubkey string, budgetRenewal string, scopes []string, kind string,
+	parentAppID *uint, parentKind string, expiresAt *time.Time, metadata map[string]interface{}) (*db.App, string, error) {
+
+	if name == "" {
+		return nil, "", errors.New("no app name provided")
+	}
+
+	if kind == "" {
+		kind = db.AppKindStandard
+	}
+
+	if db.IsIsolatedKind(kind) {
+		if slices.Contains(scopes, constants.SIGN_MESSAGE_SCOPE) {
+			return nil, "", errors.New("sub-wallet app connection cannot have sign_message scope")
+		}
+	}
+
+	if budgetRenewal == "" {
+		budgetRenewal = constants.BUDGET_RENEWAL_NEVER
+	}
+
+	if !slices.Contains(constants.GetBudgetRenewals(), budgetRenewal) {
+		return nil, "", fmt.Errorf("invalid budget renewal. Must be one of %s", strings.Join(constants.GetBudgetRenewals(), ","))
+	}
+
+	if len(scopes) == 0 {
+		return nil, "", errors.New("no scopes provided")
+	}
+
+	var pairingPublicKey string
+	var pairingSecretKey string
+	var err error
+	if pubkey == "" {
+		pairingSecretKey = nostr.GeneratePrivateKey()
+		pairingPublicKey, err = nostr.GetPublicKey(pairingSecretKey)
+		if err != nil {
+			return nil, "", err
+		}
+	} else {
+		// Stored lower-cased: a key is matched byte for byte against the pubkey on
+		// incoming events, which are always lowercase hex.
+		pairingPublicKey = pubkeyhex.Normalize(pubkey)
+		if !pubkeyhex.Valid(pairingPublicKey) {
+			logger.Logger.Error().Interface("pairingPublicKey", pairingPublicKey).Msg("Invalid public key format")
+			return nil, "", fmt.Errorf("invalid public key format: %s", pairingPublicKey)
+		}
+	}
+
+	var metadataBytes []byte
+	if metadata != nil {
+		metadataBytes, err = json.Marshal(metadata)
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to serialize metadata")
+			return nil, "", err
+		}
+	}
+
+	// use a suffix to avoid duplicate names
+	nameIndex := 0
+	var freeName string
+	for ; ; nameIndex++ {
+		freeName = name
+		if nameIndex > 0 {
+			freeName += fmt.Sprintf(" (%d)", nameIndex)
+		}
+		var existingApp db.App
+		err := queryDB.Where("name = ?", freeName).First(&existingApp).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			break
+		}
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	var existingByPubkey db.App
+	err = queryDB.Where("app_pubkey = ?", pairingPublicKey).First(&existingByPubkey).Error
+	if err == nil {
+		return nil, "", ErrDuplicateAppPubkey
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", err
+	}
+
+	app := &db.App{
+		Name:        freeName,
+		AppPubkey:   pairingPublicKey,
+		Kind:        kind,
+		ParentAppID: parentAppID,
+		ParentKind:  parentKind,
+		ExpiresAt:   expiresAt,
+		Metadata:    datatypes.JSON(metadataBytes),
+	}
+
+	return app, pairingSecretKey, nil
+}
+
+// saveAppTx persists app, its AppPermission rows, and its derived wallet
+// pubkey, all within tx. Shared by CreateApp (which wraps it in its own
+// transaction) and CreateAppTx (which runs it inside the caller's).
+func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, maxAmountLoki uint64,
+	budgetRenewal string, expiresAt *time.Time) error {
+
+	if app.ParentAppID != nil {
+		if err := svc.verifyParentHubTx(tx, *app.ParentAppID, app.ParentKind); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Save(app).Error; err != nil {
+		// idx_apps_app_pubkey_unique is the only unique index on apps besides the
+		// primary key: a duplicate here is the same refusal prepareApp's own
+		// read-then-insert check gives, lost to a concurrent creation.
+		if db.IsDuplicateKeyError(err) {
+			return ErrDuplicateAppPubkey
+		}
+		return err
+	}
+
+	for _, scope := range scopes {
+		appPermission := db.AppPermission{
+			App:           *app,
+			Scope:         scope,
+			ExpiresAt:     expiresAt,
+			MaxAmountLoki: numeric.ClampUint64ToInt(maxAmountLoki),
+			BudgetRenewal: budgetRenewal,
+		}
+		if err := tx.Create(&appPermission).Error; err != nil {
+			return err
+		}
+	}
+
+	appWalletPrivKey, err := svc.keys.GetAppWalletKey(app.ID)
+	if err != nil {
+		return fmt.Errorf("error generating wallet child private key: %w", err)
+	}
+
+	appWalletPubkey, err := nostr.GetPublicKey(appWalletPrivKey)
+	if err != nil {
+		return fmt.Errorf("error generating wallet child public key: %w", err)
+	}
+
+	return tx.Model(app).Update("wallet_pubkey", appWalletPubkey).Error
+}
+
+// verifyParentHubTx checks, within tx, that parentAppID still exists and is
+// the hub kind parentKind expects. Called before inserting a circle_wallet/
+// cash_wallet child, inside the same transaction as the insert, so a
+// concurrent DeleteApp on that hub can't race a child creation into
+// orphaning it: App.ParentAppID has no DB-level cascade. On Postgres, an
+// advisory lock keyed by the hub's own ID serializes this check+insert
+// against deleteHubAppTx's own check+delete across processes — the same lock
+// and keyspace create_circle_wallet_controller.go already uses for its own
+// commitment check. Sqlite needs no explicit lock: its transactions
+// serialize by default (only one writer active at a time), so wrapping the
+// check and the insert in one transaction — which saveAppTx's callers
+// already do — is sufficient there.
+func (svc *appsService) verifyParentHubTx(tx *gorm.DB, parentAppID uint, parentKind string) error {
+	expectedHubKind, ok := map[string]string{
+		db.ParentKindCircle: db.AppKindCircleHub,
+		db.ParentKindCash:   db.AppKindCashHub,
+	}[parentKind]
+	if !ok {
+		return fmt.Errorf("%w: unrecognized parent_kind %q", constants.ErrInvalidParams, parentKind)
+	}
+
+	if tx.Name() == "postgres" {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(parentAppID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
+			return fmt.Errorf("acquire parent hub lock: %w", err)
+		}
+	}
+
+	var parent db.App
+	if err := tx.First(&parent, parentAppID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: parent app %d not found", constants.ErrInvalidParams, parentAppID)
+		}
+		return err
+	}
+	if parent.Kind != expectedHubKind {
+		return fmt.Errorf("%w: parent app %d is not a %s", constants.ErrInvalidParams, parentAppID, expectedHubKind)
+	}
+	return nil
+}
+
+func (svc *appsService) DeleteApp(app *db.App) error {
+	return svc.deleteApp(app, false)
+}
+
+func (svc *appsService) DeleteCashHub(app *db.App, confirmWatchEnd bool) error {
+	if app.Kind != db.AppKindCashHub {
+		return fmt.Errorf("%w: app is not a cash_hub", constants.ErrInvalidParams)
+	}
+	return svc.deleteApp(app, confirmWatchEnd)
+}
+
+func (svc *appsService) deleteApp(app *db.App, confirmWatchEnd bool) error {
+	var err error
+	switch app.Kind {
+	case db.AppKindCircleHub, db.AppKindCashHub:
+		err = svc.deleteHubAppTx(app, confirmWatchEnd)
+	case db.AppKindCashOrder:
+		// Its orders are still served and minted after it is retired, so an
+		// Order connection goes only with its Hub (NIP-CO §What It Allows).
+		return fmt.Errorf("%w: an order connection cannot be deleted; retire it instead", constants.ErrInvalidParams)
+	case db.AppKindCircleWallet:
+		// A member's balance is never swept (NIP-CW §Lifecycle and Deletion): a
+		// Circle Wallet goes only through circlewallet.DeleteWallet, at most
+		// dust left and nothing in flight.
+		return fmt.Errorf("%w: a circle wallet is deleted only by its member or after its grace period, holding at most dust",
+			constants.ErrInvalidParams)
+	case db.AppKindCashWallet:
+		// A cash bill is hard-deleted the instant it is spent, which is what
+		// makes it indistinguishable from a pubkey this hub never served. That
+		// is only safe because its history is archived in the same transaction;
+		// a plain delete here would destroy the only record it ever existed,
+		// silently. Refusing outright means a delete path added later fails
+		// loudly the first time it runs instead of quietly losing data.
+		return fmt.Errorf("%w: a cash bill must be deleted via DeleteCashBill or service.ReclaimAndDeleteSubWallet so its history is archived",
+			constants.ErrInvalidParams)
+	default:
+		err = svc.db.Delete(app).Error
+	}
+	if err != nil {
+		return err
+	}
+	svc.eventPublisher.Publish(&events.Event{
+		Event: "nwc_app_deleted",
+		Properties: map[string]interface{}{
+			"name": app.Name,
+			"id":   app.ID,
+		},
+	})
+	return nil
+}
+
+// deleteHubAppTx deletes a circle_hub/cash_hub app, refusing if it still has
+// children (App.ParentAppID has no DB-level cascade, so a plain delete would
+// orphan them). The child-count check and the delete run inside one
+// transaction, with the same Postgres advisory lock (keyed by this hub's own
+// ID) that verifyParentHubTx takes before inserting a new child — otherwise a
+// concurrent circle_wallet/cash_wallet creation for this exact hub could still
+// commit in the gap between a separate count-then-delete, orphaning it. On
+// sqlite no explicit lock is needed: wrapping the count and the delete in one
+// transaction is sufficient on its own, since sqlite transactions serialize
+// by default (only one writer active at a time).
+func (svc *appsService) deleteHubAppTx(app *db.App, confirmWatchEnd bool) error {
+	parentKind, kindLabel, hint := db.ParentKindCircle, "circle_hub", "member wallet(s); use the circle delete endpoint instead"
+	if app.Kind == db.AppKindCashHub {
+		// Same orphan hazard as circle_hub, but for cash_hub: a cash_wallet
+		// child's periodic reclaim (cash_cleanup_service.ReclaimAndDeleteSubWallet)
+		// would try to credit a parent app row that no longer exists — a
+		// FOREIGN KEY violation on every cleanup tick, forever.
+		parentKind, kindLabel, hint = db.ParentKindCash, "cash_hub", "issued wallet(s); wait for them to expire/reclaim or delete them first"
+	}
+
+	return svc.db.Transaction(func(tx *gorm.DB) error {
+		if tx.Name() == "postgres" {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
+				return fmt.Errorf("acquire hub delete lock: %w", err)
+			}
+		}
+
+		var childCount int64
+		if err := tx.Model(&db.App{}).
+			Where("parent_app_id = ? AND parent_kind = ? AND kind <> ?", app.ID, parentKind, db.AppKindCashOrder).
+			Count(&childCount).Error; err != nil {
+			return err
+		}
+		if childCount > 0 {
+			// This generic delete has no cascade/balance-safety for the hub's
+			// children — refuse rather than silently orphan them. Circle hubs
+			// have a dedicated POST /api/apps/:id/circle/delete flow
+			// (api.DeleteCircleHub) that checks each child's balance and lets
+			// the caller choose how to proceed instead.
+			return fmt.Errorf("%w: %s still has %d %s", constants.ErrInvalidParams, kindLabel, childCount, hint)
+		}
+		// A Cash Hub also stays while a request record naming it is retained
+		// (Q23, XQ-22(1)): a lookup may still need it.
+		if app.Kind == db.AppKindCashHub {
+			check, err := CashHubDeleteCheckTx(tx, app.ID, clock.Now())
+			if err != nil {
+				return err
+			}
+			if check.Blocked() {
+				return fmt.Errorf("%w: %s", constants.ErrInvalidParams, check.Message())
+			}
+			if check.ConfirmationRequired && !confirmWatchEnd {
+				return fmt.Errorf("%w (%d address(es)); a later payment to one becomes no bill, so confirm the delete first",
+					ErrWatchEndUnconfirmed, check.WatchedAddresses)
+			}
+		}
+
+		// An Order connection lives as long as its Hub and goes with it (NIP-CO
+		// §The Order Connection).
+		if app.Kind == db.AppKindCashHub {
+			if err := DeleteHubOrdersTx(tx, app.ID); err != nil {
+				return err
+			}
+			if err := tx.Where("parent_app_id = ? AND kind = ?", app.ID, db.AppKindCashOrder).Delete(&db.App{}).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Delete(app).Error
+	})
+}
+
+func (svc *appsService) GetAppByPubkey(pubkey string) *db.App {
+	dbApp := db.App{}
+	findResult := svc.db.Where("app_pubkey = ?", pubkey).First(&dbApp)
+	if findResult.RowsAffected == 0 {
+		return nil
+	}
+	return &dbApp
+}
+
+func (svc *appsService) GetAppById(id uint) *db.App {
+	dbApp := db.App{}
+	findResult := svc.db.Where("id = ?", id).First(&dbApp)
+	if findResult.RowsAffected == 0 {
+		return nil
+	}
+	return &dbApp
+}
+
+func (svc *appsService) GetAppByName(name string) *db.App {
+	dbApp := db.App{}
+	findResult := svc.db.Where("name = ?", name).First(&dbApp)
+	if findResult.RowsAffected == 0 {
+		return nil
+	}
+	return &dbApp
+}
+
+func (svc *appsService) SetAppMetadata(id uint, metadata map[string]interface{}) error {
+	var metadataBytes []byte
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to serialize metadata")
+		return err
+	}
+
+	err = svc.db.Model(&db.App{}).Where("id", id).Update("metadata", datatypes.JSON(metadataBytes)).Error
+	if err != nil {
+		logger.Logger.Error().Err(err).Interface("metadata", metadata).Msg("failed to update transaction metadata")
+		return err
+	}
+
+	return nil
+}
+
+func (svc *appsService) HasLightningAddress(app *db.App) bool {
+	if app.Metadata == nil {
+		return false
+	}
+
+	var metadata map[string]interface{}
+	err := json.Unmarshal(app.Metadata, &metadata)
+	if err != nil {
+		return false
+	}
+
+	lud16, exists := metadata["lud16"]
+	return exists && lud16 != nil
+}

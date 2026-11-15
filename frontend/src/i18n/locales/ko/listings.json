@@ -1,0 +1,111 @@
+{
+  "nav": "게시",
+  "page": {
+    "title": "게시",
+    "description": "링크가 없는 사람도 찾을 수 있도록 이 Hub가 릴레이에 게시하는 오퍼",
+    "empty": "아직 게시된 것이 없습니다",
+    "emptyHint": "아래에서 서클을 게시하세요. Cash Hub 연결은 게시되지 않습니다.",
+    "listCircle": "서클 게시"
+  },
+  "card": {
+    "untitled": "제목 없는 오퍼",
+    "typeOrder": "현금 주문",
+    "typeCircle": "서클"
+  },
+  "status": {
+    "open": "열림",
+    "paused": "일시 중지",
+    "closed": "닫힘"
+  },
+  "health": {
+    "listed": "게시됨",
+    "paused": "게시됨, 일시 중지",
+    "closing": "닫힘, 마지막 버전이 만료될 때까지 유지",
+    "deleted": "게시 취소됨",
+    "refreshed": "{{count}}일 전 갱신",
+    "relays": "{{total}}개 중 {{ok}}개 릴레이",
+    "operatorVerified": "운영자 확인됨",
+    "operatorNotNamed": "운영자가 아직 지정하지 않음",
+    "failing": "마지막 버전을 받은 릴레이가 없어 다시 시도 중"
+  },
+  "dialog": {
+    "title": "이 오퍼 게시",
+    "editTitle": "게시 수정",
+    "description": "게시는 광고일 뿐이며, 조건은 누군가 탭할 때 항상 오퍼 자체에서 가져옵니다.",
+    "list": "게시",
+    "save": "저장"
+  },
+  "warnings": {
+    "public": "게시하면 이 오퍼가 공개되고 누구나 이 노드를 찾을 수 있습니다.",
+    "pow": "작업 증명 릴레이가 설정되지 않은 동안 받은편지함의 작업 증명은 꺼져 있어 누구나 요청을 보낼 수 있습니다.",
+    "circleTerms": "서클의 경우 가입 정책과 남은 수용 한도를 누구나 읽을 수 있게 됩니다.",
+    "followSet": "이 서클의 팔로우 세트는 공개입니다. 이름이 드러나면 안 되는 멤버는 숨김 항목을 고려하세요. 게시 제목은 세트에서 가져오지 않습니다.",
+    "operator": "운영자를 지정하면 그 계정이 이 노드와 공개적으로 연결됩니다."
+  },
+  "form": {
+    "title": "제목",
+    "content": "설명",
+    "image": "이미지 (https)",
+    "location": "장소 (예: Lisbon, Baixa)",
+    "regions": "지역",
+    "regionsHint": "3 또는 4자의 geohash 접두사",
+    "languages": "언어 (ISO-639-1)",
+    "operator": "운영자 (npub 또는 hex, 선택)",
+    "operatorRelay": "운영자의 릴레이",
+    "followSetA": "팔로우 세트 주소 추가",
+    "followSetConfirm": "팔로우 세트가 공개임을 이해합니다",
+    "preview": "미리보기"
+  },
+  "problems": {
+    "title": "제목은 한 줄, 최대 40자입니다.",
+    "content": "설명은 최대 280자입니다.",
+    "image": "이미지는 https URL이어야 합니다.",
+    "location": "장소는 한 줄, 최대 40자이며 링크를 넣을 수 없습니다.",
+    "languages": "언어는 두 글자 ISO-639-1 코드입니다.",
+    "regions": "지역은 3 또는 4자의 geohash 접두사입니다.",
+    "operator": "운영자는 npub 또는 64자 hex 공개키여야 합니다.",
+    "operatorRelay": "운영자의 릴레이는 websocket URL이어야 합니다."
+  },
+  "toast": {
+    "listed": "게시됨",
+    "updated": "게시가 수정됨"
+  },
+  "errors": {
+    "save": "게시를 저장할 수 없습니다",
+    "action": "게시를 업데이트할 수 없습니다",
+    "relays": "게시 릴레이를 저장할 수 없습니다",
+    "regenerate": "연결을 재발급할 수 없습니다"
+  },
+  "address": {
+    "label": "게시 주소",
+    "copied": "복사됨",
+    "copyTag": "a 태그 복사",
+    "copyCommand": "운영자 명령 복사",
+    "hint": "운영자는 자신의 Nostr 클라이언트나 cashctl로 이 오퍼를 지정합니다. 이 앱은 운영자의 키를 요구하지 않습니다."
+  },
+  "connection": {
+    "label": "게시용 연결 (공개)"
+  },
+  "actions": {
+    "pause": "일시 중지",
+    "resume": "재개",
+    "edit": "수정",
+    "unlist": "게시 취소",
+    "checkOperator": "운영자 확인",
+    "revokeConnection": "게시용 연결 취소"
+  },
+  "relays": {
+    "title": "게시 릴레이",
+    "description": "게시물과 이 노드의 릴레이 목록이 전송되는 곳: {{relays}}. 비워 두면 일반 릴레이를 사용합니다.",
+    "save": "저장",
+    "saved": "게시 릴레이가 저장됨"
+  },
+  "regenerate": {
+    "button": "Cash Hub 연결 취소 후 재발급",
+    "title": "이 Cash Hub 연결을 취소할까요?",
+    "description": "연결 문자열이 공개된 적이 있다면 실행하세요. 기존 문자열은 즉시 작동을 멈추고 새 문자열은 한 번만 표시됩니다. 지폐와 기록은 그대로이며, 발행 클라이언트를 새 문자열로 다시 연결하세요.",
+    "cancel": "취소",
+    "confirm": "취소 후 재발급",
+    "shownOnce": "새 연결 (한 번만 표시):"
+  }
+}

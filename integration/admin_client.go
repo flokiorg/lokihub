@@ -1,0 +1,596 @@
+//go:build integration
+
+// admin_client.go is a thin client for lokihub's own admin HTTP API (the
+// same one the frontend calls). It exists ONLY for test fixture setup/
+// teardown - clearing circle wallet children between suite runs, so far -
+// never for the actual test assertions themselves, which stay a pure
+// black-box NWC client (see integration/README.md and AdminAPIConfig's doc
+// comment in config.go).
+package integration
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/integration/nwcclient"
+)
+
+type adminClient struct {
+	baseURL string
+	token   string
+	http    *http.Client
+}
+
+// newAdminClient returns ok=false if admin_api isn't configured, so callers
+// can no-op fixture cleanup cleanly rather than requiring it - operators who
+// don't want to grant this token keep the old manual-cleanup workflow.
+func newAdminClient(cfg *Config) (client *adminClient, ok bool) {
+	if cfg.AdminAPI.BaseURL == "" || cfg.AdminAPI.Token == "" {
+		return nil, false
+	}
+	return &adminClient{
+		baseURL: strings.TrimRight(cfg.AdminAPI.BaseURL, "/"),
+		token:   cfg.AdminAPI.Token,
+		http:    &http.Client{Timeout: 10 * time.Second},
+	}, true
+}
+
+func (c *adminClient) do(method, path string, out any) error {
+	return c.doBody(method, path, nil, out)
+}
+
+// doBody is do, plus a JSON-encoded request body - needed for the
+// POST/PUT admin endpoints below (create app, transfer, allowlist replace),
+// unlike the GET/DELETE-only calls do alone used to cover.
+func (c *adminClient) doBody(method, path string, body, out any) error {
+	var reqBody io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reqBody = bytes.NewReader(b)
+	}
+
+	req, err := http.NewRequest(method, c.baseURL+path, reqBody)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("admin API %s %s: status %d: %s", method, path, resp.StatusCode, bytes.TrimSpace(respBody))
+	}
+	if out != nil && len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, out); err != nil {
+			return fmt.Errorf("admin API %s %s: decode response: %w", method, path, err)
+		}
+	}
+	return nil
+}
+
+type adminApp struct {
+	ID           uint   `json:"id"`
+	WalletPubkey string `json:"walletPubkey"`
+	Kind         string `json:"kind"`
+}
+
+type adminListAppsResponse struct {
+	Apps []adminApp `json:"apps"`
+}
+
+// findAppIDByWalletPubkey resolves a hub's admin-API app id from the wallet
+// pubkey embedded in its own NWC connection string (nwcclient.Client's
+// WalletPubkey()) - the admin API's direct-lookup-by-pubkey route
+// (GET /apps/:pubkey) matches the app's own pairing pubkey, not its NWC
+// wallet pubkey, so this scans the full app list instead.
+func (c *adminClient) findAppIDByWalletPubkey(walletPubkey string) (uint, error) {
+	var resp adminListAppsResponse
+	if err := c.do(http.MethodGet, "/api/apps?limit=0", &resp); err != nil {
+		return 0, err
+	}
+	for _, app := range resp.Apps {
+		if app.WalletPubkey == walletPubkey {
+			return app.ID, nil
+		}
+	}
+	return 0, fmt.Errorf("no app found with wallet pubkey %s", walletPubkey)
+}
+
+type adminCircleChild struct {
+	AppID           uint   `json:"appId"`
+	RequesterPubkey string `json:"requesterPubkey"`
+}
+
+type adminListCircleChildrenResponse struct {
+	Children []adminCircleChild `json:"children"`
+}
+
+// listCircleChildren returns every circle_wallet child currently minted
+// under hubAppID.
+func (c *adminClient) listCircleChildren(hubAppID uint) ([]adminCircleChild, error) {
+	var resp adminListCircleChildrenResponse
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/apps/%d/circle/children?limit=0", hubAppID), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Children, nil
+}
+
+// deleteCircleChildPath is the admin API path for one circle_wallet child -
+// shared by deleteCircleChild's retry loop and delete_test.go's one-shot
+// (non-retrying) delete attempt, which needs the exact same path to observe
+// an immediate "still settling" rejection instead of waiting through
+// deleteCircleChild's own retries.
+func deleteCircleChildPath(hubAppID, childAppID uint) string {
+	return fmt.Sprintf("/api/apps/%d/circle/children/%d", hubAppID, childAppID)
+}
+
+// deleteCircleChild is the host's delete of a member wallet: it moves the
+// wallet to Closing (NIP-CW §Lifecycle and Deletion) and never sweeps its
+// balance. The wallet keeps its identity's membership until it is deleted.
+// Retries on "still settling", kept for older hosts.
+func (c *adminClient) deleteCircleChild(hubAppID, childAppID uint) error {
+	const maxAttempts = 5
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err = c.do(http.MethodDelete, deleteCircleChildPath(hubAppID, childAppID), nil)
+		if err == nil || !strings.Contains(err.Error(), "still settling") {
+			return err
+		}
+		time.Sleep(time.Duration(attempt) * time.Second)
+	}
+	return err
+}
+
+type adminCashWalletClaim struct {
+	ID            uint   `json:"id"`
+	WalletAppID   uint   `json:"wallet_app_id"`
+	IdentityValue string `json:"identity_value"`
+	// AmountMloki is this slice's entitled amount, as the HUB records it. The API
+	// has always returned it; this struct simply never decoded it.
+	//
+	// It is the right source for "did any funds move?", better than asking the bill
+	// over the wire: a response cannot prove a mutation did NOT happen, and
+	// cash_status is scoped and proof-gated, so it cannot answer at all for a
+	// connection_key slice whose IA has been revoked — which is exactly the state
+	// several adversarial tests assert against.
+	AmountMloki int64 `json:"amount_mloki"`
+	Claimed     bool  `json:"claimed"`
+	// CashToken is this claim's wallet packaged as a lokicash1... string. It
+	// is the only field in this listing that identifies the WALLET rather than
+	// the slice, so it is what requireCashWalletDrainedAway matches on. Empty
+	// for an archived row, deliberately: a token for a destroyed bill would
+	// look spendable.
+	CashToken string `json:"cash_token"`
+	// Archived marks a slice whose bill no longer exists. The listing merges
+	// live and archived rows, so a test asserting on live state must filter.
+	Archived bool   `json:"archived"`
+	Status   string `json:"status"`
+	// WalletPubkey identifies the bill itself. Present on every row, and the
+	// only identifier an archived one has.
+	WalletPubkey string `json:"wallet_pubkey"`
+}
+
+// liveCashClaims filters a listing down to slices whose bill still exists.
+func liveCashClaims(claims []adminCashWalletClaim) []adminCashWalletClaim {
+	live := make([]adminCashWalletClaim, 0, len(claims))
+	for _, c := range claims {
+		if !c.Archived {
+			live = append(live, c)
+		}
+	}
+	return live
+}
+
+// archivedCashClaims is liveCashClaims' complement.
+func archivedCashClaims(claims []adminCashWalletClaim) []adminCashWalletClaim {
+	archived := make([]adminCashWalletClaim, 0, len(claims))
+	for _, c := range claims {
+		if c.Archived {
+			archived = append(archived, c)
+		}
+	}
+	return archived
+}
+
+type adminListCashWalletClaimsResponse struct {
+	Claims []adminCashWalletClaim `json:"claims"`
+}
+
+// listCashWalletClaims returns every recipient-slice claim row under
+// hubAppID - cash_wallet children are deliberately excluded from the general
+// /api/apps listing (see api.ListApps's own comment), so this, not
+// findAppIDByWalletPubkey, is how a test resolves a cash_wallet child's admin
+// app id (the claim row's WalletAppID) for deleteCashWallet.
+func (c *adminClient) listCashWalletClaims(hubAppID uint) ([]adminCashWalletClaim, error) {
+	var resp adminListCashWalletClaimsResponse
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/apps/%d/cash-wallets?limit=0", hubAppID), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Claims, nil
+}
+
+// deleteCashWallet reclaims walletAppID's remaining balance to hubAppID and
+// hard-deletes it (api.DeleteCashWallet / service.ReclaimAndDeleteSubWallet) -
+// the cash_wallet mirror of deleteCircleChild above, including the same
+// "still settling" retry.
+func (c *adminClient) deleteCashWallet(hubAppID, walletAppID uint) error {
+	const maxAttempts = 5
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err = c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d/cash-wallets/%d", hubAppID, walletAppID), nil)
+		if err == nil || !strings.Contains(err.Error(), "still settling") {
+			return err
+		}
+		time.Sleep(time.Duration(attempt) * time.Second)
+	}
+	return err
+}
+
+// deleteCashWalletClaim removes one recipient's unclaimed slice from an
+// otherwise-live shared cash_wallet (api.DeleteCashClaim), sweeping its
+// AmountMloki back to hubAppID first - the cash_wallet mirror of
+// deleteCircleChild's "one child at a time" granularity, but one level
+// deeper (one recipient within a wallet, not the whole wallet). If this was
+// the wallet's last remaining claim, api.DeleteCashClaim now also
+// reclaims/deletes the wallet itself (see its own doc comment) - the fix
+// for the bug where a claims-less wallet could survive forever, invisible
+// to listCashWalletClaims (an inner join starting from the claims table)
+// yet still blocking its hub's deletion.
+func (c *adminClient) deleteCashWalletClaim(hubAppID, walletAppID, claimID uint) error {
+	return c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d/cash-wallets/%d/claims/%d", hubAppID, walletAppID, claimID), nil)
+}
+
+// deleteApp hard-deletes appID outright (api.DeleteApp) - only valid for an
+// app with no children of its own (a bare cash_hub/circle_hub with none
+// minted yet, or one already emptied via deleteCashWallet/deleteCircleChild
+// above); apps.DeleteApp refuses otherwise. Used to tear down the ephemeral
+// hubs createEphemeralCashHub mints for parent-expiry scenarios.
+func (c *adminClient) deleteApp(appID uint) error {
+	return c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d", appID), nil)
+}
+
+// adminCreateAppRequest mirrors api.CreateAppRequest, kept to just the fields
+// this suite's fixtures need: a throwaway, self-funded cash_hub (see
+// createEphemeralCashHub) or circle_hub of either policy (see
+// createEphemeralCircleHub), each with a controllable expiry.
+type adminCreateAppRequest struct {
+	Name          string   `json:"name"`
+	MaxAmountLoki uint64   `json:"maxAmount"`
+	BudgetRenewal string   `json:"budgetRenewal,omitempty"`
+	ExpiresAt     string   `json:"expiresAt,omitempty"` // RFC3339, empty = never
+	Scopes        []string `json:"scopes"`
+	Kind          string   `json:"kind"`
+	// CashPerWalletMaxMloki/CashMaxExpSecs configure the new cash_hub's own Cash
+	// wallet policy - required (must be positive) whenever Kind is cash_hub,
+	// see apps.CreateCashHub. CashMinTransferMloki is optional (0 = no floor -
+	// also its zero-value default when omitted here).
+	CashPerWalletMaxMloki int   `json:"cashPerWalletMaxMloki,omitempty"`
+	CashMaxExpSecs        int   `json:"cashMaxExpSecs,omitempty"`
+	CashMinTransferMloki  int64 `json:"cashMinTransferMloki"`
+	// CashRedeemFeePpm is optional (0 = free - also its zero-value default
+	// when omitted here) - see apps.CreateCashHub, NIP-CASH.md §The Redeem Fee.
+	CashRedeemFeePpm int `json:"cashRedeemFeePpm,omitempty"`
+	// CashSpentRetentionSecs is how long the hub keeps answering cash_status
+	// about a bill it has destroyed. A pointer because 0 is meaningful
+	// ("answer nothing, fall silent the moment the bill is gone") and has to
+	// stay distinguishable from the field being omitted, which means the
+	// server's own default - see api.CreateAppRequest's own field.
+	CashSpentRetentionSecs *int `json:"cashSpentRetentionSecs,omitempty"`
+	// The remaining fields configure a new circle_hub (Kind == "circle_hub")
+	// and its brand-new CircleIdentity - see apps.CreateCircleHub and
+	// apps.CircleIdentityRef. CircleIdentityName/CirclePolicy/ProviderPubkey
+	// are only used to create a fresh identity (this suite never reuses an
+	// existing one via circleIdentityId - every ephemeral hub gets its own).
+	// For "follow_set", ProviderPubkey names the set's author and FollowSetD
+	// its d identifier. An empty ProviderPubkey means the node identity, and
+	// FollowSet is then published by the hub before the circle is created.
+	// For "allowlist" both are left empty and members are granted afterward
+	// via addCircleAllowlistMember.
+	CircleIdentityName      string          `json:"circleIdentityName,omitempty"`
+	CirclePolicy            string          `json:"circlePolicy,omitempty"`
+	ProviderPubkey          string          `json:"providerPubkey,omitempty"`
+	FollowSetD              string          `json:"followSetD,omitempty"`
+	FollowSet               *adminFollowSet `json:"followSet,omitempty"`
+	CircleMaxExpSecs        int             `json:"circleMaxExpSecs,omitempty"`
+	CircleFeesPpm           int             `json:"circleFeesPpm,omitempty"`
+	CirclePerWalletMaxMloki int             `json:"circlePerWalletMaxMloki,omitempty"`
+	CircleMinBudgetRenewal  string          `json:"circleMinBudgetRenewal,omitempty"`
+	// CircleGraceSecs and CircleDustThresholdMloki: the lifecycle settings; 0
+	// takes the server's defaults.
+	CircleGraceSecs          int64 `json:"circleGraceSecs,omitempty"`
+	CircleDustThresholdMloki int64 `json:"circleDustThresholdMloki,omitempty"`
+}
+
+// adminFollowSet mirrors api.FollowSetRequest: a version of a follow set the
+// hub publishes as its node identity.
+type adminFollowSet struct {
+	Title         string   `json:"title"`
+	Description   string   `json:"description"`
+	PublicMembers []string `json:"publicMembers"`
+	HiddenMembers []string `json:"hiddenMembers"`
+}
+
+type adminCreateAppResponse struct {
+	ID             uint   `json:"id"`
+	WalletPubkey   string `json:"walletPubkey"`
+	PairingUri     string `json:"pairingUri"`
+	CashHubToken   string `json:"cashHubToken"`
+	CircleHubToken string `json:"circleHubToken"`
+}
+
+// publishFollowSet publishes a new version of a follow set the hub authors
+// (PUT /api/circle-identities/:id/follow-set).
+func (c *adminClient) publishFollowSet(identityID uint, set adminFollowSet) error {
+	return c.doBody(http.MethodPut, fmt.Sprintf("/api/circle-identities/%d/follow-set", identityID), set, nil)
+}
+
+// createApp creates a new app via the admin API (POST /api/apps) with a
+// server-generated pairing keypair (no Pubkey supplied), returning its app id
+// and ready-to-use pairing URI.
+func (c *adminClient) createApp(req adminCreateAppRequest) (adminCreateAppResponse, error) {
+	var resp adminCreateAppResponse
+	err := c.doBody(http.MethodPost, "/api/apps", req, &resp)
+	return resp, err
+}
+
+// transfer moves amountLoki (not mloki - see api.TransferRequest) into
+// toAppID's isolated balance via a real internal self-payment (api.Transfer).
+// fromAppID nil roots the payment at the node's own real balance instead of
+// a specific isolated app - api.Transfer's fromAppId/toAppId validation only
+// runs "if appId != nil", and SendPaymentSync then pays with no app
+// attributed at all - which is how every ephemeral hub in this suite
+// self-funds without depending on a pre-provisioned, already-funded hub as a
+// source (verified live: a fresh isolated app funded straight from nil,
+// balance landed, no other app touched).
+func (c *adminClient) transfer(fromAppID *uint, toAppID uint, amountLoki uint64) error {
+	body := map[string]any{
+		"toAppId":    toAppID,
+		"amountLoki": amountLoki,
+	}
+	if fromAppID != nil {
+		body["fromAppId"] = *fromAppID
+	}
+	return c.doBody(http.MethodPost, "/api/transfers", body, nil)
+}
+
+// adminCashWalletRecipient mirrors api.CashWalletRecipient. CashSecret is
+// response-only (populated when identity_type == "cash", only in the
+// create-cash-wallet response, never retrievable again afterward) — a caller
+// building a request MUST NOT set it, mirroring the real type's own doc
+// comment, but this struct is reused for adminCreateCashWalletResponse's
+// Recipients field too, where a cash-mode identity_type needs it decoded.
+type adminCashWalletRecipient struct {
+	IdentityType  string `json:"identity_type"`
+	IdentityValue string `json:"identity_value,omitempty"`
+	IAPubkey      string `json:"ia_pubkey,omitempty"`
+	AmountMloki   int64  `json:"amount_mloki"`
+	CashSecret    string `json:"cash_secret,omitempty"`
+}
+
+// adminCreateCashWalletRequest mirrors api.CreateCashWalletRequest.
+type adminCreateCashWalletRequest struct {
+	Recipients []adminCashWalletRecipient `json:"recipients"`
+	ExpirySecs int                        `json:"expiry_secs,omitempty"`
+	// RequestID and Expiration make the mint recoverable; createCashWallet fills
+	// them when the test leaves them empty.
+	RequestID  string `json:"request_id,omitempty"`
+	Expiration int64  `json:"expiration,omitempty"`
+}
+
+// adminCreateCashWalletResponse mirrors api.CreateCashWalletResponse.
+type adminCreateCashWalletResponse struct {
+	AppID      uint                       `json:"app_id"`
+	CashToken  string                     `json:"cash_token"`
+	ExpiresAt  *int64                     `json:"expires_at,omitempty"`
+	Recipients []adminCashWalletRecipient `json:"recipients"`
+}
+
+// createCashWallet mints a Cash Wallet under hubAppID via the admin HTTP API
+// (POST /api/apps/:id/cash-wallets — api.CreateCashWallet), the Wails/HTTP
+// mint path a real operator's frontend uses, distinct from the NWC-facing
+// mint_cash method every other fixture in this suite mints through. Exists
+// specifically to give this path — which had unit coverage but zero
+// live-node coverage — an integration-level entry point at all.
+func (c *adminClient) createCashWallet(hubAppID uint, req adminCreateCashWalletRequest) (adminCreateCashWalletResponse, error) {
+	if req.RequestID == "" {
+		req.RequestID = nwcclient.NewRequestID()
+		req.Expiration = time.Now().Add(nwcclient.MintDeadline).Unix()
+	}
+	var resp adminCreateCashWalletResponse
+	err := c.doBody(http.MethodPost, fmt.Sprintf("/api/apps/%d/cash-wallets", hubAppID), req, &resp)
+	return resp, err
+}
+
+// registerIdentityAuthority registers pubkey as a trusted Identity Authority
+// (POST /api/identity-authorities) - the admin-API equivalent of Settings >
+// Identity Authorities, used to make a freshly-generated IA keypair trusted
+// for a test's own connection_key-mode scenarios, instead of depending on
+// config.local.yaml naming one already registered by hand. Pair with
+// deleteIdentityAuthority in t.Cleanup.
+func (c *adminClient) registerIdentityAuthority(pubkey, name string) error {
+	body := map[string]any{"pubkey": pubkey, "name": name}
+	return c.doBody(http.MethodPost, "/api/identity-authorities", body, nil)
+}
+
+// deleteIdentityAuthority revokes trust in pubkey - the cleanup half of
+// registerIdentityAuthority.
+func (c *adminClient) deleteIdentityAuthority(pubkey string) error {
+	return c.do(http.MethodDelete, fmt.Sprintf("/api/identity-authorities/%s", pubkey), nil)
+}
+
+// addCircleAllowlistMember grants pubkey membership on hubAppID's allowlist
+// (GET the current list, append, PUT the full list back - there's no
+// single-add endpoint, only replace-all and remove-one). Used to authorize a
+// freshly-generated, disposable keypair for one test's own use, instead of
+// consuming one of config.local.yaml's small fixed set of real authorized
+// identities (which circle_hub_test.go's happy path already exhausts - see
+// its one-active-wallet-per-identity comment). Pair with
+// removeCircleAllowlistMember in t.Cleanup.
+func (c *adminClient) addCircleAllowlistMember(hubAppID uint, pubkey string) error {
+	var current struct {
+		Pubkeys []string `json:"pubkeys"`
+	}
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/apps/%d/circle/allowlist", hubAppID), &current); err != nil {
+		return err
+	}
+	body := map[string][]string{"pubkeys": append(current.Pubkeys, pubkey)}
+	return c.doBody(http.MethodPut, fmt.Sprintf("/api/apps/%d/circle/allowlist", hubAppID), body, nil)
+}
+
+// removeCircleAllowlistMember revokes a single pubkey's membership - the
+// cleanup half of addCircleAllowlistMember.
+func (c *adminClient) removeCircleAllowlistMember(hubAppID uint, pubkey string) error {
+	return c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d/circle/allowlist/%s", hubAppID, pubkey), nil)
+}
+
+// adminAppDetail is the subset of api.App this suite needs from GET
+// /api/apps/:id - just enough to resolve a circle_hub app's own
+// CircleIdentity id (getCircleIdentityID), which isn't returned by
+// createApp's response and has no other admin-API lookup by app id.
+type adminAppDetail struct {
+	CircleIdentity *struct {
+		ID uint `json:"id"`
+	} `json:"circleIdentity,omitempty"`
+}
+
+// getCircleIdentityID resolves hubAppID's own CircleIdentity id via GET
+// /api/apps/:id - every circle_hub app has one (createEphemeralCircleHub
+// always sets CircleIdentityName, never reuses an existing id), so a nil
+// CircleIdentity here indicates a caller bug (a non-circle_hub app id), not
+// a legitimate empty case.
+func (c *adminClient) getCircleIdentityID(hubAppID uint) (uint, error) {
+	var app adminAppDetail
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/apps/%d", hubAppID), &app); err != nil {
+		return 0, err
+	}
+	if app.CircleIdentity == nil {
+		return 0, fmt.Errorf("app %d has no circleIdentity in its admin API detail response", hubAppID)
+	}
+	return app.CircleIdentity.ID, nil
+}
+
+// deleteCircleIdentity removes a standalone CircleIdentity (api.DeleteCircleIdentity)
+// - refuses (and so must only be called once nothing references it anymore,
+// i.e. after the circle_hub app itself has already been deleted) if any
+// circle_hub app still references it.
+func (c *adminClient) deleteCircleIdentity(id uint) error {
+	return c.do(http.MethodDelete, fmt.Sprintf("/api/circle-identities/%d", id), nil)
+}
+
+type adminCircleIdentity struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+}
+
+type adminListCircleIdentitiesResponse struct {
+	Identities []adminCircleIdentity `json:"identities"`
+}
+
+// listCircleIdentitiesByNamePrefix returns every CircleIdentity whose name
+// starts with prefix (api.ListCircleIdentities has no server-side name
+// filter, unlike listAppsByNamePrefix's app listing, so this fetches
+// everything and filters client-side). Used by
+// TestZZZ_NoLeakedEphemeralCircleIdentities to catch a circle_hub fixture
+// whose t.Cleanup deleted the app but not its own CircleIdentity (identities
+// deliberately survive circle_hub deletion - see
+// TestCreateCircleHub_IdentitySurvivesHubDeletion - so this doesn't happen
+// on its own).
+func (c *adminClient) listCircleIdentitiesByNamePrefix(prefix string) ([]adminCircleIdentity, error) {
+	var resp adminListCircleIdentitiesResponse
+	if err := c.do(http.MethodGet, "/api/circle-identities?limit=0", &resp); err != nil {
+		return nil, err
+	}
+	var matched []adminCircleIdentity
+	for _, identity := range resp.Identities {
+		if strings.HasPrefix(strings.ToLower(identity.Name), strings.ToLower(prefix)) {
+			matched = append(matched, identity)
+		}
+	}
+	return matched, nil
+}
+
+// listAppsByNamePrefix returns every app whose name starts with prefix
+// (api.ListApps's own name filter: "searching for 'Damus' will return
+// 'Damus' and 'Damus (1)'" - case-insensitive LIKE prefix%). Used by
+// TestZZZ_NoLeakedEphemeralFixtures to catch any ephemeralFixtureNamePrefix
+// app a missing t.Cleanup left behind. Note this can't see cash_wallet
+// children (api.ListApps excludes that kind unconditionally - see
+// listCashWalletClaims's own doc comment) - only hubs and circle_wallet/
+// isolated apps, which is everything this suite creates directly by name.
+func (c *adminClient) listAppsByNamePrefix(prefix string) ([]adminApp, error) {
+	filtersJSON, err := json.Marshal(map[string]string{"name": prefix})
+	if err != nil {
+		return nil, err
+	}
+	var resp adminListAppsResponse
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/apps?limit=0&filters=%s", url.QueryEscape(string(filtersJSON))), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Apps, nil
+}
+
+// unclaimedMlokiForWallet sums a bill's still-unclaimed slices from the Hub's OWN
+// records, for assertions of the form "no funds moved".
+//
+// Server truth deliberately. The alternative — reading the bill over the wire — is
+// weaker in two ways: a reply cannot prove that a mutation did not happen, and
+// cash_status is scoped and proof-gated, so it cannot answer for a connection_key
+// slice at all unless the caller supplies a currently-trusted IA's attestation. Tests
+// that revoke an IA and then assert the funds are intact would otherwise be unable to
+// look.
+func unclaimedMlokiForWallet(t *testing.T, admin *adminClient, hubAppID uint, walletPubkey string) int64 {
+	t.Helper()
+
+	claims, err := admin.listCashWalletClaims(hubAppID)
+	require.NoError(t, err, "listing this hub's cash wallet claims")
+
+	var total int64
+	for _, c := range claims {
+		if c.WalletPubkey != walletPubkey || c.Archived || c.Claimed {
+			continue
+		}
+		total += c.AmountMloki
+	}
+	return total
+}
+
+// cashHubDeleteBlockers is GET /api/cash-hubs/:id/delete-check: what still
+// keeps a Cash Hub from being deleted.
+func (c *adminClient) cashHubDeleteBlockers(hubAppID uint) ([]string, error) {
+	var check struct {
+		Blockers []struct {
+			Kind string `json:"kind"`
+		} `json:"blockers"`
+	}
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/cash-hubs/%d/delete-check", hubAppID), &check); err != nil {
+		return nil, err
+	}
+	kinds := make([]string, 0, len(check.Blockers))
+	for _, b := range check.Blockers {
+		kinds = append(kinds, b.Kind)
+	}
+	return kinds, nil
+}

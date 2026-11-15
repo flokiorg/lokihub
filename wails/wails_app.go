@@ -1,0 +1,217 @@
+package wails
+
+import (
+	"context"
+	"embed"
+	nethttp "net/http"
+	goruntime "runtime"
+	"sync/atomic"
+
+	"github.com/flokiorg/lokihub/api"
+	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/service"
+	lokitray "github.com/flokiorg/lokihub/wails/tray"
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"gorm.io/gorm"
+
+	"github.com/flokiorg/lokihub/http"
+	"github.com/labstack/echo/v4"
+)
+
+type WailsApp struct {
+	ctx      context.Context
+	quitting atomic.Bool
+	svc      service.Service
+	api      api.API
+	db       *gorm.DB
+	appsSvc  apps.AppsService
+	httpSvc  *http.HttpService
+	// session mirrors, in-process, the unlock state and permission tier the
+	// HTTP API carries in its JWT: the desktop IPC router has no per-call
+	// token, so full-access routes consult this instead. See wails_authz.go.
+	session desktopSession
+}
+
+func NewApp(svc service.Service) *WailsApp {
+	return &WailsApp{
+		svc:     svc,
+		api:     api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetHubInfoSvc(), svc.GetEventPublisher()),
+		db:      svc.GetDB(),
+		appsSvc: apps.NewAppsService(svc.GetDB(), svc.GetEventPublisher(), svc.GetKeys(), svc.GetConfig()),
+		httpSvc: http.NewHttpService(svc, svc.GetEventPublisher()),
+	}
+}
+
+func (app *WailsApp) startup(ctx context.Context, trayIcon []byte) {
+	app.ctx = ctx
+	scheduleDevReload(ctx)
+
+	lokitray.Setup("Lokihub", trayIcon, func() {
+		lokitray.ShowInDock()
+		runtime.WindowShow(ctx)
+	}, func() {
+		// Run in a goroutine: the quit callback fires on the Cocoa main thread,
+		// and MessageDialog also needs the main thread — calling it directly deadlocks.
+		go func() {
+			response, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+				Type:  runtime.QuestionDialog,
+				Title: "Confirm Exit",
+				Message: "Are you sure you want to shut down Lokihub? " +
+					"Lokihub must remain online to coordinate payments. " +
+					"If it is offline, creating or sending payments may fail.",
+				Buttons:       []string{"Yes", "No"},
+				DefaultButton: "No",
+			})
+			if err != nil || response != "Yes" {
+				return
+			}
+			app.quitting.Store(true)
+			runtime.Quit(ctx)
+		}()
+	})
+
+	// Register Wails event subscriber
+	subscriber := NewWailsEventSubscriber(ctx)
+	app.svc.GetEventPublisher().RegisterSubscriber(subscriber)
+}
+
+func (app *WailsApp) onBeforeClose(ctx context.Context) bool {
+	if app.quitting.Load() {
+		return false // real quit from tray menu — allow through
+	}
+	runtime.WindowHide(ctx)
+	lokitray.HideFromDock()
+	return true // cancel close: window is now hidden in tray
+}
+
+func (app *WailsApp) SelectDirectory() (string, error) {
+	selection, err := runtime.OpenDirectoryDialog(app.ctx, runtime.OpenDialogOptions{
+		Title: "Select Work Directory",
+	})
+	if err != nil {
+		return "", err
+	}
+	return selection, nil
+}
+
+// windowOptions holds the window setup shared by the normal app and the
+// startup-error app, so the frontend's TitleBar and background behave the same
+// in both. Callers add their own lifecycle hooks and bindings.
+func windowOptions(assets embed.FS, appIcon []byte, handler nethttp.Handler) *options.App {
+	return &options.App{
+		Title:  "Lokihub",
+		Width:  1055,
+		Height: 768,
+		AssetServer: &assetserver.Options{
+			Assets:  assets,
+			Handler: handler,
+		},
+		Logger: NewWailsLogger(),
+
+		// Matches the default theme's dark `--background` token
+		// (frontend/src/themes/default.css). Wails paints this behind the
+		// WebView before content loads. Once loaded, the frontend draws
+		// its backgrounds all the way behind the macOS traffic lights.
+		BackgroundColour: options.NewRGB(13, 43, 43),
+
+		// Windows has no native equivalent of macOS's inset traffic lights, so
+		// it gets a fully custom, frameless window with the minimal
+		// minimize/maximize/close bar drawn by the frontend (see
+		// frontend/src/components/TitleBar.tsx). macOS keeps its native
+		// window (see Mac.TitleBar below) rather than going frameless there
+		// too, since re-drawing traffic lights in HTML/CSS would look and
+		// behave worse than the real thing. Linux is left with its default
+		// native decorations - window manager behavior/theming varies too
+		// much across distros to give a frameless window a reliably "modern"
+		// look there.
+		Frameless: goruntime.GOOS == "windows",
+
+		Mac: &mac.Options{
+			About: &mac.AboutInfo{
+				Title: "Lokihub",
+				Icon:  appIcon,
+			},
+			// Hides the title text/bar and extends content full-size while
+			// keeping the native traffic-light buttons (close/miniaturize/
+			// zoom) - the standard "modern desktop app" look on macOS (used
+			// by e.g. VS Code, Slack). The frontend overlays a transparent drag
+			// region and insets interactive content below the buttons - see
+			// TitleBar.tsx.
+			TitleBar: mac.TitleBarHiddenInset(),
+		},
+		Windows: &windows.Options{
+			// Keeps the Aero shadow / Windows 11 rounded corners that
+			// Frameless would otherwise also strip.
+			DisableFramelessWindowDecorations: false,
+		},
+		Linux: &linux.Options{
+			Icon: appIcon,
+		},
+	}
+}
+
+func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []byte) {
+	// Start background HTTP server ONLY if in 'dev' build mode (see dev_server.go)
+	StartDevServer(app.svc.GetConfig().GetEnv().Port, app.httpSvc.RegisterSharedRoutes)
+
+	opts := windowOptions(assets, appIcon, NewAssetHandler(app.httpSvc))
+	opts.OnStartup = func(ctx context.Context) {
+		app.startup(ctx, trayIcon)
+	}
+	opts.OnBeforeClose = func(ctx context.Context) bool {
+		return app.onBeforeClose(ctx)
+	}
+	opts.Bind = []interface{}{app}
+
+	if err := wails.Run(opts); err != nil {
+		logger.Logger.Error().Err(err).Msg("failed to run Wails app")
+	}
+}
+
+func NewWailsLogger() WailsLogger {
+	return WailsLogger{}
+}
+
+type WailsLogger struct {
+}
+
+func (wailsLogger WailsLogger) Print(message string) {
+	logger.Logger.Info().Bool("wails", true).Msg(message)
+}
+
+func (wailsLogger WailsLogger) Trace(message string) {
+	logger.Logger.Trace().Bool("wails", true).Msg(message)
+}
+
+func (wailsLogger WailsLogger) Debug(message string) {
+	logger.Logger.Debug().Bool("wails", true).Msg(message)
+}
+
+func (wailsLogger WailsLogger) Info(message string) {
+	logger.Logger.Info().Bool("wails", true).Msg(message)
+}
+
+func (wailsLogger WailsLogger) Warning(message string) {
+	logger.Logger.Warn().Bool("wails", true).Msg(message)
+}
+
+func (wailsLogger WailsLogger) Error(message string) {
+	logger.Logger.Error().Bool("wails", true).Msg(message)
+}
+
+func (wailsLogger WailsLogger) Fatal(message string) {
+	logger.Logger.Fatal().Bool("wails", true).Msg(message)
+}
+
+func NewAssetHandler(httpSvc *http.HttpService) nethttp.Handler {
+	e := echo.New()
+	httpSvc.RegisterSharedRoutes(e)
+	return e
+}

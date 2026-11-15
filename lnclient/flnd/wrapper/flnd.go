@@ -1,0 +1,379 @@
+package wrapper
+
+import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"net"
+	"strings"
+
+	"github.com/flokiorg/flnd/lnrpc"
+	"github.com/flokiorg/flnd/lnrpc/invoicesrpc"
+	"github.com/flokiorg/flnd/lnrpc/peersrpc"
+	"github.com/flokiorg/flnd/lnrpc/routerrpc"
+	"github.com/flokiorg/flnd/lnrpc/signrpc"
+	"github.com/flokiorg/flnd/lnrpc/walletrpc"
+	"github.com/flokiorg/flnd/macaroons"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
+	"gopkg.in/macaroon.v2"
+)
+
+type LNPayReq struct {
+	PayReq  *lnrpc.PayReq
+	Keysend bool
+}
+
+// FLNDoptions are the options for the connection to the lnd node.
+type FLNDoptions struct {
+	Address      string
+	CertFile     string
+	CertHex      string
+	MacaroonFile string
+	MacaroonHex  string
+}
+
+type FLNDWrapper struct {
+	client          lnrpc.LightningClient
+	routerClient    routerrpc.RouterClient
+	stateClient     lnrpc.StateClient
+	invoicesClient  invoicesrpc.InvoicesClient
+	peersClient     peersrpc.PeersClient
+	walletKitClient walletrpc.WalletKitClient
+	// signerClient reaches flnd's signrpc subserver, which is compiled into both
+	// dev and release builds and authorised by the admin macaroon this client
+	// already presents. It is needed for BIP340 signatures over an arbitrary
+	// digest, which lnrpc.SignMessage cannot produce: that one is ECDSA over a
+	// Lightning-prefixed double hash.
+	signerClient signrpc.SignerClient
+	// IdentityPubkey is NEVER POPULATED — NewFLNDclient does not set it, and
+	// nothing else does either, so it is always "". That makes IsIdentityPubkey
+	// always report false and GetMainPubkey always return "", and neither has
+	// any caller. It already caused one real bug (FLNDService.UpdateChannel
+	// compared against it and so always selected the peer's routing policy).
+	//
+	// The node's real identity pubkey lives in FLNDService.nodeInfo.Pubkey,
+	// filled from GetInfo at construction — use that. This field and its two
+	// accessors should be deleted; they are left only because removing them also
+	// means regenerating the hand-maintained LightningClientWrapper mock.
+	IdentityPubkey string
+	conn           *grpc.ClientConn
+}
+
+func NewFLNDclient(flndOptions FLNDoptions) (result *FLNDWrapper, err error) {
+	// Get credentials either from a hex string, a file or the system's certificate store
+	var creds credentials.TransportCredentials
+	// if a hex string is provided
+	if flndOptions.CertHex != "" {
+		cp := x509.NewCertPool()
+		cert, err := hex.DecodeString(flndOptions.CertHex)
+		if err != nil {
+			return nil, err
+		}
+		if !cp.AppendCertsFromPEM(cert) {
+			return nil, errors.New("failed to append certificate")
+		}
+		creds = credentials.NewClientTLSFromCert(cp, "")
+		// no cert pinned
+	} else {
+		// The admin macaroon is attached to every RPC below and grants full
+		// control of the node's funds, so it must only travel over a verified
+		// TLS channel. With no pinned cert there is nothing to verify the server
+		// against, so InsecureSkipVerify is confined to a loopback address (local
+		// dev); for any non-loopback address we refuse rather than send the
+		// macaroon over an unauthenticated channel a MITM can terminate.
+		if !isLoopbackAddress(flndOptions.Address) {
+			return nil, fmt.Errorf("refusing to connect to non-loopback FLND address %q without a pinned TLS certificate: set FLND_CERT_FILE (or configure the cert during setup) so the admin macaroon is only sent over a verified channel", flndOptions.Address)
+		}
+		creds = credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec // loopback only; a non-loopback address without a pinned cert is refused above
+		})
+	}
+	const (
+		maxGrpcRecvMsgSize = 50 * 1024 * 1024
+		maxGrpcSendMsgSize = 20 * 1024 * 1024
+	)
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(maxGrpcRecvMsgSize),
+			grpc.MaxCallSendMsgSize(maxGrpcSendMsgSize),
+		),
+	}
+
+	var macaroonData []byte
+	if flndOptions.MacaroonHex != "" {
+		macBytes, err := hex.DecodeString(flndOptions.MacaroonHex)
+		if err != nil {
+			return nil, err
+		}
+		macaroonData = macBytes
+	} else {
+		return nil, errors.New("FLND macaroon is missing")
+	}
+
+	mac := &macaroon.Macaroon{}
+	if err := mac.UnmarshalBinary(macaroonData); err != nil {
+		return nil, err
+	}
+	macCred, err := macaroons.NewMacaroonCredential(mac)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, grpc.WithPerRPCCredentials(macCred))
+
+	conn, err := grpc.NewClient(flndOptions.Address, opts...)
+	if err != nil {
+		return nil, err
+	}
+	lnClient := lnrpc.NewLightningClient(conn)
+	return &FLNDWrapper{
+		client:          lnClient,
+		routerClient:    routerrpc.NewRouterClient(conn),
+		stateClient:     lnrpc.NewStateClient(conn),
+		invoicesClient:  invoicesrpc.NewInvoicesClient(conn),
+		peersClient:     peersrpc.NewPeersClient(conn),
+		walletKitClient: walletrpc.NewWalletKitClient(conn),
+		signerClient:    signrpc.NewSignerClient(conn),
+		conn:            conn,
+	}, nil
+}
+
+// isLoopbackAddress reports whether addr (host or host:port) targets the local
+// host. Used to gate InsecureSkipVerify: only a loopback flnd may be dialed
+// without a pinned cert, since the admin macaroon must not leave the host over
+// an unverified channel. A bare hostname like "flnd" (the documented compose
+// target) is not loopback.
+func isLoopbackAddress(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// No port, or an unexpected shape: treat the whole string as the host.
+		host = addr
+	}
+	host = strings.TrimSpace(host)
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// keyFamilyNodeKey is flnd's keychain.KeyFamilyNodeKey — the family holding the
+// node's Lightning identity key, which is the key a bill's mint signature proves
+// and therefore the only one a client can verify an announcement against.
+const keyFamilyNodeKey = 6
+
+// SignSchnorrNodeKey returns a BIP340 signature by the node's identity key over
+// sha256(msg).
+//
+// Note carefully what is signed: flnd hashes msg itself (no tag, double_hash
+// false takes its single-SHA branch), so a caller wanting a signature over a
+// digest it already holds must pass that digest's PRE-IMAGE, not the digest. For
+// a Nostr event that means the canonical serialization, since an event id is
+// exactly sha256 of it. Passing the id instead yields a valid signature over
+// sha256(id) — the wrong thing, and it fails verification with nothing indicating
+// why.
+//
+// This is deliberately separate from SignMessage, which is ECDSA over a
+// Lightning-prefixed double hash and cannot produce a Nostr-valid signature at
+// all.
+func (wrapper *FLNDWrapper) SignSchnorrNodeKey(ctx context.Context, msg []byte) ([]byte, error) {
+	resp, err := wrapper.signerClient.SignMessage(ctx, &signrpc.SignMessageReq{
+		Msg:        msg,
+		KeyLoc:     &signrpc.KeyLocator{KeyFamily: keyFamilyNodeKey, KeyIndex: 0},
+		SchnorrSig: true,
+		DoubleHash: false,
+	})
+	if err != nil {
+		return nil, explainSignerError(err)
+	}
+	return resp.Signature, nil
+}
+
+// explainSignerError names what the node is missing when it cannot sign as itself.
+// Both failures otherwise surface as a bare "permission denied" or "unknown
+// service", which says nothing about the macaroon or the signer RPC.
+func explainSignerError(err error) error {
+	switch {
+	case status.Code(err) == codes.Unimplemented:
+		return fmt.Errorf("the node does not serve the signer RPC (signrpc), which signing as the node needs: %w", err)
+	case status.Code(err) == codes.PermissionDenied || strings.Contains(err.Error(), "permission denied"):
+		return fmt.Errorf("the node's macaroon does not grant signer:generate, which signing as the node needs; use admin.macaroon or bake one that includes it: %w", err)
+	}
+	return err
+}
+
+func (wrapper *FLNDWrapper) Close() error {
+	return wrapper.conn.Close()
+}
+
+func (wrapper *FLNDWrapper) ListChannels(ctx context.Context, req *lnrpc.ListChannelsRequest, options ...grpc.CallOption) (*lnrpc.ListChannelsResponse, error) {
+	return wrapper.client.ListChannels(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) GetTransactions(ctx context.Context, req *lnrpc.GetTransactionsRequest, options ...grpc.CallOption) (*lnrpc.TransactionDetails, error) {
+	return wrapper.client.GetTransactions(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) PendingChannels(ctx context.Context, req *lnrpc.PendingChannelsRequest, options ...grpc.CallOption) (*lnrpc.PendingChannelsResponse, error) {
+	return wrapper.client.PendingChannels(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) SendPayment(ctx context.Context, req *routerrpc.SendPaymentRequest, options ...grpc.CallOption) (routerrpc.Router_SendPaymentV2Client, error) {
+	return wrapper.routerClient.SendPaymentV2(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) ChannelBalance(ctx context.Context, req *lnrpc.ChannelBalanceRequest, options ...grpc.CallOption) (*lnrpc.ChannelBalanceResponse, error) {
+	return wrapper.client.ChannelBalance(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) AddInvoice(ctx context.Context, req *lnrpc.Invoice, options ...grpc.CallOption) (*lnrpc.AddInvoiceResponse, error) {
+	return wrapper.client.AddInvoice(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) AddHoldInvoice(ctx context.Context, req *invoicesrpc.AddHoldInvoiceRequest, options ...grpc.CallOption) (*invoicesrpc.AddHoldInvoiceResp, error) {
+	return wrapper.invoicesClient.AddHoldInvoice(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) SettleInvoice(ctx context.Context, req *invoicesrpc.SettleInvoiceMsg, options ...grpc.CallOption) (*invoicesrpc.SettleInvoiceResp, error) {
+	return wrapper.invoicesClient.SettleInvoice(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) CancelInvoice(ctx context.Context, req *invoicesrpc.CancelInvoiceMsg, options ...grpc.CallOption) (*invoicesrpc.CancelInvoiceResp, error) {
+	return wrapper.invoicesClient.CancelInvoice(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) SubscribeInvoices(ctx context.Context, req *lnrpc.InvoiceSubscription, options ...grpc.CallOption) (SubscribeInvoicesWrapper, error) {
+	return wrapper.client.SubscribeInvoices(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) SubscribeSingleInvoice(ctx context.Context, req *invoicesrpc.SubscribeSingleInvoiceRequest, options ...grpc.CallOption) (SubscribeSingleInvoiceWrapper, error) {
+	return wrapper.invoicesClient.SubscribeSingleInvoice(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) SubscribePayments(ctx context.Context, req *routerrpc.TrackPaymentsRequest, options ...grpc.CallOption) (routerrpc.Router_TrackPaymentsClient, error) {
+	return wrapper.routerClient.TrackPayments(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) ListInvoices(ctx context.Context, req *lnrpc.ListInvoiceRequest, options ...grpc.CallOption) (*lnrpc.ListInvoiceResponse, error) {
+	return wrapper.client.ListInvoices(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) ListPayments(ctx context.Context, req *lnrpc.ListPaymentsRequest, options ...grpc.CallOption) (*lnrpc.ListPaymentsResponse, error) {
+	return wrapper.client.ListPayments(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) LookupInvoice(ctx context.Context, req *lnrpc.PaymentHash, options ...grpc.CallOption) (*lnrpc.Invoice, error) {
+	return wrapper.client.LookupInvoice(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) GetDebugInfo(ctx context.Context, req *lnrpc.GetDebugInfoRequest, options ...grpc.CallOption) (*lnrpc.GetDebugInfoResponse, error) {
+	return wrapper.client.GetDebugInfo(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) GetInfo(ctx context.Context, req *lnrpc.GetInfoRequest, options ...grpc.CallOption) (*lnrpc.GetInfoResponse, error) {
+	return wrapper.client.GetInfo(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) GetNetworkInfo(ctx context.Context, req *lnrpc.NetworkInfoRequest, options ...grpc.CallOption) (*lnrpc.NetworkInfo, error) {
+	return wrapper.client.GetNetworkInfo(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) DescribeGraph(ctx context.Context, req *lnrpc.ChannelGraphRequest, options ...grpc.CallOption) (*lnrpc.ChannelGraph, error) {
+	return wrapper.client.DescribeGraph(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) GetState(ctx context.Context, req *lnrpc.GetStateRequest, options ...grpc.CallOption) (*lnrpc.GetStateResponse, error) {
+	return wrapper.stateClient.GetState(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) GetNodeInfo(ctx context.Context, req *lnrpc.NodeInfoRequest, options ...grpc.CallOption) (*lnrpc.NodeInfo, error) {
+	return wrapper.client.GetNodeInfo(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) SubscribePayment(ctx context.Context, req *routerrpc.TrackPaymentRequest, options ...grpc.CallOption) (SubscribePaymentWrapper, error) {
+	return wrapper.routerClient.TrackPaymentV2(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) IsIdentityPubkey(pubkey string) (isOurPubkey bool) {
+	return pubkey == wrapper.IdentityPubkey
+}
+
+func (wrapper *FLNDWrapper) GetMainPubkey() (pubkey string) {
+	return wrapper.IdentityPubkey
+}
+
+func (wrapper *FLNDWrapper) SignMessage(ctx context.Context, req *lnrpc.SignMessageRequest, options ...grpc.CallOption) (*lnrpc.SignMessageResponse, error) {
+	return wrapper.client.SignMessage(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) ConnectPeer(ctx context.Context, req *lnrpc.ConnectPeerRequest, options ...grpc.CallOption) (*lnrpc.ConnectPeerResponse, error) {
+	return wrapper.client.ConnectPeer(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) ListPeers(ctx context.Context, req *lnrpc.ListPeersRequest, options ...grpc.CallOption) (*lnrpc.ListPeersResponse, error) {
+	return wrapper.client.ListPeers(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) OpenChannelSync(ctx context.Context, req *lnrpc.OpenChannelRequest, options ...grpc.CallOption) (*lnrpc.ChannelPoint, error) {
+	return wrapper.client.OpenChannelSync(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) CloseChannel(ctx context.Context, req *lnrpc.CloseChannelRequest, options ...grpc.CallOption) (lnrpc.Lightning_CloseChannelClient, error) {
+	return wrapper.client.CloseChannel(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) WalletBalance(ctx context.Context, req *lnrpc.WalletBalanceRequest, options ...grpc.CallOption) (*lnrpc.WalletBalanceResponse, error) {
+	return wrapper.client.WalletBalance(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) SendCoins(ctx context.Context, req *lnrpc.SendCoinsRequest, options ...grpc.CallOption) (*lnrpc.SendCoinsResponse, error) {
+	return wrapper.client.SendCoins(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) NewAddress(ctx context.Context, req *lnrpc.NewAddressRequest, options ...grpc.CallOption) (*lnrpc.NewAddressResponse, error) {
+	return wrapper.client.NewAddress(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) PublishTransaction(ctx context.Context, req *walletrpc.Transaction, options ...grpc.CallOption) (*walletrpc.PublishResponse, error) {
+	return wrapper.walletKitClient.PublishTransaction(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) GetChanInfo(ctx context.Context, req *lnrpc.ChanInfoRequest, options ...grpc.CallOption) (*lnrpc.ChannelEdge, error) {
+	return wrapper.client.GetChanInfo(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) UpdateChannel(ctx context.Context, req *lnrpc.PolicyUpdateRequest, options ...grpc.CallOption) (*lnrpc.PolicyUpdateResponse, error) {
+	return wrapper.client.UpdateChannelPolicy(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) DisconnectPeer(ctx context.Context, req *lnrpc.DisconnectPeerRequest, options ...grpc.CallOption) (*lnrpc.DisconnectPeerResponse, error) {
+	return wrapper.client.DisconnectPeer(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) SubscribeChannelEvents(ctx context.Context, in *lnrpc.ChannelEventSubscription, options ...grpc.CallOption) (lnrpc.Lightning_SubscribeChannelEventsClient, error) {
+	return wrapper.client.SubscribeChannelEvents(ctx, in, options...)
+}
+
+func (wrapper *FLNDWrapper) ForwardingHistory(ctx context.Context, in *lnrpc.ForwardingHistoryRequest, options ...grpc.CallOption) (*lnrpc.ForwardingHistoryResponse, error) {
+	return wrapper.client.ForwardingHistory(ctx, in, options...)
+}
+
+func (wrapper *FLNDWrapper) SubscribeTransactions(ctx context.Context, req *lnrpc.GetTransactionsRequest, options ...grpc.CallOption) (SubscribeTransactionsWrapper, error) {
+	return wrapper.client.SubscribeTransactions(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) ChannelAcceptor(ctx context.Context, options ...grpc.CallOption) (lnrpc.Lightning_ChannelAcceptorClient, error) {
+	return wrapper.client.ChannelAcceptor(ctx, options...)
+}
+
+func (wrapper *FLNDWrapper) UpdateNodeAnnouncement(ctx context.Context, req *peersrpc.NodeAnnouncementUpdateRequest, options ...grpc.CallOption) (*peersrpc.NodeAnnouncementUpdateResponse, error) {
+	return wrapper.peersClient.UpdateNodeAnnouncement(ctx, req, options...)
+}

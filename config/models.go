@@ -1,0 +1,243 @@
+package config
+
+import "github.com/ohstr/nmilat/nipcash/transport"
+
+const (
+	FLNDBackendType = "FLND"
+)
+
+const (
+	OnchainAddressKey = "OnchainAddress"
+)
+
+type AppConfig struct {
+	// Relay is the NWC relay the Hub DIALS (subscribes and publishes on).
+	// Comma-separated for multiple.
+	Relay string `envconfig:"NWC_RELAY"`
+	// AdvertisedRelay is the client-facing NWC relay the Hub ADVERTISES in
+	// pairing URIs, cash/circle connection tokens and minted bills. Empty
+	// advertises whatever Relay dials; set it when the dial URL (e.g. a
+	// docker-internal hostname) is not reachable by clients.
+	AdvertisedRelay string `envconfig:"NWC_RELAY_ADVERTISED"`
+	// AdvertisedGeneralRelay is the client-facing general/social relay the Hub
+	// ADVERTISES (e.g. in /api/info, so a client knows where to publish a
+	// provider follow set). Empty advertises whatever general relay the Hub
+	// dials; set it when that dial URL is not reachable by clients.
+	AdvertisedGeneralRelay string `envconfig:"GENERAL_RELAY_ADVERTISED"`
+	LNBackendType          string `envconfig:"LN_BACKEND_TYPE"`
+
+	// FLND (Flokicoin) Backend
+	FLNDAddress      string `envconfig:"FLND_ADDRESS"`
+	FLNDCertFile     string `envconfig:"FLND_CERT_FILE"`
+	FLNDMacaroonFile string `envconfig:"FLND_MACAROON_FILE"`
+
+	Workdir     string `envconfig:"WORK_DIR"`
+	Port        string `envconfig:"PORT" default:"1610"`
+	DatabaseUri string `envconfig:"DATABASE_URI" default:"nwc.db"`
+	LogLevel    string `envconfig:"LOG_LEVEL" default:"4"`
+	LogToFile   bool   `envconfig:"LOG_TO_FILE" default:"true"`
+	Network     string `envconfig:"NETWORK"`
+	MempoolApi  string `envconfig:"MEMPOOL_API"`
+	BaseUrl     string `envconfig:"BASE_URL"`
+	FrontendUrl string `envconfig:"FRONTEND_URL"`
+
+	GoProfilerAddr      string `envconfig:"GO_PROFILER_ADDR"`
+	EnableAdvancedSetup bool   `envconfig:"ENABLE_ADVANCED_SETUP" default:"true"`
+	AutoUnlockPassword  string `envconfig:"AUTO_UNLOCK_PASSWORD"`
+	LogDBQueries        bool   `envconfig:"LOG_DB_QUERIES" default:"false"`
+	// LokihubStoreURL is the app-store base URL. Empty by default — the app
+	// store is OFF (no startup sync, no periodic sync, no fetch) until the
+	// operator selects a store under Settings → Services. The former hardcoded
+	// raw.githubusercontent default now lives only as a *suggested* value in the
+	// service catalogue (seed.yaml), inactive until picked.
+	LokihubStoreURL string `envconfig:"LOKIHUB_STORE_URL"`
+
+	// LSP service attach (daemonclient, plan §3.2). The Hub becomes the single
+	// privileged client of a separately-deployed lspd daemon's NIP-98 JSON-RPC
+	// dashboard. These are read-only wiring: the Hub never imports lspd code,
+	// it only talks to it over the network boundary.
+	//
+	// LSPServiceEndpoint is lspd's dashboard base URL (e.g. http://lspd:8080).
+	// Empty disables the feature entirely — no nav item, no calls to lspd.
+	LSPServiceEndpoint string `envconfig:"LSP_SERVICE_ENDPOINT"`
+	// LSPServiceNsec is a raw nsec1…/64-hex admin key. Exactly ONE of
+	// LSPServiceNsec / LSPServiceBunker must be set when the endpoint is
+	// present; its pubkey must equal lspd's DASHBOARD_ADMIN_PUBKEY.
+	LSPServiceNsec string `envconfig:"LSP_SERVICE_NSEC"`
+	// LSPServiceBunker is a NIP-46 bunker:// string, so the Hub host need not
+	// store the raw admin key. Exactly ONE of nsec/bunker, as above.
+	LSPServiceBunker string `envconfig:"LSP_SERVICE_BUNKER"`
+
+	// CashWalletRateLimitPerHour caps mint_cash calls per calling app
+	// pubkey. 0 disables the limit entirely (useful for dev/integration testing
+	// against a shared long-lived hub).
+	CashWalletRateLimitPerHour int `envconfig:"CASH_WALLET_RATE_LIMIT_PER_HOUR" default:"10"`
+	// CashClaimCallsPerHour caps the cash_redeem, cash_transfer and
+	// cash_consolidate calls one verified claim signer, or one cash-mode
+	// commitment, may make per hour; the three share it. Never keyed by a bill.
+	// 0 disables the limit.
+	CashClaimCallsPerHour int `envconfig:"CASH_CLAIM_CALLS_PER_HOUR" default:"120"`
+	// CashRedeemMaxInvoiceExpirySecs and CashRedeemMaxFinalCLTV are the redeem
+	// invoice policy: an invoice whose expiry or final CLTV delta exceeds them is
+	// refused RESTRICTED before the claim. 0 disables the check. The CLTV limit
+	// is in blocks: 2880 is two days of one-minute Flokicoin blocks, above flnd's
+	// own invoice default (800).
+	CashRedeemMaxInvoiceExpirySecs int `envconfig:"CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS" default:"86400"`
+	CashRedeemMaxFinalCLTV         int `envconfig:"CASH_REDEEM_MAX_FINAL_CLTV" default:"2880"`
+	// CashRedeemInflightPerHub and CashRedeemInflightNode bound the cash_redeem
+	// payouts in flight per Cash Hub and node-wide; over either a redeem is
+	// RATE_LIMITED before it claims anything. 0 disables that bound.
+	CashRedeemInflightPerHub int `envconfig:"CASH_REDEEM_INFLIGHT_PER_HUB" default:"32"`
+	CashRedeemInflightNode   int `envconfig:"CASH_REDEEM_INFLIGHT_NODE" default:"256"`
+	// CashRedeemInflightPerPayee bounds a Cash Hub's payouts in flight to one
+	// paying node, so one holder of many slices paying hold invoices cannot take
+	// every slot of the Hub. Same-node payouts are not counted. 0 disables it.
+	CashRedeemInflightPerPayee int `envconfig:"CASH_REDEEM_INFLIGHT_PER_PAYEE" default:"8"`
+	// CashRedeemLateFailureCooldownSecs is how long a slice whose payout failed
+	// only after cash_redeem answered is refused RATE_LIMITED for another
+	// redeem. 0 disables the cool-down.
+	CashRedeemLateFailureCooldownSecs int `envconfig:"CASH_REDEEM_LATE_FAILURE_COOLDOWN_SECS" default:"600"`
+	// CashRedeemRouteMarginPpm and CashRedeemRouteMarginMinMillis are the margin
+	// over the quoted redeem fee that an external redeem may pay for its route:
+	// fee + max(ppm × amount / 1e6, min).
+	CashRedeemRouteMarginPpm       int `envconfig:"CASH_REDEEM_ROUTE_MARGIN_PPM" default:"2000"`
+	CashRedeemRouteMarginMinMillis int `envconfig:"CASH_REDEEM_ROUTE_MARGIN_MIN_MILLIS" default:"1000"`
+	// CashRedeemReplyWaitSecs is how long cash_redeem waits for its payment
+	// before answering INTERNAL with the slice kept claimed. 0 means 20.
+	CashRedeemReplyWaitSecs int `envconfig:"CASH_REDEEM_REPLY_WAIT_SECS" default:"20"`
+	// CashLineageSpinOffsPerHour bounds how often one bill's lineage spins off
+	// new bills, per hour (NIP-CASH §Security Considerations for Cash-Mode
+	// Slices); over it a spin-off is RATE_LIMITED. 0 disables the limit.
+	CashLineageSpinOffsPerHour int `envconfig:"CASH_LINEAGE_SPIN_OFFS_PER_HOUR" default:"20"`
+	// CashMaxLiveBillsPerHub caps the live bills under one Cash Hub that a
+	// spin-off or consolidate may create; over it the call is QUOTA_EXCEEDED. A
+	// mint is the hub owner's own call and is not bounded. 0 disables the cap.
+	CashMaxLiveBillsPerHub int `envconfig:"CASH_MAX_LIVE_BILLS_PER_HUB" default:"10000"`
+	// CircleWalletRateLimitPerHour caps create_circle_wallet calls per calling
+	// app pubkey. 0 disables the limit entirely.
+	CircleWalletRateLimitPerHour int `envconfig:"CIRCLE_WALLET_RATE_LIMIT_PER_HOUR" default:"3"`
+	// CircleMaxDustMloki bounds the dust threshold a Circle Wallet Hub may set:
+	// the most it may keep from a wallet it deletes. The default is the
+	// default routing-fee reserve floor (10 loki), a balance too small to pay
+	// out over Lightning. NIP-CW sets no bound.
+	CircleMaxDustMloki int64 `envconfig:"CIRCLE_MAX_DUST_MLOKI" default:"10000"`
+	// CashSplitLinkRetentionDays is how long an archived cash slice keeps the
+	// link to the bill its value moved into (a split or a consolidation). A
+	// consolidation's links say which bills shared a holder, and NIP-CASH says a
+	// Hub SHOULD NOT keep that longer than its audit policy needs. Amounts and
+	// outcomes stay. 0 keeps the links forever.
+	CashSplitLinkRetentionDays int `envconfig:"CASH_SPLIT_LINK_RETENTION_DAYS" default:"90"`
+	// WithdrawEnv are the on-chain withdrawal tunables (config/withdraw.go).
+	WithdrawEnv
+
+	// The four knobs below bound one private-transport batch envelope. They are
+	// node-level rather than per-Cash-Hub on purpose: the transport gate runs
+	// before any item has been attributed to a Hub, and a single envelope can
+	// carry items targeting bills from different Hubs, so there is no per-Hub
+	// policy to consult at the point where the limit has to be enforced.
+	//
+	// Each is a default only — a runtime value set through hub settings wins.
+	// See config.PrivateEnvelopeLimits. Defaults mirror
+	// nipcash/transport.DefaultLimits so the two cannot drift; 0 means "use the
+	// SDK default".
+
+	// PrivateEnvelopeMaxBytes caps the PADDED plaintext of one envelope. Bounded
+	// by NIP-44's 65535-byte plaintext ceiling. Raising it also raises what the
+	// relay must accept, since the base64 ciphertext is ~4/3 of this.
+	PrivateEnvelopeMaxBytes int `envconfig:"PRIVATE_ENVELOPE_MAX_BYTES" default:"0"`
+	// PrivateEnvelopeMaxItems is a cheap pre-check on item count, applied before
+	// anything is parsed. Bytes are the real constraint.
+	PrivateEnvelopeMaxItems int `envconfig:"PRIVATE_ENVELOPE_MAX_ITEMS" default:"0"`
+	// PrivateEnvelopePadBucketBytes is the padding granularity that makes a
+	// one-item envelope indistinguishable in size from a small batch.
+	PrivateEnvelopePadBucketBytes int `envconfig:"PRIVATE_ENVELOPE_PAD_BUCKET_BYTES" default:"0"`
+	// PrivateEnvelopeMaxVerifyBudget caps the signature verifications one
+	// envelope may demand, counted structurally before any crypto runs.
+	PrivateEnvelopeMaxVerifyBudget int `envconfig:"PRIVATE_ENVELOPE_MAX_VERIFY_BUDGET" default:"0"`
+	// PrivateEnvelopeMaxConsolidateSources caps sources in one cash_consolidate
+	// item on the private transport, and is necessarily LOWER than NIP-CASH's own
+	// cap of 100 on the standard path: each source carries its own signed proof
+	// (~952 bytes), so 100 sources is a ~96 KB item, past NIP-44's 65535-byte
+	// ceiling and therefore impossible to encrypt at any envelope size.
+	PrivateEnvelopeMaxConsolidateSources int `envconfig:"PRIVATE_ENVELOPE_MAX_CONSOLIDATE_SOURCES" default:"0"`
+	// PrivateInboxEventsPerMin is how many envelopes a minute the hub decrypts
+	// from one relay connection; the rest are dropped undecrypted. 0 disables
+	// the limit.
+	PrivateInboxEventsPerMin int `envconfig:"PRIVATE_INBOX_EVENTS_PER_MIN" default:"600"`
+	// CashMaxRequestAgeSecs is the horizon H (NIP-CASH §Deadlines): how far past
+	// arrival a request's deadline may lie, and the record-retention unit. 0 means
+	// the default (300); accepted 60 to 86400.
+	CashMaxRequestAgeSecs int `envconfig:"CASH_MAX_REQUEST_AGE_SECS" default:"0"`
+}
+
+func (c *AppConfig) GetBaseFrontendUrl() string {
+	url := c.FrontendUrl
+	if url == "" {
+		url = c.BaseUrl
+	}
+	return url
+}
+
+type Config interface {
+	Unlock(encryptionKey string) error
+	Get(key string, encryptionKey string) (string, error)
+	SetIgnore(key string, value string, encryptionKey string) error
+	SetUpdate(key string, value string, encryptionKey string) error
+	GetJWTSecret() (string, error)
+	GetRelayUrls() []string
+	// GetAdvertisedRelayUrls are the NWC relays advertised to clients (pairing
+	// URIs, connection tokens, minted bills) — distinct from GetRelayUrls, which
+	// the Hub dials. Empty AdvertisedRelay falls back to the dialed relays.
+	GetAdvertisedRelayUrls() []string
+	// TrustedNwcRelay reports whether the NWC relays in GetRelayUrls are run
+	// by this hub. See config.TrustedNwcRelay for what it turns on and why it
+	// must never be set for a relay the operator does not control.
+	TrustedNwcRelay() bool
+	SetTrustedNwcRelay(trusted bool) error
+	// PrivateEnvelopeLimits bounds one private-transport batch envelope,
+	// resolved as: hub setting, else env var, else the SDK default.
+	PrivateEnvelopeLimits() transport.Limits
+	SetPrivateEnvelopeLimits(limits transport.Limits) error
+	GetNetwork() string
+	GetMempoolApi() string
+	SetMempoolApi(value string) error
+	GetEnv() *AppConfig
+	CheckUnlockPassword(password string) bool
+	ChangeUnlockPassword(currentUnlockPassword string, newUnlockPassword string) error
+	SetAutoUnlockPassword(unlockPassword string) error
+	// GetAutoUnlockPassword returns the plaintext auto-unlock password,
+	// decrypting the at-rest value. Empty when auto-unlock is disabled.
+	GetAutoUnlockPassword() (string, error)
+	SaveUnlockPasswordCheck(encryptionKey string) error
+	SetupCompleted() bool
+	GetCurrency() string
+	SetCurrency(value string) error
+	GetFlokicoinDisplayFormat() string
+	SetFlokicoinDisplayFormat(value string) error
+	// Profile-image gating (P0-B). GetImageProxyMode is one of "off"
+	// (default), "direct" or "proxy"; GetImageProxyTemplate is the user's URL
+	// template used only in "proxy" mode. See config.ValidateImageProxyTemplate
+	// for the template contract.
+	GetImageProxyMode() string
+	SetImageProxyMode(value string) error
+	GetImageProxyTemplate() string
+	SetImageProxyTemplate(value string) error
+	GetLokihubStoreURL() string
+	SetLokihubStoreURL(value string) error
+	GetRelay() string
+	SetRelay(value string) error
+	GetGeneralRelayUrls() []string
+	GetGeneralRelay() string
+	SetGeneralRelay(value string) error
+	// GetAdvertisedGeneralRelayUrls / GetAdvertisedGeneralRelay are the
+	// client-reachable general relays advertised to other clients (/api/info,
+	// follow-set publishing) — distinct from the Get*GeneralRelay* above, which
+	// the hub dials. Empty GENERAL_RELAY_ADVERTISED falls back to the dialed value.
+	GetAdvertisedGeneralRelayUrls() []string
+	GetAdvertisedGeneralRelay() string
+	GetSearchRelayUrls() []string
+	GetSearchRelay() string
+	SetSearchRelay(value string) error
+
+	GetDefaultWorkDir() string
+}

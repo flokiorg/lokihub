@@ -1,0 +1,172 @@
+package controllers
+
+import (
+	"context"
+	"slices"
+	"time"
+
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/flokiorg/lokihub/nip47/permissions"
+	"github.com/nbd-wtf/go-nostr"
+)
+
+type createConnectionParams struct {
+	Pubkey            string                 `json:"pubkey"` // pubkey of the app connection
+	Name              string                 `json:"name"`
+	RequestMethods    []string               `json:"request_methods"`
+	NotificationTypes []string               `json:"notification_types"`
+	MaxAmount         uint64                 `json:"max_amount"`
+	BudgetRenewal     string                 `json:"budget_renewal"`
+	ExpiresAt         *uint64                `json:"expires_at"` // unix timestamp
+	Kind              string                 `json:"kind"`
+	Metadata          map[string]interface{} `json:"metadata,omitempty"`
+}
+
+type createConnectionResponse struct {
+	// pubkey is given, user requesting already knows relay.
+	WalletPubkey string `json:"wallet_pubkey"`
+}
+
+func (controller *nip47Controller) HandleCreateConnectionEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, publishResponse publishFunc) {
+	params := &createConnectionParams{}
+	resp := decodeRequest(nip47Request, params)
+	if resp != nil {
+		publishResponse(resp, nostr.Tags{})
+		return
+	}
+
+	logger.Logger.Info().
+		Interface("request_event_id", requestEventId).
+		Interface("params", params).
+		Msg("creating app")
+
+	var expiresAt *time.Time
+	if params.ExpiresAt != nil {
+		expiresAtUnsigned := *params.ExpiresAt
+		expiresAtValue := time.Unix(int64(expiresAtUnsigned), 0) //nolint:gosec // an oversized caller value only fails closed (treated as already-expired)
+		expiresAt = &expiresAtValue
+	}
+
+	maxAmountLoki := params.MaxAmount / 1000
+
+	// Reject a nonzero max_amount that would floor to 0 whole loki (any value
+	// in [1, 999] mloki). 0 itself is left valid — it's this codebase's
+	// established "no budget cap" convention for generic connections, unlike
+	// create_circle_wallet's spec, which requires a real cap on every
+	// request. Silently accepting a sub-loki nonzero value used to produce
+	// the exact same stored MaxAmountLoki == 0 as an explicit "unlimited"
+	// request, which validateCanPay can't tell apart from a real cap that
+	// merely rounded away.
+	if params.MaxAmount > 0 && maxAmountLoki == 0 {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: "max_amount is below the minimum enforceable cap of 1000 mloki (1 loki); use 0 for no cap",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
+	// explicitly do not allow creating an app with create_connection permission
+	if slices.Contains(params.RequestMethods, models.CREATE_CONNECTION_METHOD) {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: "cannot create a new app that has create_connection permission via NWC",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
+	// ensure there is at least one request method
+	if len(params.RequestMethods) == 0 {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: "No request methods provided",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
+	supportedMethods := controller.lnClient.GetSupportedNIP47Methods()
+	if slices.ContainsFunc(params.RequestMethods, func(method string) bool {
+		return !slices.Contains(supportedMethods, method)
+	}) {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: "One or more methods are not supported by the current LNClient",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
+	scopes, err := permissions.RequestMethodsToScopes(params.RequestMethods)
+	if err != nil {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: err.Error(),
+			},
+		}, nostr.Tags{})
+		return
+	}
+
+	supportedNotificationTypes := controller.lnClient.GetSupportedNIP47NotificationTypes()
+	if len(params.NotificationTypes) > 0 {
+		if slices.ContainsFunc(params.NotificationTypes, func(method string) bool {
+			return !slices.Contains(supportedNotificationTypes, method)
+		}) {
+			publishResponse(&models.Response{
+				ResultType: nip47Request.Method,
+				Error: &models.Error{
+					Code:    constants.ERROR_BAD_REQUEST,
+					Message: "One or more notification types are not supported by the current LNClient",
+				},
+			}, nostr.Tags{})
+			return
+		}
+		scopes = append(scopes, constants.NOTIFICATIONS_SCOPE)
+	}
+
+	if params.Kind != "" && params.Kind != db.AppKindStandard && params.Kind != db.AppKindIsolated {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: "invalid kind: must be \"standard\" or \"isolated\"",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
+	app, _, err := controller.appsService.CreateApp(params.Name, params.Pubkey, maxAmountLoki, params.BudgetRenewal, expiresAt, scopes, params.Kind, nil, "", params.Metadata)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Interface("request_event_id", requestEventId).
+			Msg("Failed to create app")
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error:      mapNip47Error(err),
+		}, nostr.Tags{})
+		return
+	}
+
+	responsePayload := createConnectionResponse{
+		WalletPubkey: *app.WalletPubkey,
+	}
+
+	publishResponse(&models.Response{
+		ResultType: nip47Request.Method,
+		Result:     responsePayload,
+	}, nostr.Tags{})
+}

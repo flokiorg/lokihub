@@ -1,0 +1,2886 @@
+package transactions
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"math/bits"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/flokiorg/lokihub/circle/circlelife"
+	"github.com/flokiorg/lokihub/circle/circlemoney"
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/queries"
+	"github.com/flokiorg/lokihub/events"
+	decodepay "github.com/flokiorg/lokihub/internal/decodepay"
+	"github.com/flokiorg/lokihub/internal/numeric"
+	"github.com/flokiorg/lokihub/internal/testknobs"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/logger"
+
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
+	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/rs/zerolog"
+)
+
+type transactionsService struct {
+	db               *gorm.DB
+	eventPublisher   events.EventPublisher
+	liquidityManager *manager.LiquidityManager
+	logger           zerolog.Logger
+	// lnClientProvider returns the node, for resolving a Circle Wallet payment
+	// the node reports accepted; nil until the service sets it.
+	lnClientProvider func() lnclient.LNClient
+	// orderIntake takes in a settled invoice that pays a NIP-CO order; it
+	// reports false for any other invoice. nil until the service sets it.
+	orderIntake func(ctx context.Context, inv *lnclient.Transaction) bool
+	// orderSelfPay takes in a same-node payment of an order's invoice: handled
+	// false when the hash names no order.
+	orderSelfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (preimage string, handled bool, err error)
+}
+
+// InternalMakeInvoiceMeta carries trusted caller context to MakeInvoice.
+// It is never populated from NIP-47 or HTTP request params — untrusted callers pass nil.
+type InternalMakeInvoiceMeta struct {
+	// OverrideAppID, when non-nil, replaces the appId parameter.
+	// Used only by the Transfer endpoint to route an invoice to a specific sub-wallet.
+	OverrideAppID *uint
+	// InternalTransfer marks the invoice as a hub-internal fund movement,
+	// skipping Cash liquidity provisioning and external fee checks.
+	InternalTransfer bool
+}
+
+type TransactionsService interface {
+	events.EventSubscriber
+	MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32, internal *InternalMakeInvoiceMeta) (*Transaction, error)
+	LookupTransaction(ctx context.Context, paymentHash string, transactionType *string, lnClient lnclient.LNClient, appId *uint) (*Transaction, error)
+	ListTransactions(ctx context.Context, from, until, limit, offset uint64, unpaidOutgoing bool, unpaidIncoming bool, transactionType *string, lnClient lnclient.LNClient, appId *uint, forceFilterByAppId bool) (transactions []Transaction, totalCount uint64, err error)
+	SendPaymentSync(payReq string, amountMloki *uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error)
+	SendKeysend(amount uint64, destination string, customRecords []lnclient.TLVRecord, preimage string, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error)
+	MakeHoldInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, paymentHash string, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error)
+	SettleHoldInvoice(ctx context.Context, preimage string, lnClient lnclient.LNClient, appId *uint) (*Transaction, error)
+	CancelHoldInvoice(ctx context.Context, paymentHash string, lnClient lnclient.LNClient, appId *uint) error
+	SetTransactionMetadata(ctx context.Context, id uint, metadata map[string]interface{}) error
+	SetLiquidityManager(lm *manager.LiquidityManager)
+	EstimateFee(payReq string) (uint64, error)
+	SweepStalePendingOutgoing(ctx context.Context, lnClient lnclient.LNClient)
+	ReconcilePendingCashRedeems(ctx context.Context, lnClient lnclient.LNClient) int
+	PendingCashRedeems() ([]db.Transaction, error)
+	// MakeCircleInvoice issues a Circle Wallet's Hub-settled invoice.
+	MakeCircleInvoice(ctx context.Context, wallet *db.App, amount uint64, description, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, requestEventId *uint) (*Transaction, error)
+	// ResolveCircleHold settles or cancels an accepted Circle Wallet payment.
+	ResolveCircleHold(ctx context.Context, paymentHash string, amountPaid int64, lnClient lnclient.LNClient) error
+	// ResolveAcceptedCircleHolds resolves every Circle Wallet payment left accepted.
+	ResolveAcceptedCircleHolds(ctx context.Context, lnClient lnclient.LNClient)
+	// SetLNClientProvider gives the service the node for Circle Wallet payments.
+	SetLNClientProvider(provider func() lnclient.LNClient)
+	// SetOrderIntake routes a settled invoice that pays an order to the order
+	// intake (NIP-CO §Lightning) instead of app crediting.
+	SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
+		selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error))
+	// CancelHoldInvoicesAtNode cancels hold invoices at the node whose rows are
+	// already failed, best effort.
+	CancelHoldInvoicesAtNode(ctx context.Context, paymentHashes []string, lnClient lnclient.LNClient)
+	// CancelOpenCircleInvoices cancels a Circle Wallet's open invoices.
+	CancelOpenCircleInvoices(ctx context.Context, walletID uint, lnClient lnclient.LNClient) error
+}
+
+const (
+	BoostagramTlvType = 7629169
+	WhatsatTlvType    = 34349334
+	CustomKeyTlvType  = 696969
+)
+
+// Payment atomicity is enforced at the database level:
+//   - SQLite: _txlock=immediate acquires a write lock at the start of every
+//     db.Transaction(), serialising all concurrent payment attempts.
+//   - PostgreSQL: pg_advisory_xact_lock(appId) is acquired at the start of each
+//     payment transaction, serialising concurrent payments to the same app.
+//     The lock is released automatically on transaction commit or rollback.
+
+type Transaction = db.Transaction
+
+type Boostagram struct {
+	AppName         string         `json:"app_name"`
+	Name            string         `json:"name"`
+	Podcast         string         `json:"podcast"`
+	URL             string         `json:"url"`
+	Episode         StringOrNumber `json:"episode,omitempty"`
+	FeedId          StringOrNumber `json:"feedID,omitempty"`
+	ItemId          StringOrNumber `json:"itemID,omitempty"`
+	Timestamp       int64          `json:"ts,omitempty"`
+	Message         string         `json:"message,omitempty"`
+	SenderId        StringOrNumber `json:"sender_id"`
+	SenderName      string         `json:"sender_name"`
+	Time            string         `json:"time"`
+	Action          string         `json:"action"`
+	ValueMlokiTotal int64          `json:"value_msat_total"` // Podcasting 2.0 standard field name
+}
+
+type StringOrNumber struct {
+	StringData string
+	NumberData int64
+}
+
+func (sn *StringOrNumber) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &sn.StringData); err == nil {
+		return nil
+	}
+
+	if err := json.Unmarshal(data, &sn.NumberData); err == nil {
+		return nil
+	}
+
+	return fmt.Errorf("cannot unmarshal %s into StringOrNumber type", data)
+}
+
+func (sn StringOrNumber) String() string {
+	if sn.StringData != "" {
+		return sn.StringData
+	}
+	return fmt.Sprintf("%d", sn.NumberData)
+}
+
+// ErrPaymentSentNotRecorded is returned (wrapped) by SendPaymentSync when the
+// node reported the payment as succeeded but recording that outcome failed —
+// most often because the node's response carried no preimage. The money has
+// left: this is NOT a failed payment, and a caller must never undo whatever it
+// did on the payment's behalf (release a cash slice, delete a funded wallet,
+// restore a source claim). The outgoing row stays PENDING so the payment
+// subscription or startup reconciliation can settle it once the outcome is
+// known.
+var ErrPaymentSentNotRecorded = errors.New("payment sent but its outcome could not be recorded")
+
+type notFoundError struct {
+}
+
+func NewNotFoundError() error {
+	return &notFoundError{}
+}
+
+func (err *notFoundError) Error() string {
+	return "The transaction requested was not found"
+}
+
+type insufficientBalanceError struct {
+}
+
+func NewInsufficientBalanceError() error {
+	return &insufficientBalanceError{}
+}
+
+func (err *insufficientBalanceError) Error() string {
+	return "Insufficient balance remaining to make the requested payment"
+}
+
+type quotaExceededError struct {
+}
+
+func NewQuotaExceededError() error {
+	return &quotaExceededError{}
+}
+
+func (err *quotaExceededError) Error() string {
+	return "Your app does not have enough budget remaining to make this payment. Please review this app in the connections page of your Lokihub."
+}
+
+type cashPartialSpendError struct{}
+
+func NewCashPartialSpendError() error {
+	return &cashPartialSpendError{}
+}
+
+func (err *cashPartialSpendError) Error() string {
+	return "Cash wallet must be drained in a single payment (no partial spends allowed)"
+}
+
+// enforceCashFullDrain returns cashPartialSpendError if a Cash wallet payment would
+// leave more than its fee reserve behind. Shared by SendPaymentSync and
+// SendKeysend so the two payment paths can't silently diverge on this check —
+// they previously duplicated it, and only one of the two copies carried the
+// internal-transfer exemption. isInternalTransfer and isCashClaimSlice are
+// explicit at every call site (SendKeysend currently has neither path and
+// passes false for both) so that a future addition to either path only needs
+// to thread its own metadata flag through, not rediscover this rule.
+//
+// isCashClaimSlice exempts cash_redeem' payout of one recipient's slice of a
+// SHARED cash_wallet (see nip47/controllers/cash_redeem_controller.go). This
+// whole-wallet-balance check is wrong for that case: it would reject a
+// recipient's payout whenever OTHER recipients' unclaimed slices are still
+// sitting in the same balance. cash_redeem already enforces the correct,
+// stronger, per-slice exact-amount rule itself before calling
+// SendPaymentSync/SendKeysend with this flag set — this check only ever
+// exists to catch partial spends on an otherwise-unconstrained payment path.
+func enforceCashFullDrain(parentKind string, balance int64, amount uint64, isInternalTransfer, isCashClaimSlice bool) error {
+	if parentKind != db.ParentKindCash || isInternalTransfer || isCashClaimSlice {
+		return nil
+	}
+	feeReserve := CalculateFeeReserveMloki(amount)
+	// amount was already validated against balance by validateCanPay before
+	// this is called; balance/feeReserve are LN mloki amounts, always far
+	// below int64 range.
+	if balance-int64(amount) > int64(feeReserve) { //nolint:gosec
+		return NewCashPartialSpendError()
+	}
+	return nil
+}
+
+func NewTransactionsService(db *gorm.DB, eventPublisher events.EventPublisher) *transactionsService {
+	return &transactionsService{
+		db:             db,
+		eventPublisher: eventPublisher,
+		logger:         logger.Logger.With().Str("component", "transactions").Logger(),
+	}
+}
+
+func (svc *transactionsService) SetLiquidityManager(lm *manager.LiquidityManager) {
+	svc.liquidityManager = lm
+}
+
+func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32, internal *InternalMakeInvoiceMeta) (*Transaction, error) {
+	svc.logger.Debug().
+		Interface("app_id", appId).
+		Interface("request_event_id", requestEventId).
+		Uint64("amount", amount).
+		Str("description", description).
+		Str("description_hash", descriptionHash).
+		Uint64("expiry", expiry).
+		Interface("metadata", metadata).
+		Msg("Making invoice")
+
+	var metadataBytes []byte
+	if metadata != nil {
+		var err error
+		metadataBytes, err = json.Marshal(metadata)
+		if err != nil {
+			svc.logger.Error().Err(err).Msg("Failed to serialize metadata")
+			return nil, err
+		}
+		if len(metadataBytes) > constants.INVOICE_METADATA_MAX_LENGTH {
+			return nil, fmt.Errorf("encoded invoice metadata provided is too large. Limit: %d Received: %d", constants.INVOICE_METADATA_MAX_LENGTH, len(metadataBytes))
+		}
+	}
+
+	// Apply trusted caller overrides. Sanitize the user-supplied metadata map to
+	// prevent any injected "app_id" or "internal_transfer" keys from having effect.
+	if metadata != nil {
+		delete(metadata, "app_id")
+		delete(metadata, "internal_transfer")
+	}
+	isInternalTransfer := false
+	if internal != nil {
+		if internal.OverrideAppID != nil {
+			svc.logger.Info().Uint("app_id", *internal.OverrideAppID).Msg("Making invoice with overwritten app ID")
+			appId = internal.OverrideAppID
+		}
+		isInternalTransfer = internal.InternalTransfer
+	}
+
+	// Cash Liquidity Check
+	invoiceAmount := amount // Default to requested amount
+
+	if svc.liquidityManager != nil && lspJitChannelSCID == nil && !isInternalTransfer {
+		jitHints, err := svc.liquidityManager.EnsureInboundLiquidity(ctx, amount) // Buy for GROSS amount
+		if err != nil {
+			svc.logger.Error().Err(err).Msg("Failed to ensure inbound liquidity")
+			// We continue anyway, but log error
+		} else if jitHints != nil {
+			svc.logger.Info().Msg("Applying Cash channel hints to invoice")
+			throughNodePubkey = &jitHints.LSPNodeID
+			lspJitChannelSCID = &jitHints.SCID
+			lspCltvExpiryDelta = &jitHints.CLTVExpiryDelta
+
+			// APPLY ROUTE HINT FEE LOGIC
+			// 1. Fee is declared in Route Hint
+			fee := jitHints.FeeMloki
+			lspFeeBaseMloki = &fee
+
+			zero32 := uint32(0)
+			lspFeeProportionalMillionths = &zero32 // All fee in base
+
+			// 2. Invoice Amount = Net Amount (Gross - Fee)
+			if amount > fee {
+				invoiceAmount = amount - fee
+			} else {
+				svc.logger.Warn().Uint64("amount", amount).Uint64("fee", fee).Msg("Cash Fee exceeds payment amount! Invoice will be 0 net.")
+				invoiceAmount = 0 // Should probably fail?
+			}
+		}
+	}
+
+	lnClientTransaction, err := lnClient.MakeInvoice(ctx, int64(invoiceAmount), description, descriptionHash, int64(expiry), throughNodePubkey, lspJitChannelSCID, lspCltvExpiryDelta, lspFeeBaseMloki, lspFeeProportionalMillionths) //nolint:gosec // invoice amount/expiry are always far below int64 range
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to create transaction")
+		return nil, err
+	}
+
+	var preimage *string
+	if lnClientTransaction.Preimage != "" {
+		preimage = &lnClientTransaction.Preimage
+	}
+
+	var expiresAt *time.Time
+	if lnClientTransaction.ExpiresAt != nil {
+		expiresAtValue := time.Unix(*lnClientTransaction.ExpiresAt, 0)
+		expiresAt = &expiresAtValue
+	}
+
+	dbTransaction := db.Transaction{
+		AppId:           appId,
+		RequestEventId:  requestEventId,
+		Type:            lnClientTransaction.Type,
+		State:           constants.TRANSACTION_STATE_PENDING,
+		AmountMloki:     uint64(lnClientTransaction.Amount), //nolint:gosec // LN-client-reported invoice amount is always non-negative
+		Description:     description,
+		DescriptionHash: descriptionHash,
+		PaymentRequest:  lnClientTransaction.Invoice,
+		PaymentHash:     lnClientTransaction.PaymentHash,
+		ExpiresAt:       expiresAt,
+		Preimage:        preimage,
+		Metadata:        datatypes.JSON(metadataBytes),
+	}
+	err = svc.db.Create(&dbTransaction).Error
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to create DB transaction")
+		return nil, err
+	}
+	return &dbTransaction, nil
+}
+
+func (svc *transactionsService) MakeHoldInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, paymentHash string, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error) {
+	var err error
+	var metadataBytes []byte
+	if metadata != nil {
+		metadataBytes, err = json.Marshal(metadata)
+		if err != nil {
+			svc.logger.Error().Err(err).Msg("Failed to serialize metadata")
+			return nil, err
+		}
+		if len(metadataBytes) > constants.INVOICE_METADATA_MAX_LENGTH {
+			return nil, fmt.Errorf("encoded invoice metadata provided is too large. Limit: %d Received: %d", constants.INVOICE_METADATA_MAX_LENGTH, len(metadataBytes))
+		}
+	}
+
+	lnClientTransaction, err := lnClient.MakeHoldInvoice(ctx, int64(amount), description, descriptionHash, int64(expiry), paymentHash) //nolint:gosec // invoice amount/expiry are always far below int64 range
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to create hold invoice via FLN client")
+		return nil, err
+	}
+
+	var preimage *string
+	if lnClientTransaction.Preimage != "" {
+		preimage = &lnClientTransaction.Preimage
+	}
+
+	var expiresAt *time.Time
+	if lnClientTransaction.ExpiresAt != nil {
+		expiresAtValue := time.Unix(*lnClientTransaction.ExpiresAt, 0)
+		expiresAt = &expiresAtValue
+	}
+
+	dbTransaction := db.Transaction{
+		AppId:           appId,
+		RequestEventId:  requestEventId,
+		Type:            constants.TRANSACTION_TYPE_INCOMING,
+		State:           constants.TRANSACTION_STATE_PENDING,
+		AmountMloki:     uint64(lnClientTransaction.Amount), //nolint:gosec // LN-client-reported invoice amount is always non-negative
+		Description:     description,
+		DescriptionHash: descriptionHash,
+		PaymentRequest:  lnClientTransaction.Invoice,
+		PaymentHash:     lnClientTransaction.PaymentHash,
+		ExpiresAt:       expiresAt,
+		Preimage:        preimage,
+		Metadata:        datatypes.JSON(metadataBytes),
+		Hold:            true,
+	}
+	err = svc.db.Create(&dbTransaction).Error
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to create hold invoice DB transaction")
+		return nil, err
+	}
+	return &dbTransaction, nil
+}
+
+func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error) {
+	var metadataBytes []byte
+	if metadata != nil {
+		var err error
+		metadataBytes, err = json.Marshal(metadata)
+		if err != nil {
+			svc.logger.Error().Err(err).Msg("Failed to serialize metadata")
+			return nil, err
+		}
+		if len(metadataBytes) > constants.INVOICE_METADATA_MAX_LENGTH {
+			return nil, fmt.Errorf("encoded payment metadata provided is too large. Limit: %d Received: %d", constants.INVOICE_METADATA_MAX_LENGTH, len(metadataBytes))
+		}
+	}
+
+	payReq = strings.ToLower(payReq)
+	paymentRequest, err := decodepay.Decode(payReq)
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("bolt11", payReq).
+			Msg("Failed to decode bolt11 invoice")
+
+		return nil, err
+	}
+
+	if time.Now().After(time.Unix(int64(paymentRequest.CreatedAt+paymentRequest.Expiry), 0)) {
+		svc.logger.Error().
+			Str("bolt11", payReq).
+			Time("expiry", time.Unix(int64(paymentRequest.CreatedAt+paymentRequest.Expiry), 0)).
+			Msg("this invoice has expired")
+
+		return nil, errors.New("this invoice has expired")
+	}
+
+	selfPayment := IsSelfPayment(svc.db, paymentRequest, lnClient)
+
+	var dbTransaction db.Transaction
+
+	paymentAmount := uint64(paymentRequest.AmountMloki) //nolint:gosec // mloki amounts are always far below int/uint64 range
+	if amountMloki != nil && paymentRequest.AmountMloki == 0 {
+		paymentAmount = *amountMloki
+	}
+
+	var circleQuote *circlemoney.SendQuote
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		var feeSkim, feeReserve uint64
+		payer, err := loadApp(tx, appId)
+		if err != nil {
+			return err
+		}
+		isInternalTransfer, _ := metadata["internal_transfer"].(bool)
+		// A Circle Wallet's payment runs its own checks under its Hub's lock
+		// (NIP-CW §Own Funds and Caps).
+		circlePayer := circlemoney.IsCircleWallet(payer) && !isInternalTransfer
+		if circlePayer {
+			if err := lockCircleParties(tx, payer); err != nil {
+				return err
+			}
+			// Read again under the lock: a state change in between must count.
+			if payer, err = loadApp(tx, appId); err != nil {
+				return err
+			}
+		} else if tx.Name() == "postgres" && appId != nil {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
+				return fmt.Errorf("acquire payment lock: %w", err)
+			}
+		}
+
+		var existingSettledTransaction db.Transaction
+		if tx.Limit(1).Find(&existingSettledTransaction, &db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: paymentRequest.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).RowsAffected > 0 {
+			svc.logger.Debug().Str("payment_hash", dbTransaction.PaymentHash).Msg("this invoice has already been paid")
+			return errors.New("this invoice has already been paid")
+		}
+		if tx.Limit(1).Find(&existingSettledTransaction, &db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: paymentRequest.PaymentHash,
+			State:       constants.TRANSACTION_STATE_PENDING,
+		}).RowsAffected > 0 {
+			svc.logger.Debug().Str("payment_hash", dbTransaction.PaymentHash).Msg("this invoice is already being paid")
+			return errors.New("there is already a payment pending for this invoice")
+		}
+
+		// Internal transfers (hub cleanup, self-payment) and cash_redeem' own
+		// per-slice payout (which enforces its own, stronger exact-amount rule
+		// upstream) are exempt from both the fee-reserve balance/quota headroom
+		// (validateCanPay) and the whole-wallet full-drain shape check
+		// (enforceCashFullDrain) below. Internal transfers are additionally
+		// exempt from the MaxAmountLoki budget cap itself (skipBudgetCap) -
+		// see validateCanPay's doc comment.
+		isCashClaimSlice, _ := metadata["cash_claim_slice"].(bool)
+		// cashRedeemFeeMloki is set only by cash_redeem_controller.go — the
+		// redeem fee it already quoted to the recipient (and deducted from
+		// paymentAmount) BEFORE this call, computed from the slice's own
+		// CashWalletClaim.RedeemFeePpm, 0 for a same-node redemption. Carried
+		// onto the pending row below so markTransactionSettled can reconcile
+		// it against the real routing fee once known (reconcileCashRedeemFee)
+		// — see db.Transaction.CashRedeemFeeMloki's own doc comment for why
+		// this must stay out of FeeSkimMloki/validateCanPay entirely.
+		var cashRedeemFeeMloki *uint64
+		if v, ok := metadata["cash_redeem_fee_mloki"].(uint64); ok {
+			cashRedeemFeeMloki = &v
+		}
+
+		if circlePayer {
+			var payee *db.App
+			if selfPayment {
+				if payee, err = incomingApp(tx, paymentRequest.PaymentHash); err != nil {
+					return err
+				}
+			}
+			quote, err := circlemoney.CheckSend(tx, circlemoney.SendInput{
+				Wallet: payer, Payee: payee, SameNode: selfPayment, Amount: paymentAmount, Now: time.Now(), Active: circlelife.IsActive(payer, time.Now()),
+			}, circlemoney.SameCircleTransfers)
+			if err != nil {
+				return err
+			}
+			circleQuote = &quote
+		} else {
+			balance, parentKind, feeSkimMloki, err := svc.validateCanPay(tx, appId, paymentAmount, paymentRequest.Description, selfPayment, validateCanPayExemptions{
+				SkipFeeReserve: isCashClaimSlice,
+				SkipBudgetCap:  isInternalTransfer,
+			})
+			if err != nil {
+				return err
+			}
+			// Cash wallets must drain their full balance in a single payment.
+			// Enforced here (shared layer) so the HTTP API and keysend paths cannot bypass it.
+			if err := enforceCashFullDrain(parentKind, balance, paymentAmount, isInternalTransfer, isCashClaimSlice); err != nil {
+				return err
+			}
+			circleQuote = nil
+			feeSkim = feeSkimMloki
+			// An external cash_redeem of one slice must not stamp the generic LN
+			// fee reserve on its pending row. The redeem route is already bounded
+			// by CashRedeemRouteCapKey and reconciled via cash_redeem_fee_mloki,
+			// so the reserve is dead weight here — and get_isolated_balance.go
+			// subtracts a pending row's reserve across the WHOLE shared bill, so
+			// stamping it would transiently reduce the readable balance of a
+			// co-recipient's fully-funded sibling slice and could block its
+			// redeem until this payment settles (LOKIHUB-0023). This mirrors the
+			// SkipFeeReserve headroom exemption already set above.
+			if !isCashClaimSlice {
+				feeReserve = CalculateFeeReserveMloki(paymentAmount)
+			}
+		}
+
+		var expiresAt *time.Time
+		if paymentRequest.Expiry > 0 {
+			expiresAtValue := time.Now().Add(time.Duration(paymentRequest.Expiry) * time.Second)
+			expiresAt = &expiresAtValue
+		}
+		dbTransaction = db.Transaction{
+			AppId:              appId,
+			RequestEventId:     requestEventId,
+			Type:               constants.TRANSACTION_TYPE_OUTGOING,
+			State:              constants.TRANSACTION_STATE_PENDING,
+			FeeReserveMloki:    feeReserve,
+			FeeSkimMloki:       feeSkim,
+			CashRedeemFeeMloki: cashRedeemFeeMloki,
+			AmountMloki:        paymentAmount,
+			PaymentRequest:     payReq,
+			PaymentHash:        paymentRequest.PaymentHash,
+			Description:        paymentRequest.Description,
+			DescriptionHash:    paymentRequest.DescriptionHash,
+			ExpiresAt:          expiresAt,
+			SelfPayment:        selfPayment,
+			Metadata:           datatypes.JSON(metadataBytes),
+		}
+		if circleQuote != nil {
+			stampSend(&dbTransaction, *circleQuote)
+		}
+		return tx.Create(&dbTransaction).Error
+	})
+
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("bolt11", payReq).
+			Msg("Failed to create DB transaction")
+		return nil, err
+	}
+
+	svc.logger.Debug().
+		Interface("app_id", appId).
+		Interface("request_event_id", requestEventId).
+		Uint64("amount", paymentAmount).
+		Str("description", paymentRequest.Description).
+		Str("description_hash", paymentRequest.DescriptionHash).
+		Int64("expiry", paymentRequest.Expiry).
+		Bool("self_payment", selfPayment).
+		Interface("metadata", metadata).
+		Msg("Initiating payment")
+
+	var response *lnclient.PayInvoiceResponse
+	if selfPayment {
+		response, err = svc.interceptSelfPayment(paymentRequest.PaymentHash, paymentAmount, lnClient)
+	} else {
+		// A cash_redeem's route is capped by the Hub's own policy (NIP-CASH
+		// §Redeeming a Slice step 4): the quoted fee plus a margin, computed by
+		// cash_redeem_controller.go and set only there. Never the generic reserve.
+		var routeCap *uint64
+		if v, ok := metadata[CashRedeemRouteCapKey].(uint64); ok {
+			routeCap = &v
+		}
+		// A Circle Wallet's Lightning payment never pays a routing fee above its
+		// reserve (NIP-CW §Own Funds and Caps).
+		if circleQuote != nil && circleQuote.Kind == circlemoney.KindLightning {
+			reserve := circleQuote.FeeReserve
+			routeCap = &reserve
+		}
+		response, err = lnClient.SendPaymentSync(payReq, amountMloki, routeCap)
+	}
+
+	if err != nil {
+		rpcErr := err
+		svc.logger.Error().Err(rpcErr).
+			Str("bolt11", payReq).
+			Msg("Failed to send payment")
+
+		// The payment may still settle, so the row stays PENDING and the node's
+		// payment subscription settles or fails it later.
+		if errors.Is(rpcErr, lnclient.ErrPaymentPending) {
+			return nil, rpcErr
+		}
+
+		var failedTransaction *db.Transaction
+		dbErr := svc.db.Transaction(func(tx *gorm.DB) error {
+			var markErr error
+			failedTransaction, markErr = svc.markPaymentFailed(tx, &dbTransaction, rpcErr.Error())
+			return markErr
+		})
+		if dbErr != nil {
+			return nil, dbErr
+		}
+		if failedTransaction != nil {
+			return nil, rpcErr
+		}
+
+		// markPaymentFailed no-opped: most likely the payment-sent-event
+		// subscription already settled this same payment hash before this
+		// error branch ran (see markPaymentFailed's doc comment). Re-fetch and
+		// return the settled transaction instead of surfacing a stale RPC
+		// error for a payment that actually went out - mirrors the identical
+		// re-fetch pattern used below for the success-path settle race.
+		var existing db.Transaction
+		if lookupErr := svc.db.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: dbTransaction.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).First(&existing).Error; lookupErr != nil {
+			// Not actually settled (e.g. the no-op was an already-FAILED
+			// duplicate call) - the original RPC error is the right one to surface.
+			return nil, rpcErr
+		}
+		return &existing, nil
+	}
+
+	// the payment definitely succeeded
+	var settledTransaction *db.Transaction
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		settledTransaction, err = svc.markTransactionSettled(tx, &dbTransaction, response.Preimage, response.Fee, selfPayment)
+		return err
+	})
+	if err != nil {
+		// The node said the payment went out, so this must not read as a
+		// failure: callers roll back on failure, and rolling back here would
+		// hand out value that has already been paid. The row stays PENDING.
+		svc.logger.Error().Err(err).
+			Str("payment_hash", dbTransaction.PaymentHash).
+			Bool("self_payment", selfPayment).
+			Msg("Payment succeeded but recording it failed; transaction left pending for reconciliation")
+		return nil, fmt.Errorf("%w: %w", ErrPaymentSentNotRecorded, err)
+	}
+	if settledTransaction != nil {
+		svc.publishSettleEvent(settledTransaction)
+	} else {
+		// subscribePayments goroutine raced and settled the transaction first.
+		// markTransactionSettled returns nil to avoid double-firing the settle event,
+		// but we still need to return the record to the caller.
+		var existing db.Transaction
+		if err := svc.db.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: dbTransaction.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).First(&existing).Error; err != nil {
+			return nil, fmt.Errorf("payment settled but transaction not found: %w", err)
+		}
+		settledTransaction = &existing
+	}
+
+	return settledTransaction, nil
+}
+
+func (svc *transactionsService) SendKeysend(amount uint64, destination string, customRecords []lnclient.TLVRecord, preimage string, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error) {
+	if preimage == "" {
+		preImageBytes, err := makePreimageHex()
+		if err != nil {
+			return nil, err
+		}
+		preimage = hex.EncodeToString(preImageBytes)
+	}
+
+	preImageBytes, err := lnclient.DecodeHash32("preimage", preimage)
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("preimage", preimage).
+			Msg("Invalid preimage")
+		return nil, err
+	}
+
+	paymentHash256 := sha256.New()
+	paymentHash256.Write(preImageBytes)
+	paymentHashBytes := paymentHash256.Sum(nil)
+	paymentHash := hex.EncodeToString(paymentHashBytes)
+
+	metadata := map[string]interface{}{}
+
+	metadata["destination"] = destination
+
+	metadata["tlv_records"] = customRecords
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to serialize transaction metadata")
+		return nil, err
+	}
+	boostagramBytes := svc.getBoostagramBytesFromCustomRecords(customRecords)
+
+	var dbTransaction db.Transaction
+
+	selfPayment := destination == lnClient.GetPubkey()
+
+	var circleQuote *circlemoney.SendQuote
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		payer, err := loadApp(tx, appId)
+		if err != nil {
+			return err
+		}
+		// On this node the custom key record names the recipient app; anyone
+		// can write it, so a Circle Wallet named there is checked like any
+		// credit that names none of its invoices.
+		var recipient *db.App
+		if selfPayment {
+			if recipient, err = loadApp(tx, svc.findCustomKeyApp(customRecords, tx)); err != nil {
+				return err
+			}
+		}
+		circlePayer := circlemoney.IsCircleWallet(payer)
+		if circlePayer || circlemoney.IsCircleWallet(recipient) {
+			if err := lockCircleParties(tx, payer, recipient); err != nil {
+				return err
+			}
+			// Read both again under the lock: a state change in between must count.
+			if payer, err = loadApp(tx, appId); err != nil {
+				return err
+			}
+			if recipient != nil {
+				if recipient, err = loadApp(tx, &recipient.ID); err != nil {
+					return err
+				}
+			}
+		} else if tx.Name() == "postgres" && appId != nil {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
+				return fmt.Errorf("acquire payment lock: %w", err)
+			}
+		}
+
+		feeSkim, feeReserve := uint64(0), CalculateFeeReserveMloki(amount)
+		if circlePayer {
+			quote, err := circlemoney.CheckSend(tx, circlemoney.SendInput{
+				Wallet: payer, Payee: recipient, SameNode: selfPayment, Amount: amount, Now: time.Now(), Active: circlelife.IsActive(payer, time.Now()),
+			}, circlemoney.SameCircleTransfers)
+			if err != nil {
+				return err
+			}
+			circleQuote = &quote
+		} else {
+			balance, parentKind, feeSkimMloki, err := svc.validateCanPay(tx, appId, amount, "", selfPayment, validateCanPayExemptions{})
+			if err != nil {
+				return err
+			}
+			// SendKeysend has no internal-transfer or cash_redeem path today (see enforceCashFullDrain doc).
+			if err := enforceCashFullDrain(parentKind, balance, amount, false, false); err != nil {
+				return err
+			}
+			feeSkim = feeSkimMloki
+		}
+		if selfPayment {
+			if err := checkCircleKeysendCredit(tx, recipient, payer, true, amount); err != nil {
+				return err
+			}
+		}
+
+		dbTransaction = db.Transaction{
+			AppId:           appId,
+			Description:     svc.getDescriptionFromCustomRecords(customRecords),
+			RequestEventId:  requestEventId,
+			Type:            constants.TRANSACTION_TYPE_OUTGOING,
+			State:           constants.TRANSACTION_STATE_PENDING,
+			FeeReserveMloki: feeReserve,
+			FeeSkimMloki:    feeSkim,
+			AmountMloki:     amount,
+			Metadata:        datatypes.JSON(metadataBytes),
+			Boostagram:      datatypes.JSON(boostagramBytes),
+			PaymentHash:     paymentHash,
+			Preimage:        &preimage,
+			SelfPayment:     selfPayment,
+		}
+		if circleQuote != nil {
+			stampSend(&dbTransaction, *circleQuote)
+		}
+		if err := tx.Create(&dbTransaction).Error; err != nil {
+			return err
+		}
+		if !selfPayment {
+			return nil
+		}
+		// A keysend on this node is credited by its own incoming row, written
+		// in the same transaction as the checks that admitted it, so a second
+		// keysend to the same wallet sees this one.
+		var recipientID *uint
+		if recipient != nil {
+			recipientID = &recipient.ID
+		}
+		return tx.Create(&db.Transaction{
+			AppId:       recipientID,
+			Type:        constants.TRANSACTION_TYPE_INCOMING,
+			State:       constants.TRANSACTION_STATE_PENDING,
+			AmountMloki: amount,
+			PaymentHash: paymentHash,
+			Preimage:    &preimage,
+			Description: svc.getDescriptionFromCustomRecords(customRecords),
+			Metadata:    datatypes.JSON(metadataBytes),
+			Boostagram:  datatypes.JSON(boostagramBytes),
+			SelfPayment: true,
+		}).Error
+	})
+
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("destination", destination).
+			Uint64("amount", amount).
+			Msg("Failed to create DB transaction")
+		return nil, err
+	}
+
+	var payKeysendResponse *lnclient.PayKeysendResponse
+
+	if selfPayment {
+		_, err = svc.interceptSelfPayment(paymentHash, amount, lnClient)
+		if err == nil {
+			payKeysendResponse = &lnclient.PayKeysendResponse{
+				Fee: 0,
+			}
+		}
+	} else if limiter, ok := lnClient.(KeysendFeeLimiter); ok && circleQuote != nil && circleQuote.Kind == circlemoney.KindLightning {
+		// Within the Circle Wallet's routing-fee reserve, never above it.
+		payKeysendResponse, err = limiter.SendKeysendWithFeeLimit(amount, destination, customRecords, preimage, circleQuote.FeeReserve)
+	} else {
+		payKeysendResponse, err = lnClient.SendKeysend(amount, destination, customRecords, preimage)
+	}
+
+	if err != nil {
+		rpcErr := err
+		svc.logger.Error().Err(rpcErr).
+			Str("destination", destination).
+			Uint64("amount", amount).
+			Msg("Failed to send payment")
+
+		// The payment may still settle, so the row stays PENDING and the node's
+		// payment subscription (or the stale sweep's lookup) resolves it later.
+		if errors.Is(rpcErr, lnclient.ErrPaymentPending) {
+			return nil, rpcErr
+		}
+
+		// Route through markPaymentFailed (not a raw Updates() call) so this
+		// shares its guard against downgrading an already-SETTLED transaction -
+		// the async payment-sent-event subscription can settle this same
+		// payment hash before this error branch runs, same as SendPaymentSync.
+		var failedTransaction *db.Transaction
+		dbErr := svc.db.Transaction(func(tx *gorm.DB) error {
+			var markErr error
+			failedTransaction, markErr = svc.markPaymentFailed(tx, &dbTransaction, rpcErr.Error())
+			return markErr
+		})
+		if dbErr != nil {
+			return nil, dbErr
+		}
+		if failedTransaction != nil {
+			return nil, rpcErr
+		}
+
+		var existing db.Transaction
+		if lookupErr := svc.db.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: dbTransaction.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).First(&existing).Error; lookupErr != nil {
+			return nil, rpcErr
+		}
+		return &existing, nil
+	}
+
+	// the payment definitely succeeded
+	var settledTransaction *db.Transaction
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		settledTransaction, err = svc.markTransactionSettled(tx, &dbTransaction, preimage, payKeysendResponse.Fee, selfPayment)
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	if settledTransaction != nil {
+		svc.publishSettleEvent(settledTransaction)
+	} else {
+		// subscribePayments goroutine raced and settled the transaction first.
+		// markTransactionSettled returns nil to avoid double-firing the settle event,
+		// but we still need to return the record to the caller.
+		var existing db.Transaction
+		if err := svc.db.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: dbTransaction.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).First(&existing).Error; err != nil {
+			return nil, fmt.Errorf("payment settled but transaction not found: %w", err)
+		}
+		settledTransaction = &existing
+	}
+
+	return settledTransaction, nil
+}
+
+func (svc *transactionsService) LookupTransaction(ctx context.Context, paymentHash string, transactionType *string, lnClient lnclient.LNClient, appId *uint) (*Transaction, error) {
+	transaction := db.Transaction{}
+
+	tx := svc.db
+
+	var appKind string
+	if appId != nil {
+		err := svc.db.
+			Model(&db.App{}).
+			Where("id", *appId).
+			Pluck("kind", &appKind).
+			Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, NewNotFoundError()
+			}
+			return nil, err
+		}
+	}
+
+	if db.IsIsolatedKind(appKind) {
+		tx = tx.Where("app_id = ?", *appId)
+	}
+
+	if transactionType != nil {
+		tx = tx.Where("type = ?", *transactionType)
+	}
+
+	// order settled first, otherwise by created date, as there can be multiple outgoing payments
+	// for the same payment hash (if you tried to pay an invoice multiple times - e.g. the first time failed)
+	result := tx.Order("settled_at desc, created_at desc").Limit(1).Find(&transaction, &db.Transaction{
+		// Type:        transactionType,
+		PaymentHash: paymentHash,
+	})
+
+	if result.Error != nil {
+		svc.logger.Error().Err(result.Error).Msg("Failed to lookup transaction")
+		return nil, result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		svc.logger.Error().Err(result.Error).
+			Str("payment_hash", paymentHash).
+			Interface("app_id", appId).
+			Msg("transaction not found")
+		return nil, NewNotFoundError()
+	}
+
+	if transaction.State == constants.TRANSACTION_STATE_PENDING {
+		_ = svc.checkUnsettledTransaction(ctx, &transaction, lnClient)
+	}
+
+	return &transaction, nil
+}
+
+func (svc *transactionsService) ListTransactions(ctx context.Context, from, until, limit, offset uint64, unpaidOutgoing bool, unpaidIncoming bool, transactionType *string, lnClient lnclient.LNClient, appId *uint, forceFilterByAppId bool) (transactions []Transaction, totalCount uint64, err error) {
+	svc.checkUnsettledTransactions(ctx, lnClient)
+
+	var appKind string
+	if appId != nil {
+		err := svc.db.
+			Model(&db.App{}).
+			Where("id", *appId).
+			Pluck("kind", &appKind).
+			Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, 0, NewNotFoundError()
+			}
+			return nil, 0, err
+		}
+	}
+
+	tx := svc.db
+
+	if db.IsIsolatedKind(appKind) || forceFilterByAppId {
+		tx = tx.Where("app_id = ?", *appId)
+	}
+
+	if !unpaidOutgoing && !unpaidIncoming {
+		tx = tx.Where("state = ?", constants.TRANSACTION_STATE_SETTLED)
+	} else if unpaidOutgoing && !unpaidIncoming {
+		tx = tx.Where("state = ? OR type = ?", constants.TRANSACTION_STATE_SETTLED, constants.TRANSACTION_TYPE_OUTGOING)
+	} else if unpaidIncoming && !unpaidOutgoing {
+		tx = tx.Where("state = ? OR type = ?", constants.TRANSACTION_STATE_SETTLED, constants.TRANSACTION_TYPE_INCOMING)
+	}
+
+	if transactionType != nil {
+		tx = tx.Where("type = ?", *transactionType)
+	}
+
+	if from > 0 {
+		tx = tx.Where("updated_at >= ?", time.Unix(numeric.ClampUint64ToInt64(from), 0))
+	}
+	if until > 0 {
+		tx = tx.Where("updated_at <= ?", time.Unix(numeric.ClampUint64ToInt64(until), 0))
+	}
+
+	var totalCount64 int64
+	result := tx.Model(&db.Transaction{}).Count(&totalCount64)
+	if result.Error != nil {
+		svc.logger.Error().Err(result.Error).Msg("Failed to count DB transactions")
+		return nil, 0, result.Error
+	}
+	totalCount = uint64(totalCount64) //nolint:gosec // a DB row count is always non-negative
+
+	tx = tx.Order("updated_at desc")
+
+	if limit > 0 {
+		tx = tx.Limit(numeric.ClampUint64ToInt(limit))
+	}
+	if offset > 0 {
+		tx = tx.Offset(numeric.ClampUint64ToInt(offset))
+	}
+
+	result = tx.Find(&transactions)
+	if result.Error != nil {
+		svc.logger.Error().Err(result.Error).Msg("Failed to list DB transactions")
+		return nil, 0, result.Error
+	}
+
+	return transactions, totalCount, nil
+}
+
+func (svc *transactionsService) checkUnsettledTransactions(ctx context.Context, lnClient lnclient.LNClient) {
+	// Only check unsettled transactions for clients that don't support async events
+	// checkUnsettledTransactions does not work for keysend payments!
+	if slices.Contains(lnClient.GetSupportedNIP47NotificationTypes(), "payment_received") {
+		return
+	}
+
+	// check pending payments less than a day old
+	transactions := []Transaction{}
+	result := svc.db.Where("state = ? AND created_at > ?", constants.TRANSACTION_STATE_PENDING, time.Now().Add(-24*time.Hour)).Find(&transactions)
+	if result.Error != nil {
+		svc.logger.Error().Err(result.Error).Msg("Failed to list DB transactions")
+		return
+	}
+	for _, transaction := range transactions {
+		_ = svc.checkUnsettledTransaction(ctx, &transaction, lnClient)
+	}
+}
+func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, transaction *db.Transaction, lnClient lnclient.LNClient) error {
+	if slices.Contains(lnClient.GetSupportedNIP47NotificationTypes(), "payment_received") {
+		return nil
+	}
+
+	lnClientTransaction, err := lnClient.LookupInvoice(ctx, transaction.PaymentHash)
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("bolt11", transaction.PaymentRequest).
+			Msg("Failed to check transaction")
+		return err
+	}
+	// update transaction state
+	if lnClientTransaction.SettledAt != nil {
+		var settledTx *db.Transaction
+		err = svc.db.Transaction(func(tx *gorm.DB) error {
+			var txErr error
+			settledTx, txErr = svc.markTransactionSettled(tx, transaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false) //nolint:gosec // LN-client-reported fee is always non-negative
+			return txErr
+		})
+
+		if err != nil {
+			svc.logger.Error().Err(err).Msg("Failed to mark payment sent when checking unsettled transaction")
+		} else if settledTx != nil {
+			svc.publishSettleEvent(settledTx)
+		}
+	}
+	return nil
+}
+
+const stalePendingTTL = 48 * time.Hour
+
+const (
+	// sweepBatchSize / sweepMaxBatchesPerTick bound SweepStalePendingOutgoing the
+	// same way runCashCleanup bounds itself (service/cash_cleanup_service.go): at
+	// most sweepBatchSize rows per query and sweepMaxBatchesPerTick batches per
+	// 5-minute tick, keyset-paged by id, so a large backlog (or rows left PENDING
+	// because the node was unreachable) spreads across ticks instead of being
+	// re-scanned unbounded every tick.
+	sweepBatchSize         = 200
+	sweepMaxBatchesPerTick = 10
+)
+
+// CashRedeemRouteCapKey is the payment metadata key carrying a cash_redeem's
+// routing-fee cap. Only cash_redeem sets it; callers' metadata never may.
+const CashRedeemRouteCapKey = "cash_redeem_route_cap_mloki"
+
+// IsCashRedeemPayout reports whether t is a cash_redeem payout, which
+// cash_redeem_controller.go marks with cash_claim_slice.
+func IsCashRedeemPayout(t *db.Transaction) bool {
+	var metadata map[string]interface{}
+	if len(t.Metadata) == 0 || json.Unmarshal(t.Metadata, &metadata) != nil {
+		return false
+	}
+	isCashRedeem, _ := metadata["cash_claim_slice"].(bool)
+	return isCashRedeem
+}
+
+// PendingCashRedeems returns the cash_redeem payouts still PENDING.
+func (svc *transactionsService) PendingCashRedeems() ([]db.Transaction, error) {
+	var pending []db.Transaction
+	if err := svc.db.Where("type = ? AND state = ?",
+		constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_PENDING).Find(&pending).Error; err != nil {
+		return nil, err
+	}
+	redeems := pending[:0]
+	for _, t := range pending {
+		if IsCashRedeemPayout(&t) {
+			redeems = append(redeems, t)
+		}
+	}
+	return redeems, nil
+}
+
+// ReconcilePendingCashRedeems asks the node about every cash_redeem payout
+// still PENDING — one whose outcome the node could not report when it was paid,
+// so its slice stayed claimed — and settles or fails it. A failure releases the
+// slice through the nwc_payment_failed event; an outcome still unknown is left
+// alone. Returns how many stay unresolved.
+//
+// Needed because the node's payment subscription only reports outcomes that
+// happen while lokihub is running: one reached during a restart is never sent.
+func (svc *transactionsService) ReconcilePendingCashRedeems(ctx context.Context, lnClient lnclient.LNClient) int {
+	pending, err := svc.PendingCashRedeems()
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to list pending cash_redeem payouts")
+		return 0
+	}
+	looker, canLookUp := lnClient.(lnclient.PaymentLooker)
+
+	unresolved := 0
+	for i := range pending {
+		payout := &pending[i]
+		if !canLookUp {
+			unresolved++
+			continue
+		}
+		lookup, lookupErr := looker.LookupPayment(ctx, payout.PaymentHash)
+		if lookupErr != nil || lookup.Status == lnclient.PaymentStatusInFlight {
+			unresolved++
+			continue
+		}
+
+		resolved, dbErr := svc.applyPaymentLookup(payout, lookup)
+		if dbErr != nil {
+			svc.logger.Error().Err(dbErr).Str("payment_hash", payout.PaymentHash).
+				Msg("Failed to record a reconciled cash_redeem payout")
+			unresolved++
+		} else if !resolved {
+			// Reported succeeded but without a preimage: it went out, so the
+			// slice stays claimed until the preimage is known.
+			unresolved++
+		}
+	}
+
+	if unresolved > 0 {
+		svc.logger.Warn().Int("unresolved", unresolved).
+			Msg("Some cash_redeem payouts still have no known outcome; their slices stay claimed")
+	}
+	return unresolved
+}
+
+// applyPaymentLookup records what the node reported for an outgoing payment:
+// settled (with its preimage and fee) or failed. Anything else — still in flight,
+// or "succeeded" without a preimage — leaves the row as it is and reports
+// resolved=false.
+func (svc *transactionsService) applyPaymentLookup(payment *db.Transaction, lookup *lnclient.PaymentLookup) (resolved bool, err error) {
+	switch lookup.Status {
+	case lnclient.PaymentStatusSucceeded:
+		if lookup.Preimage == "" {
+			return false, nil
+		}
+		var settled *db.Transaction
+		err = svc.db.Transaction(func(tx *gorm.DB) error {
+			var txErr error
+			settled, txErr = svc.markTransactionSettled(tx, payment, lookup.Preimage, lookup.FeeMloki, false)
+			return txErr
+		})
+		if err == nil && settled != nil {
+			svc.publishSettleEvent(settled)
+		}
+		return err == nil, err
+	case lnclient.PaymentStatusFailed:
+		reason := lookup.FailureReason
+		if reason == "" {
+			reason = "the node has no record of this payment"
+		}
+		err = svc.db.Transaction(func(tx *gorm.DB) error {
+			_, txErr := svc.markPaymentFailed(tx, payment, reason)
+			return txErr
+		})
+		return err == nil, err
+	case lnclient.PaymentStatusInFlight:
+		// Still in flight: leave the row as it is.
+	}
+	return false, nil
+}
+
+// SweepStalePendingOutgoing resolves outgoing payments that have been stuck in
+// PENDING state for longer than stalePendingTTL (2× the practical HTLC expiry
+// window). Each one is resolved from what actually happened, never by age alone:
+// failing a payment drops it out of the payer's balance, so failing one that went
+// out credits back money that has left.
+//
+//   - A payment to another node is looked up on the node by its hash: settled →
+//     recorded settled with its preimage and fee; definitively failed → failed
+//     (which releases a cash_redeem's slice); in flight, "succeeded" without a
+//     preimage, a lookup error, or a backend that can't look payments up → left
+//     PENDING and logged for the operator.
+//   - A self-payment never reached the node, so its own incoming leg is the
+//     record: settled → this leg is settled with the same preimage; failed or
+//     missing → failed; still open → left PENDING.
+func (svc *transactionsService) SweepStalePendingOutgoing(ctx context.Context, lnClient lnclient.LNClient) {
+	cutoff := time.Now().Add(-stalePendingTTL)
+	var lastID uint
+	for batch := 0; batch < sweepMaxBatchesPerTick; batch++ {
+		var stale []db.Transaction
+		if err := svc.db.Where(
+			"type = ? AND state = ? AND created_at < ? AND id > ?",
+			constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_PENDING, cutoff, lastID,
+		).Order("id").Limit(sweepBatchSize).Find(&stale).Error; err != nil {
+			svc.logger.Error().Err(err).Msg("SweepStalePendingOutgoing: failed to query stale transactions")
+			return
+		}
+		if len(stale) == 0 {
+			return
+		}
+
+		for i := range stale {
+			lastID = stale[i].ID
+			if err := svc.checkUnsettledTransaction(ctx, &stale[i], lnClient); err != nil {
+				// LN node was unreachable — payment state is unknown; do not force-cancel.
+				svc.logger.Warn().Err(err).Uint("tx_id", stale[i].ID).
+					Msg("SweepStalePendingOutgoing: skipping — LN unreachable, state unknown")
+				continue
+			}
+
+			var refreshed db.Transaction
+			if err := svc.db.First(&refreshed, stale[i].ID).Error; err != nil {
+				continue
+			}
+			if refreshed.State != constants.TRANSACTION_STATE_PENDING {
+				continue
+			}
+			svc.resolveStalePendingOutgoing(ctx, &refreshed, lnClient)
+		}
+
+		// A short page means the backlog is drained for this tick; a full page
+		// means more may remain, handled by the next batch (or the next tick).
+		if len(stale) < sweepBatchSize {
+			return
+		}
+	}
+}
+
+func (svc *transactionsService) resolveStalePendingOutgoing(ctx context.Context, payment *db.Transaction, lnClient lnclient.LNClient) {
+	logLeft := func(err error, why string) {
+		svc.logger.Warn().Err(err).Uint("tx_id", payment.ID).Str("payment_hash", payment.PaymentHash).
+			Msg("SweepStalePendingOutgoing: left pending — " + why + "; needs operator attention")
+	}
+
+	if payment.SelfPayment {
+		svc.resolveStaleSelfPayment(payment, logLeft)
+		return
+	}
+
+	looker, canLookUp := lnClient.(lnclient.PaymentLooker)
+	if !canLookUp {
+		logLeft(nil, "this backend cannot look payments up")
+		return
+	}
+	lookup, err := looker.LookupPayment(ctx, payment.PaymentHash)
+	if err != nil {
+		logLeft(err, "payment lookup failed, outcome unknown")
+		return
+	}
+	resolved, err := svc.applyPaymentLookup(payment, lookup)
+	if err != nil {
+		svc.logger.Error().Err(err).Uint("tx_id", payment.ID).Str("payment_hash", payment.PaymentHash).
+			Msg("SweepStalePendingOutgoing: failed to record the node's answer")
+		return
+	}
+	if !resolved {
+		logLeft(nil, "the node does not report a final outcome with a preimage")
+		return
+	}
+	svc.logger.Warn().Uint("tx_id", payment.ID).Str("payment_hash", payment.PaymentHash).Str("status", string(lookup.Status)).
+		Msg("SweepStalePendingOutgoing: resolved a stale pending payment from the node")
+}
+
+// resolveStaleSelfPayment settles or fails a stale self-payment's outgoing leg
+// from its incoming leg, the only record of whether the value moved.
+func (svc *transactionsService) resolveStaleSelfPayment(payment *db.Transaction, logLeft func(error, string)) {
+	var incoming db.Transaction
+	result := svc.db.Limit(1).Find(&incoming, &db.Transaction{
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		PaymentHash: payment.PaymentHash,
+	})
+	if result.Error != nil {
+		logLeft(result.Error, "could not read the self-payment's incoming leg")
+		return
+	}
+
+	var err error
+	switch {
+	case result.RowsAffected > 0 && incoming.State == constants.TRANSACTION_STATE_SETTLED && incoming.Preimage != nil:
+		var settled *db.Transaction
+		err = svc.db.Transaction(func(tx *gorm.DB) error {
+			var txErr error
+			settled, txErr = svc.markTransactionSettled(tx, payment, *incoming.Preimage, 0, true)
+			return txErr
+		})
+		if err == nil && settled != nil {
+			svc.publishSettleEvent(settled)
+		}
+	case result.RowsAffected == 0 || incoming.State == constants.TRANSACTION_STATE_FAILED:
+		err = svc.db.Transaction(func(tx *gorm.DB) error {
+			_, txErr := svc.markPaymentFailed(tx, payment, "self-payment: the incoming leg was never credited")
+			return txErr
+		})
+	default:
+		logLeft(nil, "the self-payment's incoming leg is still open")
+		return
+	}
+	if err != nil {
+		svc.logger.Error().Err(err).Uint("tx_id", payment.ID).Str("payment_hash", payment.PaymentHash).
+			Msg("SweepStalePendingOutgoing: failed to resolve a stale self-payment")
+	}
+}
+
+func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.Event, globalProperties map[string]interface{}) {
+	switch event.Event {
+	case "nwc_lnclient_payment_received":
+		lnClientTransaction, ok := event.Properties.(*lnclient.Transaction)
+		if !ok {
+			svc.logger.Error().Interface("event", event).Msg("Failed to cast event")
+			return
+		}
+
+		// An order's invoice was created at the node directly, with no app row:
+		// its payment goes to the order intake, which mints it.
+		if svc.orderIntake != nil && svc.orderIntake(ctx, lnClientTransaction) {
+			return
+		}
+
+		var dbTransaction db.Transaction
+		var settledIncoming *db.Transaction
+		err := svc.db.Transaction(func(tx *gorm.DB) error {
+
+			result := tx.Limit(1).Find(&dbTransaction, &db.Transaction{
+				Type:        constants.TRANSACTION_TYPE_INCOMING,
+				PaymentHash: lnClientTransaction.PaymentHash,
+			})
+
+			if result.RowsAffected == 0 {
+				var appId *uint
+				description := lnClientTransaction.Description
+				var metadataBytes []byte
+				var boostagramBytes []byte
+				if lnClientTransaction.Metadata != nil {
+					var err error
+					metadataBytes, err = json.Marshal(lnClientTransaction.Metadata)
+					if err != nil {
+						svc.logger.Error().Err(err).Msg("Failed to serialize transaction metadata")
+						return err
+					}
+
+					var customRecords []lnclient.TLVRecord
+					customRecords, _ = lnClientTransaction.Metadata["tlv_records"].([]lnclient.TLVRecord)
+					boostagramBytes = svc.getBoostagramBytesFromCustomRecords(customRecords)
+					extractedDescription := svc.getDescriptionFromCustomRecords(customRecords)
+					if extractedDescription != "" {
+						description = extractedDescription
+					}
+					// find app by custom key/value records
+					appId = svc.getAppIdFromCustomRecords(customRecords, uint64(lnClientTransaction.Amount), tx) //nolint:gosec // LN-client-reported amount is always non-negative
+				}
+				var expiresAt *time.Time
+				if lnClientTransaction.ExpiresAt != nil {
+					expiresAtValue := time.Unix(*lnClientTransaction.ExpiresAt, 0)
+					expiresAt = &expiresAtValue
+				}
+				dbTransaction = db.Transaction{
+					Type:            constants.TRANSACTION_TYPE_INCOMING,
+					AmountMloki:     uint64(lnClientTransaction.Amount), //nolint:gosec // LN-client-reported invoice amount is always non-negative
+					PaymentRequest:  lnClientTransaction.Invoice,
+					PaymentHash:     lnClientTransaction.PaymentHash,
+					Description:     description,
+					DescriptionHash: lnClientTransaction.DescriptionHash,
+					ExpiresAt:       expiresAt,
+					Metadata:        datatypes.JSON(metadataBytes),
+					Boostagram:      datatypes.JSON(boostagramBytes),
+					AppId:           appId,
+				}
+				err := tx.Create(&dbTransaction).Error
+				if err != nil {
+					svc.logger.Error().Err(err).
+						Str("payment_hash", lnClientTransaction.PaymentHash).
+						Msg("Failed to create transaction")
+					return err
+				}
+			}
+
+			// Serialise against any other transaction locked on this app (e.g.
+			// DeleteCircleHub checking+deleting a circle_wallet child) so this
+			// settlement can't commit in the gap between a balance check and a
+			// dependent write on the same app — same lock key/semantics as the
+			// outgoing-payment paths above.
+			if tx.Name() == "postgres" && dbTransaction.AppId != nil {
+				if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*dbTransaction.AppId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
+					return fmt.Errorf("acquire payment lock: %w", err)
+				}
+			}
+
+			var txErr error
+			settledIncoming, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false) //nolint:gosec // LN-client-reported fee is always non-negative
+			if txErr != nil {
+				return txErr
+			}
+			// A held keysend's reservation ends in the commit that records its credit.
+			return tx.Where("payment_hash = ?", lnClientTransaction.PaymentHash).Delete(&db.CircleHeldKeysend{}).Error
+		})
+
+		if err != nil {
+			svc.logger.Error().Err(err).
+				Str("payment_hash", lnClientTransaction.PaymentHash).
+				Msg("Failed to execute DB transaction")
+			return
+		}
+		if settledIncoming != nil {
+			svc.publishSettleEvent(settledIncoming)
+		}
+
+	case "nwc_lnclient_hold_invoice_accepted":
+		lnClientTransaction, ok := event.Properties.(*lnclient.Transaction)
+		if !ok {
+			svc.logger.Error().Interface("event", event).Msg("Failed to cast event properties for hold invoice accepted")
+			return
+		}
+		// A keysend has no payment request and no row of ours: the node holds
+		// it for lokihub to settle or fail (flnd keysend-hold-time).
+		if lnClientTransaction.Invoice == "" && !svc.hasIncomingRow(lnClientTransaction.PaymentHash) {
+			if svc.lnClientProvider != nil {
+				if lnClient := svc.lnClientProvider(); lnClient != nil {
+					svc.resolveHeldKeysend(ctx, lnClientTransaction, lnClient)
+				}
+			}
+			return
+		}
+		if lnClientTransaction.SettleDeadline == nil {
+			svc.logger.Error().Interface("event", event).Msg("Transaction has no settle deadline")
+			return
+		}
+		if !svc.markHoldInvoiceAccepted(lnClientTransaction.PaymentHash, *lnClientTransaction.SettleDeadline, false) {
+			svc.cancelHeldForFailedRow(ctx, lnClientTransaction.PaymentHash)
+		}
+		// A Circle Wallet's invoice is the Hub's to settle, after re-checking
+		// the payment (NIP-CW §Own Funds and Caps).
+		if svc.lnClientProvider != nil {
+			if lnClient := svc.lnClientProvider(); lnClient != nil {
+				amountPaid := int64(-1)
+				if lnClientTransaction.AmountPaid > 0 {
+					amountPaid = lnClientTransaction.AmountPaid
+				}
+				if err := svc.ResolveCircleHold(ctx, lnClientTransaction.PaymentHash, amountPaid, lnClient); err != nil {
+					svc.logger.Error().Err(err).Str("payment_hash", lnClientTransaction.PaymentHash).
+						Msg("Failed to resolve an accepted circle wallet payment")
+				}
+			}
+		}
+
+	case "nwc_lnclient_payment_sent":
+		lnClientTransaction, ok := event.Properties.(*lnclient.Transaction)
+		if !ok {
+			svc.logger.Error().Interface("event", event).Msg("Failed to cast event")
+			return
+		}
+
+		var dbTransaction db.Transaction
+		var settledOutgoing *db.Transaction
+		err := svc.db.Transaction(func(tx *gorm.DB) error {
+
+			// first lookup by pending
+			result := tx.Limit(1).Find(&dbTransaction, &db.Transaction{
+				Type:        constants.TRANSACTION_TYPE_OUTGOING,
+				State:       constants.TRANSACTION_STATE_PENDING,
+				PaymentHash: lnClientTransaction.PaymentHash,
+			})
+
+			if result.Error != nil {
+				return result.Error
+			}
+
+			if result.RowsAffected == 0 {
+				// if no pending payment was found, lookup by failed, latest updated first
+				result := tx.Limit(1).Order("updated_at DESC").Find(&dbTransaction, &db.Transaction{
+					Type:        constants.TRANSACTION_TYPE_OUTGOING,
+					State:       constants.TRANSACTION_STATE_FAILED,
+					PaymentHash: lnClientTransaction.PaymentHash,
+				})
+
+				if result.Error != nil {
+					return result.Error
+				}
+
+				if result.RowsAffected == 0 {
+					// check if it was already settled
+					result := tx.Limit(1).Find(&dbTransaction, &db.Transaction{
+						Type:        constants.TRANSACTION_TYPE_OUTGOING,
+						State:       constants.TRANSACTION_STATE_SETTLED,
+						PaymentHash: lnClientTransaction.PaymentHash,
+					})
+					if result.RowsAffected > 0 {
+						svc.logger.Debug().Str("payment_hash", lnClientTransaction.PaymentHash).Msg("payment already settled, ignoring payment sent event")
+						return nil
+					}
+
+					// Note: payments made from outside cannot be associated with an app
+					// for now this is disabled as it only applies to FLND, and we do not import FLND transactions either.
+					svc.logger.Error().Str("payment_hash", lnClientTransaction.PaymentHash).Msg("failed to mark payment as sent: payment not found")
+					return NewNotFoundError()
+				}
+			}
+
+			var txErr error
+			settledOutgoing, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false) //nolint:gosec // LN-client-reported fee is always non-negative
+			return txErr
+		})
+
+		if err != nil {
+			svc.logger.Error().Err(err).
+				Str("payment_hash", lnClientTransaction.PaymentHash).
+				Msg("Failed to update transaction")
+			return
+		}
+		if settledOutgoing != nil {
+			svc.publishSettleEvent(settledOutgoing)
+		}
+	case "nwc_lnclient_payment_failed":
+		paymentFailedAsyncProperties, ok := event.Properties.(*lnclient.PaymentFailedEventProperties)
+		if !ok {
+			svc.logger.Error().Interface("event", event).Msg("Failed to cast event")
+			return
+		}
+
+		lnClientTransaction := paymentFailedAsyncProperties.Transaction
+
+		var dbTransaction db.Transaction
+		result := svc.db.Limit(1).Find(&dbTransaction, &db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			State:       constants.TRANSACTION_STATE_PENDING,
+			PaymentHash: lnClientTransaction.PaymentHash,
+		})
+
+		if result.RowsAffected == 0 {
+			svc.logger.Error().Interface("event", event).Msg("Failed to find pending outgoing transaction by payment hash")
+			return
+		}
+
+		if err := svc.db.Transaction(func(tx *gorm.DB) error {
+			_, markErr := svc.markPaymentFailed(tx, &dbTransaction, paymentFailedAsyncProperties.Reason)
+			return markErr
+		}); err != nil {
+			svc.logger.Error().Err(err).Str("payment_hash", lnClientTransaction.PaymentHash).Msg("Failed to mark transaction as failed from async event")
+		}
+	}
+}
+
+// markHoldInvoiceAccepted moves a hold invoice's PENDING incoming row to
+// ACCEPTED, and reports whether this call moved it. A row another payment
+// already accepted is left alone and reported false: a same-node payer must not
+// take that payment's outcome for its own.
+func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, settleDeadline uint32, selfPayment bool) bool {
+	svc.logger.Info().
+		Str("payment_hash", paymentHash).
+		Bool("self_payment", selfPayment).
+		Msg("Processing hold invoice accepted event")
+
+	var dbTransaction db.Transaction
+	err := svc.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("payment_hash = ? AND type = ? AND state = ?", paymentHash, constants.TRANSACTION_TYPE_INCOMING, constants.TRANSACTION_STATE_PENDING).First(&dbTransaction)
+		if result.Error != nil {
+			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				svc.logger.Warn().
+					Str("payment_hash", paymentHash).
+					Msg("No corresponding pending incoming transaction found in DB for accepted hold invoice")
+			}
+			svc.logger.Error().Err(result.Error).
+				Str("payment_hash", paymentHash).
+				Msg("Failed to query DB for accepted hold invoice")
+			return result.Error
+		}
+
+		res := tx.Model(&db.Transaction{}).Where("id = ? AND state = ?", dbTransaction.ID, constants.TRANSACTION_STATE_PENDING).
+			UpdateColumns(map[string]interface{}{
+				"state":           constants.TRANSACTION_STATE_ACCEPTED,
+				"self_payment":    selfPayment,
+				"settle_deadline": settleDeadline,
+			})
+		if res.Error != nil {
+			svc.logger.Error().Err(res.Error).
+				Str("payment_hash", paymentHash).
+				Uint("dbTxID", dbTransaction.ID).
+				Msg("Failed to update hold invoice state to accepted in DB")
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return errHoldAlreadyAccepted
+		}
+		dbTransaction.State = constants.TRANSACTION_STATE_ACCEPTED
+		dbTransaction.SelfPayment = selfPayment
+		dbTransaction.SettleDeadline = &settleDeadline
+
+		svc.logger.Info().
+			Str("payment_hash", paymentHash).
+			Uint("dbTxID", dbTransaction.ID).
+			Msg("Updated hold invoice state to accepted in DB")
+
+		return nil
+	})
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Failed DB transaction for hold invoice accepted event")
+		return false
+	}
+	if publishHoldAccepted(svc.db, &dbTransaction) {
+		svc.eventPublisher.Publish(&events.Event{
+			Event:      "nwc_hold_invoice_accepted",
+			Properties: &dbTransaction,
+		})
+	}
+	return true
+}
+
+// errHoldAlreadyAccepted: another payment accepted the hold invoice first.
+var errHoldAlreadyAccepted = errors.New("the hold invoice was already accepted by another payment")
+
+// IsSelfPayment reports whether paymentRequest resolves to a payment that
+// never actually needs to leave this node's own Lightning liquidity — the
+// invoice's embedded payee matches this node's own pubkey, AND a matching
+// incoming db.Transaction row already exists for that exact payment hash
+// (any state), meaning some app on this same instance minted it via the
+// shared MakeInvoice path. Extracted from SendPaymentSync's own internal
+// self-payment detection (unchanged behavior) so a caller that needs to know
+// the answer BEFORE calling SendPaymentSync — e.g. cash_redeem_controller.go,
+// to decide whether its redeem fee applies to this specific redemption —
+// can ask the identical question SendPaymentSync will ask moments later,
+// rather than duplicating or guessing at the logic.
+func IsSelfPayment(gormDB *gorm.DB, paymentRequest *decodepay.Bolt11, lnClient lnclient.LNClient) bool {
+	if paymentRequest.Payee == "" || paymentRequest.Payee != lnClient.GetPubkey() {
+		return false
+	}
+	var incomingTransaction db.Transaction
+	result := gormDB.Limit(1).Find(&incomingTransaction, &db.Transaction{
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		PaymentHash: paymentRequest.PaymentHash,
+	})
+	if result.Error == nil && result.RowsAffected > 0 {
+		return true
+	}
+	// An order's invoice has no app row until it is minted: it is this node's
+	// when its payment hash names an open Lightning order (NIP-CO, a same-node
+	// payment of an order invoice).
+	var orders int64
+	err := gormDB.Model(&db.CashOrder{}).Where("payment_hash = ? AND payment = ? AND state = ?",
+		paymentRequest.PaymentHash, "lightning", db.CashOrderOpen).Count(&orders).Error
+	return err == nil && orders > 0
+}
+
+// interceptSelfPayment settles a payment whose payee is a wallet on this same node,
+// without going near the network.
+//
+// payerAmountMloki is what the PAYER is being debited, and it is required because the
+// incoming row cannot always supply it. An AMOUNTLESS bolt11 records AmountMloki = 0
+// (MakeInvoice stores whatever the LN client reports for the invoice it created), while
+// the payer's debit is resolved from the request's own amount. Settling the incoming leg
+// at its recorded 0 therefore debited the payer in full and credited the payee nothing,
+// destroying the difference — with a preimage and a success response, so nothing
+// downstream could tell. reconcileCashRedeemFee did not compensate either, because the
+// fee delta was 0.
+//
+// Fixed by writing the payer's amount onto the incoming row before it settles, which is
+// the only moment the two sides are both known. Not specific to cash: every amountless
+// self-payment had this shape.
+func (svc *transactionsService) interceptSelfPayment(paymentHash string, payerAmountMloki uint64, lnClient lnclient.LNClient) (*lnclient.PayInvoiceResponse, error) {
+	svc.logger.Debug().Str("payment_hash", paymentHash).Msg("Intercepting self payment")
+	incomingTransaction := db.Transaction{}
+	result := svc.db.Limit(1).Find(&incomingTransaction, &db.Transaction{
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		State:       constants.TRANSACTION_STATE_PENDING,
+		PaymentHash: paymentHash,
+	})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		// The invoice of an order: the order intake takes the payment in.
+		if svc.orderSelfPay != nil {
+			if preimage, handled, err := svc.orderSelfPay(context.Background(), paymentHash, payerAmountMloki); handled {
+				if err != nil {
+					return nil, err
+				}
+				return &lnclient.PayInvoiceResponse{Preimage: preimage, Fee: 0}, nil
+			}
+		}
+		return nil, NewNotFoundError()
+	}
+
+	// Before either settlement path, so the hold branch below inherits it too. Only ever
+	// fills in a zero: an invoice that named its own amount is authoritative, and a payer
+	// must not be able to restate it.
+	if incomingTransaction.AmountMloki == 0 && payerAmountMloki > 0 {
+		if err := svc.db.Model(&incomingTransaction).
+			Update("amount_mloki", payerAmountMloki).Error; err != nil {
+			return nil, fmt.Errorf("failed to set the amount on an amountless self-payment's incoming leg: %w", err)
+		}
+		incomingTransaction.AmountMloki = payerAmountMloki
+		svc.logger.Debug().
+			Str("payment_hash", paymentHash).
+			Uint64("amount", payerAmountMloki).
+			Msg("Credited an amountless self-payment's incoming leg with the payer's amount")
+	}
+
+	if incomingTransaction.Hold {
+		if isCircleHold(svc.db, &incomingTransaction) {
+			return svc.interceptSelfCircleHold(&incomingTransaction, lnClient)
+		}
+		return svc.interceptSelfHoldPayment(paymentHash, lnClient)
+	}
+
+	if incomingTransaction.Preimage == nil {
+		return nil, errors.New("preimage is not set on transaction. Self payments not supported")
+	}
+
+	if err := testknobs.WaitSelfPayments(context.Background()); err != nil {
+		return nil, err
+	}
+	var settledSelfTx *db.Transaction
+	err := svc.db.Transaction(func(tx *gorm.DB) error {
+		// Under the recipient's locks, as its deletion takes them: a credit the
+		// deletion cancelled meanwhile is not settled, and the payer fails.
+		if err := lockRecipient(tx, incomingTransaction.AppId); err != nil {
+			return err
+		}
+		var current db.Transaction
+		if err := tx.Where("id = ? AND state = ?", incomingTransaction.ID, constants.TRANSACTION_STATE_PENDING).Limit(1).Find(&current).Error; err != nil {
+			return err
+		}
+		if current.ID == 0 {
+			return errSelfPaymentCreditGone
+		}
+		var txErr error
+		settledSelfTx, txErr = svc.markTransactionSettled(tx, &incomingTransaction, *incomingTransaction.Preimage, uint64(0), true)
+		return txErr
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	if settledSelfTx != nil {
+		svc.publishSettleEvent(settledSelfTx)
+	}
+
+	return &lnclient.PayInvoiceResponse{
+		Preimage: *incomingTransaction.Preimage,
+		Fee:      0,
+	}, nil
+}
+
+// errSelfPaymentCreditGone fails a same-node payment whose credit was
+// cancelled before it settled (its wallet deleted, or its invoice cancelled).
+var errSelfPaymentCreditGone = errors.New("the payment's recipient no longer takes it")
+
+// lockRecipient takes a payment recipient's locks, its Hub's first for a
+// Circle Wallet.
+func lockRecipient(tx *gorm.DB, appID *uint) error {
+	if appID == nil {
+		return nil
+	}
+	recipient, err := loadApp(tx, appID)
+	if err != nil {
+		return err
+	}
+	if recipient == nil {
+		return nil
+	}
+	if circlemoney.IsCircleWallet(recipient) {
+		if err := db.LockApp(tx, *recipient.ParentAppID); err != nil {
+			return err
+		}
+	}
+	return db.LockApp(tx, recipient.ID)
+}
+
+func (svc *transactionsService) interceptSelfHoldPayment(paymentHash string, lnClient lnclient.LNClient) (*lnclient.PayInvoiceResponse, error) {
+	settledChannel := make(chan *db.Transaction)
+	canceledChannel := make(chan *db.Transaction)
+
+	holdInvoiceUpdatedConsumer := newHoldInvoiceUpdatedConsumer(paymentHash, settledChannel, canceledChannel)
+
+	svc.eventPublisher.RegisterSubscriber(holdInvoiceUpdatedConsumer)
+	defer svc.eventPublisher.RemoveSubscriber(holdInvoiceUpdatedConsumer)
+
+	clientInfo, err := lnClient.GetInfo(context.Background())
+	if err != nil {
+		return nil, errors.New("failed to get client info")
+	}
+	if clientInfo.BlockHeight == 0 {
+		return nil, errors.New("invalid client block height")
+	}
+
+	fakeSettleDeadline := clientInfo.BlockHeight + 24
+
+	if !svc.markHoldInvoiceAccepted(paymentHash, fakeSettleDeadline, true) {
+		return nil, errors.New("this invoice is already being paid by another payment")
+	}
+
+	select {
+	case settledTransaction := <-settledChannel:
+		svc.logger.Info().Interface("settled_transaction", settledTransaction).Msg("self hold payment was settled")
+		if settledTransaction.Preimage == nil {
+			return nil, errors.New("preimage is not set on self hold payment")
+		}
+
+		return &lnclient.PayInvoiceResponse{
+			Preimage: *settledTransaction.Preimage,
+			Fee:      0,
+		}, nil
+	case canceledTransaction := <-canceledChannel:
+		svc.logger.Info().Interface("canceled_transaction", canceledTransaction).Msg("self hold payment was canceled")
+		return nil, lnclient.NewHoldInvoiceCanceledError()
+	}
+}
+
+// validateCanPay checks whether the given app is permitted to pay the given amount.
+// Returns the isolated balance (0 if not isolated) and the app's parent_kind so
+// the Cash full-drain check can be applied by the caller without an extra DB query.
+//
+// skipFeeReserve additionally exempts cash_redeem' per-slice payout from the
+// fee-reserve headroom below, for the same reason it's exempt from
+// enforceCashFullDrain: a shared Cash wallet is funded with EXACTLY the sum of
+// its recipients' declared slices (cashwallet.Commit), and each slice's own
+// budget cap (AppPermission.MaxAmountLoki) is set to that same exact sum —
+// so "balance/budget must cover amount + reserve" is never satisfiable for a
+// wallet's last (or only) recipient no matter the amount's scale, since the
+// reserve is strictly positive and the balance available for that specific
+// claim can be exactly the claimed amount. cash_redeem already independently
+// enforces its own, stronger exact-match rule (invoice amount == the proven
+// slice, checked before payment) — this reserve is a generic conservative
+// pre-check for arbitrary payments, and is redundant/counter-productive for
+// a payout whose amount is already pinned by that stronger rule.
+//
+// skipBudgetCap exempts a hub-internal reclaim transfer (a wallet's leftover
+// balance being paid back to its own parent on teardown - see
+// service.ReclaimAndDeleteSubWallet) from the MaxAmountLoki/budget-usage
+// check below. Without this, a wallet whose lifetime spend has already
+// reached its own cap could never be reclaimed/deleted again: returning its
+// residual balance home is itself an outgoing payment from that same app,
+// so it would trip the very cap it's trying to close out, permanently
+// stranding both the leftover funds and the DB row. The isolated-balance
+// check above this still applies unconditionally - a reclaim still can't
+// move more than the wallet actually holds.
+// validateCanPayExemptions bundles the two exemption flags below into named
+// fields. Both are plain bools with unrelated meanings (see validateCanPay's
+// own doc comments on skipFeeReserve/skipBudgetCap for what each actually
+// exempts a payment from and why that's safe) - passed positionally into
+// validateCanPay, a same-type pair like this gets no compiler protection
+// against being swapped or misordered by a future edit; naming them at every
+// call site removes that risk.
+type validateCanPayExemptions struct {
+	SkipFeeReserve bool
+	SkipBudgetCap  bool
+}
+
+func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount uint64, description string, selfPayment bool, exemptions validateCanPayExemptions) (isolatedBalance int64, parentKind string, feeSkimMloki uint64, err error) {
+	skipFeeReserve := exemptions.SkipFeeReserve
+	skipBudgetCap := exemptions.SkipBudgetCap
+	if appId == nil {
+		return 0, "", 0, nil
+	}
+
+	// Fetch app and its pay-capable permission in a single JOIN so we only hit
+	// the DB once. parent_kind is returned so the caller can enforce Cash
+	// full-drain without a second query. Matches against
+	// constants.PayCapableScopes (not just PAY_INVOICE_SCOPE alone) since
+	// cash_wallet children carry CASH_REDEEM_SCOPE instead — without this,
+	// cash_redeem would fail every call with "app does not have pay_invoice
+	// scope" the moment it reaches this shared payment layer.
+	//
+	// The LEFT JOIN to circle_hub_configs resolves a circle_wallet's parent
+	// hub's forwarding-fee rate in the same query: apps.parent_app_id only
+	// ever matches a circle_hub_configs.app_id row when this app is a
+	// circle_wallet child of a circle_hub, so chc.fees_ppm is harmlessly NULL
+	// (coalesced to 0) for every other app kind/lineage.
+	var row struct {
+		AppName       string
+		AppKind       string
+		ParentKind    string
+		MaxAmountLoki int
+		BudgetRenewal string
+		PermAppId     uint
+		FeesPpm       int
+	}
+	// LEFT JOIN (not INNER) so apps.kind/parent_kind still resolve even when
+	// no PayCapableScopes permission row exists — needed for skipBudgetCap's
+	// hub-decrease case below, where the payer (e.g. a circle_hub, which is
+	// deliberately never NWC-granted pay_invoice — see
+	// create_circle_wallet_controller.go) has no such row by design.
+	result := tx.Table("apps").
+		// A circle_wallet pays the rate fixed when its member joined
+		// (apps.circle_fees_ppm, NIP-CW §Fees); only a wallet that predates that
+		// column falls back to the Hub's current rate.
+		Select("apps.name AS app_name, apps.kind AS app_kind, apps.parent_kind AS parent_kind, ap.max_amount_loki, ap.budget_renewal, ap.app_id AS perm_app_id, COALESCE(apps.circle_fees_ppm, chc.fees_ppm, 0) AS fees_ppm").
+		Joins("LEFT JOIN app_permissions ap ON ap.app_id = apps.id AND ap.scope IN ?", constants.PayCapableScopes).
+		Joins("LEFT JOIN circle_hub_configs chc ON chc.app_id = apps.parent_app_id").
+		Where("apps.id = ?", *appId).
+		Scan(&row)
+	if result.Error != nil {
+		return 0, "", 0, result.Error
+	}
+	if row.AppKind == "" {
+		return 0, "", 0, NewNotFoundError()
+	}
+	if row.PermAppId == 0 {
+		// skipBudgetCap (internal_transfer) is only ever set by trusted
+		// server-side call sites (api.Transfer's admin-initiated balance
+		// decrease, hub reclaim/cleanup) — never reachable from an external
+		// NWC pay_invoice/keysend/cash_redeem request, which all strip this
+		// flag from caller-supplied metadata before it gets here (see
+		// pay_invoice_controller.go/cash_redeem_controller.go). So it's safe
+		// to let an admin manually decrease a hub's own balance (still fully
+		// subject to the isolated-balance check below - just not gated on a
+		// pay_invoice scope the hub was deliberately never granted over NWC)
+		// without opening any real payment capability to that hub's own,
+		// often-shared/public NWC connection.
+		if !skipBudgetCap {
+			return 0, "", 0, errors.New("app does not have pay_invoice scope")
+		}
+	}
+
+	// A selfPayment (lnClient's own self-payment-interception shortcut, hit
+	// whenever the invoice being paid was minted by an app on this same
+	// lokihub instance) is exempt from the skim — by design, not just for the
+	// hub's own internal_transfer reclaim. Every Cash wallet, circle wallet,
+	// and generic NWC app sharing this instance settles between each other
+	// this way, so this single flag is exactly "member-to-member / member-to-
+	// any-other-app-on-this-instance" traffic, which should stay fee-free;
+	// only a payment that genuinely leaves this instance over the real
+	// Lightning network is skimmable.
+	if row.AppKind == db.AppKindCircleWallet && !selfPayment {
+		feeSkimMloki = CalculateFeeSkimMloki(amount, row.FeesPpm)
+	}
+
+	amountWithFeeReserve := amount + feeSkimMloki
+	if !selfPayment && !skipFeeReserve {
+		amountWithFeeReserve += CalculateFeeReserveMloki(amount)
+	}
+
+	if db.IsIsolatedKind(row.AppKind) {
+		isolatedBalance = queries.GetIsolatedBalance(tx, *appId)
+		// amountWithFeeReserve is built from a caller-suppliable amount (an
+		// "amountless invoice" override); a value beyond int64 range would
+		// wrap negative and bypass this balance check below, so fail closed
+		// on the overflow itself rather than relying on the comparison.
+		if amountWithFeeReserve > math.MaxInt64 || int64(amountWithFeeReserve) > isolatedBalance {
+			svc.logger.Debug().
+				Int64("balance", isolatedBalance).
+				Bool("self_payment", selfPayment).
+				Uint64("amount", amount).
+				Uint64("fee_skim", feeSkimMloki).
+				Uint64("amount_with_fee_reserve", amountWithFeeReserve).
+				Msg("Insufficient budget to make payment from isolated app")
+			message := NewInsufficientBalanceError().Error()
+			if description != "" {
+				message += " " + description
+			}
+			svc.eventPublisher.Publish(&events.Event{
+				Event: "nwc_permission_denied",
+				Properties: map[string]interface{}{
+					"app_name": row.AppName,
+					"code":     constants.ERROR_INSUFFICIENT_BALANCE,
+					"message":  message,
+				},
+			})
+			return 0, "", 0, NewInsufficientBalanceError()
+		}
+	}
+
+	if row.MaxAmountLoki > 0 && !skipBudgetCap {
+		appPermission := db.AppPermission{
+			AppId:         *appId,
+			MaxAmountLoki: row.MaxAmountLoki,
+			BudgetRenewal: row.BudgetRenewal,
+		}
+		budgetUsageSat := queries.GetBudgetUsageSat(tx, &appPermission)
+		// Compare as amountLoki+budgetUsageSat > maxAmountLoki rather than
+		// amountLoki > maxAmountLoki-budgetUsageSat: arithmetically
+		// equivalent, but avoids narrowing amountWithFeeReserve/1000 (uint64)
+		// to int, which could wrap negative for an oversized amount and make
+		// this quota check silently fail open.
+		if amountWithFeeReserve/1000+budgetUsageSat > uint64(row.MaxAmountLoki) { //nolint:gosec // row.MaxAmountLoki > 0 is checked above
+			message := NewQuotaExceededError().Error()
+			if description != "" {
+				message += " " + description
+			}
+			svc.eventPublisher.Publish(&events.Event{
+				Event: "nwc_permission_denied",
+				Properties: map[string]interface{}{
+					"app_name": row.AppName,
+					"code":     constants.ERROR_QUOTA_EXCEEDED,
+					"message":  message,
+				},
+			})
+			return 0, "", 0, NewQuotaExceededError()
+		}
+	}
+
+	return isolatedBalance, row.ParentKind, feeSkimMloki, nil
+}
+
+// max of 1% or constants.MIN_FEE_RESERVE_MLOKI (10 loki)
+func CalculateFeeReserveMloki(amountMloki uint64) uint64 {
+	return uint64(math.Max(math.Ceil(float64(amountMloki)*0.01), constants.MIN_FEE_RESERVE_MLOKI))
+}
+
+// CalculateRedeemFeeMloki computes a cash slice's redeem fee: a flat base plus a
+// per-million cut of the amount.
+//
+// Deliberately NOT CalculateFeeSkimMloki, which computes a circle_hub's forwarding
+// fee and is purely proportional. The two look alike and mean different things;
+// folding a base into the shared helper would silently change circle forwarding
+// too.
+//
+// The base exists because routing cost does not scale with the payment. A purely
+// proportional fee earns ~nothing on a small slice while the Hub still pays a full
+// route for it, and that gap was coming out of the Hub's own balance. Adding a base
+// makes the withheld fee cover the delivery it is withheld for.
+//
+// Saturating, like its sibling: a fee can never exceed the amount it is charged on,
+// so a base larger than the slice yields the whole slice rather than wrapping. The
+// caller is then quoting a zero payout, and it is the CALLER's job to refuse that —
+// cash_redeem_controller.go does, right after computing expectedAmount, because
+// whether a slice can pay out at all depends on IsSelfPayment and is not knowable
+// here. An earlier version of this comment named a mint-time MinRedeemableMloki
+// instead; no such guard was ever implemented, and mint time is the wrong place for
+// it anyway, since a slice below the base fee is still transferable, consolidatable
+// and redeemable same-node.
+func CalculateRedeemFeeMloki(amountMloki uint64, baseMloki int64, feePpm int) uint64 {
+	fee := CalculateFeeSkimMloki(amountMloki, feePpm)
+	if baseMloki > 0 {
+		base := uint64(baseMloki)
+		if fee > math.MaxUint64-base {
+			return amountMloki
+		}
+		fee += base
+	}
+	if fee > amountMloki {
+		return amountMloki
+	}
+	return fee
+}
+
+// CalculateFeeSkimMloki computes a circle_hub's forwarding-fee cut of an
+// outgoing payment: floor(amountMloki * feesPpm / constants.PPM_DIVISOR).
+// Pure integer math (no floating point) so it's exact and can't round a skim
+// up past what CircleHubConfig.FeesPpm actually authorizes. feesPpm <= 0
+// (unset, or a defensively-clamped negative) always yields zero — callers
+// don't need to guard the call themselves.
+func CalculateFeeSkimMloki(amountMloki uint64, feesPpm int) uint64 {
+	if feesPpm <= 0 {
+		return 0
+	}
+	// amountMloki*uint64(feesPpm) can overflow uint64 well before
+	// amountMloki reaches cashwallet.Resolve's own permitted per-recipient
+	// ceiling (~1.845e13 mloki at the maximum 100% rate) — a plain "*"
+	// silently wraps to an arbitrary, WRONG fee instead of erroring or
+	// saturating. bits.Mul64 computes the full 128-bit product so no
+	// precision is lost, then bits.Div64 divides that full-precision value
+	// by PPM_DIVISOR. The true quotient can only exceed uint64's range if
+	// feesPpm > PPM_DIVISOR (i.e. a >100% rate, never valid — feesPpm is
+	// clamped to constants.MAX_FEES_PPM == PPM_DIVISOR at config-validation
+	// time, but this function doesn't assume its caller enforced that), in
+	// which case bits.Div64 would panic on a quotient overflow — saturate at
+	// math.MaxUint64 instead, so a defensive/future caller passing an
+	// out-of-range rate fails safe (an unmistakably-wrong huge fee) rather
+	// than crashing or wrapping to a plausible-looking wrong number.
+	hi, lo := bits.Mul64(amountMloki, uint64(feesPpm)) //nolint:gosec // feesPpm > 0 already checked above
+	if hi >= constants.PPM_DIVISOR {
+		return math.MaxUint64
+	}
+	quotient, _ := bits.Div64(hi, lo, constants.PPM_DIVISOR)
+	return quotient
+}
+
+func makePreimageHex() ([]byte, error) {
+	bytes := make([]byte, 32) // 32 bytes * 8 bits/byte = 256 bits
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return nil, err
+	}
+	return bytes, nil
+}
+
+func (svc *transactionsService) getBoostagramBytesFromCustomRecords(customRecords []lnclient.TLVRecord) []byte {
+	for _, record := range customRecords {
+		if record.Type == BoostagramTlvType {
+			bytes, err := hex.DecodeString(record.Value)
+			if err != nil {
+				svc.logger.Error().Err(err).Str("value", record.Value).Msg("failed to decode boostagram tlv hex value")
+				return nil
+			}
+
+			// ensure the boostagram is valid json
+			var boostagram Boostagram
+			if err := json.Unmarshal(bytes, &boostagram); err != nil {
+				svc.logger.Error().Err(err).Str("value", string(bytes)).Msg("failed to unmarshal boostagram to json")
+				return nil
+			}
+
+			return bytes
+		}
+	}
+
+	return nil
+}
+
+func (svc *transactionsService) getDescriptionFromCustomRecords(customRecords []lnclient.TLVRecord) string {
+	var description string
+
+	for _, record := range customRecords {
+		switch record.Type {
+		case BoostagramTlvType:
+			bytes, err := hex.DecodeString(record.Value)
+			if err != nil {
+				continue
+			}
+			var boostagram Boostagram
+			if err := json.Unmarshal(bytes, &boostagram); err != nil {
+				continue
+			}
+			return boostagram.Message
+
+		// TODO: consider adding support for this in LDK
+		case WhatsatTlvType:
+			bytes, err := hex.DecodeString(record.Value)
+			if err == nil {
+				description = string(bytes)
+			}
+		}
+	}
+
+	return description
+}
+
+// getAppIdFromCustomRecords finds the app a Lightning keysend names in its
+// custom key record. Anyone can write that record, so a Circle Wallet is named
+// only when the credit passes its checks (its receive room, its circle's
+// holdings ceiling, under the Hub's lock); otherwise the payment is credited to
+// no wallet and stays with the node (a Lightning keysend cannot be failed
+// without a final-hop acceptor: lokihub never credits an over-room one).
+func (svc *transactionsService) getAppIdFromCustomRecords(customRecords []lnclient.TLVRecord, amountMloki uint64, tx *gorm.DB) *uint {
+	appID := svc.findCustomKeyApp(customRecords, tx)
+	recipient, err := loadApp(tx, appID)
+	if err != nil || !circlemoney.IsCircleWallet(recipient) {
+		return appID
+	}
+	if err := db.LockApp(tx, *recipient.ParentAppID); err != nil {
+		return nil
+	}
+	if err := checkCircleKeysendCredit(tx, recipient, nil, false, amountMloki); err != nil {
+		// Only a node that settles keysends itself gets here: a held one is
+		// failed by resolveHeldKeysend.
+		svc.logger.Error().Err(err).Uint("app_id", *appID).Uint64("amount", amountMloki).
+			Msg("The node settled a keysend the circle wallet's checks refuse; it stays with the node. Run flnd with keysend-hold-time so lokihub can fail such a keysend")
+		return nil
+	}
+	return appID
+}
+
+func (svc *transactionsService) findCustomKeyApp(customRecords []lnclient.TLVRecord, tx *gorm.DB) *uint {
+	app := db.App{}
+	for _, record := range customRecords {
+		if record.Type == CustomKeyTlvType {
+			decodedString, err := hex.DecodeString(record.Value)
+			if err != nil {
+				svc.logger.Error().Err(err).Msg("Failed to parse custom key TLV record as hex")
+				continue
+			}
+			customValue, err := strconv.ParseUint(string(decodedString), 10, 64)
+			if err != nil {
+				svc.logger.Error().Err(err).Msg("Failed to parse custom key TLV record as number")
+				continue
+			}
+			err = tx.Take(&app, &db.App{
+				ID: uint(customValue),
+			}).Error
+			if err != nil {
+				svc.logger.Error().Err(err).Msg("Failed to find app by id from custom key TLV record")
+				continue
+			}
+			return &app.ID
+		}
+	}
+	return nil
+}
+
+// holdInvoiceAppFilter reports the app_id a hold-invoice cancel/settle lookup
+// must be scoped to, or nil when it must not be scoped. For an isolated-kind
+// caller it returns the caller's own appId so it can act only on its own hold
+// invoices, mirroring the app_id gating LookupTransaction/ListTransactions
+// already enforce for the read path. A standard/shared-wallet connection (not
+// an isolated kind) and an internal caller (appId == nil) stay unscoped, as the
+// read siblings leave them. A caller app that no longer exists is not-found.
+func (svc *transactionsService) holdInvoiceAppFilter(appId *uint) (*uint, error) {
+	if appId == nil {
+		return nil, nil
+	}
+	var appKind string
+	err := svc.db.
+		Model(&db.App{}).
+		Where("id", *appId).
+		Pluck("kind", &appKind).
+		Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, NewNotFoundError()
+		}
+		return nil, err
+	}
+	if db.IsIsolatedKind(appKind) {
+		return appId, nil
+	}
+	return nil, nil
+}
+
+func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage string, lnClient lnclient.LNClient, appId *uint) (*Transaction, error) {
+	if len(preimage) != 64 {
+		return nil, errors.New("invalid preimage format")
+	}
+	preimageBytes, err := hex.DecodeString(preimage)
+	if err != nil {
+		return nil, fmt.Errorf("invalid preimage hex: %w", err)
+	}
+
+	paymentHashBytes := sha256.Sum256(preimageBytes)
+	paymentHash := hex.EncodeToString(paymentHashBytes[:])
+
+	// Scope the lookup to the hold invoices the caller owns, so an
+	// isolated app cannot settle another app's accepted hold invoice by
+	// payment hash (same app_id gating as LookupTransaction/ListTransactions).
+	scopeAppId, err := svc.holdInvoiceAppFilter(appId)
+	if err != nil {
+		return nil, err
+	}
+
+	var dbTransaction db.Transaction
+	query := svc.db.Limit(1)
+	if scopeAppId != nil {
+		query = query.Where("app_id = ?", *scopeAppId)
+	}
+	result := query.Find(&dbTransaction, &db.Transaction{
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		State:       constants.TRANSACTION_STATE_ACCEPTED,
+		PaymentHash: paymentHash,
+	})
+
+	if result.RowsAffected == 0 {
+		svc.logger.Error().Str("payment_hash", paymentHash).Msg("Failed to find accepted hold invoice")
+		return nil, errors.New("failed to find accepted hold invoice")
+	}
+
+	if !dbTransaction.SelfPayment {
+		err = lnClient.SettleHoldInvoice(ctx, preimage)
+	}
+
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Failed to settle hold invoice via FLN client")
+		// Don't mark DB as failed here, as the settle might succeed later or might have already succeeded.
+		return nil, err
+	}
+
+	var settledTransaction *db.Transaction
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		settledTransaction, err = svc.markTransactionSettled(tx, &dbTransaction, preimage, 0, dbTransaction.SelfPayment)
+		return err
+	})
+
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Failed DB transaction while settling hold invoice")
+		return nil, err
+	}
+	if settledTransaction != nil {
+		svc.publishSettleEvent(settledTransaction)
+	}
+
+	return settledTransaction, nil
+}
+
+func (svc *transactionsService) CancelHoldInvoice(ctx context.Context, paymentHash string, lnClient lnclient.LNClient, appId *uint) error {
+
+	// Scope the lookup to the hold invoices the caller owns, so an
+	// isolated app cannot cancel another app's accepted hold invoice by
+	// payment hash (same app_id gating as LookupTransaction/ListTransactions).
+	scopeAppId, err := svc.holdInvoiceAppFilter(appId)
+	if err != nil {
+		return err
+	}
+
+	var dbTransaction db.Transaction
+	query := svc.db.Limit(1)
+	if scopeAppId != nil {
+		query = query.Where("app_id = ?", *scopeAppId)
+	}
+	result := query.Find(&dbTransaction, &db.Transaction{
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		State:       constants.TRANSACTION_STATE_ACCEPTED,
+		PaymentHash: paymentHash,
+	})
+
+	if result.RowsAffected == 0 {
+		svc.logger.Error().Str("payment_hash", paymentHash).Msg("Failed to find accepted hold invoice")
+		return NewNotFoundError()
+	}
+
+	if !dbTransaction.SelfPayment {
+		err := lnClient.CancelHoldInvoice(ctx, paymentHash)
+		if err != nil {
+			svc.logger.Error().Err(err).
+				Str("payment_hash", paymentHash).
+				Msg("Failed to cancel hold invoice via FLN client")
+			// Don't mark DB as failed here, cancellation might have already happened or might succeed later.
+			return err
+		}
+	}
+
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		var dbTransaction db.Transaction
+		query := tx.Limit(1)
+		if scopeAppId != nil {
+			query = query.Where("app_id = ?", *scopeAppId)
+		}
+		result := query.Find(&dbTransaction, &db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_INCOMING,
+			State:       constants.TRANSACTION_STATE_ACCEPTED,
+			PaymentHash: paymentHash,
+		})
+
+		if result.Error != nil {
+			svc.logger.Error().Err(result.Error).
+				Str("payment_hash", paymentHash).
+				Msg("Failed to find accepted hold invoice in DB for cancellation")
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			svc.logger.Warn().
+				Str("payment_hash", paymentHash).
+				Msg("No accepted hold invoice found in DB to mark as failed due to cancellation")
+			return NewNotFoundError()
+		}
+
+		_, markErr := svc.markPaymentFailed(tx, &dbTransaction, "Hold invoice was cancelled")
+		return markErr
+	})
+
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Failed DB transaction while canceling hold invoice")
+		return err
+	}
+
+	svc.logger.Info().
+		Str("payment_hash", paymentHash).
+		Msg("Marked hold invoice as failed in DB due to cancellation")
+
+	svc.eventPublisher.Publish(&events.Event{
+		Event:      "nwc_hold_invoice_canceled",
+		Properties: &dbTransaction,
+	})
+
+	return nil
+}
+
+func (svc *transactionsService) SetTransactionMetadata(ctx context.Context, id uint, metadata map[string]interface{}) error {
+	var metadataBytes []byte
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to serialize metadata")
+		return err
+	}
+	if len(metadataBytes) > constants.INVOICE_METADATA_MAX_LENGTH {
+		return fmt.Errorf("encoded invoice metadata provided is too large. Limit: %d Received: %d", constants.INVOICE_METADATA_MAX_LENGTH, len(metadataBytes))
+	}
+
+	err = svc.db.Model(&db.Transaction{}).Where("id", id).Update("metadata", datatypes.JSON(metadataBytes)).Error
+	if err != nil {
+		svc.logger.Error().Err(err).Interface("metadata", metadata).Msg("Failed to update transaction metadata")
+		return err
+	}
+
+	return nil
+}
+
+func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransaction *db.Transaction, preimage string, fee uint64, selfPayment bool) (*db.Transaction, error) {
+	if preimage == "" {
+		return nil, errors.New("no preimage in payment")
+	}
+
+	if tx.Name() == "postgres" {
+		// lock based on payment hash to ensure we only mark one transaction as settled
+		// (in sqlite transactions are serializable by default)
+		transactionsWithPaymentHash := []db.Transaction{}
+		tx.Where(&db.Transaction{
+			PaymentHash: dbTransaction.PaymentHash,
+		}).Clauses(clause.Locking{Strength: "UPDATE"}).Find(&transactionsWithPaymentHash)
+	}
+
+	var existingSettledTransaction db.Transaction
+	if tx.Limit(1).Find(&existingSettledTransaction, &db.Transaction{
+		Type:        dbTransaction.Type,
+		PaymentHash: dbTransaction.PaymentHash,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+	}).RowsAffected > 0 {
+		svc.logger.Debug().Str("payment_hash", dbTransaction.PaymentHash).Msg("payment already marked as sent")
+		// Return nil so callers know not to fire a settlement event for an already-settled payment.
+		return nil, nil
+	}
+
+	now := time.Now()
+	err := tx.Model(dbTransaction).Updates(map[string]interface{}{
+		"State":    constants.TRANSACTION_STATE_SETTLED,
+		"Preimage": &preimage,
+		// A settled preimage is the payer's proof, no longer a secret.
+		"HoldPreimageSealed": nil,
+		"FeeMloki":           fee,
+		"FeeReserveMloki":    0,
+		"SettledAt":          &now,
+		"SelfPayment":        selfPayment,
+	}).Error
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("payment_hash", dbTransaction.PaymentHash).
+			Msg("Failed to update DB transaction")
+		return nil, err
+	}
+
+	svc.logger.Info().
+		Str("payment_hash", dbTransaction.PaymentHash).
+		Str("type", dbTransaction.Type).
+		Msg("Marked transaction as settled")
+
+	if err := stampCircleReceipt(tx, dbTransaction, selfPayment, now); err != nil {
+		return nil, err
+	}
+
+	if dbTransaction.Type == constants.TRANSACTION_TYPE_OUTGOING && dbTransaction.FeeSkimMloki > 0 {
+		if err := svc.creditCircleHubFeeSkim(tx, dbTransaction); err != nil {
+			svc.logger.Error().Err(err).
+				Str("payment_hash", dbTransaction.PaymentHash).
+				Msg("Failed to credit circle hub fee skim")
+			return nil, err
+		}
+	}
+
+	if dbTransaction.Type == constants.TRANSACTION_TYPE_OUTGOING && dbTransaction.CashRedeemFeeMloki != nil {
+		if err := svc.reconcileCashRedeemFee(tx, dbTransaction, fee); err != nil {
+			svc.logger.Error().Err(err).
+				Str("payment_hash", dbTransaction.PaymentHash).
+				Msg("Failed to reconcile cash redeem fee")
+			return nil, err
+		}
+	}
+
+	if dbTransaction.Type == constants.TRANSACTION_TYPE_OUTGOING && dbTransaction.AppId != nil {
+		svc.checkBudgetUsage(dbTransaction, tx)
+	}
+
+	return dbTransaction, nil
+}
+
+// creditCircleHubFeeSkim credits a circle_hub with the forwarding fee it
+// skimmed off one of its circle_wallet children's just-settled outgoing
+// payment. The debit side already happened at payment initiation —
+// dbTransaction.FeeSkimMloki was set on the child's own pending transaction
+// row by validateCanPay and is included in every isolated-balance/budget-usage
+// calculation (see db/queries), so this only needs to add the matching credit
+// for the hub. Runs inside the same DB transaction as the child's settlement
+// update (its caller, markTransactionSettled), so the debit and credit commit
+// atomically together.
+func (svc *transactionsService) creditCircleHubFeeSkim(tx *gorm.DB, dbTransaction *db.Transaction) error {
+	var childApp db.App
+	if tx.Select("parent_app_id").Limit(1).Find(&childApp, *dbTransaction.AppId).RowsAffected == 0 {
+		return fmt.Errorf("failed to look up circle_wallet parent for fee skim: app %d not found", *dbTransaction.AppId)
+	}
+	if childApp.ParentAppID == nil {
+		// Unreachable in practice — validateCanPay only ever computes a nonzero
+		// FeeSkimMloki for a circle_wallet, which always has a parent hub — but
+		// never silently skim into the void if lineage is somehow missing.
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).
+			Msg("circle_wallet has FeeSkimMloki but no parent hub app; skipping fee credit")
+		return nil
+	}
+	// The hub row may be gone by the time the payment settles. The credit has
+	// nowhere to go then, and failing here would leave the member's own
+	// payment unrecorded, so the skim is skipped instead.
+	var hubCount int64
+	if err := tx.Model(&db.App{}).Where("id = ?", *childApp.ParentAppID).Count(&hubCount).Error; err != nil {
+		return err
+	}
+	if hubCount == 0 {
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).Uint("parent_app_id", *childApp.ParentAppID).
+			Uint64("fee_skim_mloki", dbTransaction.FeeSkimMloki).
+			Msg("circle_wallet's parent hub no longer exists; skipping fee credit")
+		return nil
+	}
+
+	metadataBytes, err := json.Marshal(map[string]interface{}{
+		"circle_fee_skim_source_app_id":       *dbTransaction.AppId,
+		"circle_fee_skim_source_payment_hash": dbTransaction.PaymentHash,
+	})
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	hubCredit := db.Transaction{
+		AppId:       childApp.ParentAppID,
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		AmountMloki: dbTransaction.FeeSkimMloki,
+		PaymentHash: deriveCircleFeeSkimPaymentHash(dbTransaction.PaymentHash),
+		Description: "Circle hub forwarding fee",
+		Metadata:    datatypes.JSON(metadataBytes),
+		SettledAt:   &now,
+		SelfPayment: true,
+	}
+	return tx.Create(&hubCredit).Error
+}
+
+// deriveCircleFeeSkimPaymentHash generates a distinct, deterministic synthetic
+// payment hash for a circle_hub's fee-skim ledger credit, derived from the
+// child payment's own hash. It deliberately never collides with a real bolt11
+// payment hash (a second-preimage attack would be required), so PaymentHash-
+// scoped lookups (LookupTransaction et al.) never confuse this internal
+// accounting row with the real payment it was skimmed from.
+func deriveCircleFeeSkimPaymentHash(sourcePaymentHash string) string {
+	sum := sha256.Sum256([]byte(sourcePaymentHash + ":circle_fee_skim"))
+	return hex.EncodeToString(sum[:])
+}
+
+// reconcileCashRedeemFee is cash_redeem's counterpart to creditCircleHubFeeSkim
+// — but unlike circle's one-directional skim (always debits the child, always
+// credits the hub), this moves the SIGNED difference between the redeem fee
+// already quoted to (and deducted from) the recipient's payout
+// (dbTransaction.CashRedeemFeeMloki, fixed before the payment was attempted)
+// and the real routing fee this payment turned out to cost (realFeeMloki,
+// only known now, at settlement). This is deliberately a separate mechanism
+// from FeeSkimMloki, not a reuse of it: dbTransaction's own AmountMloki is
+// already the fee-REDUCED net payout (not the full slice plus an add-on skim
+// the way a circle_wallet payment is), so folding CashRedeemFeeMloki into
+// FeeSkimMloki here would double-count it in db/queries.GetIsolatedBalance's
+// SQL and silently reopen the shared-wallet stranding bug
+// db.CashWalletClaim.RedeemFeePpm's own doc comment describes.
+//
+// delta = quoted hub fee − real routing fee:
+//   - delta > 0: the quoted fee covered the real cost with some to spare —
+//     the wallet pays the Cash Hub exactly that surplus, as real fee revenue.
+//   - delta < 0: the real cost exceeded what was quoted — the Cash Hub
+//     reimburses the wallet exactly the shortfall, out of its own balance
+//     (an explicit, tracked version of the same operator-absorbs-the-fee
+//     behavior a single-recipient wallet already has today — see
+//     transactions_service_test.go's self-payment/single-recipient cases).
+//   - delta == 0 (always true for a same-node redemption, where both the
+//     quoted fee and the real fee are 0): no rows are created.
+//
+// Either way, the net effect on the wallet's own isolated balance
+// (GetIsolatedBalance) works out to exactly the redeemed slice's own
+// AmountMloki — see db.Transaction.CashRedeemFeeMloki's doc comment for the
+// arithmetic. Runs inside the same DB transaction as the payout's own
+// settlement update (its caller, markTransactionSettled), so the payout and
+// the reconciliation commit atomically together — a crash between the two
+// must never happen, since a controller-side second transfer (after
+// SendPaymentSync's own transaction has already committed) could not offer
+// that guarantee.
+// Every early-exit below intentionally logs and returns nil (skip
+// reconciliation only) rather than returning an error: by the time this
+// function runs, the real payment this settlement represents has ALREADY
+// unconditionally happened — either a real Lightning payment already sent
+// (SendPaymentSync calls this from inside a DB transaction entered only
+// AFTER the real send succeeded, transactions_service.go's own "the payment
+// definitely succeeded" comment), or a self-payment already marked settled.
+// Returning an error here would abort the ENCLOSING settlement transaction
+// (the same one this function runs inside), rolling back the very "mark
+// this payment SETTLED" update that must not be undone — leaving a payment
+// that genuinely went out looking FAILED to its caller. For cash_redeem
+// specifically, that would make the controller roll back the slice's claim
+// (UnclaimCashSlice) and report failure, reopening an already-paid slice for
+// a second claim — a real double-payout risk strictly worse than skipping
+// one reconciliation adjustment. Every condition below is confirmed
+// unreachable through any real application code path; if one is ever hit
+// anyway, the ERROR-level log is the loud, alerting-worthy signal an
+// operator needs, without corrupting settlement state to raise it.
+func (svc *transactionsService) reconcileCashRedeemFee(tx *gorm.DB, dbTransaction *db.Transaction, realFeeMloki uint64) error {
+	quotedFeeMloki := *dbTransaction.CashRedeemFeeMloki
+	delta := int64(quotedFeeMloki) - int64(realFeeMloki) //nolint:gosec // both operands are mloki amounts, always far below int64 range
+	if delta == 0 {
+		return nil
+	}
+
+	if dbTransaction.AppId == nil {
+		svc.logger.Error().Str("payment_hash", dbTransaction.PaymentHash).
+			Msg("cash redeem fee reconciliation: transaction has CashRedeemFeeMloki but no AppId; skipping fee reconciliation")
+		return nil
+	}
+
+	var walletApp db.App
+	if tx.Select("id, kind, parent_app_id, parent_kind").Limit(1).Find(&walletApp, *dbTransaction.AppId).RowsAffected == 0 {
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).
+			Msg("cash redeem fee reconciliation: app not found; skipping fee reconciliation")
+		return nil
+	}
+	// Defense in depth against a spoofed/misrouted CashRedeemFeeMloki ever
+	// reaching this point for a non-cash_wallet app — the primary guard is
+	// stripping this metadata key from every general-purpose payment entry
+	// point (pay_invoice_controller.go, api/transactions.go); this makes the
+	// function itself safe even if some future caller reaches it another way.
+	// Never move ledger balance between an arbitrary app and its parent under
+	// this mechanism's name.
+	if walletApp.Kind != db.AppKindCashWallet || walletApp.ParentKind != db.ParentKindCash {
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).Str("kind", walletApp.Kind).
+			Msg("cash redeem fee reconciliation: app is not a cash_wallet; skipping fee reconciliation")
+		return nil
+	}
+	if walletApp.ParentAppID == nil {
+		// Unreachable in practice — a cash_wallet is always created as a
+		// child of a cash_hub (cashwallet.Commit/Split unconditionally set
+		// ParentAppID) — but never silently strand a reconciliation into the
+		// void without at least a loud log if lineage is somehow missing.
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).
+			Msg("cash_wallet has CashRedeemFeeMloki but no parent hub app; skipping fee reconciliation")
+		return nil
+	}
+
+	metadataBytes, err := json.Marshal(map[string]interface{}{
+		"cash_redeem_fee_source_app_id":       *dbTransaction.AppId,
+		"cash_redeem_fee_source_payment_hash": dbTransaction.PaymentHash,
+		"cash_redeem_hub_fee_mloki":           quotedFeeMloki,
+		"cash_redeem_real_fee_mloki":          realFeeMloki,
+		"cash_redeem_delta_mloki":             delta,
+	})
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	walletAppID := *dbTransaction.AppId
+	hubAppID := *walletApp.ParentAppID
+	var fromAppID, toAppID uint
+	var amountMloki uint64
+	if delta > 0 {
+		// The quoted fee covered the real cost — wallet pays the surplus to the hub.
+		fromAppID, toAppID = walletAppID, hubAppID
+		amountMloki = uint64(delta) //nolint:gosec // delta > 0 just checked
+	} else {
+		// The real cost exceeded the quote — the hub reimburses the shortfall.
+		fromAppID, toAppID = hubAppID, walletAppID
+		amountMloki = uint64(-delta) //nolint:gosec // delta < 0 just checked, negation is positive
+	}
+
+	debit := db.Transaction{
+		AppId:       &fromAppID,
+		Type:        constants.TRANSACTION_TYPE_OUTGOING,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		AmountMloki: amountMloki,
+		PaymentHash: deriveCashRedeemFeePaymentHash(dbTransaction.PaymentHash, "debit"),
+		Description: "Cash redeem fee reconciliation",
+		Metadata:    datatypes.JSON(metadataBytes),
+		SettledAt:   &now,
+		SelfPayment: true,
+	}
+	if err := tx.Create(&debit).Error; err != nil {
+		return err
+	}
+	credit := db.Transaction{
+		AppId:       &toAppID,
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		AmountMloki: amountMloki,
+		PaymentHash: deriveCashRedeemFeePaymentHash(dbTransaction.PaymentHash, "credit"),
+		Description: "Cash redeem fee reconciliation",
+		Metadata:    datatypes.JSON(metadataBytes),
+		SettledAt:   &now,
+		SelfPayment: true,
+	}
+	return tx.Create(&credit).Error
+}
+
+// deriveCashRedeemFeePaymentHash generates a distinct, deterministic synthetic
+// payment hash for one leg of a cash_redeem fee reconciliation, derived from
+// the source payout's own hash plus a leg suffix (so the debit and credit
+// legs of the same reconciliation get two different hashes, never colliding
+// with each other, with deriveCircleFeeSkimPaymentHash's own derived hashes,
+// or with a real bolt11 payment hash).
+func deriveCashRedeemFeePaymentHash(sourcePaymentHash string, leg string) string {
+	sum := sha256.Sum256([]byte(sourcePaymentHash + ":cash_redeem_fee:" + leg))
+	return hex.EncodeToString(sum[:])
+}
+
+func (svc *transactionsService) publishSettleEvent(dbTransaction *db.Transaction) {
+	event := "nwc_payment_sent"
+	if dbTransaction.Type == constants.TRANSACTION_TYPE_INCOMING {
+		event = "nwc_payment_received"
+	}
+	svc.eventPublisher.Publish(&events.Event{
+		Event:      event,
+		Properties: dbTransaction,
+	})
+}
+
+func (svc *transactionsService) checkBudgetUsage(dbTransaction *db.Transaction, gormTransaction *gorm.DB) {
+	var app db.App
+	result := gormTransaction.Limit(1).Find(&app, &db.App{
+		ID: *dbTransaction.AppId,
+	})
+	if result.RowsAffected == 0 {
+		svc.logger.Error().Interface("app_id", dbTransaction.AppId).Msg("failed to find app by id")
+		return
+	}
+	if app.IsIsolated() {
+		return
+	}
+
+	var appPermission db.AppPermission
+	result = gormTransaction.Limit(1).Find(&appPermission, &db.AppPermission{
+		AppId: app.ID,
+		Scope: constants.PAY_INVOICE_SCOPE,
+	})
+	if result.RowsAffected == 0 {
+		svc.logger.Error().Interface("app_id", dbTransaction.AppId).Msg("failed to find pay_invoice scope")
+		return
+	}
+
+	budgetUsage := queries.GetBudgetUsageSat(gormTransaction, &appPermission)
+	warningUsage := uint64(math.Floor(float64(appPermission.MaxAmountLoki) * 0.8))
+	if budgetUsage >= warningUsage && budgetUsage-dbTransaction.AmountMloki/1000 < warningUsage {
+		svc.eventPublisher.Publish(&events.Event{
+			Event: "nwc_budget_warning",
+			Properties: map[string]interface{}{
+				"name": app.Name,
+				"id":   app.ID,
+			},
+		})
+	}
+}
+
+// markPaymentFailed marks dbTransaction as FAILED, unless it's already FAILED
+// or SETTLED, in which case it's a no-op and returns (nil, nil) - mirroring
+// markTransactionSettled's own no-op-returns-nil convention below, so callers
+// use the same "re-fetch the settled row if nil" pattern for both races.
+func (svc *transactionsService) markPaymentFailed(tx *gorm.DB, dbTransaction *db.Transaction, reason string) (*db.Transaction, error) {
+	var existingTransaction db.Transaction
+	result := tx.Limit(1).Find(&existingTransaction, &db.Transaction{
+		ID: dbTransaction.ID,
+	})
+
+	if result.Error != nil {
+		svc.logger.Error().Err(result.Error).Str("payment_hash", dbTransaction.PaymentHash).Msg("could not find transaction to mark as failed")
+		return nil, result.Error
+	}
+
+	if existingTransaction.State == constants.TRANSACTION_STATE_FAILED {
+		svc.logger.Info().Str("payment_hash", dbTransaction.PaymentHash).Msg("payment already marked as failed")
+		return nil, nil
+	}
+
+	// The payment-sent-event subscription can race the synchronous SendPaymentSync
+	// call and settle this same row (see markTransactionSettled's own reverse-direction
+	// guard) before this failure branch runs. Without this check, a payment that
+	// actually succeeded would get flipped to FAILED here, dropping its amount out of
+	// isolated-balance accounting (which only sums SETTLED rows) even though the funds
+	// already left the node — and, for a Cash claim, incorrectly reopening the slice for
+	// a second payout. Never downgrade an already-settled transaction to failed.
+	if existingTransaction.State == constants.TRANSACTION_STATE_SETTLED {
+		svc.logger.Info().Str("payment_hash", dbTransaction.PaymentHash).Msg("payment already settled; ignoring late failure notification")
+		return nil, nil
+	}
+
+	err := tx.Model(dbTransaction).Updates(map[string]interface{}{
+		"State":           constants.TRANSACTION_STATE_FAILED,
+		"FeeReserveMloki": 0,
+		"FailureReason":   reason,
+	}).Error
+	if err != nil {
+		svc.logger.Error().Err(err).
+			Str("payment_hash", dbTransaction.PaymentHash).
+			Msg("Failed to mark transaction as failed")
+		return nil, err
+	}
+	svc.logger.Info().Str("payment_hash", dbTransaction.PaymentHash).Msg("Marked transaction as failed")
+	svc.eventPublisher.Publish(&events.Event{
+		Event:      "nwc_payment_failed",
+		Properties: dbTransaction,
+	})
+	return dbTransaction, nil
+}
+
+// EstimateFee calculates potential fees based on route hints in the invoice
+func (svc *transactionsService) EstimateFee(payReq string) (uint64, error) {
+	paymentRequest, err := decodepay.Decode(payReq)
+	if err != nil {
+		return 0, err
+	}
+
+	var maxHintFeeMloki uint64 = 0
+
+	for _, route := range paymentRequest.Route {
+		var routeFeeMloki uint64 = 0
+		for _, hop := range route {
+			fee := uint64(hop.FeeBaseMloki) + (uint64(paymentRequest.AmountMloki) * uint64(hop.FeeProportionalMillionths) / 1000000) //nolint:gosec // invoice-declared mloki amount is always non-negative and far below int64 range; this is a fee preview only, doesn't gate actual payment execution
+			routeFeeMloki += fee
+		}
+		if routeFeeMloki > maxHintFeeMloki {
+			maxHintFeeMloki = routeFeeMloki
+		}
+	}
+
+	return maxHintFeeMloki, nil
+}

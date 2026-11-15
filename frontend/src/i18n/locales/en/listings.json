@@ -1,0 +1,112 @@
+{
+  "nav": "Listings",
+  "page": {
+    "title": "Listings",
+    "description": "Offers this Hub lists on relays so people without a link can find them",
+    "empty": "Nothing listed yet",
+    "emptyHint": "List a circle below. A Cash Hub connection is never listed.",
+    "listCircle": "List a circle"
+  },
+  "card": {
+    "untitled": "Untitled offer",
+    "typeOrder": "Cash order",
+    "typeCircle": "Circle"
+  },
+  "status": {
+    "open": "Open",
+    "paused": "Paused",
+    "closed": "Closed"
+  },
+  "health": {
+    "listed": "Listed",
+    "paused": "Listed, paused",
+    "closing": "Closed, kept until its last version expires",
+    "deleted": "Unlisted",
+    "refreshed": "refreshed {{count}} days ago",
+    "refreshed_one": "refreshed {{count}} day ago",
+    "relays": "on {{ok}} of {{total}} relays",
+    "operatorVerified": "operator verified",
+    "operatorNotNamed": "not yet named by the operator",
+    "failing": "no relay accepted the last version, retrying"
+  },
+  "dialog": {
+    "title": "List this offer",
+    "editTitle": "Edit listing",
+    "description": "The listing advertises; the terms always come from the offer itself when someone taps it.",
+    "list": "List",
+    "save": "Save"
+  },
+  "warnings": {
+    "public": "Listing makes this offer public and lets anyone find this node.",
+    "pow": "Proof of work on the inbox is off while no proof-of-work relays are set; anyone can send requests.",
+    "circleTerms": "For a circle, its access policy and how much it can still take in become readable by anyone.",
+    "followSet": "This circle's follow set is public. Consider hidden entries for members who should not be named. The listing's title is not taken from the set.",
+    "operator": "Naming an operator publicly links their account to this node."
+  },
+  "form": {
+    "title": "Title",
+    "content": "Description",
+    "image": "Image (https)",
+    "location": "Place (e.g. Lisbon, Baixa)",
+    "regions": "Regions",
+    "regionsHint": "Geohash prefixes of 3 or 4 characters",
+    "languages": "Languages (ISO-639-1)",
+    "operator": "Operator (npub or hex, optional)",
+    "operatorRelay": "Operator's relay",
+    "followSetA": "Add the follow set's address",
+    "followSetConfirm": "I understand the follow set is public",
+    "preview": "Preview"
+  },
+  "problems": {
+    "title": "The title must be one line of at most 40 characters.",
+    "content": "The description must be at most 280 characters.",
+    "image": "The image must be an https URL.",
+    "location": "The place must be one line of at most 40 characters, with no link.",
+    "languages": "Languages are two-letter ISO-639-1 codes.",
+    "regions": "Regions are geohash prefixes of 3 or 4 characters.",
+    "operator": "The operator must be an npub or a 64-character hex pubkey.",
+    "operatorRelay": "The operator's relay must be a websocket URL."
+  },
+  "toast": {
+    "listed": "Listed",
+    "updated": "Listing updated"
+  },
+  "errors": {
+    "save": "Could not save the listing",
+    "action": "Could not update the listing",
+    "relays": "Could not save the listing relays",
+    "regenerate": "Could not regenerate the connection"
+  },
+  "address": {
+    "label": "Listing address",
+    "copied": "Copied",
+    "copyTag": "Copy the a tag",
+    "copyCommand": "Copy the operator's command",
+    "hint": "The operator names this offer from their own Nostr client or with cashctl; this app never asks for their key."
+  },
+  "connection": {
+    "label": "Listing connection (public)"
+  },
+  "actions": {
+    "pause": "Pause",
+    "resume": "Resume",
+    "edit": "Edit",
+    "unlist": "Unlist",
+    "checkOperator": "Check operator",
+    "revokeConnection": "Revoke listing connection"
+  },
+  "relays": {
+    "title": "Listing relays",
+    "description": "Listings and this node's relay list go to: {{relays}}. Leave empty for the general relays.",
+    "save": "Save",
+    "saved": "Listing relays saved"
+  },
+  "regenerate": {
+    "button": "Revoke and reissue the Cash Hub connection",
+    "title": "Revoke this Cash Hub connection?",
+    "description": "Do this if the connection string was ever published. The old string stops working at once and a new one is shown once. Bills and records are untouched; reconnect your minting client with the new string.",
+    "cancel": "Cancel",
+    "confirm": "Revoke and reissue",
+    "shownOnce": "New connection, shown once:"
+  }
+}

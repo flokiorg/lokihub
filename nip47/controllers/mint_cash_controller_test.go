@@ -1,0 +1,623 @@
+package controllers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/cash/cashwallet"
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/flokiorg/lokihub/tests"
+)
+
+func onePubkeyRecipientJSON(pubkey string, amountMloki uint64) string {
+	return fmt.Sprintf(`{"identity_type":"pubkey","identity_value":"%s","amount_millis":%d}`, pubkey, amountMloki)
+}
+
+func makeCashWalletRequest(pubkey string, amountMloki uint64, expirationSecs int) string {
+	return fmt.Sprintf(`{
+		"method": "mint_cash",
+		"params": {"request_id":"`+testRequestID()+`",
+			"recipients": [%s],
+			"expiry": %d
+		}
+	}`, onePubkeyRecipientJSON(pubkey, amountMloki), expirationSecs)
+}
+
+// registerTrustedIA registers iaPubkey as a trusted Identity Authority on svc's DB.
+func registerTrustedIA(t *testing.T, svc *tests.TestService, iaPubkey string) {
+	t.Helper()
+	_, err := apps.NewIdentityAuthorityManager(svc.DB).Add(iaPubkey, "test-ia", nil)
+	require.NoError(t, err)
+}
+
+func TestHandleMintCashEvent_NotCashHub(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	// A standard (non-cash_hub) app.
+	standardApp, _, err := svc.AppsService.CreateApp("std", "", 0, "never", nil, []string{constants.GET_INFO_SCOPE}, db.AppKindStandard, nil, "", nil)
+	require.NoError(t, err)
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 1000, 3600)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, standardApp, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	assert.NotNil(t, publishedResponse.Error)
+	assert.Equal(t, constants.ERROR_RESTRICTED, publishedResponse.Error.Code)
+}
+
+func TestHandleMintCashEvent_SumOfRecipients_ExceedsPerWalletMaxTotal(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 5000, 3600) // max 5000 mloki total per wallet
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 6000, 3600)), nip47Request) // 6000 > 5000
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	assert.NotNil(t, publishedResponse.Error)
+	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, publishedResponse.Error.Code)
+}
+
+func TestHandleMintCashEvent_ExpiryExceedsMax(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600) // max 3600 secs
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 1000, 7200)), nip47Request) // 7200 > 3600
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	assert.NotNil(t, publishedResponse.Error)
+	assert.Equal(t, constants.ERROR_RESTRICTED, publishedResponse.Error.Code, "an expiry over the Hub's ceiling is RESTRICTED (NIP-CASH §Minting Cash, step 5)")
+}
+
+// An omitted/zero expiry must default to the hub's own max_exp_secs rather
+// than producing an already-expired wallet (time.Now() + 0).
+func TestHandleMintCashEvent_OmittedExpiry_DefaultsToHubMax(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600) // max 3600 secs
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	nip47Request := &models.Request{}
+	// No "expiry" field at all (defaults to zero value on unmarshal).
+	err = json.Unmarshal([]byte(fmt.Sprintf(`{
+		"method": "mint_cash",
+		"params": {"request_id":"`+testRequestID()+`",
+			"recipients": [%s]
+		}
+	}`, onePubkeyRecipientJSON(beneficiaryPubkey, 1000))), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	require.Nil(t, publishedResponse.Error)
+	result := publishedResponse.Result.(MintCashReply)
+	require.NotNil(t, result.ExpiresAt)
+	assert.WithinDuration(t, time.Now().Add(3600*time.Second), time.Unix(*result.ExpiresAt, 0), 5*time.Second,
+		"wallet must default to the hub's max_exp_secs, not expire immediately")
+}
+
+func TestHandleMintCashEvent_InsufficientBalance(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	// hub has 0 balance — do NOT call fundApp
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 5000, 3600)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	assert.NotNil(t, publishedResponse.Error)
+	assert.Equal(t, constants.ERROR_INSUFFICIENT_BALANCE, publishedResponse.Error.Code)
+}
+
+func TestHandleMintCashEvent_RateLimited(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	controller := NewTestNip47Controller(svc)
+
+	// Exhaust the rate limiter.
+	for i := 0; i < cashRateLimitPerHour; i++ {
+		controller.cashRateLimiter.Allow(hub.AppPubkey, cashRateLimitPerHour)
+	}
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 1000, 3600)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	controller.HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	assert.NotNil(t, publishedResponse.Error)
+	assert.Equal(t, constants.ERROR_RATE_LIMITED, publishedResponse.Error.Code)
+}
+
+func TestHandleMintCashEvent_HappyPath_SingleRecipient(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 1000, 1800)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	require.Nil(t, publishedResponse.Error)
+	result := publishedResponse.Result.(MintCashReply)
+	assert.NotEmpty(t, result.WalletPubkey)
+	require.NotNil(t, result.ExpiresAt)
+	assert.Greater(t, *result.ExpiresAt, time.Now().Unix())
+	require.Len(t, result.Recipients, 1)
+	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMillis)
+
+	// cash_token alone is the bill's credential (NIP-CASH §Minting Cash): it names
+	// the wallet, carries its connection secret and is signed by the node under
+	// cash-mint:v1. No pairing_uri is returned.
+	assert.True(t, strings.HasPrefix(result.CashToken, constants.CashTokenHRP+"1"))
+	decoded, err := nipcash.Decode(result.CashToken)
+	require.NoError(t, err)
+	assert.Equal(t, result.WalletPubkey, decoded.WalletPubkey)
+	assert.Equal(t, nipcash.SchemeMintV1, decoded.Scheme)
+	minter, ok := nipcash.VerifyProvenance(decoded)
+	require.True(t, ok)
+	assert.Equal(t, tests.MockNodePubkey, minter)
+	raw, err := json.Marshal(publishedResponse.Result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "pairing_uri")
+	assert.Contains(t, string(raw), `"cash_token":"`+result.CashToken+`"`)
+
+	// Verify the Cash wallet sub-app was created with correct kind and parent.
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	require.Equal(t, 1, len(childApps))
+	assert.Equal(t, db.ParentKindCash, childApps[0].ParentKind)
+
+	// Hardened scope surface: exactly the three bill methods, and nothing that
+	// discloses money without proof. get_balance is deliberately absent — a bill's
+	// balance is the total funded across every recipient, which is the same
+	// disclosure get_budget is carved out of the always-granted list for.
+	var perms []db.AppPermission
+	svc.DB.Where("app_id = ?", childApps[0].ID).Find(&perms)
+	scopes := make([]string, len(perms))
+	for i, p := range perms {
+		scopes[i] = p.Scope
+	}
+	assert.ElementsMatch(t, []string{constants.CASH_REDEEM_SCOPE, constants.CASH_TRANSFER_SCOPE, constants.CASH_CONSOLIDATE_SCOPE}, scopes)
+}
+
+func TestHandleMintCashEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	pk1, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	connKey := tests.NewTestConnectionKey()
+	iaPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	registerTrustedIA(t, svc, iaPubkey)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(fmt.Sprintf(`{
+		"method": "mint_cash",
+		"params": {"request_id":"`+testRequestID()+`",
+			"recipients": [
+				{"identity_type":"pubkey","identity_value":"%s","amount_millis":1000},
+				{"identity_type":"connection_key","identity_value":"%s","ia_pubkey":"%s","amount_millis":2000}
+			],
+			"expiry": 1800
+		}
+	}`, pk1, connKey, iaPubkey)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	require.Nil(t, publishedResponse.Error)
+	result := publishedResponse.Result.(MintCashReply)
+	require.Len(t, result.Recipients, 2)
+
+	// Exactly one shared wallet app.
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	require.Len(t, childApps, 1)
+
+	var claims []db.CashWalletClaim
+	svc.DB.Where("wallet_app_id = ?", childApps[0].ID).Find(&claims)
+	require.Len(t, claims, 2)
+}
+
+// TestHandleMintCashEvent_TransferFailure_Rollback verifies that a failure while
+// funding the new bill rolls the whole mint back: no bill, no slices, no record,
+// and an error reply.
+func TestHandleMintCashEvent_TransferFailure_Rollback(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	controller := NewTestNip47Controller(svc)
+	controller.cashHooks = &cashwallet.TestHooks{Before: func(stage string) error {
+		if stage == cashwallet.StageAfterTransfer+"(0)" {
+			return errors.New("injected: funding failed")
+		}
+		return nil
+	}}
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 1000, 1800)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	controller.HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	// Handler must return an error.
+	require.NotNil(t, publishedResponse.Error, "transfer failure must produce an error response")
+	var records int64
+	require.NoError(t, svc.DB.Model(&db.CashRequestRecord{}).Count(&records).Error)
+	assert.Zero(t, records, "no record commits without its bill")
+
+	// The child Cash wallet app must have been deleted (rollback).
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	assert.Empty(t, childApps, "failed Cash wallet creation must roll back the child app")
+
+	var claims []db.CashWalletClaim
+	svc.DB.Find(&claims)
+	assert.Empty(t, claims, "claim rows must be rolled back too (FK cascade)")
+}
+
+func TestHandleMintCashEvent_ConnectionKeyMode_UntrustedIARejected(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	connKey := tests.NewTestConnectionKey()
+	iaPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	// Deliberately not registered as trusted.
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(fmt.Sprintf(`{
+		"method": "mint_cash",
+		"params": {"request_id":"`+testRequestID()+`",
+			"recipients": [{"identity_type":"connection_key","identity_value":"%s","ia_pubkey":"%s","amount_millis":1000}],
+			"expiry": 1800
+		}
+	}`, connKey, iaPubkey)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	require.NotNil(t, publishedResponse.Error)
+	assert.Equal(t, constants.ERROR_RESTRICTED, publishedResponse.Error.Code, "an untrusted IA refuses the whole request (NIP-CASH §Minting Cash, step 4)")
+}
+
+func TestHandleMintCashEvent_NonRoundMloki_FullDrainSucceeds(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	nip47Request := &models.Request{}
+	// 1234 mloki isn't a round number of loki, exercising the sat-rounding
+	// path in CreateApp's MaxAmountLoki (mloki/1000).
+	err = json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 1234, 1800)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	require.Nil(t, publishedResponse.Error)
+}
+
+func TestHandleMintCashEvent_BudgetRenewalNever(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryKey := nostr.GeneratePrivateKey()
+	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 1000, 1800)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+	require.Nil(t, publishedResponse.Error)
+
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	require.Len(t, childApps, 1)
+
+	var perm db.AppPermission
+	require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", childApps[0].ID, constants.CASH_REDEEM_SCOPE).First(&perm).Error)
+	assert.Equal(t, constants.BUDGET_RENEWAL_NEVER, perm.BudgetRenewal, "a Cash wallet must never renew, even implicitly")
+}
+
+// TestHandleMintCashEvent_Cash_HappyPath and
+// TestHandleMintCashEvent_Cash_RejectsMixedRecipients close a coverage gap:
+// the cash-mode sole-recipient rule (§Cash-Mode
+// Slices) was already covered at the cashwallet unit layer, the admin HTTP
+// API (api.TestCreateCashWallet_Cash_*), and the live integration wire, but
+// had no fast, offline test at this controller layer — meaning the
+// controller's own error-code mapping for the rejection path
+// (mapCashWalletErrorCode(ErrInvalidParams) -> ERROR_BAD_REQUEST) was only
+// proven by the slow live suite.
+func TestHandleMintCashEvent_Cash_HappyPath(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	_, cashCommitment, err := tests.GenerateCashSecret()
+	require.NoError(t, err)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(`{
+		"method": "mint_cash",
+		"params": {"request_id":"`+testRequestID()+`",
+			"recipients": [{"identity_type":"cash","identity_value":"`+cashCommitment+`","amount_millis":1000}],
+			"expiry": 1800
+		}
+	}`), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	require.Nil(t, publishedResponse.Error)
+	result := publishedResponse.Result.(MintCashReply)
+	require.Len(t, result.Recipients, 1)
+	assert.Equal(t, db.CashIdentityCash, result.Recipients[0].IdentityType)
+	assert.Equal(t, cashCommitment, result.Recipients[0].IdentityValue, "the caller's commitment is echoed")
+	raw, err := json.Marshal(publishedResponse.Result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "cash_secret")
+}
+
+func TestHandleMintCashEvent_Cash_RejectsMixedRecipients(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(fmt.Sprintf(`{
+		"method": "mint_cash",
+		"params": {"request_id":"`+testRequestID()+`",
+			"recipients": [
+				{"identity_type":"pubkey","identity_value":"%s","amount_millis":500},
+				{"identity_type":"cash","amount_millis":500}
+			],
+			"expiry": 1800
+		}
+	}`, pk)), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	}, testMintMeta())
+
+	require.NotNil(t, publishedResponse.Error)
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
+
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	assert.Empty(t, childApps, "a rejected request must leave no partial wallet")
+}
+
+// A mint whose commit fails gives its rate-limit allowance back, so with a limit
+// of 1 a mint after it still goes through; the next one is limited, after its
+// request_id was marked, and says so.
+func TestHandleMintCashEvent_RateLimitSpentOnlyOnCommit(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+	svc.Cfg.GetEnv().CashWalletRateLimitPerHour = 1
+	ln, ok := svc.LNClient.(*tests.MockLn)
+	require.True(t, ok)
+	signingKey := ln.SigningKey
+	controller := NewTestNip47Controller(svc)
+
+	mint := func() *models.Response {
+		pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+		req := &models.Request{}
+		require.NoError(t, json.Unmarshal([]byte(makeCashWalletRequest(pk, 1000, 3600)), req))
+		var resp *models.Response
+		controller.HandleMintCashEvent(ctx, req, 0, hub, func(r *models.Response, _ nostr.Tags) { resp = r }, testMintMeta())
+		require.NotNil(t, resp)
+		return resp
+	}
+
+	ln.SigningKey = nil // the node cannot sign: the commit fails
+	failed := mint()
+	require.NotNil(t, failed.Error)
+	assert.NotEqual(t, constants.ERROR_RATE_LIMITED, failed.Error.Code)
+
+	ln.SigningKey = signingKey
+	require.Nil(t, mint().Error, "the failed mint spent no allowance")
+
+	limited := mint()
+	require.NotNil(t, limited.Error)
+	assert.Equal(t, constants.ERROR_RATE_LIMITED, limited.Error.Code)
+	assert.Contains(t, limited.Error.Message, "request_id stays used")
+}

@@ -1,0 +1,376 @@
+package api
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/queries"
+	"github.com/flokiorg/lokihub/tests"
+	"github.com/flokiorg/lokihub/tests/mocks"
+	"github.com/flokiorg/lokihub/transactions"
+	"github.com/ohstr/nmilat/nipcash"
+)
+
+// newTestAPI returns an api wired to the test service's real DB and AppsService.
+func newTestAPI(svc *tests.TestService) *api {
+	return &api{db: svc.DB, appsSvc: svc.AppsService, keys: svc.Keys, cfg: svc.Cfg}
+}
+
+// newTestAPIWithService returns an api wired to the test service's real DB,
+// AppsService, and a mock service.Service that forwards GetTransactionsService
+// and GetLNClient to the test service's real instances — everything
+// cashwallet.Create needs beyond what newTestAPI already provides.
+func newTestAPIWithService(t *testing.T, svc *tests.TestService) *api {
+	mockSvc := mocks.NewMockService(t)
+	txSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
+	mockSvc.On("GetTransactionsService").Return(txSvc).Maybe()
+	mockSvc.On("GetLNClient").Return(svc.LNClient).Maybe()
+	mockSvc.On("GetListingService").Return(nil).Maybe()
+
+	return &api{
+		db:             svc.DB,
+		appsSvc:        svc.AppsService,
+		keys:           svc.Keys,
+		cfg:            svc.Cfg,
+		svc:            mockSvc,
+		iaManager:      apps.NewIdentityAuthorityManager(svc.DB),
+		eventPublisher: svc.EventPublisher,
+	}
+}
+
+func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+		},
+		ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(result.CashToken, constants.CashTokenHRP+"1"))
+	assert.NotZero(t, result.AppID)
+	require.Len(t, result.Recipients, 1)
+
+	var childApp db.App
+	require.NoError(t, svc.DB.First(&childApp, result.AppID).Error)
+	assert.Equal(t, db.AppKindCashWallet, childApp.Kind)
+	assert.Equal(t, hub.ID, *childApp.ParentAppID)
+
+	var claimCount int64
+	require.NoError(t, svc.DB.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ?", result.AppID).Count(&claimCount).Error)
+	assert.EqualValues(t, 1, claimCount)
+
+	// GET cash-connection returns the identical token, the bill's only credential,
+	// and it names this bill with the secret derived from its id.
+	conn, err := theAPI.GetCashWalletConnection(result.AppID)
+	require.NoError(t, err)
+	assert.Equal(t, result.CashToken, conn.CashToken)
+	decoded, err := nipcash.Decode(result.CashToken)
+	require.NoError(t, err)
+	assert.Equal(t, *childApp.WalletPubkey, decoded.WalletPubkey)
+	secret, err := svc.Keys.GetCashPairingKey(result.AppID)
+	require.NoError(t, err)
+	assert.Equal(t, secret, decoded.Secret)
+}
+
+// TestCreateCashWallet_ProducesSignedToken pins that a wallet minted through the admin
+// API carries provenance recovering to the node's own pubkey.
+//
+// There is no longer a request field to opt in with: provenance is mandatory, because
+// it is the only thing a token carries that identifies its minting hub, and that is
+// what a client verifies a transport announcement against. This test therefore guards
+// that signing actually happens rather than that a flag is threaded.
+func TestCreateCashWallet_ProducesSignedToken(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	priv, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	minterPubkey := hex.EncodeToString(priv.PubKey().SerializeCompressed())
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.SigningKey = priv
+	mockLN.Pubkey = minterPubkey
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+		},
+		ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+
+	tok, err := nipcash.Decode(result.CashToken)
+	require.NoError(t, err)
+	require.NotNil(t, tok.MintSignature)
+	require.NotNil(t, tok.AttestedAmountMillis)
+	assert.Equal(t, uint64(1000), *tok.AttestedAmountMillis)
+
+	recovered, ok := nipcash.VerifyProvenance(tok)
+	require.True(t, ok)
+	assert.Equal(t, minterPubkey, recovered)
+}
+
+func TestCreateCashWallet_HappyPath_MultipleRecipients_OneSharedWallet(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	pk1, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	pk2, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: pk1, AmountMloki: 1000},
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: pk2, AmountMloki: 2000},
+		},
+		ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Recipients, 2)
+
+	var childApps []db.App
+	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps).Error)
+	require.Len(t, childApps, 1, "both recipients must share exactly one wallet app")
+
+	var claims []db.CashWalletClaim
+	require.NoError(t, svc.DB.Where("wallet_app_id = ?", childApps[0].ID).Find(&claims).Error)
+	require.Len(t, claims, 2)
+}
+
+func TestCreateCashWallet_Cash_HappyPath(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	theAPI := newTestAPIWithService(t, svc)
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityCash, AmountMloki: 1000},
+		},
+		ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Recipients, 1)
+
+	r := result.Recipients[0]
+	assert.Equal(t, db.CashIdentityCash, r.IdentityType)
+	assert.NotEmpty(t, r.CashSecret, "the operator gets the secret generated for it, once")
+	secret, err := hex.DecodeString(r.CashSecret)
+	require.NoError(t, err)
+	commitment := sha256.Sum256(secret)
+	assert.Equal(t, hex.EncodeToString(commitment[:]), r.IdentityValue, "the entry echoes the commitment, as over NWC")
+}
+
+// The operator may send the commitment itself, as a mint_cash caller does; then no
+// secret is generated or returned.
+func TestCreateCashWallet_Cash_OperatorCommitment(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	_, commitment, err := tests.GenerateCashSecret()
+	require.NoError(t, err)
+	result, err := newTestAPIWithService(t, svc).CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{{IdentityType: db.CashIdentityCash, IdentityValue: commitment, AmountMloki: 1000}},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Recipients, 1)
+	assert.Equal(t, commitment, result.Recipients[0].IdentityValue)
+	assert.Empty(t, result.Recipients[0].CashSecret)
+}
+
+func TestCreateCashWallet_Cash_RejectsMixedRecipients(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	theAPI := newTestAPIWithService(t, svc)
+	_, err = theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 500},
+			{IdentityType: db.CashIdentityCash, AmountMloki: 500},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+func TestCreateCashWallet_ChildExcludedFromListApps(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+		},
+		ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+
+	// cash_wallet children are ephemeral, spend-only wallets managed via their
+	// hub's claims list — they must never show up in the general Connections
+	// page listing.
+	listResp, err := theAPI.ListApps(100, 0, ListAppsFilters{}, "")
+	require.NoError(t, err)
+	for _, a := range listResp.Apps {
+		assert.NotEqual(t, result.AppID, a.ID, "cash_wallet child app must not appear in ListApps")
+		assert.NotEqual(t, db.AppKindCashWallet, a.Kind, "no cash_wallet app should ever appear in ListApps")
+	}
+}
+
+func TestCreateCashWallet_InsufficientBalance(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	// hub has 0 balance — do NOT fund it.
+
+	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	_, err = theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 5000},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, transactions.NewInsufficientBalanceError()))
+
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	assert.Empty(t, childApps)
+}
+
+// TestCreateCashWallet_NegativeAmountRejected guards against a
+// uint64(int64) wraparound: AmountMloki on the request is int64 (unlike
+// the NWC mint_cash controller's own uint64-typed field, which
+// gets this rejection for free from JSON unmarshaling), so a negative
+// value must be explicitly rejected before it silently becomes a huge
+// uint64 in cashwallet.RecipientInput.
+func TestCreateCashWallet_NegativeAmountRejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	_, err = theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: -1},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be negative")
+
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	assert.Empty(t, childApps)
+}
+
+func TestCreateCashWallet_NotCashHub(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	isolatedApp, _, err := svc.AppsService.CreateApp(
+		"iso", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.GET_INFO_SCOPE}, db.AppKindIsolated, nil, "", nil,
+	)
+	require.NoError(t, err)
+
+	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	_, err = theAPI.CreateCashWallet(isolatedApp.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a cash_hub")
+}
+
+func TestCreateCashWallet_TransferFailure_Rollback(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	// The node cannot sign, so the commit fails after it has created the bill
+	// inside its transaction: everything it wrote must roll back.
+	svc.LNClient.(*tests.MockLn).SigningKey = nil
+
+	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	_, err = theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	assert.Empty(t, childApps, "the bill must roll back with its failed commit")
+	assert.Equal(t, int64(10_000_000), queries.GetIsolatedBalance(svc.DB, hub.ID), "the Hub was never debited")
+}

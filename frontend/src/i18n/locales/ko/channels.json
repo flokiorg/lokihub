@@ -1,0 +1,182 @@
+{
+  "title": "노드",
+  "channels": {
+    "title": "채널",
+    "open": "채널 열기",
+    "close": "채널 닫기",
+    "empty": "열린 채널이 없습니다",
+    "capacity": "용량",
+    "localBalance": "로컬 잔액",
+    "remoteBalance": "원격 잔액",
+    "status": {
+      "active": "활성",
+      "inactive": "비활성",
+      "pending": "대기 중",
+      "closing": "닫는 중",
+      "online": "온라인",
+      "offline": "오프라인",
+      "opening": "열리는 중"
+    },
+    "pendingClosed": "보류 중인 채널 닫힘",
+    "table": {
+      "capacity": "용량",
+      "localBalance": "로컬 잔액",
+      "remoteBalance": "원격 잔액",
+      "actions": "작업",
+      "typeTooltip": "Lightning 채널 유형. 대부분의 사용자에게는 비공개가 권장됩니다.",
+      "reserveTooltip": "각 참가자가 사기 방지를 위해 예약하는 자금으로, 채널 기간 동안 사용할 수 없습니다."
+    },
+    "closeDialog": {
+      "title": "채널 종료 모드 선택",
+      "headsUp": "주의!",
+      "cancel": "취소",
+      "closedSuccess": "채널이 성공적으로 닫혔습니다"
+    },
+    "nodeHealth": {
+      "tooltip": "노드 상태: {{percent}}%",
+      "dialogTitle": "노드 상태",
+      "close": "닫기"
+    },
+    "dropdown": {
+      "viewFunding": "자금 조달 트랜잭션 보기",
+      "viewNode": "{{explorer}}에서 노드 보기",
+      "setRoutingFee": "라우팅 수수료 설정"
+    },
+    "type": "유형",
+    "typePublic": "공개",
+    "typePrivate": "비공개",
+    "reserve": "리저브"
+  },
+  "peers": {
+    "title": "피어",
+    "connect": "피어 연결",
+    "disconnect": "연결 해제",
+    "empty": "연결된 피어가 없습니다",
+    "pubkey": "공개 키",
+    "alias": "별칭",
+    "disconnectConfirm": "확인",
+    "disconnectCancel": "취소"
+  },
+  "liquidity": {
+    "title": "유동성",
+    "incoming": "수신",
+    "outgoing": "송신"
+  },
+  "menu": {
+    "node": "노드",
+    "onchain": "온체인",
+    "swaps": "스왑",
+    "history": "내역",
+    "management": "관리"
+  },
+  "onchain": {
+    "title": "온체인",
+    "addressLabel": "온체인 주소",
+    "depositTitle": "{{chain}} 입금",
+    "generateNew": "새 주소 생성",
+    "transactions": "온체인 거래",
+    "sent": "전송됨",
+    "sending": "전송 중",
+    "received": "수신됨",
+    "receiving": "수신 중"
+  },
+  "orderHistory": {
+    "title": "Order History",
+    "date": "Date",
+    "orderId": "Order ID",
+    "state": "State",
+    "detailsTitle": "Liquidity Order Details",
+    "reviewTitle": "Review Inbound Order",
+    "description": "채널 주문 내역",
+    "noOrdersDesc": "아직 채널을 주문하지 않았습니다.",
+    "noOrdersTitle": "주문 내역 없음",
+    "totalFee": "총 수수료",
+    "orderLiquidity": "유동성 주문"
+  },
+  "increaseCapacity": {
+    "title": "온체인으로 채널 열기",
+    "description": "채널을 열기 위해 사용된 자금에서 수수료를 뺀 금액이 지출 잔액에 추가됩니다",
+    "info": "온체인 자금으로 채널을 엽니다. 양 당사자는 언제든지 채널을 자유롭게 닫을 수 있습니다. 단, 채널 내 본인 측에 더 많은 자금을 보유하고 정기적으로 사용하면 채널이 계속 열려 있을 가능성이 높아집니다.",
+    "peerLabel": "피어 / LSP",
+    "customPeer": "사용자 지정 피어",
+    "peer": "피어",
+    "hostPort": "호스트:포트",
+    "increaseSpendingLabel": "지출 잔액 늘리기",
+    "increaseSpendingTooltip": "필요한 지출 용량을 설정합니다. 채널 전체 크기에 더하여 온체인 수수료를 충당하기 위해 온체인 {{chain}}을 입금해야 합니다.",
+    "currentBalance": "현재 온체인 잔액:",
+    "noLsps": "LSP가 구성되지 않았습니다",
+    "selectProvider": "제공업체 선택",
+    "needIncoming": "대신 수신 용량이 필요한가요?",
+    "buyInbound": "인바운드 유동성 구매",
+    "lookingToReceive": "대신 자금을 받으려고 하시나요? 수신 용량이 필요할 수 있습니다.",
+    "publicChannel": "공개 채널",
+    "publicChannelDesc": "대부분의 사용자에게는 권장되지 않습니다.",
+    "confirmTitle": "채널 개설 확인",
+    "confirmDesc": "다음 세부 정보로 Lightning 채널을 열겠습니까?",
+    "channelType": "채널 유형",
+    "paymentMethod": "결제 방법",
+    "nodePublicKey": "노드 공개 키",
+    "important": "중요:",
+    "confirmWarning": "채널을 열기 위해서는 온체인 트랜잭션과 네트워크 수수료가 필요합니다. 이 작업은 취소할 수 없습니다. 진행하기 전에 모든 세부 사항을 확인하세요.",
+    "confirmAndOpen": "확인 및 채널 열기",
+    "manageProviders": "제공업체 관리"
+  },
+  "orderChannel": {
+    "title": "Increase Inbound Liquidity",
+    "description": "Order a channel from your LSP to increase your receiving capacity",
+    "info": "Order a channel from an LSP. This provides inbound liquidity, allowing you to receive payments immediately after the channel is confirmed.",
+    "increaseInboundLabel": "Increase inbound liquidity",
+    "orderRange": "Order Range:",
+    "orderBtn": "Order Channel",
+    "opening": "Your channel is being opened",
+    "reviewTitle": "Review Channel Purchase",
+    "reviewDesc": "Complete Payment to open a channel to your node",
+    "spendingBalance": "Spending Balance",
+    "incomingLiquidity": "Incoming Liquidity",
+    "amountToPay": "Amount to pay",
+    "consentMsg": "By proceeding, you consent the channel opens immediately and that you lose the right to revoke once it is open.",
+    "otherOptions": "Other options",
+    "increaseSpending": "Increase Spending Balance",
+    "balanceMsg": "현재 잔액은",
+    "currentlyHave": "현재 보유 중",
+    "deposited": "입금됨",
+    "depositedAmount": "입금 금액",
+    "estTime": "예상 시간",
+    "includesCost": "채널 개설 비용 포함",
+    "noPending": "보류 중인 채널 주문 없음",
+    "notEnough": "잔액 부족",
+    "openedDesc": "채널이 열려 사용 가능합니다.",
+    "openedTitle": "채널이 열렸습니다",
+    "recommendDeposit": "입금을 권장합니다",
+    "return": "노드로 돌아가기",
+    "scanQr": "QR 코드 스캔하여 입금",
+    "sendFloki": "{{chain}} 보내기",
+    "successMsg": "채널 주문에 성공했습니다",
+    "toOpen": "채널을 열기 위해",
+    "waitingChannel": "채널이 열리기를 기다리는 중...",
+    "waitingConf": "확인을 기다리는 중...",
+    "waitingTx": "트랜잭션을 기다리는 중..."
+  },
+  "relay": {
+    "communityRelays": "커뮤니티 릴레이",
+    "customRelays": "사용자 지정 릴레이",
+    "addCustomRelay": "사용자 지정 릴레이 추가",
+    "alreadyAdded": "이 릴레이는 이미 추가되어 있습니다",
+    "add": "추가"
+  },
+  "lspTerms": {
+    "title": "LSP 조건이 변경되었습니다",
+    "description": "LSP의 현재 조건이 공지된 조건보다 불리합니다. 구매 전에 비교하세요.",
+    "value": "조건",
+    "announced": "공지",
+    "live": "현재",
+    "verdict": {
+      "worse": "불리",
+      "better": "유리",
+      "same": "동일"
+    },
+    "cancel": "구매 안 함",
+    "confirm": "현재 조건으로 구매",
+    "changed": "확인한 뒤 LSP 조건이 변경되었습니다. 검토 후 다시 시도하세요."
+  }
+}

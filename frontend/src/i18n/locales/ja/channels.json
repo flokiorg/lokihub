@@ -1,0 +1,182 @@
+{
+  "title": "ノード",
+  "channels": {
+    "title": "チャンネル",
+    "open": "チャンネルを開く",
+    "close": "チャンネルを閉じる",
+    "empty": "開いているチャンネルはありません",
+    "capacity": "容量",
+    "localBalance": "ローカル残高",
+    "remoteBalance": "リモート残高",
+    "status": {
+      "active": "アクティブ",
+      "inactive": "非アクティブ",
+      "pending": "保留中",
+      "closing": "クローズ中",
+      "online": "オンライン",
+      "offline": "オフライン",
+      "opening": "開設中"
+    },
+    "pendingClosed": "閉鎖保留中のチャンネル",
+    "table": {
+      "capacity": "容量",
+      "localBalance": "ローカル残高",
+      "remoteBalance": "リモート残高",
+      "actions": "操作",
+      "typeTooltip": "Lightning チャンネルの種類。ほとんどのユーザーにはプライベートが推奨されます。",
+      "reserveTooltip": "各参加者が不正行為防止のために確保する資金で、チャンネル存続中は使用できません。"
+    },
+    "closeDialog": {
+      "title": "チャンネルクローズモードを選択",
+      "headsUp": "注意！",
+      "cancel": "キャンセル",
+      "closedSuccess": "チャンネルが正常にクローズされました"
+    },
+    "nodeHealth": {
+      "tooltip": "ノードの健全性: {{percent}}%",
+      "dialogTitle": "ノードの健全性",
+      "close": "閉じる"
+    },
+    "dropdown": {
+      "viewFunding": "資金調達トランザクションを表示",
+      "viewNode": "{{explorer}}でノードを表示",
+      "setRoutingFee": "ルーティング手数料を設定"
+    },
+    "type": "タイプ",
+    "typePublic": "パブリック",
+    "typePrivate": "プライベート",
+    "reserve": "リザーブ"
+  },
+  "peers": {
+    "title": "ピア",
+    "connect": "ピアに接続",
+    "disconnect": "切断",
+    "empty": "接続中のピアはありません",
+    "pubkey": "公開鍵",
+    "alias": "エイリアス",
+    "disconnectConfirm": "確認",
+    "disconnectCancel": "キャンセル"
+  },
+  "liquidity": {
+    "title": "流動性",
+    "incoming": "受信",
+    "outgoing": "送信"
+  },
+  "menu": {
+    "node": "ノード",
+    "onchain": "オンチェーン",
+    "swaps": "スワップ",
+    "history": "履歴",
+    "management": "管理"
+  },
+  "onchain": {
+    "title": "オンチェーン",
+    "addressLabel": "オンチェーンアドレス",
+    "depositTitle": "{{chain}}を入金",
+    "generateNew": "新しいアドレスを生成",
+    "transactions": "オンチェーントランザクション",
+    "sent": "送信済み",
+    "sending": "送信中",
+    "received": "受信済み",
+    "receiving": "受信中"
+  },
+  "orderHistory": {
+    "title": "Order History",
+    "date": "Date",
+    "orderId": "Order ID",
+    "state": "State",
+    "detailsTitle": "Liquidity Order Details",
+    "reviewTitle": "Review Inbound Order",
+    "description": "チャンネル注文の履歴",
+    "noOrdersDesc": "まだチャンネルを注文していません。",
+    "noOrdersTitle": "注文履歴はありません",
+    "totalFee": "合計手数料",
+    "orderLiquidity": "流動性を注文"
+  },
+  "increaseCapacity": {
+    "title": "オンチェーンでチャンネルを開く",
+    "description": "チャンネルを開くために使用された資金から手数料を引いた金額が支出残高に追加されます",
+    "info": "オンチェーン資金でチャンネルを開きます。両者はいつでもチャンネルを閉じることができます。ただし、チャンネルの自分側に多くの資金を保持し、定期的に使用することで、チャンネルが開いたままになる可能性が高まります。",
+    "peerLabel": "ピア / LSP",
+    "customPeer": "カスタムピア",
+    "peer": "ピア",
+    "hostPort": "ホスト:ポート",
+    "increaseSpendingLabel": "支出残高を増やす",
+    "increaseSpendingTooltip": "必要な支出容量を設定します。チャンネルサイズ全体をカバーするためにオンチェーン{{chain}}を入金する必要があります。",
+    "currentBalance": "現在のオンチェーン残高：",
+    "noLsps": "LSPが設定されていません",
+    "selectProvider": "プロバイダーを選択",
+    "needIncoming": "代わりに受信容量が必要ですか？",
+    "buyInbound": "インバウンド流動性を購入",
+    "lookingToReceive": "代わりに資金を受け取りたいですか？受信容量が必要かもしれません。",
+    "publicChannel": "パブリックチャンネル",
+    "publicChannelDesc": "ほとんどのユーザーには推奨されません。",
+    "confirmTitle": "チャンネル開設を確認",
+    "confirmDesc": "以下の詳細で Lightning チャンネルを開いてもよいですか？",
+    "channelType": "チャンネルタイプ",
+    "paymentMethod": "支払い方法",
+    "nodePublicKey": "ノードの公開鍵",
+    "important": "重要：",
+    "confirmWarning": "チャンネルを開くにはオンチェーントランザクションとネットワーク手数料が必要です。この操作は取り消せません。続行前にすべての詳細を確認してください。",
+    "confirmAndOpen": "確認してチャンネルを開く",
+    "manageProviders": "プロバイダーの管理"
+  },
+  "orderChannel": {
+    "title": "Increase Inbound Liquidity",
+    "description": "Order a channel from your LSP to increase your receiving capacity",
+    "info": "Order a channel from an LSP. This provides inbound liquidity, allowing you to receive payments immediately after the channel is confirmed.",
+    "increaseInboundLabel": "Increase inbound liquidity",
+    "orderRange": "Order Range:",
+    "orderBtn": "Order Channel",
+    "opening": "Your channel is being opened",
+    "reviewTitle": "Review Channel Purchase",
+    "reviewDesc": "Complete Payment to open a channel to your node",
+    "spendingBalance": "Spending Balance",
+    "incomingLiquidity": "Incoming Liquidity",
+    "amountToPay": "Amount to pay",
+    "consentMsg": "By proceeding, you consent the channel opens immediately and that you lose the right to revoke once it is open.",
+    "otherOptions": "Other options",
+    "increaseSpending": "Increase Spending Balance",
+    "balanceMsg": "現在の残高は",
+    "currentlyHave": "現在お持ちの額は",
+    "deposited": "入金済み",
+    "depositedAmount": "入金額",
+    "estTime": "推定時間",
+    "includesCost": "チャンネル開設コストを含む",
+    "noPending": "保留中のチャンネル注文はありません",
+    "notEnough": "残高が不足しています",
+    "openedDesc": "チャンネルが開き、使用可能になりました。",
+    "openedTitle": "チャンネルが開きました",
+    "recommendDeposit": "入金を推奨します",
+    "return": "ノードに戻る",
+    "scanQr": "QRコードをスキャンして入金",
+    "sendFloki": "{{chain}}を送る",
+    "successMsg": "チャンネルの注文が成功しました",
+    "toOpen": "チャンネルを開くために",
+    "waitingChannel": "チャンネルが開くのを待っています...",
+    "waitingConf": "確認を待っています...",
+    "waitingTx": "トランザクションを待っています..."
+  },
+  "relay": {
+    "communityRelays": "コミュニティリレー",
+    "customRelays": "カスタムリレー",
+    "addCustomRelay": "カスタムリレーを追加",
+    "alreadyAdded": "このリレーは既に追加済みです",
+    "add": "追加"
+  },
+  "lspTerms": {
+    "title": "LSPの条件が変わりました",
+    "description": "LSPの現在の条件は告知された条件より不利です。購入前に比較してください。",
+    "value": "条件",
+    "announced": "告知",
+    "live": "現在",
+    "verdict": {
+      "worse": "不利",
+      "better": "有利",
+      "same": "同じ"
+    },
+    "cancel": "購入しない",
+    "confirm": "現在の条件で購入",
+    "changed": "確認後にLSPの条件が変わりました。内容を確認してもう一度お試しください。"
+  }
+}

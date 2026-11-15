@@ -1,0 +1,39 @@
+import useSWR from "swr";
+
+import { CashHubDeleteCheck, CashHubStats } from "src/types";
+import { swrFetcher } from "src/utils/swr";
+
+// Cash stats refresh on a timer because a bill's state changes without the
+// operator doing anything — a recipient redeems, a window expires, the sweep
+// reclaims. These are rolled-up totals and charts rather than rows the user
+// is acting on, so they tick at 10s; CashHubAllocations polls its own list
+// faster (3s) because that is where an operator is actually waiting to see a
+// redemption land.
+const CASH_REFRESH_INTERVAL_MS = 10_000;
+
+export function useCashHubStats(hubId: number | undefined, poll = true) {
+  return useSWR<CashHubStats>(
+    !!hubId && `/api/apps/${hubId}/cash-stats`,
+    swrFetcher,
+    { refreshInterval: poll ? CASH_REFRESH_INTERVAL_MS : 0 }
+  );
+}
+
+// Node-wide totals for the Cash Hubs list: the same figures as one hub's
+// dashboard, summed across every hub. Fetched from the server rather than by
+// summing each hub's own stats in the client, which would be one request per
+// hub and could not produce a correct median anyway.
+export function useAllCashHubStats(poll = true) {
+  return useSWR<CashHubStats>("/api/cash-hubs/stats", swrFetcher, {
+    refreshInterval: poll ? CASH_REFRESH_INTERVAL_MS : 0,
+  });
+}
+
+// What keeps a Cash Hub from being deleted, without deleting anything (Q23):
+// each blocker with its count and time, and the earliest possible deletion.
+export function useCashHubDeleteCheck(hubId: number | undefined) {
+  return useSWR<CashHubDeleteCheck>(
+    !!hubId && `/api/cash-hubs/${hubId}/delete-check`,
+    swrFetcher
+  );
+}

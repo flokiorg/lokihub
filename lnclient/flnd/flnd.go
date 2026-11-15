@@ -1,0 +1,2393 @@
+package flnd
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/flokiorg/lokihub/internal/testknobs"
+	"math"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/flokiorg/go-flokicoin/chaincfg/chainhash"
+	"github.com/flokiorg/lokihub/internal/decodepay"
+	"github.com/flokiorg/lokihub/internal/seed"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/flokiorg/flnd/lnrpc"
+	"github.com/flokiorg/flnd/lnrpc/invoicesrpc"
+	"github.com/flokiorg/flnd/lnrpc/peersrpc"
+	"github.com/flokiorg/flnd/lnrpc/routerrpc"
+	"github.com/flokiorg/flnd/lnrpc/walletrpc"
+	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/flokiorg/lokihub/nip47/notifications"
+	"github.com/flokiorg/lokihub/transactions"
+	"github.com/rs/zerolog"
+	// "gorm.io/gorm"
+)
+
+// clampUint64ToUint32 and clampInt64ToUint32 clamp externally/remotely
+// sourced fee-policy values (e.g. an LSP's quoted fee, or another node's
+// gossip-advertised routing policy) into uint32 route-hint fields without
+// silently wrapping an out-of-range value into a misleadingly small one.
+func clampUint64ToUint32(v uint64) uint32 {
+	if v > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return uint32(v)
+}
+
+func clampInt64ToUint32(v int64) uint32 {
+	if v < 0 {
+		return 0
+	}
+	if v > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return uint32(v)
+}
+
+type FLNDService struct {
+	client         *wrapper.FLNDWrapper
+	nodeInfo       *lnclient.NodeInfo
+	cancel         context.CancelFunc
+	ctx            context.Context
+	eventPublisher events.EventPublisher
+	logger         zerolog.Logger
+	// cfg is read-only here, used to build explorer deep-links (e.g. the
+	// closed-channel counterparty node URL) from the operator-selected
+	// Flokicoin Explorer. May be nil in tests that don't exercise those paths.
+	cfg config.Config
+
+	txCache      []lnclient.OnchainTransaction
+	txCacheMtx   sync.RWMutex
+	txCacheValid bool
+
+	// invoices is how far the invoice stream was read, so a resubscription
+	// resumes there and replays what it missed.
+	invoices invoiceCursor
+}
+
+func NewFLNDService(ctx context.Context, cfg config.Config, eventPublisher events.EventPublisher, flndAddress, flndCertHex, flndMacaroonHex string) (result lnclient.LNClient, err error) {
+	if flndAddress == "" || flndMacaroonHex == "" {
+		return nil, errors.New("one or more required FLND configuration are missing")
+	}
+
+	flndClient, err := wrapper.NewFLNDclient(wrapper.FLNDoptions{
+		Address:     flndAddress,
+		CertHex:     flndCertHex,
+		MacaroonHex: flndMacaroonHex,
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to create new FLND client")
+		return nil, err
+	}
+
+	var nodeInfo *lnclient.NodeInfo
+	maxRetries := 5
+	for i := range maxRetries {
+		nodeInfo, err = fetchNodeInfo(ctx, flndClient)
+		if err == nil {
+			break
+		}
+		logger.Logger.Error().Err(err).
+			Int("iteration", i).
+			Msg("Failed to connect to FLND, retrying in 2s")
+
+		select {
+		case <-time.After(2 * time.Second):
+		case <-ctx.Done():
+			logger.Logger.Error().Err(ctx.Err()).Msg("Context cancelled during FLND connection retries")
+			return nil, ctx.Err()
+		}
+	}
+
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to connect to FLND on final attempt, not attempting further retries")
+		return nil, err
+	}
+
+	flndCtx, cancel := context.WithCancel(ctx)
+
+	flndService := &FLNDService{
+		client:         flndClient,
+		nodeInfo:       nodeInfo,
+		cancel:         cancel,
+		ctx:            flndCtx,
+		eventPublisher: eventPublisher,
+		cfg:            cfg,
+		logger:         logger.Logger.With().Str("component", "flnd").Logger(),
+	}
+
+	go flndService.subscribePayments(flndCtx)
+	go flndService.subscribeInvoices(flndCtx)
+	go flndService.subscribeChannelEvents(flndCtx)
+	go flndService.subscribeOpenHoldInvoices(flndCtx)
+	go flndService.subscribeTransactions(flndCtx)
+	go flndService.trackForwardedPayments(flndCtx)
+	go flndService.checkKeysendHoldTime(flndCtx)
+
+	logger.Logger.Info().Str("alias", nodeInfo.Alias).Msg("Connected to FLND")
+
+	return flndService, nil
+}
+
+// checkKeysendHoldTime warns when the node accepts keysends but settles them
+// itself (no keysend-hold-time): lokihub then cannot fail a keysend a circle
+// wallet's checks refuse, as NIP-CW §Own Funds and Caps requires, and the
+// node keeps it. It never stops the Hub, and a node whose config cannot be
+// read is only logged.
+func (svc *FLNDService) checkKeysendHoldTime(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	info, err := svc.client.GetDebugInfo(ctx, &lnrpc.GetDebugInfoRequest{})
+	if err != nil {
+		svc.logger.Warn().Err(err).Msg("Could not read the node's config to check keysend-hold-time")
+		return
+	}
+	if !keysendsSelfSettled(info.GetConfig()) {
+		return
+	}
+	svc.logger.Warn().Msg("FLND accepts keysends without keysend-hold-time: it settles every keysend itself, " +
+		"so a keysend a circle wallet refuses (suspended, closing, over its receive room) is kept by the node " +
+		"instead of failed. Set keysend-hold-time (e.g. 30s) on any node hosting circle wallets")
+}
+
+// keysendsSelfSettled reports whether flnd's flattened config (GetDebugInfo)
+// accepts keysends with no keysend-hold-time.
+func keysendsSelfSettled(config map[string]string) bool {
+	if accept, _ := strconv.ParseBool(config["accept-keysend"]); !accept {
+		return false
+	}
+	hold, err := time.ParseDuration(config["keysend-hold-time"])
+	return err != nil || hold <= 0
+}
+
+func (svc *FLNDService) trackForwardedPayments(ctx context.Context) {
+	// NOTE: this only tracks payments when hub is online and attached
+	lastTime := time.Now()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(1 * time.Minute):
+			nextTime := time.Now()
+			forwardedPayments, err := svc.client.ForwardingHistory(ctx, &lnrpc.ForwardingHistoryRequest{
+				StartTime: uint64(lastTime.Unix()), //nolint:gosec // time.Now().Unix() is always positive post-1970
+				EndTime:   uint64(nextTime.Unix()), //nolint:gosec // time.Now().Unix() is always positive post-1970
+			})
+			if err != nil {
+				if ctx.Err() != nil {
+					// context was cancelled while waiting for the timer or during the RPC call, exiting
+					return
+				}
+				logger.Logger.Error().Err(err).Msg("failed to read forwarding history")
+				continue
+			}
+			for _, forwardingEvent := range forwardedPayments.ForwardingEvents {
+				svc.eventPublisher.Publish(&events.Event{
+					Event: "nwc_payment_forwarded",
+					Properties: &lnclient.PaymentForwardedEventProperties{
+						TotalFeeEarnedMloki:          forwardingEvent.FeeMsat,
+						OutboundAmountForwardedMloki: forwardingEvent.AmtOutMsat,
+					},
+				})
+			}
+			lastTime = nextTime
+		}
+	}
+}
+
+func (svc *FLNDService) subscribePayments(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			paymentStream, err := svc.client.SubscribePayments(ctx, &routerrpc.TrackPaymentsRequest{
+				NoInflightUpdates: true,
+			})
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				logger.Logger.Error().Err(err).Msg("Error subscribing to payments")
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(10 * time.Second):
+					continue
+				}
+			}
+		paymentsLoop:
+			for {
+				payment, err := paymentStream.Recv()
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					logger.Logger.Error().Err(err).Msg("Failed to receive payment")
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(2 * time.Second):
+						break paymentsLoop
+					}
+				}
+
+				switch payment.Status {
+				case lnrpc.Payment_FAILED:
+					logger.Logger.Info().Interface("payment", payment).Msg("Received payment failed notification")
+
+					transaction, err := flndPaymentToTransaction(payment)
+					if err != nil {
+						continue
+					}
+					svc.eventPublisher.Publish(&events.Event{
+						Event: "nwc_lnclient_payment_failed",
+						Properties: &lnclient.PaymentFailedEventProperties{
+							Transaction: transaction,
+							Reason:      payment.FailureReason.String(),
+						},
+					})
+				case lnrpc.Payment_SUCCEEDED:
+					logger.Logger.Info().Interface("payment", payment).Msg("Received payment sent notification")
+
+					transaction, err := flndPaymentToTransaction(payment)
+					if err != nil {
+						continue
+					}
+					svc.eventPublisher.Publish(&events.Event{
+						Event:      "nwc_lnclient_payment_sent",
+						Properties: transaction,
+					})
+				default:
+					continue
+				}
+			}
+		}
+	}
+}
+
+func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			invoiceStream, err := svc.client.SubscribeInvoices(ctx, svc.invoices.subscription())
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				logger.Logger.Error().Err(err).Msg("Error subscribing to invoices")
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(10 * time.Second):
+					continue
+				}
+			}
+		invoicesLoop:
+			for {
+				invoice, err := invoiceStream.Recv()
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					logger.Logger.Error().Err(err).Msg("Failed to receive invoice")
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(2 * time.Second):
+						break invoicesLoop
+					}
+				}
+
+				svc.invoices.seen(invoice)
+
+				// A keysend the node holds (flnd's keysend-hold-time) is
+				// followed until it is accepted, so lokihub can settle or fail
+				// it at the final hop (NIP-CW §Own Funds and Caps).
+				if invoice.State == lnrpc.Invoice_OPEN && invoice.IsKeysend {
+					go svc.subscribeSingleInvoice(invoice.RHash)
+					continue
+				}
+				if invoice.State != lnrpc.Invoice_SETTLED {
+					continue
+				}
+
+				logger.Logger.Info().Interface("invoice", invoice).Msg("Received new invoice")
+
+				svc.eventPublisher.Publish(&events.Event{
+					Event:      "nwc_lnclient_payment_received",
+					Properties: flndInvoiceToTransaction(invoice),
+				})
+			}
+		}
+	}
+}
+
+func (svc *FLNDService) subscribeChannelEvents(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			channelEvents, err := svc.client.SubscribeChannelEvents(ctx, &lnrpc.ChannelEventSubscription{})
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				logger.Logger.Error().Err(err).Msg("Error subscribing to channel events")
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(10 * time.Second):
+					continue
+				}
+			}
+		channelEventsLoop:
+			for {
+				event, err := channelEvents.Recv()
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					logger.Logger.Error().Err(err).Msg("Failed to receive channel event")
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(2 * time.Second):
+						break channelEventsLoop
+					}
+				}
+
+				switch update := event.Channel.(type) {
+				case *lnrpc.ChannelEventUpdate_OpenChannel:
+					channel := update.OpenChannel
+					logger.Logger.Info().
+						Str("counterparty_node_id", channel.RemotePubkey).
+						Bool("public", !channel.Private).
+						Int64("capacity", channel.Capacity).
+						Bool("is_outbound", channel.Initiator).
+						Msg("Channel opened")
+
+					svc.eventPublisher.Publish(&events.Event{
+						Event: "nwc_channel_ready",
+						Properties: map[string]interface{}{
+							"counterparty_node_id": channel.RemotePubkey,
+							"node_type":            config.FLNDBackendType,
+							"public":               !channel.Private,
+							"capacity":             channel.Capacity,
+							"is_outbound":          channel.Initiator,
+						},
+					})
+				case *lnrpc.ChannelEventUpdate_ClosedChannel:
+					closureReason := update.ClosedChannel.CloseType.String()
+					counterpartyNodeId := update.ClosedChannel.RemotePubkey
+
+					logger.Logger.Info().
+						Str("counterparty_node_id", counterpartyNodeId).
+						Str("reason", closureReason).
+						Msg("Channel closed")
+
+					properties := map[string]interface{}{
+						"counterparty_node_id": counterpartyNodeId,
+						"reason":               closureReason,
+						"node_type":            config.FLNDBackendType,
+					}
+					// Build the explorer deep-link from the operator-selected
+					// Flokicoin Explorer, never a hardcoded host. With no
+					// explorer selected the field is omitted (not a baked-in
+					// default); it is a pure display string, no backend dial.
+					if nodeURL := svc.counterpartyNodeURL(counterpartyNodeId); nodeURL != "" {
+						properties["counterparty_node_url"] = nodeURL
+					}
+
+					svc.eventPublisher.Publish(&events.Event{
+						Event:      "nwc_channel_closed",
+						Properties: properties,
+					})
+				}
+			}
+		}
+	}
+}
+
+// counterpartyNodeURL builds the explorer web page for a node from the
+// operator-selected Flokicoin Explorer (config.GetMempoolApi), e.g.
+// "<explorer>/lightning/node/<id>". It returns "" when no explorer is
+// configured (or no config is wired), so the closed-channel event omits the
+// link rather than pointing at a hardcoded host. Pure string building — no
+// network call.
+func (svc *FLNDService) counterpartyNodeURL(nodeID string) string {
+	if svc.cfg == nil || nodeID == "" {
+		return ""
+	}
+	base := strings.TrimRight(svc.cfg.GetMempoolApi(), "/")
+	if base == "" {
+		return ""
+	}
+	return base + "/lightning/node/" + nodeID
+}
+
+func (svc *FLNDService) subscribeOpenHoldInvoices(ctx context.Context) {
+	oneWeekAgo := time.Now().AddDate(0, 0, -7).Unix()
+
+	listInvoicesResponse, err := svc.client.ListInvoices(ctx, &lnrpc.ListInvoiceRequest{
+		PendingOnly:       true,
+		CreationDateStart: uint64(oneWeekAgo), //nolint:gosec // time.Now()-derived Unix seconds is always positive
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to list invoices for open hold invoices subscription")
+		return
+	}
+
+	for _, invoice := range listInvoicesResponse.Invoices {
+		// A keysend held while lokihub was down is decided now.
+		if invoice.State == lnrpc.Invoice_OPEN || (invoice.State == lnrpc.Invoice_ACCEPTED && invoice.IsKeysend) {
+			paymentHashHex := hex.EncodeToString(invoice.RHash)
+			logger.Logger.Debug().
+				Str("payment_hash", paymentHashHex).
+				Uint64("addIndex", invoice.AddIndex).
+				Msg("Resubscribing to pending hold invoice")
+			go svc.subscribeSingleInvoice(invoice.RHash)
+		}
+	}
+}
+
+func (svc *FLNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
+	// Use the global context for the lifetime of this subscription, but create a cancellable one for this specific task
+	// This allows the goroutine to be potentially cancelled externally if needed, though it primarily exits on invoice state change.
+	// We use a background context derived from the global one to avoid cancelling if the original request context finishes.
+	ctx, cancel := context.WithCancel(svc.ctx)
+	defer cancel() // Ensure cancellation happens on exit
+
+	paymentHashHex := hex.EncodeToString(paymentHashBytes)
+	log := logger.Logger.With().Str("payment_hash", paymentHashHex).Logger()
+
+	log.Debug().Msg("Starting subscribeSingleInvoice goroutine")
+
+	subReq := &invoicesrpc.SubscribeSingleInvoiceRequest{
+		RHash: paymentHashBytes,
+	}
+
+	invoiceStream, err := svc.client.SubscribeSingleInvoice(ctx, subReq)
+	if err != nil {
+		log.Error().Err(err).Msg("SubscribeSingleInvoice call failed")
+		// Goroutine will exit
+		return
+	}
+
+	log.Debug().Msg("Successfully subscribed to single invoice stream")
+
+	defer func() {
+		log.Debug().Msg("Exiting subscribeSingleInvoice goroutine")
+		if r := recover(); r != nil {
+			log.Error().Interface("panic", r).Msg("PANIC recovered in single invoice stream processing")
+		}
+	}()
+
+	for {
+		invoice, err := invoiceStream.Recv()
+
+		if err != nil {
+			if ctx.Err() != nil {
+				log.Debug().Msg("Context cancelled, exiting single invoice subscription loop")
+				return
+			}
+			log.Error().Err(err).Msg("Failed to receive single invoice update from stream")
+			return
+		}
+
+		log.Debug().
+			Str("rawState", invoice.State.String()).
+			Uint64("addIndex", invoice.AddIndex).
+			Uint64("settleIndex", invoice.SettleIndex).
+			Int64("amtPaidMloki", invoice.AmtPaidMsat).
+			Msg("Raw update received from single invoice stream")
+
+		switch invoice.State {
+		case lnrpc.Invoice_ACCEPTED:
+			log.Info().Msg("Hold invoice accepted, publishing internal event")
+			transaction := flndInvoiceToTransaction(invoice)
+			var minExpiry uint32
+			for _, htlc := range invoice.Htlcs {
+				if htlc.ExpiryHeight < int32(minExpiry) || minExpiry == 0 { //nolint:gosec // block height, always tiny relative to int32 range
+					minExpiry = uint32(htlc.ExpiryHeight) //nolint:gosec // LND-reported HTLC expiry height is always non-negative
+				}
+			}
+			transaction.SettleDeadline = &minExpiry
+			svc.eventPublisher.Publish(&events.Event{
+				Event:      "nwc_lnclient_hold_invoice_accepted",
+				Properties: transaction,
+			})
+		case lnrpc.Invoice_CANCELED:
+			log.Info().Msg("Hold invoice canceled, ending subscription")
+			return // Invoice reached final state, exit goroutine
+		case lnrpc.Invoice_SETTLED:
+			return // Invoice reached final state, exit goroutine
+		case lnrpc.Invoice_OPEN:
+			// Continue loop
+		}
+	}
+}
+
+func (svc *FLNDService) Shutdown() error {
+	logger.Logger.Info().Msg("cancelling FLND context")
+	svc.cancel()
+	return nil
+}
+
+func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*lnclient.PayInvoiceResponse, error) {
+	const MAX_PARTIAL_PAYMENTS = 16
+
+	paymentRequest, err := decodepay.Decode(payReq)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("bolt11", payReq).
+			Msg("Failed to decode bolt11 invoice")
+		return nil, err
+	}
+
+	paymentAmountMloki := uint64(paymentRequest.AmountMloki) //nolint:gosec // mloki amounts are always far below int64/uint64 range
+	if amount != nil {
+		paymentAmountMloki = *amount
+	}
+	// Regtest test hooks only (testknobs is inert in other builds): a payment
+	// held in flight until cleared, or the next route over its fee bound.
+	if err := testknobs.WaitPayments(svc.ctx); err != nil {
+		return nil, err
+	}
+	if testknobs.TakeRouteOverBound() {
+		return nil, errors.New(lnrpc.PaymentFailureReason_FAILURE_REASON_NO_ROUTE.String())
+	}
+	// feeLimitMloki, when supplied, is the fee the caller already WITHHELD from the
+	// payment and is therefore willing to spend delivering it. Honouring it is what
+	// keeps payout + fee inside the amount being paid, so the node never covers a
+	// route out of its own balance: LND fails a payment rather than exceed this, so
+	// an over-priced route becomes a failed redeem instead of a silent subsidy.
+	//
+	// Falling back to the fee RESERVE when it is nil is deliberate and is the older
+	// behaviour: the reserve is max(1%, 10_000), which for anything under 1,000,000
+	// is a flat 10,000 — far above a small payment's own quoted fee, which is exactly
+	// how the node ended up paying thousands of times what it earned on a small cash
+	// redeem. Callers that have no fee of their own to spend still get it.
+	feeLimit := transactions.CalculateFeeReserveMloki(paymentAmountMloki)
+	if feeLimitMloki != nil {
+		feeLimit = *feeLimitMloki
+	}
+	sendRequest := &routerrpc.SendPaymentRequest{
+		PaymentRequest: payReq,
+		MaxParts:       MAX_PARTIAL_PAYMENTS,
+		FeeLimitMsat:   int64(feeLimit), //nolint:gosec // msat amounts are always far below int64 range
+	}
+
+	if amount != nil {
+		sendRequest.AmtMsat = int64(*amount) //nolint:gosec // msat amounts are always far below int64 range
+	}
+
+	payStream, err := svc.client.SendPayment(svc.ctx, sendRequest)
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("bolt11", payReq).Msg("SendPayment failed")
+		return svc.lookupPaymentAfterError(paymentRequest.PaymentHash, err)
+	}
+
+	resp, err := svc.getPaymentResult(payStream)
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("bolt11", payReq).Msg("Couldn't get response from paystream")
+		return svc.lookupPaymentAfterError(paymentRequest.PaymentHash, err)
+	}
+
+	if resp.Status != lnrpc.Payment_SUCCEEDED {
+		failureReasonMessage := resp.FailureReason.String()
+		logger.Logger.Error().
+			Str("bolt11", payReq).
+			Str("reason", failureReasonMessage).
+			Msg("Payment not successful")
+		return nil, errors.New(failureReasonMessage)
+	}
+
+	if resp.PaymentPreimage == "" {
+		logger.Logger.Error().Str("bolt11", payReq).Msg("No payment preimage in response")
+		return nil, fmt.Errorf("%w: no preimage in response", lnclient.ErrPaymentPending)
+	}
+
+	return &lnclient.PayInvoiceResponse{
+		Preimage: resp.PaymentPreimage,
+		Fee:      uint64(resp.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
+	}, nil
+}
+
+func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string) (*lnclient.PayKeysendResponse, error) {
+	return svc.SendKeysendWithFeeLimit(amount, destination, custom_records, preimage, transactions.CalculateFeeReserveMloki(amount))
+}
+
+// SendKeysendWithFeeLimit is SendKeysend with the routing fee capped at
+// feeLimitMloki: a Circle Wallet's keysend never pays more than its reserve.
+func (svc *FLNDService) SendKeysendWithFeeLimit(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string, feeLimitMloki uint64) (*lnclient.PayKeysendResponse, error) {
+	if err := testknobs.WaitPayments(svc.ctx); err != nil {
+		return nil, err
+	}
+	destBytes, err := hex.DecodeString(destination)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("payee_pubkey", destination).
+			Str("preimage", preimage).
+			Msg("Failed to decode payee pubkey")
+		return nil, err
+	}
+	preImageBytes, err := lnclient.DecodeHash32("preimage", preimage)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("payee_pubkey", destination).
+			Str("preimage", preimage).
+			Msg("Invalid preimage")
+		return nil, err
+	}
+
+	paymentHash256 := sha256.New()
+	paymentHash256.Write(preImageBytes)
+	paymentHashBytes := paymentHash256.Sum(nil)
+	paymentHash := hex.EncodeToString(paymentHashBytes)
+
+	destCustomRecords := map[uint64][]byte{}
+	for _, record := range custom_records {
+		decodedValue, err := hex.DecodeString(record.Value)
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("payment_hash", paymentHash).
+				Str("preimage", preimage).
+				Msg("Failed to decode custom records")
+			return nil, err
+		}
+		destCustomRecords[record.Type] = decodedValue
+	}
+	const MAX_PARTIAL_PAYMENTS = 16
+	const SEND_PAYMENT_TIMEOUT = 50
+	const KEYSEND_CUSTOM_RECORD = 5482373484
+	destCustomRecords[KEYSEND_CUSTOM_RECORD] = preImageBytes
+	sendPaymentRequest := &routerrpc.SendPaymentRequest{
+		Dest:              destBytes,
+		AmtMsat:           int64(amount), //nolint:gosec // msat amounts are always far below int64 range
+		PaymentHash:       paymentHashBytes,
+		DestFeatures:      []lnrpc.FeatureBit{lnrpc.FeatureBit_TLV_ONION_REQ},
+		DestCustomRecords: destCustomRecords,
+		MaxParts:          MAX_PARTIAL_PAYMENTS,
+		TimeoutSeconds:    SEND_PAYMENT_TIMEOUT,
+		FeeLimitMsat:      int64(feeLimitMloki), //nolint:gosec // msat amounts are always far below int64 range
+	}
+
+	payStream, err := svc.client.SendPayment(svc.ctx, sendPaymentRequest)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Str("preimage", preimage).
+			Msg("Failed to make keysend payment")
+		return svc.keysendOutcomeAfterError(paymentHash, err)
+	}
+
+	resp, err := svc.getPaymentResult(payStream)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Str("preimage", preimage).
+			Msg("Couldn't get response from paystream")
+		return svc.keysendOutcomeAfterError(paymentHash, err)
+	}
+
+	if resp.Status != lnrpc.Payment_SUCCEEDED {
+		failureReasonMessage := resp.FailureReason.String()
+		logger.Logger.Error().
+			Str("payment_hash", paymentHash).
+			Str("preimage", preimage).
+			Str("reason", failureReasonMessage).
+			Msg("Keysend not successful")
+		return nil, errors.New(failureReasonMessage)
+	}
+
+	if resp.PaymentPreimage != preimage {
+		logger.Logger.Error().
+			Str("payment_hash", paymentHash).
+			Str("preimage", preimage).
+			Msg("Preimage in keysend response does not match")
+		return nil, errors.New("preimage in keysend response does not match")
+	}
+	logger.Logger.Info().
+		Str("payment_hash", paymentHash).
+		Str("preimage", preimage).
+		Msg("Keysend payment successful")
+
+	return &lnclient.PayKeysendResponse{
+		Fee: uint64(resp.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
+	}, nil
+}
+
+// keysendOutcomeAfterError is lookupPaymentAfterError for a keysend: a broken
+// call or stream is not a failed payment, so it is reported as one only when the
+// node says so, and as lnclient.ErrPaymentPending when it can't tell.
+func (svc *FLNDService) keysendOutcomeAfterError(paymentHash string, callErr error) (*lnclient.PayKeysendResponse, error) {
+	resp, err := svc.lookupPaymentAfterError(paymentHash, callErr)
+	if err != nil {
+		return nil, err
+	}
+	return &lnclient.PayKeysendResponse{Fee: resp.Fee}, nil
+}
+
+// lookupPaymentAfterError asks the node for a payment's state by hash after
+// the call or stream that was reporting it failed. The HTLC may still be in
+// flight then, so a failure is returned only when the node says the payment
+// failed or never started; anything else wraps lnclient.ErrPaymentPending.
+func (svc *FLNDService) lookupPaymentAfterError(paymentHash string, callErr error) (*lnclient.PayInvoiceResponse, error) {
+	pending := fmt.Errorf("%w: %w", lnclient.ErrPaymentPending, callErr)
+	lookup, err := svc.LookupPayment(svc.ctx, paymentHash)
+	if err != nil {
+		logger.Logger.Warn().Err(err).Str("payment_hash", paymentHash).Msg("Payment lookup failed, outcome unknown")
+		return nil, pending
+	}
+	switch lookup.Status {
+	case lnclient.PaymentStatusSucceeded:
+		return &lnclient.PayInvoiceResponse{Preimage: lookup.Preimage, Fee: lookup.FeeMloki}, nil
+	case lnclient.PaymentStatusFailed:
+		if lookup.FailureReason == "" {
+			return nil, callErr
+		}
+		return nil, errors.New(lookup.FailureReason)
+	case lnclient.PaymentStatusInFlight:
+	}
+	return nil, pending
+}
+
+// LookupPayment asks the node for an outgoing payment's state by hash
+// (lnclient.PaymentLooker). A payment the node has no record of never started,
+// which is a definite failure with no reason given.
+func (svc *FLNDService) LookupPayment(ctx context.Context, paymentHash string) (*lnclient.PaymentLookup, error) {
+	hash, err := hex.DecodeString(paymentHash)
+	if err != nil {
+		return nil, fmt.Errorf("invalid payment hash: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	var payment *lnrpc.Payment
+	stream, err := svc.client.SubscribePayment(ctx, &routerrpc.TrackPaymentRequest{PaymentHash: hash})
+	if err == nil {
+		payment, err = stream.Recv()
+	}
+	if status.Code(err) == codes.NotFound {
+		return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusFailed}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	switch {
+	case payment.Status == lnrpc.Payment_SUCCEEDED && payment.PaymentPreimage != "":
+		return &lnclient.PaymentLookup{
+			Status:   lnclient.PaymentStatusSucceeded,
+			Preimage: payment.PaymentPreimage,
+			FeeMloki: uint64(payment.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
+		}, nil
+	case payment.Status == lnrpc.Payment_FAILED:
+		return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusFailed, FailureReason: payment.FailureReason.String()}, nil
+	}
+	return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusInFlight}, nil
+}
+
+// getPaymentResult reads a payment's update stream until the payment is final:
+// SUCCEEDED or FAILED. Every other status (INITIATED, which a node run with
+// routerrpc.usestatusinitiated sends first, IN_FLIGHT, UNKNOWN) means the HTLCs
+// may still be out, so it is never taken as an outcome. A stream that ends
+// before a final status returns its error, and the caller then asks the node.
+func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Client) (*lnrpc.Payment, error) {
+	for {
+		payment, err := stream.Recv()
+		if err != nil {
+			return nil, err
+		}
+
+		switch payment.Status {
+		case lnrpc.Payment_SUCCEEDED, lnrpc.Payment_FAILED:
+			return payment, nil
+		default:
+			// Not final yet: read the next update.
+		}
+	}
+}
+
+func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (transaction *lnclient.Transaction, err error) {
+	var descriptionHashBytes []byte
+
+	if descriptionHash != "" {
+		descriptionHashBytes, err = lnclient.DecodeHash32("description hash", descriptionHash)
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("descriptionHash", descriptionHash).
+				Msg("Invalid description hash")
+			return nil, err
+		}
+	}
+
+	if expiry == 0 {
+		expiry = lnclient.DEFAULT_INVOICE_EXPIRY
+	}
+
+	channels, err := svc.ListChannels(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	hasPublicChannels := false
+	for _, channel := range channels {
+		if channel.Active && channel.Public {
+			hasPublicChannels = true
+			break
+		}
+	}
+
+	var hints []*lnrpc.RouteHint
+	// JIT Channel Hints
+	if lspJitChannelSCID != nil && lspCltvExpiryDelta != nil && lspFeeBaseMloki != nil && lspFeeProportionalMillionths != nil {
+		// Parse SCID
+		scid, err := strconv.ParseUint(*lspJitChannelSCID, 10, 64)
+		if err != nil {
+			logger.Logger.Error().Err(err).Str("scid", *lspJitChannelSCID).Msg("Invalid LSP JIT Channel SCID")
+			return nil, err
+		}
+
+		if throughNodePubkey == nil {
+			return nil, errors.New("throughNodePubkey (LSP Pubkey) is required for JIT channel hints")
+		}
+
+		hints = append(hints, &lnrpc.RouteHint{
+			HopHints: []*lnrpc.HopHint{
+				{
+					NodeId:                    *throughNodePubkey,
+					ChanId:                    scid,
+					FeeBaseMsat:               clampUint64ToUint32(*lspFeeBaseMloki),
+					FeeProportionalMillionths: *lspFeeProportionalMillionths,
+					CltvExpiryDelta:           uint32(*lspCltvExpiryDelta),
+				},
+			},
+		})
+	}
+
+	// Private Channel Hints: Add hints for private channels when no public channels exist
+	// This is critical for mobile wallets that only have private channels
+	if !hasPublicChannels {
+		channelsRes, err := svc.client.ListChannels(ctx, &lnrpc.ListChannelsRequest{
+			PrivateOnly: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// Structure to hold channel info for sorting
+		type channelCandidate struct {
+			channel      *lnrpc.Channel
+			chanInfo     *lnrpc.ChannelEdge
+			remotePolicy *lnrpc.RoutingPolicy
+			channelId    uint64
+		}
+
+		var candidates []channelCandidate
+
+		// First pass: collect valid channels with capacity and active status checks
+		for _, channel := range channelsRes.Channels {
+			// If throughNodePubkey is specified (LSP scenario), filter by it
+			// Otherwise, include all private channels for general mobile wallet use
+			if throughNodePubkey != nil && channel.RemotePubkey != *throughNodePubkey {
+				continue
+			}
+
+			// Check if channel is active - CRITICAL for payment success
+			if !channel.Active {
+				logger.Logger.Debug().
+					Uint64("channel_id", channel.ChanId).
+					Str("remote_pubkey", channel.RemotePubkey).
+					Msg("Skipping inactive channel for route hints")
+				continue
+			}
+
+			// Check if channel has sufficient inbound capacity (remote balance)
+			// RemoteBalance is in loki, amount is in milli-loki (mloki)
+			remoteBalanceMloki := channel.RemoteBalance * 1000
+			if amount > 0 && remoteBalanceMloki < amount {
+				logger.Logger.Debug().
+					Uint64("channel_id", channel.ChanId).
+					Int64("remote_balance_mloki", remoteBalanceMloki).
+					Int64("invoice_amount_mloki", amount).
+					Msg("Skipping channel with insufficient inbound capacity for route hints")
+				continue
+			}
+
+			chanInfo, err := svc.client.GetChanInfo(ctx, &lnrpc.ChanInfoRequest{
+				ChanId: channel.ChanId,
+			})
+			if err != nil {
+				logger.Logger.Error().Err(err).
+					Uint64("channel_id", channel.ChanId).
+					Msg("Unable to get channel info")
+				continue
+			}
+
+			var remotePolicy *lnrpc.RoutingPolicy
+			if chanInfo.Node1Pub == channel.RemotePubkey {
+				remotePolicy = chanInfo.Node1Policy
+			} else {
+				remotePolicy = chanInfo.Node2Policy
+			}
+
+			if remotePolicy == nil {
+				logger.Logger.Debug().
+					Uint64("channel_id", channel.ChanId).
+					Msg("Remote channel policy does not exist")
+				continue
+			}
+
+			channelId := chanInfo.ChannelId
+			if channel.PeerScidAlias != 0 {
+				channelId = channel.PeerScidAlias
+			}
+
+			candidates = append(candidates, channelCandidate{
+				channel:      channel,
+				chanInfo:     chanInfo,
+				remotePolicy: remotePolicy,
+				channelId:    channelId,
+			})
+		}
+
+		// Sort candidates by remote balance (descending) to prioritize best capacity channels
+		sort.Slice(candidates, func(i, j int) bool {
+			return candidates[i].channel.RemoteBalance > candidates[j].channel.RemoteBalance
+		})
+
+		// Select top N channels for hints
+		const MAX_ROUTE_HINTS = 3
+		selectedCount := 0
+		for _, candidate := range candidates {
+			if selectedCount >= MAX_ROUTE_HINTS {
+				break
+			}
+
+			hint := &lnrpc.RouteHint{
+				HopHints: []*lnrpc.HopHint{
+					{
+						NodeId:                    candidate.channel.RemotePubkey,
+						ChanId:                    candidate.channelId,
+						FeeBaseMsat:               clampInt64ToUint32(candidate.remotePolicy.FeeBaseMsat),
+						FeeProportionalMillionths: clampInt64ToUint32(candidate.remotePolicy.FeeRateMilliMsat),
+						CltvExpiryDelta:           candidate.remotePolicy.TimeLockDelta,
+					},
+				},
+			}
+
+			hints = append(hints, hint)
+			selectedCount++
+
+			logger.Logger.Debug().
+				Uint64("channel_id", candidate.channel.ChanId).
+				Int64("remote_balance_sat", candidate.channel.RemoteBalance).
+				Uint32("fee_base_mloki", clampInt64ToUint32(candidate.remotePolicy.FeeBaseMsat)).
+				Str("remote_pubkey", candidate.channel.RemotePubkey).
+				Msg("Added channel to route hints")
+		}
+
+		logger.Logger.Info().
+			Int("selected_hints", selectedCount).
+			Int("total_candidates", len(candidates)).
+			Int64("invoice_amount_mloki", amount).
+			Bool("filtered_by_pubkey", throughNodePubkey != nil).
+			Msg("Route hint selection completed")
+
+		if len(hints) == 0 {
+			if throughNodePubkey != nil {
+				return nil, errors.New("no suitable channel found for given throughNodePubkey (check capacity and active status)")
+			}
+			// For wallets with only private channels but no suitable hints, this is acceptable
+			// FLND will handle it, though payment success may be lower
+			logger.Logger.Warn().
+				Int64("invoice_amount_mloki", amount).
+				Msg("No suitable private channels found for route hints - invoice may have reduced payment success")
+		}
+	}
+
+	addInvoiceRequest := &lnrpc.Invoice{
+		ValueMsat:       amount,
+		Memo:            description,
+		DescriptionHash: descriptionHashBytes,
+		Expiry:          expiry,
+		RouteHints:      hints,
+		Private:         !hasPublicChannels, // use private channel hints in the invoice
+	}
+
+	resp, err := svc.client.AddInvoice(ctx, addInvoiceRequest)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to create invoice")
+		return nil, err
+	}
+
+	inv, err := svc.client.LookupInvoice(ctx, &lnrpc.PaymentHash{RHash: resp.RHash})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to lookup invoice")
+		return nil, err
+	}
+
+	transaction = flndInvoiceToTransaction(inv)
+	return transaction, nil
+}
+
+func (svc *FLNDService) MakeHoldInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, paymentHash string) (transaction *lnclient.Transaction, err error) {
+	var descriptionHashBytes []byte
+	var paymentHashBytes []byte
+
+	if descriptionHash != "" {
+		descriptionHashBytes, err = lnclient.DecodeHash32("description hash", descriptionHash)
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("descriptionHash", descriptionHash).
+				Msg("Invalid description hash")
+			return nil, err
+		}
+	}
+
+	paymentHashBytes, err = lnclient.DecodeHash32("payment hash", paymentHash)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Invalid payment hash")
+		return nil, err
+	}
+
+	if expiry == 0 {
+		expiry = lnclient.DEFAULT_INVOICE_EXPIRY
+	}
+
+	channels, err := svc.ListChannels(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	hasPublicChannels := false
+	for _, channel := range channels {
+		if channel.Active && channel.Public {
+			hasPublicChannels = true
+		}
+	}
+
+	addInvoiceRequest := &invoicesrpc.AddHoldInvoiceRequest{
+		ValueMsat:       amount,
+		Memo:            description,
+		DescriptionHash: descriptionHashBytes,
+		Expiry:          expiry,
+		Private:         !hasPublicChannels,
+		Hash:            paymentHashBytes,
+	}
+
+	_, err = svc.client.AddHoldInvoice(ctx, addInvoiceRequest)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to create hold invoice")
+		return nil, err
+	}
+
+	// Start subscribing to updates for this specific hold invoice in a separate goroutine
+	go svc.subscribeSingleInvoice(paymentHashBytes)
+	logger.Logger.Info().Str("payment_hash", paymentHash).Msg("Launched single invoice subscription goroutine")
+
+	inv, err := svc.client.LookupInvoice(ctx, &lnrpc.PaymentHash{RHash: paymentHashBytes})
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("payment_hash", paymentHash).Msg("Failed to lookup hold invoice after creation")
+		return nil, err
+	}
+
+	transaction = flndInvoiceToTransaction(inv)
+	return transaction, nil
+}
+
+func (svc *FLNDService) SettleHoldInvoice(ctx context.Context, preimage string) (err error) {
+	preimageBytes, err := lnclient.DecodeHash32("preimage", preimage)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("preimage", preimage).
+			Msg("Invalid preimage")
+		return err
+	}
+
+	_, err = svc.client.SettleInvoice(ctx, &invoicesrpc.SettleInvoiceMsg{
+		Preimage: preimageBytes,
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("preimage", preimage).
+			Msg("Failed to settle hold invoice")
+		return err
+	}
+	return nil
+}
+
+func (svc *FLNDService) CancelHoldInvoice(ctx context.Context, paymentHash string) (err error) {
+	paymentHashBytes, err := lnclient.DecodeHash32("payment hash", paymentHash)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Invalid payment hash")
+		return err
+	}
+
+	_, err = svc.client.CancelInvoice(ctx, &invoicesrpc.CancelInvoiceMsg{
+		PaymentHash: paymentHashBytes,
+	})
+	if err != nil && cancelledAlready(err) {
+		return nil
+	}
+	if err != nil && invoiceUnknown(err) {
+		return fmt.Errorf("%w: %v", lnclient.ErrInvoiceNotFound, err)
+	}
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Failed to cancel hold invoice")
+		return err
+	}
+	return nil
+}
+
+func (svc *FLNDService) LookupInvoice(ctx context.Context, paymentHash string) (transaction *lnclient.Transaction, err error) {
+	paymentHashBytes, err := lnclient.DecodeHash32("payment hash", paymentHash)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Invalid payment hash")
+		return nil, err
+	}
+
+	flndInvoice, err := svc.client.LookupInvoice(ctx, &lnrpc.PaymentHash{RHash: paymentHashBytes})
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Failed to lookup invoice")
+		return nil, err
+	}
+
+	transaction = flndInvoiceToTransaction(flndInvoice)
+	return transaction, nil
+}
+
+// FIXME: this always returns limit * 2 transactions and offset is not used correctly
+func (svc *FLNDService) ListTransactions(ctx context.Context, from, until, limit, offset uint64, unpaid bool, invoiceType string) (transactions []lnclient.Transaction, err error) {
+	// Fetch invoices
+	var invoices []*lnrpc.Invoice
+	if invoiceType == "" || invoiceType == "incoming" {
+		incomingResp, err := svc.client.ListInvoices(ctx, &lnrpc.ListInvoiceRequest{Reversed: true, NumMaxInvoices: limit, IndexOffset: offset})
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to fetch incoming invoices")
+			return nil, err
+		}
+		invoices = incomingResp.Invoices
+	}
+	for _, invoice := range invoices {
+		// this will cause retrieved amount to be less than limit if unpaid is false
+		if !unpaid && invoice.State != lnrpc.Invoice_SETTLED {
+			continue
+		}
+
+		transaction := flndInvoiceToTransaction(invoice)
+		transactions = append(transactions, *transaction)
+	}
+	// Fetch payments
+	var payments []*lnrpc.Payment
+	if invoiceType == "" || invoiceType == "outgoing" {
+		// Not just pending but failed payments will also be included because of IncludeIncomplete
+		outgoingResp, err := svc.client.ListPayments(ctx, &lnrpc.ListPaymentsRequest{Reversed: true, MaxPayments: limit, IndexOffset: offset, IncludeIncomplete: unpaid})
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to fetch outgoing invoices")
+			return nil, err
+		}
+		payments = outgoingResp.Payments
+	}
+	for _, payment := range payments {
+		if payment.Status == lnrpc.Payment_FAILED {
+			// don't return failed payments for now
+			// this will cause retrieved amount to be less than limit
+			continue
+		}
+
+		transaction, err := flndPaymentToTransaction(payment)
+		if err != nil {
+			return nil, err
+		}
+
+		transactions = append(transactions, *transaction)
+	}
+
+	// sort by created date descending
+	sort.SliceStable(transactions, func(i, j int) bool {
+		return transactions[i].CreatedAt > transactions[j].CreatedAt
+	})
+
+	return transactions, nil
+}
+
+func (svc *FLNDService) GetInfo(ctx context.Context) (info *lnclient.NodeInfo, err error) {
+	return svc.nodeInfo, nil
+}
+
+func (svc *FLNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, error) {
+	activeResp, err := svc.client.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch channels")
+		return nil, err
+	}
+	pendingResp, err := svc.client.PendingChannels(ctx, &lnrpc.PendingChannelsRequest{})
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to fetch pending channels")
+		pendingResp = &lnrpc.PendingChannelsResponse{}
+	}
+
+	nodeInfo, err := svc.client.GetInfo(ctx, &lnrpc.GetInfoRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
+		return nil, err
+	}
+
+	// hardcoding required confirmations as there seems to be no way to get the number of required confirmations in FLND
+	var confirmationsRequired uint32 = 6
+	// get recent transactions to check how many confirmations pending channel(s) have
+	// Guard against underflow (wrapping to a huge uint32, then a garbage
+	// negative StartHeight) on a fresh chain where BlockHeight < 6.
+	var startHeight int32
+	if nodeInfo.BlockHeight > confirmationsRequired {
+		startHeight = int32(nodeInfo.BlockHeight - confirmationsRequired) //nolint:gosec // guarded above; real block heights are far below int32 range
+	}
+	recentOnchainTransactions, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{
+		StartHeight: startHeight,
+	})
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to fetch onchain transactions")
+		recentOnchainTransactions = &lnrpc.TransactionDetails{}
+	}
+
+	channels := make([]lnclient.Channel, len(activeResp.Channels)+len(pendingResp.PendingOpenChannels))
+
+	for i, flndChannel := range activeResp.Channels {
+		channelPoint, err := svc.parseChannelPoint(flndChannel.ChannelPoint)
+		if err != nil {
+			return nil, err
+		}
+
+		// first 3 bytes of the channel ID are the block height (a BOLT7
+		// 24-bit field, always far below uint32 range)
+		channelOpeningBlockHeight := uint32(flndChannel.ChanId >> 40) //nolint:gosec
+		// Guard against uint32 underflow (wrapping to a huge, nonsensical
+		// confirmation count) if the node's reported tip height is ever
+		// behind this channel's own recorded opening height, e.g. right
+		// after a reorg or a stale/inconsistent nodeInfo snapshot.
+		var confirmations uint32
+		if nodeInfo.BlockHeight >= channelOpeningBlockHeight {
+			confirmations = nodeInfo.BlockHeight - channelOpeningBlockHeight + 1
+		}
+
+		var forwardingFeeBaseMloki uint32
+		var forwardingFeeProportionalMillionths uint32
+		if !flndChannel.Private {
+			channelEdge, err := svc.client.GetChanInfo(ctx, &lnrpc.ChanInfoRequest{
+				ChanId: flndChannel.ChanId,
+			})
+			if err != nil {
+				// GetChanInfo failure (e.g. edge not found) shouldn't crash the whole app
+				logger.Logger.Warn().Err(err).Uint64("chan_id", flndChannel.ChanId).Msg("Failed to get channel info, fees will be 0")
+				// continue without policy info (fees 0)
+			} else {
+				var policy *lnrpc.RoutingPolicy
+				if channelEdge.Node1Pub == nodeInfo.IdentityPubkey {
+					policy = channelEdge.Node1Policy
+				} else {
+					policy = channelEdge.Node2Policy
+				}
+				if policy != nil {
+					forwardingFeeBaseMloki = clampInt64ToUint32(policy.FeeBaseMsat)
+					forwardingFeeProportionalMillionths = clampInt64ToUint32(policy.FeeRateMilliMsat)
+				}
+			}
+		}
+
+		channels[i] = lnclient.Channel{
+			InternalChannel:                          flndChannel,
+			LocalBalance:                             flndChannel.LocalBalance * 1000,
+			LocalSpendableBalance:                    int64(math.Max(float64((flndChannel.LocalBalance-int64(flndChannel.LocalConstraints.ChanReserveSat))*1000), float64(0))), //nolint:gosec // channel reserve sat amounts are always far below int64 range
+			RemoteBalance:                            flndChannel.RemoteBalance * 1000,
+			RemotePubkey:                             flndChannel.RemotePubkey,
+			Id:                                       strconv.FormatUint(flndChannel.ChanId, 10),
+			Active:                                   flndChannel.Active,
+			Public:                                   !flndChannel.Private,
+			FundingTxId:                              channelPoint.GetFundingTxidStr(),
+			FundingTxVout:                            channelPoint.GetOutputIndex(),
+			Confirmations:                            &confirmations,
+			ConfirmationsRequired:                    &confirmationsRequired,
+			UnspendablePunishmentReserve:             flndChannel.LocalConstraints.ChanReserveSat,
+			CounterpartyUnspendablePunishmentReserve: flndChannel.RemoteConstraints.ChanReserveSat,
+			IsOutbound:                               flndChannel.Initiator,
+			ForwardingFeeBaseMloki:                   forwardingFeeBaseMloki,
+			ForwardingFeeProportionalMillionths:      forwardingFeeProportionalMillionths,
+		}
+	}
+
+	for j, flndChannel := range pendingResp.PendingOpenChannels {
+		channelPoint, err := svc.parseChannelPoint(flndChannel.Channel.ChannelPoint)
+		if err != nil {
+			return nil, err
+		}
+		fundingTxId := channelPoint.GetFundingTxidStr()
+
+		var confirmations *uint32
+		for _, t := range recentOnchainTransactions.Transactions {
+			if t.TxHash == fundingTxId {
+				confirmations32 := uint32(t.NumConfirmations) //nolint:gosec // transaction confirmation counts are always small and non-negative
+				confirmations = &confirmations32
+			}
+		}
+
+		channels[j+len(activeResp.Channels)] = lnclient.Channel{
+			InternalChannel:       flndChannel,
+			LocalBalance:          flndChannel.Channel.LocalBalance * 1000,
+			RemoteBalance:         flndChannel.Channel.RemoteBalance * 1000,
+			RemotePubkey:          flndChannel.Channel.RemoteNodePub,
+			Public:                !flndChannel.Channel.Private,
+			FundingTxId:           fundingTxId,
+			Active:                false,
+			Confirmations:         confirmations,
+			ConfirmationsRequired: &confirmationsRequired,
+		}
+	}
+
+	return channels, nil
+}
+
+func (svc *FLNDService) parseChannelPoint(channelPointStr string) (*lnrpc.ChannelPoint, error) {
+	channelPointParts := strings.Split(channelPointStr, ":")
+
+	if len(channelPointParts) != 2 {
+		logger.Logger.Error().Str("channel_point", channelPointStr).Msg("Invalid channel point")
+		return nil, errors.New("invalid channel point")
+	}
+
+	channelPoint := &lnrpc.ChannelPoint{}
+	channelPoint.FundingTxid = &lnrpc.ChannelPoint_FundingTxidStr{
+		FundingTxidStr: channelPointParts[0],
+	}
+
+	outputIndex, err := strconv.ParseUint(channelPointParts[1], 10, 32)
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("channel_point", channelPointStr).Msg("Failed to parse channel point")
+		return nil, err
+	}
+	channelPoint.OutputIndex = uint32(outputIndex)
+
+	return channelPoint, nil
+}
+
+func (svc *FLNDService) GetNodeConnectionInfo(ctx context.Context) (nodeConnectionInfo *lnclient.NodeConnectionInfo, err error) {
+	pubkey := svc.GetPubkey()
+	nodeConnectionInfo = &lnclient.NodeConnectionInfo{
+		Pubkey: pubkey,
+	}
+
+	nodeInfo, err := svc.client.GetNodeInfo(ctx, &lnrpc.NodeInfoRequest{
+		PubKey: pubkey,
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
+		return nodeConnectionInfo, nil
+	}
+
+	addresses := nodeInfo.Node.Addresses
+	if len(addresses) < 1 {
+		logger.Logger.Warn().Msg("No available listening addresses")
+		return nodeConnectionInfo, nil
+	}
+
+	firstAddress := addresses[0]
+	parts := strings.Split(firstAddress.Addr, ":")
+	if len(parts) != 2 {
+		logger.Logger.Error().Msg("Failed to fetch node address")
+		return nodeConnectionInfo, nil
+	}
+	port, err := strconv.Atoi(parts[1])
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node port")
+		return nodeConnectionInfo, nil
+	}
+
+	nodeConnectionInfo.Address = parts[0]
+	nodeConnectionInfo.Port = port
+
+	return nodeConnectionInfo, nil
+}
+
+func formatConnectionAddress(address string, port uint16) string {
+	if port == 0 {
+		return address
+	}
+	return address + ":" + strconv.Itoa(int(port))
+}
+
+func (svc *FLNDService) ConnectPeer(ctx context.Context, connectPeerRequest *lnclient.ConnectPeerRequest) error {
+	_, err := svc.client.ConnectPeer(ctx, &lnrpc.ConnectPeerRequest{
+		Addr: &lnrpc.LightningAddress{
+			Pubkey: connectPeerRequest.Pubkey,
+			Host:   formatConnectionAddress(connectPeerRequest.Address, connectPeerRequest.Port),
+		},
+	})
+
+	if grpcErr, ok := status.FromError(err); ok {
+		if strings.HasPrefix(grpcErr.Message(), "already connected to peer") {
+			return nil
+		}
+	}
+	return err
+}
+
+func (svc *FLNDService) OpenChannel(ctx context.Context, openChannelRequest *lnclient.OpenChannelRequest) (*lnclient.OpenChannelResponse, error) {
+	peers, err := svc.ListPeers(ctx)
+	if err != nil {
+		return nil, errors.New("failed to list peers")
+	}
+
+	var foundPeer *lnclient.PeerDetails
+	for _, peer := range peers {
+		if peer.NodeId == openChannelRequest.Pubkey {
+
+			foundPeer = &peer
+			break
+		}
+	}
+
+	if foundPeer == nil {
+		return nil, errors.New("node is not peered yet")
+	}
+
+	logger.Logger.Info().Str("peer_id", foundPeer.NodeId).Msg("Opening channel")
+
+	nodePub, err := hex.DecodeString(openChannelRequest.Pubkey)
+	if err != nil {
+		return nil, errors.New("failed to decode pubkey")
+	}
+
+	channel, err := svc.client.OpenChannelSync(ctx, &lnrpc.OpenChannelRequest{
+		NodePubkey:         nodePub,
+		Private:            !openChannelRequest.Public,
+		LocalFundingAmount: openChannelRequest.AmountLoki,
+		// set a super-high forwarding fee of 100K loki by default to disable unwanted routing
+		BaseFee: 100_000_000,
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to open channel")
+		return nil, fmt.Errorf("failed to open channel with %s: %s", foundPeer.NodeId, err)
+	}
+
+	fundingTxidBytes := channel.GetFundingTxidBytes()
+
+	// we get the funding transaction id bytes in reverse
+	for i, j := 0, len(fundingTxidBytes)-1; i < j; i, j = i+1, j-1 {
+		fundingTxidBytes[i], fundingTxidBytes[j] = fundingTxidBytes[j], fundingTxidBytes[i]
+	}
+
+	return &lnclient.OpenChannelResponse{
+		FundingTxId: hex.EncodeToString(fundingTxidBytes),
+	}, err
+}
+
+func (svc *FLNDService) UpdateChannel(ctx context.Context, updateChannelRequest *lnclient.UpdateChannelRequest) error {
+	logger.Logger.Info().
+		Interface("request", updateChannelRequest).
+		Msg("Updating Channel")
+
+	chanId64, err := strconv.ParseUint(updateChannelRequest.ChannelId, 10, 64)
+	if err != nil {
+		logger.Logger.Error().Interface("request", updateChannelRequest).Msg("Failed to parse channel id")
+		return err
+	}
+
+	channelEdge, err := svc.client.GetChanInfo(ctx, &lnrpc.ChanInfoRequest{
+		ChanId: chanId64,
+	})
+	if err != nil {
+		logger.Logger.Error().Interface("request", updateChannelRequest).Msg("Failed to fetch channel info")
+		return err
+	}
+
+	channelPoint, err := svc.parseChannelPoint(channelEdge.ChanPoint)
+	if err != nil {
+		return err
+	}
+
+	// svc.nodeInfo.Pubkey, not svc.client.IdentityPubkey: the wrapper's field is
+	// never populated by NewFLNDclient, so it is always "" and this comparison
+	// never matched. That silently selected Node2Policy on every channel —
+	// including the ones where we ARE Node1 — so a fee update copied the
+	// *peer's* TimeLockDelta and MaxHtlcMsat into our own policy.
+	var nodePolicy *lnrpc.RoutingPolicy
+	if channelEdge.Node1Pub == svc.nodeInfo.Pubkey {
+		nodePolicy = channelEdge.Node1Policy
+	} else {
+		nodePolicy = channelEdge.Node2Policy
+	}
+
+	_, err = svc.client.UpdateChannel(ctx, &lnrpc.PolicyUpdateRequest{
+		Scope: &lnrpc.PolicyUpdateRequest_ChanPoint{
+			ChanPoint: channelPoint,
+		},
+		BaseFeeMsat:   int64(updateChannelRequest.ForwardingFeeBaseMloki),
+		FeeRatePpm:    updateChannelRequest.ForwardingFeeProportionalMillionths,
+		TimeLockDelta: nodePolicy.TimeLockDelta,
+		MaxHtlcMsat:   nodePolicy.MaxHtlcMsat,
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Interface("request", updateChannelRequest).Msg("Failed to update channel")
+		return err
+	}
+
+	return nil
+}
+
+func (svc *FLNDService) CloseChannel(ctx context.Context, closeChannelRequest *lnclient.CloseChannelRequest) (*lnclient.CloseChannelResponse, error) {
+	logger.Logger.Info().
+		Interface("request", closeChannelRequest).
+		Msg("Closing Channel")
+
+	resp, err := svc.client.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch channels")
+		return nil, err
+	}
+
+	var foundChannel *lnrpc.Channel
+	for _, channel := range resp.Channels {
+		if strconv.FormatUint(channel.ChanId, 10) == closeChannelRequest.ChannelId {
+
+			foundChannel = channel
+			break
+		}
+	}
+
+	if foundChannel == nil {
+		logger.Logger.Error().Interface("request", closeChannelRequest).Msg("Failed to find channel to close")
+		return nil, errors.New("no channel exists with the given id")
+	}
+
+	channelPoint, err := svc.parseChannelPoint(foundChannel.ChannelPoint)
+	if err != nil {
+		return nil, err
+	}
+
+	stream, err := svc.client.CloseChannel(ctx, &lnrpc.CloseChannelRequest{
+		ChannelPoint: channelPoint,
+		Force:        closeChannelRequest.Force,
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Interface("request", closeChannelRequest).Msg("Failed to close channel")
+		return nil, err
+	}
+
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			return nil, err
+		}
+
+		switch update := resp.Update.(type) {
+		case *lnrpc.CloseStatusUpdate_ClosePending:
+			closingHash := update.ClosePending.Txid
+			txid, err := chainhash.NewHash(closingHash)
+			if err != nil {
+				return nil, err
+			}
+			logger.Logger.Info().
+				Str("closingTxid", txid.String()).
+				Msg("Channel close pending")
+			// TODO: return the closing tx id or fire an event
+			return &lnclient.CloseChannelResponse{}, nil
+		}
+	}
+}
+
+func (svc *FLNDService) GetNewOnchainAddress(ctx context.Context) (string, error) {
+	resp, err := svc.client.NewAddress(ctx, &lnrpc.NewAddressRequest{
+		Type: lnrpc.AddressType_WITNESS_PUBKEY_HASH,
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to generate onchain address")
+		return "", err
+	}
+	return resp.Address, nil
+}
+
+func (svc *FLNDService) GetOnchainBalance(ctx context.Context) (*lnclient.OnchainBalanceResponse, error) {
+	balances, err := svc.client.WalletBalance(ctx, &lnrpc.WalletBalanceRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch wallet balance")
+		return nil, err
+	}
+	pendingChannels, err := svc.client.PendingChannels(ctx, &lnrpc.PendingChannelsRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to list pending channels")
+		return nil, err
+	}
+	pendingBalancesFromChannelClosures := uint64(0)
+	pendingBalancesDetails := []lnclient.PendingBalanceDetails{}
+	for _, closingChannel := range pendingChannels.WaitingCloseChannels {
+		pendingBalancesFromChannelClosures += uint64(closingChannel.LimboBalance) //nolint:gosec // LN-node-reported balance is always non-negative
+		if closingChannel.Channel != nil {
+			channelPoint, err := svc.parseChannelPoint(closingChannel.Channel.ChannelPoint)
+			if err != nil {
+				return nil, err
+			}
+			pendingBalancesDetails = append(pendingBalancesDetails, lnclient.PendingBalanceDetails{
+				NodeId:        closingChannel.Channel.RemoteNodePub,
+				Amount:        uint64(closingChannel.LimboBalance), //nolint:gosec // LN-node-reported balance is always non-negative
+				FundingTxId:   channelPoint.GetFundingTxidStr(),
+				FundingTxVout: channelPoint.GetOutputIndex(),
+			})
+		}
+	}
+	logger.Logger.Debug().
+		Interface("balances", balances).
+		Msg("Listed Balances")
+	return &lnclient.OnchainBalanceResponse{
+		Spendable:                          int64(balances.ConfirmedBalance),
+		Total:                              int64(balances.TotalBalance),
+		Reserved:                           int64(balances.ReservedBalanceAnchorChan),
+		PendingBalancesFromChannelClosures: pendingBalancesFromChannelClosures,
+		PendingBalancesDetails:             pendingBalancesDetails,
+		PendingSweepBalancesDetails:        []lnclient.PendingBalanceDetails{},
+		InternalBalances: map[string]interface{}{
+			"balances":         balances,
+			"pending_channels": pendingChannels,
+		},
+	}, nil
+}
+
+func (svc *FLNDService) RedeemOnchainFunds(ctx context.Context, toAddress string, amount uint64, feeRate *uint64, sendAll bool) (txId string, err error) {
+	sendCoinsRequest := &lnrpc.SendCoinsRequest{
+		Addr:    toAddress,
+		SendAll: sendAll,
+		Amount:  int64(amount), //nolint:gosec // sat amounts are always far below int64 range
+	}
+
+	if feeRate != nil {
+		sendCoinsRequest.SatPerVbyte = *feeRate
+	} else {
+		sendCoinsRequest.TargetConf = 1
+	}
+
+	resp, err := svc.client.SendCoins(ctx, sendCoinsRequest)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to send onchain funds")
+		return "", err
+	}
+	return resp.Txid, nil
+}
+
+func (svc *FLNDService) ResetRouter(key string) error {
+	return nil
+}
+
+func (svc *FLNDService) BroadcastTransaction(ctx context.Context, txHex string) error {
+	rawTx, err := hex.DecodeString(txHex)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to decode raw transaction hex")
+		return err
+	}
+
+	resp, err := svc.client.PublishTransaction(ctx, &walletrpc.Transaction{TxHex: rawTx})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to publish transaction")
+		return err
+	}
+	if resp.PublishError != "" {
+		err = errors.New(resp.PublishError)
+		logger.Logger.Error().Err(err).Msg("Node rejected published transaction")
+		return err
+	}
+	return nil
+}
+
+// errSignerBroken is the node signer failing on purpose (a regtest test hook).
+var errSignerBroken = errors.New("the node signer is broken (test fault)")
+
+func (svc *FLNDService) SignMessage(ctx context.Context, message string) (string, error) {
+	if testknobs.SignerBroken() {
+		return "", errSignerBroken
+	}
+	resp, err := svc.client.SignMessage(ctx, &lnrpc.SignMessageRequest{Msg: []byte(message)})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to sign message")
+		return "", err
+	}
+
+	return resp.Signature, nil
+}
+
+func (svc *FLNDService) SendPaymentProbes(ctx context.Context, invoice string) error {
+	return nil
+}
+
+func (svc *FLNDService) SendSpontaneousPaymentProbes(ctx context.Context, amountMloki uint64, nodeId string) error {
+	return nil
+}
+
+func (svc *FLNDService) ListPeers(ctx context.Context) ([]lnclient.PeerDetails, error) {
+	resp, err := svc.client.ListPeers(ctx, &lnrpc.ListPeersRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to list peers")
+		return nil, err
+	}
+	ret := make([]lnclient.PeerDetails, 0, len(resp.Peers))
+	for _, peer := range resp.Peers {
+		ret = append(ret, lnclient.PeerDetails{
+			NodeId:      peer.PubKey,
+			Address:     peer.Address,
+			IsPersisted: true,
+			IsConnected: true,
+		})
+	}
+	return ret, nil
+}
+
+func (svc *FLNDService) GetNetworkGraph(ctx context.Context, nodeIds []string) (lnclient.NetworkGraphResponse, error) {
+	graph, err := svc.client.DescribeGraph(ctx, &lnrpc.ChannelGraphRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch network graph")
+		return "", err
+	}
+
+	type NodeInfoWithId struct {
+		Node   *lnrpc.LightningNode `json:"node"`
+		NodeId string               `json:"nodeId"`
+	}
+
+	nodes := []NodeInfoWithId{}
+	channels := []*lnrpc.ChannelEdge{}
+
+	for _, node := range graph.Nodes {
+		if slices.Contains(nodeIds, node.PubKey) {
+			nodes = append(nodes, NodeInfoWithId{
+				Node:   node,
+				NodeId: node.PubKey,
+			})
+		}
+	}
+
+	for _, edge := range graph.Edges {
+		if slices.Contains(nodeIds, edge.Node1Pub) || slices.Contains(nodeIds, edge.Node2Pub) {
+			channels = append(channels, edge)
+		}
+	}
+
+	networkGraph := map[string]interface{}{
+		"nodes":    nodes,
+		"channels": channels,
+	}
+	return networkGraph, nil
+}
+
+func (svc *FLNDService) GetLogOutput(ctx context.Context, maxLen int) ([]byte, error) {
+	resp, err := svc.client.GetDebugInfo(ctx, &lnrpc.GetDebugInfoRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch debug info")
+		return nil, err
+	}
+	jsonBytes, err := json.MarshalIndent(resp.Log, "", "")
+	if err != nil {
+		return nil, err
+	}
+
+	jsonLength := len(jsonBytes)
+	start := jsonLength - maxLen
+	if maxLen == 0 || start < 0 {
+		start = 0
+	}
+	slicedBytes := jsonBytes[start:]
+
+	return slicedBytes, nil
+}
+
+func (svc *FLNDService) GetBalances(ctx context.Context, includeInactiveChannels bool) (*lnclient.BalancesResponse, error) {
+	onchainBalance, err := svc.GetOnchainBalance(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var totalReceivable int64 = 0
+	var totalSpendable int64 = 0
+	var nextMaxReceivable int64 = 0
+	var nextMaxSpendable int64 = 0
+	var nextMaxReceivableMPP int64 = 0
+	var nextMaxSpendableMPP int64 = 0
+
+	resp, err := svc.client.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch channels")
+		return nil, err
+	}
+
+	for _, channel := range resp.Channels {
+		// Unnecessary since ListChannels only returns active channels
+		if channel.Active || includeInactiveChannels {
+			channelSpendable := max(channel.LocalBalance*1000-int64(channel.LocalConstraints.ChanReserveSat*1000), 0)    //nolint:gosec // channel reserve sat amounts are always far below int64 range
+			channelReceivable := max(channel.RemoteBalance*1000-int64(channel.RemoteConstraints.ChanReserveSat*1000), 0) //nolint:gosec // channel reserve sat amounts are always far below int64 range
+
+			// spending or receiving amount may be constrained by channel configuration (e.g. ACINQ does this)
+			channelConstrainedSpendable := min(channelSpendable, int64(channel.RemoteConstraints.MaxPendingAmtMsat))  //nolint:gosec // msat amounts are always far below int64 range
+			channelConstrainedReceivable := min(channelReceivable, int64(channel.LocalConstraints.MaxPendingAmtMsat)) //nolint:gosec // msat amounts are always far below int64 range
+
+			nextMaxSpendable = max(nextMaxSpendable, channelConstrainedSpendable)
+			nextMaxReceivable = max(nextMaxReceivable, channelConstrainedReceivable)
+
+			nextMaxSpendableMPP += channelConstrainedSpendable
+			nextMaxReceivableMPP += channelConstrainedReceivable
+
+			// these are what the wallet can send and receive, but not necessarily in one go
+			totalSpendable += channelSpendable
+			totalReceivable += channelReceivable
+		}
+	}
+
+	return &lnclient.BalancesResponse{
+		Onchain: *onchainBalance,
+		Lightning: lnclient.LightningBalanceResponse{
+			TotalSpendable:       totalSpendable,
+			TotalReceivable:      totalReceivable,
+			NextMaxSpendable:     nextMaxSpendable,
+			NextMaxReceivable:    nextMaxReceivable,
+			NextMaxSpendableMPP:  nextMaxSpendableMPP,
+			NextMaxReceivableMPP: nextMaxReceivableMPP,
+		},
+	}, nil
+}
+
+func (svc *FLNDService) GetStorageDir() (string, error) {
+	return "", nil
+}
+
+func (svc *FLNDService) GetNodeStatus(ctx context.Context) (nodeStatus *lnclient.NodeStatus, err error) {
+	info, err := svc.GetInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nodeInfo, err := svc.client.GetNodeInfo(ctx, &lnrpc.NodeInfoRequest{
+		PubKey: svc.GetPubkey(),
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
+		return nil, err
+	}
+	state, err := svc.client.GetState(ctx, &lnrpc.GetStateRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch wallet state")
+		return nil, err
+	}
+	return &lnclient.NodeStatus{
+		IsReady: true, // Assuming that, if GetNodeInfo() succeeds, the node is online and accessible.
+		InternalNodeStatus: map[string]interface{}{
+			"info":         info,
+			"node_info":    nodeInfo,
+			"wallet_state": state.GetState().String(),
+		},
+	}, nil
+}
+
+func (svc *FLNDService) DisconnectPeer(ctx context.Context, peerId string) error {
+	_, err := svc.client.DisconnectPeer(ctx, &lnrpc.DisconnectPeerRequest{PubKey: peerId})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to disconnect peer")
+		return err
+	}
+
+	return nil
+}
+
+func (svc *FLNDService) UpdateLastWalletSyncRequest() {}
+
+func (svc *FLNDService) GetSupportedNIP47Methods() []string {
+	return []string{
+		models.PAY_INVOICE_METHOD,
+		models.PAY_KEYSEND_METHOD,
+		models.GET_BALANCE_METHOD,
+		models.GET_BUDGET_METHOD,
+		models.GET_INFO_METHOD,
+		models.MAKE_INVOICE_METHOD,
+		models.LOOKUP_INVOICE_METHOD,
+		models.LIST_TRANSACTIONS_METHOD,
+		models.MULTI_PAY_INVOICE_METHOD,
+		models.MULTI_PAY_KEYSEND_METHOD,
+		models.SIGN_MESSAGE_METHOD,
+		models.MAKE_HOLD_INVOICE_METHOD,
+		models.SETTLE_HOLD_INVOICE_METHOD,
+		models.CANCEL_HOLD_INVOICE_METHOD,
+	}
+}
+
+func (svc *FLNDService) GetSupportedNIP47NotificationTypes() []string {
+	return []string{notifications.PAYMENT_RECEIVED_NOTIFICATION, notifications.PAYMENT_SENT_NOTIFICATION, notifications.HOLD_INVOICE_ACCEPTED_NOTIFICATION}
+}
+
+// SignSchnorrNodeKey implements lnclient.TransportSigner: a BIP340 signature by
+// the node's identity key over sha256(msg).
+//
+// Used once per restart to sign the hub's private-transport announcement, which
+// must be signed by the node identity because that is the only key a client can
+// verify against — it recovers it from its bill's mint signature. See
+// transport.AnnouncementSigningPayload for why msg is the event's serialization
+// rather than its id.
+func (svc *FLNDService) SignSchnorrNodeKey(ctx context.Context, msg []byte) ([]byte, error) {
+	if testknobs.SignerBroken() {
+		return nil, errSignerBroken
+	}
+	return svc.client.SignSchnorrNodeKey(ctx, msg)
+}
+
+func (svc *FLNDService) GetPubkey() string {
+	return svc.nodeInfo.Pubkey
+}
+
+func (svc *FLNDService) SetNodeAlias(ctx context.Context, alias string) error {
+	_, err := svc.client.UpdateNodeAnnouncement(ctx, &peersrpc.NodeAnnouncementUpdateRequest{
+		Alias: alias,
+	})
+	if err != nil {
+		svc.logger.Error().Err(err).Str("alias", alias).Msg("Failed to remove node alias")
+		return err
+	}
+	return nil
+}
+
+func fetchNodeInfo(ctx context.Context, client *wrapper.FLNDWrapper) (*lnclient.NodeInfo, error) {
+	resp, err := client.GetInfo(ctx, &lnrpc.GetInfoRequest{})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
+		return nil, err
+	}
+	network := resp.Chains[0].Network
+	if network == "mainnet" {
+		network = "bitcoin"
+	}
+	return &lnclient.NodeInfo{
+		Alias:       resp.Alias,
+		Color:       resp.Color,
+		Pubkey:      resp.IdentityPubkey,
+		Network:     network,
+		BlockHeight: resp.BlockHeight,
+		BlockHash:   resp.BlockHash,
+	}, nil
+}
+
+func flndPaymentToTransaction(payment *lnrpc.Payment) (*lnclient.Transaction, error) {
+	var expiresAt *int64
+	var description string
+	var descriptionHash string
+	if payment.PaymentRequest != "" {
+		paymentRequest, err := decodepay.Decode(strings.ToLower(payment.PaymentRequest))
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("bolt11", payment.PaymentRequest).
+				Msg("Failed to decode bolt11 invoice")
+			return nil, err
+		}
+		expiresAtUnix := time.UnixMilli(int64(paymentRequest.CreatedAt) * 1000).Add(time.Duration(paymentRequest.Expiry) * time.Second).Unix()
+		expiresAt = &expiresAtUnix
+		description = paymentRequest.Description
+		descriptionHash = paymentRequest.DescriptionHash
+	}
+
+	var settledAt *int64
+	if payment.Status == lnrpc.Payment_SUCCEEDED {
+		// FIXME: how to get the actual settled at time?
+		settledAtUnix := time.Unix(0, payment.CreationTimeNs).Unix()
+		settledAt = &settledAtUnix
+	}
+
+	return &lnclient.Transaction{
+		Type:            "outgoing",
+		Invoice:         payment.PaymentRequest,
+		Preimage:        payment.PaymentPreimage,
+		PaymentHash:     payment.PaymentHash,
+		Amount:          payment.ValueMsat,
+		FeesPaid:        payment.FeeMsat,
+		CreatedAt:       time.Unix(0, payment.CreationTimeNs).Unix(),
+		Description:     description,
+		DescriptionHash: descriptionHash,
+		ExpiresAt:       expiresAt,
+		SettledAt:       settledAt,
+		// TODO: Metadata:  (e.g. keysend),
+	}, nil
+}
+
+func flndInvoiceToTransaction(invoice *lnrpc.Invoice) *lnclient.Transaction {
+	var settledAt *int64
+	preimage := hex.EncodeToString(invoice.RPreimage)
+	metadata := map[string]interface{}{}
+	// OPEN, SETTLED, CANCELED or ACCEPTED: an order's pay_by job tells a
+	// cancelled invoice from one holding an accepted HTLC by it.
+	metadata[lnclient.InvoiceStateKey] = invoice.State.String()
+
+	if invoice.State == lnrpc.Invoice_SETTLED {
+		settledAt = &invoice.SettleDate
+	}
+	var expiresAt *int64
+	if invoice.Expiry > 0 {
+		expiresAtUnix := invoice.CreationDate + invoice.Expiry
+		expiresAt = &expiresAtUnix
+	}
+
+	if invoice.IsKeysend {
+		tlvRecords := []lnclient.TLVRecord{}
+		for _, htlc := range invoice.Htlcs {
+			for key, value := range htlc.CustomRecords {
+				tlvRecords = append(tlvRecords, lnclient.TLVRecord{
+					Type:  key,
+					Value: hex.EncodeToString(value),
+				})
+			}
+		}
+		metadata["tlv_records"] = tlvRecords
+	}
+
+	return &lnclient.Transaction{
+		Type:            "incoming",
+		Invoice:         invoice.PaymentRequest,
+		Description:     invoice.Memo,
+		DescriptionHash: hex.EncodeToString(invoice.DescriptionHash),
+		Preimage:        preimage,
+		PaymentHash:     hex.EncodeToString(invoice.RHash),
+		Amount:          invoice.ValueMsat,
+		AmountPaid:      invoice.AmtPaidMsat,
+		CreatedAt:       invoice.CreationDate,
+		SettledAt:       settledAt,
+		ExpiresAt:       expiresAt,
+		Metadata:        metadata,
+	}
+}
+
+func (svc *FLNDService) GetCustomNodeCommandDefinitions() []lnclient.CustomNodeCommandDef {
+	return nil
+}
+
+func (svc *FLNDService) ExecuteCustomNodeCommand(ctx context.Context, command *lnclient.CustomNodeCommandRequest) (*lnclient.CustomNodeCommandResponse, error) {
+	return nil, nil
+}
+
+func (svc *FLNDService) subscribeTransactions(ctx context.Context) {
+	stream, err := svc.client.SubscribeTransactions(ctx, &lnrpc.GetTransactionsRequest{})
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to subscribe to transactions")
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if stream == nil {
+				var err error
+				stream, err = svc.client.SubscribeTransactions(ctx, &lnrpc.GetTransactionsRequest{})
+				if err != nil {
+					svc.logger.Error().Err(err).Msg("Failed to subscribe to transactions, retrying in 5s")
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(5 * time.Second):
+						continue
+					}
+				}
+			}
+
+			_, err := stream.Recv()
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				svc.logger.Error().Err(err).Msg("Failed to receive transaction update")
+				stream = nil                // Mark stream as invalid so it gets re-created in next iteration
+				time.Sleep(1 * time.Second) // Small backoff before retrying connection
+				continue
+			}
+
+			// Invalidate cache on any new transaction event
+			svc.txCacheMtx.Lock()
+			svc.txCacheValid = false
+			svc.txCacheMtx.Unlock()
+			svc.logger.Info().Msg("Invalidated on-chain transaction cache due to new event")
+		}
+	}
+}
+
+func (svc *FLNDService) refreshTransactionCache(ctx context.Context) error {
+	var allTransactions []lnclient.OnchainTransaction
+	offset := uint32(0)
+	limit := uint32(1000) // Batch size to avoid gRPC usage limits
+
+	for {
+		req := &lnrpc.GetTransactionsRequest{
+			IndexOffset:     offset,
+			MaxTransactions: limit,
+		}
+
+		resp, err := svc.client.GetTransactions(ctx, req)
+		if err != nil {
+			return err
+		}
+
+		for _, tx := range resp.Transactions {
+			state := "unconfirmed"
+			if tx.NumConfirmations > 0 {
+				state = "confirmed"
+			}
+
+			amountLoki := tx.Amount
+			txType := "incoming"
+			if tx.Amount < 0 {
+				amountLoki = -amountLoki
+				txType = "outgoing"
+			}
+
+			allTransactions = append(allTransactions, lnclient.OnchainTransaction{
+				AmountLoki:       uint64(amountLoki),   //nolint:gosec // sign-normalized above; LN-node-reported amount is always far below int64 range
+				CreatedAt:        uint64(tx.TimeStamp), //nolint:gosec // LN-node-reported transaction timestamp is always positive
+				State:            state,
+				Type:             txType,
+				NumConfirmations: uint32(tx.NumConfirmations), //nolint:gosec // transaction confirmation counts are always small and non-negative
+				TxId:             tx.TxHash,
+			})
+		}
+
+		// If we got fewer transactions than the limit, we've reached the end
+		if len(resp.Transactions) < int(limit) {
+			break
+		}
+
+		// Update offset for next batch.
+		// Note: GetTransactions uses index in list, not block height or ID.
+		// Using the index of the last transaction returned + 1.
+		// Actually, GetTransactions doc says index_offset: "The index of the transaction that will be used as either the start or end of a query..."
+		// It usually corresponds to the number of transactions to skip if sorted?
+		// FLND documentation says: "The index of the transaction that will be used as either the start or end of a query to determine which transactions should be returned in the response."
+		// Simpler approach: offset by count.
+		offset += uint32(len(resp.Transactions)) //nolint:gosec // page size is bounded by the hardcoded 1000-row batch limit above
+	}
+
+	// Sort by CreatedAt descending (newest first)
+	sort.SliceStable(allTransactions, func(i, j int) bool {
+		return allTransactions[i].CreatedAt > allTransactions[j].CreatedAt
+	})
+
+	svc.txCacheMtx.Lock()
+	svc.txCache = allTransactions
+	svc.txCacheValid = true
+	svc.txCacheMtx.Unlock()
+
+	return nil
+}
+
+func (svc *FLNDService) ListOnchainTransactions(ctx context.Context, from, until, limit, offset uint64) ([]lnclient.OnchainTransaction, error) {
+	svc.txCacheMtx.RLock()
+	isValid := svc.txCacheValid
+	svc.txCacheMtx.RUnlock()
+
+	if !isValid {
+		// Cache is invalid, refresh it synchronously
+		// Note: This might block the first request after invalidation, but ensures consistency.
+		// For better UX, could do it in background if stale data is acceptable, but user wants newest.
+		if err := svc.refreshTransactionCache(ctx); err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to refresh onchain transaction cache")
+			return nil, err
+		}
+	}
+
+	svc.txCacheMtx.RLock()
+	defer svc.txCacheMtx.RUnlock()
+
+	// Slice from cache. Keep arithmetic in uint64 and bound everything by
+	// cacheLen before ever narrowing to int, so an oversized caller-supplied
+	// offset/limit can't wrap to a negative int (which would otherwise blow
+	// up the make() call below into an attempted multi-exabyte allocation).
+	cacheLen := uint64(len(svc.txCache))
+
+	start := cacheLen
+	if offset < cacheLen {
+		start = offset
+	}
+
+	// If limit is 0, return all from start
+	end := cacheLen
+	if limit != 0 {
+		remaining := cacheLen - start
+		if limit < remaining {
+			end = start + limit
+		}
+	}
+
+	// Return a copy to be safe? Or just slice (since it's read-only usually, copy is safer but slower)
+	// Slicing is fine if we respect immutability of the cache.
+	// But since this returns []OnchainTransaction (value type struct), slicing returns a new slice header pointing to same array.
+	// As long as caller doesn't modify elements (which they shouldn't), it's fine.
+	// However, if refreshTransactionCache replaces the array, old readers are safe holding old array.
+
+	result := make([]lnclient.OnchainTransaction, end-start)
+	copy(result, svc.txCache[start:end])
+
+	return result, nil
+}
+
+func (svc *FLNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnclient.ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error) {
+	stream, err := svc.client.ChannelAcceptor(ctx)
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to subscribe to channel acceptor")
+		return nil, nil, err
+	}
+
+	reqChan := make(chan lnclient.ChannelAcceptRequest)
+
+	// Map to track IDs since FLND uses uint64 ID but we might want to abstract it or just pass it as string
+	// Actually FLND's ChannelAcceptRequest has `pending_chan_id` (bytes)
+
+	go func() {
+		defer close(reqChan)
+		for {
+			req, err := stream.Recv()
+			if err != nil {
+				// Don't log if context canceled
+				if ctx.Err() == nil {
+					svc.logger.Error().Err(err).Msg("Channel acceptor stream failed")
+				}
+				return
+			}
+
+			// Convert pending_chan_id to hex string for ID
+			id := hex.EncodeToString(req.PendingChanId)
+			nodePubkey := hex.EncodeToString(req.NodePubkey)
+
+			reqChan <- lnclient.ChannelAcceptRequest{
+				ID:         id,
+				NodePubkey: nodePubkey,
+				Capacity:   req.FundingAmt,
+			}
+		}
+	}()
+
+	respond := func(id string, accept bool, zeroConf bool) error {
+		chanIdBytes, err := hex.DecodeString(id)
+		if err != nil {
+			return err
+		}
+
+		response := &lnrpc.ChannelAcceptResponse{
+			Accept:        accept,
+			PendingChanId: chanIdBytes,
+		}
+
+		if accept {
+			if zeroConf {
+				// For ZeroConf JIT channels:
+				// Ensure we accept 0 conf
+				response.MinAcceptDepth = 0
+				response.ZeroConf = true
+			} else {
+				// For Standard channels:
+				// Use safe default of 1 if not specified to avoid FLND rejecting "0 depth without zero-conf"
+				// Note: FLND usually defaults to 1 for private, but if we send 0 it might reject.
+				response.MinAcceptDepth = 1
+				response.ZeroConf = false
+			}
+		}
+
+		logger.Logger.Info().
+			Str("id", id).
+			Bool("accept", accept).
+			Uint32("minAcceptDepth", response.MinAcceptDepth).
+			Bool("zeroConf", response.ZeroConf).
+			Msg("Sending ChannelAcceptResponse")
+
+		return stream.Send(response)
+	}
+
+	return reqChan, respond, nil
+}
+
+// ListOnchainOutputs lists every output to one of the wallet's own addresses,
+// over the wallet transactions confirmed at fromHeight or above and those in
+// the mempool.
+func (svc *FLNDService) ListOnchainOutputs(ctx context.Context, fromHeight int32) ([]lnclient.OnchainOutput, error) {
+	var out []lnclient.OnchainOutput
+	offset := uint32(0)
+	const limit = uint32(1000)
+	for {
+		// EndHeight -1 includes the unconfirmed transactions.
+		resp, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{StartHeight: max(fromHeight, 0), EndHeight: -1,
+			IndexOffset: offset, MaxTransactions: limit})
+		if err != nil {
+			return nil, err
+		}
+		for _, tx := range resp.Transactions {
+			for _, o := range tx.OutputDetails {
+				if !o.IsOurAddress || o.Address == "" || o.OutputIndex < 0 {
+					continue
+				}
+				out = append(out, lnclient.OnchainOutput{
+					TxID: tx.TxHash, Vout: uint32(o.OutputIndex), Address: o.Address, AmountLoki: o.Amount, //nolint:gosec // an output index
+					Confirmations: uint32(max(tx.NumConfirmations, 0)), BlockHeight: tx.BlockHeight, //nolint:gosec // non-negative
+					SeenAt: tx.TimeStamp,
+				})
+			}
+		}
+		if len(resp.Transactions) < int(limit) {
+			return out, nil
+		}
+		offset += uint32(len(resp.Transactions)) //nolint:gosec // at most limit
+	}
+}
+
+// invoiceUnknown reports a node answer that it holds no invoice for the hash.
+func invoiceUnknown(err error) bool {
+	return status.Code(err) == codes.NotFound || strings.Contains(err.Error(), "unable to locate invoice")
+}
+
+// cancelledAlready reports a cancel of an invoice the node already cancelled.
+func cancelledAlready(err error) bool {
+	return strings.Contains(err.Error(), "invoice already canceled")
+}
+
+// channelClosedProperties are the nwc_channel_closed event's properties. The explorer
+// link is given only on mainnet (flnd's "mainnet", reported as "bitcoin"): no public
+// explorer shows a test network's nodes.
+func channelClosedProperties(nodeInfo *lnclient.NodeInfo, counterpartyNodeId, reason string) map[string]interface{} {
+	props := map[string]interface{}{
+		"counterparty_node_id": counterpartyNodeId,
+		"reason":               reason,
+		"node_type":            config.FLNDBackendType,
+	}
+	if nodeInfo != nil && nodeInfo.Network == "bitcoin" {
+		// Base the explorer deep-link on the configured native_asset explorer,
+		// never a hardcoded host. The embedded Flokicoin default keeps this
+		// byte-for-byte ("https://flokichain.info/lightning/node/<id>").
+		base := strings.TrimRight(seed.Get().NativeAsset.Explorer.URL, "/")
+		props["counterparty_node_url"] = base + "/lightning/node/" + counterpartyNodeId
+	}
+	return props
+}

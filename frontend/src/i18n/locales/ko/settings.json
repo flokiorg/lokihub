@@ -1,0 +1,301 @@
+{
+  "title": "일반",
+  "description": "Lokihub 일반 설정.",
+  "sections": {
+    "appearance": "외관",
+    "unitsAndCurrency": "단위 및 통화",
+    "language": "언어",
+    "advanced": "고급"
+  },
+  "appearance": {
+    "theme": "테마",
+    "themeDescription": "비주얼 테마를 선택하세요",
+    "darkMode": "외관",
+    "darkModeDescription": "라이트, 다크 모드 또는 시스템 설정 따르기를 선택하세요",
+    "modes": {
+      "system": "시스템",
+      "light": "라이트",
+      "dark": "다크"
+    },
+    "themes": {
+      "default": "기본"
+    }
+  },
+  "units": {
+    "displayUnit": "표시 단위",
+    "displayUnitDescription": "금액 표시 방식을 선택하세요",
+    "fiatCurrency": "법정 통화",
+    "fiatCurrencyDescription": "선호하는 법정 기준 통화",
+    "auto": "자동"
+  },
+  "language": {
+    "label": "언어",
+    "description": "선호하는 인터페이스 언어를 선택하세요",
+    "updated": "언어가 업데이트되었습니다."
+  },
+  "toasts": {
+    "themeUpdated": "테마가 업데이트되었습니다.",
+    "appearanceUpdated": "외관이 업데이트되었습니다.",
+    "currencyUpdated": "통화가 {{currency}}로 설정되었습니다",
+    "formatUpdated": "{{chain}} 표시 형식이 업데이트되었습니다",
+    "currencyFetchFailed": "통화를 가져오지 못했습니다: {{error}}",
+    "updateFailed": "설정 업데이트에 실패했습니다"
+  },
+  "nav": {
+    "general": "일반",
+    "services": "서비스",
+    "autoUnlock": "자동 잠금 해제",
+    "unlockPassword": "잠금 해제 비밀번호",
+    "backup": "백업",
+    "migrate": "Lokihub 마이그레이션",
+    "developer": "개발자",
+    "debugTools": "디버그 도구",
+    "about": "정보"
+  },
+  "shutdown": {
+    "dialogTitle": "Lokihub를 끄시겠습니까?",
+    "dialogDesc": "이렇게 하면 Lokihub가 꺼지고 노드가 오프라인 상태가 됩니다. 잠금을 해제할 때까지 {{chain}}을 보내거나 받을 수 없습니다.",
+    "cancel": "취소",
+    "confirm": "계속",
+    "toast": "노드가 꺼졌습니다.",
+    "failedToast": "노드 종료 실패"
+  },
+  "header": {
+    "title": "설정"
+  },
+  "changePassword": {
+    "title": "잠금 해제 비밀번호 변경",
+    "important": "중요!",
+    "currentPassword": "현재 비밀번호",
+    "newPassword": "새 비밀번호",
+    "confirmNew": "새 비밀번호 확인",
+    "save": "저장"
+  },
+  "backup": {
+    "title": "백업",
+    "important": "중요",
+    "passwordLabel": "비밀번호",
+    "active": "활성"
+  },
+  "autoUnlock": {
+    "title": "자동 잠금 해제",
+    "attention": "주의",
+    "passwordLabel": "잠금 해제 비밀번호"
+  },
+  "developer": {
+    "title": "개발자",
+    "tokenType": "토큰 유형",
+    "tokenExpiry": "토큰 만료 (일)",
+    "passwordLabel": "잠금 해제 비밀번호",
+    "createToken": "토큰 생성"
+  },
+  "debugTools": {
+    "title": "디버그 도구",
+    "probeInvoice": "인보이스 프로브",
+    "probeKeysend": "Keysend 프로브",
+    "networkGraph": "네트워크 그래프 가져오기",
+    "refundTo": "환불 대상",
+    "onchainAddress": "온체인 주소",
+    "cancel": "취소"
+  },
+  "withdraw": {
+    "switch": "온체인 출금",
+    "switchDescription": "이 노드의 Cash Hub가 지폐를 온체인 주소로 지급할 수 있게 합니다 (cash_withdraw). 각 Cash Hub도 직접 켜야 합니다.",
+    "notCapable": "이 노드의 백엔드는 온체인 출금을 지급할 수 없습니다.",
+    "turnedOn": "온체인 출금을 켰습니다",
+    "turnedOff": "온체인 출금을 껐습니다",
+    "switchFailed": "온체인 출금을 변경할 수 없습니다",
+    "ready": "지급 엔진 준비됨",
+    "notReady": "지급 엔진이 아직 준비되지 않았습니다",
+    "status": {
+      "eligible": "대상 코인",
+      "setAside": "예약됨",
+      "floor": "하한",
+      "unconfirmed": "미확인",
+      "oldestUnbroadcast": "가장 오래된 미전파",
+      "payouts": "지급",
+      "bumps": "수수료 인상",
+      "reorgs": "재구성",
+      "invalidations": "무효화",
+      "coinsVanished": "사라진 코인",
+      "invariantFailures": "불변식 실패"
+    },
+    "hubTitle": "온체인 출금",
+    "offered": "현재 이 Cash Hub의 지폐에 제공 중",
+    "notOffered": "이 Cash Hub의 지폐에 제공하지 않음",
+    "hubEnable": "온체인 출금 제공",
+    "blocked": {
+      "nodeOff": "먼저 설정에서 노드의 온체인 출금을 켜세요.",
+      "notCapable": "이 노드의 백엔드는 온체인 출금을 지급할 수 없습니다."
+    },
+    "feeBase": "출금 기본 수수료 ({{unit}})",
+    "feePpm": "출금 수수료 (ppm)",
+    "min": "최소 ({{unit}})",
+    "max": "최대 ({{unit}})",
+    "none": "없음",
+    "errors": {
+      "feeBase": "기본 수수료는 소수점 셋째 자리까지의 {{unit}} 금액입니다.",
+      "feePpm": "수수료율은 0부터 {{max}} ppm까지의 정수입니다.",
+      "min": "최소는 소수점 셋째 자리까지의 {{unit}} 금액입니다.",
+      "max": "최대는 소수점 셋째 자리까지의 {{unit}} 금액입니다.",
+      "minAboveMax": "최소가 최대보다 큽니다."
+    },
+    "scriptTypes": "지급하는 스크립트 유형",
+    "finalDepth": "최종 깊이 (확인 수)",
+    "networkFeeNote": "네트워크 수수료는 주소 유형마다 노드가 실시간으로 추정해 견적에 더합니다.",
+    "save": "저장",
+    "saved": "온체인 출금 조건을 저장했습니다",
+    "saveFailed": "온체인 출금 조건을 저장할 수 없습니다",
+    "payouts": {
+      "title": "온체인 지급",
+      "description": "이 Cash Hub의 온체인 출금(최신순). 운영자 작업으로 지급이 바뀌지 않으며, 취소는 지폐 보유자만 요청할 수 있습니다.",
+      "amount": "금액",
+      "fee": "수수료",
+      "hubFee": "Hub 수수료",
+      "networkFee": "네트워크 수수료",
+      "payout": "지급액",
+      "sentBy": "전송 기한",
+      "signed": "서명됨",
+      "unsigned": "아직 서명 안 됨",
+      "depth": "깊이",
+      "remintedBill": "재발행된 지폐",
+      "detailTitle": "지급",
+      "address": "주소",
+      "requestId": "요청 ID",
+      "committed": "확정",
+      "versions": "버전",
+      "noVersions": "아직 트랜잭션이 없습니다.",
+      "inputs_one": "입력 {{count}}개",
+      "inputs_other": "입력 {{count}}개",
+      "broadcast": "전파 처음 / 마지막",
+      "facts": "보관 기록",
+      "state": {
+        "queued": "대기",
+        "broadcast": "전파됨",
+        "confirmed": "확인됨",
+        "final": "최종",
+        "cancelled": "취소됨"
+      },
+      "cancel": {
+        "requested": "보유자가 취소 요청",
+        "cancelled": "취소됨 ({{reason}})"
+      }
+    }
+  },
+  "sellCash": {
+    "connections": {
+      "title": "주문 연결",
+      "description": "구매자가 이 Cash Hub의 현금을 사기 위해 주문을 넣는 연결입니다. 각 연결은 다시 표시할 수 있는 cashorder1… 문자열이며, 그 비밀은 공개 정보입니다.",
+      "labelPlaceholder": "라벨 (선택)",
+      "create": "연결 생성",
+      "createdToast": "주문 연결을 생성했습니다",
+      "createFailed": "주문 연결을 생성하지 못했습니다",
+      "created": "생성",
+      "retired": "폐기됨",
+      "retiredToast": "주문 연결을 폐기했습니다",
+      "retireFailed": "주문 연결을 폐기하지 못했습니다",
+      "empty": "아직 주문 연결이 없습니다.",
+      "unlabeled": "라벨 없음",
+      "cannotSign": "노드가 지금 이 연결에 서명할 수 없습니다. 서명이 가능해지면 문자열이 다시 표시됩니다.",
+      "show": "표시",
+      "hide": "숨기기",
+      "copy": "복사",
+      "retire": "폐기",
+      "retireTitle": "이 주문 연결을 폐기하시겠어요?",
+      "retireWarning": "되돌릴 수 없습니다. 새 주문은 넣을 수 없지만 기존 주문은 계속 발행되고 읽을 수 있습니다.",
+      "cancel": "취소",
+      "retireConfirm": "폐기"
+    },
+    "terms": {
+      "title": "판매 조건",
+      "selling": "이 Cash Hub가 현금을 판매하고 있습니다.",
+      "notSellingYet": "이 Cash Hub는 아직 판매하지 않습니다. 시작하려면 아래에서 조건을 설정하세요.",
+      "lightningTitle": "라이트닝",
+      "onchainTitle": "온체인",
+      "min": "최소 ({{unit}})",
+      "max": "최대 ({{unit}})",
+      "feeBase": "기본 수수료 ({{unit}})",
+      "feePpm": "수수료 (ppm)",
+      "window": "유효 시간 (초)",
+      "ceiling": "미결 주문 상한 ({{unit}})",
+      "tiersTitle": "온체인 확인 단계",
+      "tiersHint": "각 금액까지의 결제는 해당 확인 수가 필요합니다. 마지막 단계는 개방형으로 더 큰 모든 금액을 포함합니다.",
+      "tierUpTo": "상한 ({{unit}})",
+      "tierOpen": "초과",
+      "tierN": "확인 수",
+      "tierAdd": "단계 추가",
+      "tierRemove": "단계 삭제",
+      "billTitle": "지폐 조건",
+      "redeemFeeBase": "상환 기본 수수료 ({{unit}})",
+      "redeemFeePpm": "상환 수수료 (ppm)",
+      "minTransfer": "최소 전송액 ({{unit}})",
+      "openTitle": "미결 주문 제한",
+      "openOnchainMax": "최대 미결 온체인 주문 수 (0 = 무제한)",
+      "outboundWarnTitle": "온체인 상한이 라이트닝 출력 용량을 초과",
+      "outboundWarn": "미결 온체인 주문 상한({{ceiling}})이 노드의 라이트닝 출력 용량({{outbound}})을 초과합니다. Hub가 모든 온체인 주문을 지폐로 발행하지 못할 수 있습니다.",
+      "save": "저장",
+      "saved": "판매 조건을 저장했습니다",
+      "saveFailed": "판매 조건을 저장하지 못했습니다",
+      "errors": {
+        "lightningMin": "라이트닝 최소는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "lightningMax": "라이트닝 최대는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "lightningFeeBase": "라이트닝 기본 수수료는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "lightningFeePpm": "라이트닝 수수료는 0에서 {{max}} ppm 사이의 정수입니다.",
+        "lightningWindow": "라이트닝 유효 시간은 정수 초입니다.",
+        "lightningMinAboveMax": "라이트닝 최소가 최대보다 큽니다.",
+        "lightningCeiling": "라이트닝 미결 주문 상한은 양수 {{unit}} 금액입니다.",
+        "onchainMin": "온체인 최소는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "onchainMax": "온체인 최대는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "onchainFeeBase": "온체인 기본 수수료는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "onchainFeePpm": "온체인 수수료는 0에서 {{max}} ppm 사이의 정수입니다.",
+        "onchainWindow": "온체인 유효 시간은 정수 초입니다.",
+        "onchainMinAboveMax": "온체인 최소가 최대보다 큽니다.",
+        "onchainWhole": "온체인 금액은 정수 {{unit}}입니다.",
+        "onchainCeiling": "온체인 미결 주문 상한은 양수 {{unit}} 금액입니다.",
+        "onchainCeilingWhole": "온체인 미결 주문 상한은 정수 {{unit}} 금액입니다.",
+        "tiers": "각 단계는 최소 1회 확인이 필요하고 금액은 오름차순이어야 하며 마지막 단계만 개방형입니다.",
+        "redeemFeeBase": "상환 기본 수수료는 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "redeemFeePpm": "상환 수수료는 0에서 {{max}} ppm 사이의 정수입니다.",
+        "minTransfer": "최소 전송액은 소수점 세 자리까지의 {{unit}} 금액입니다.",
+        "openOnchainMax": "최대 미결 온체인 주문 수는 정수입니다."
+      }
+    },
+    "orders": {
+      "title": "주문",
+      "description": "이 Cash Hub에 들어온 주문을 최신순으로, 각 주문의 결제와 함께 표시합니다. 운영자 정보만: 현금 토큰도 구매자 키도 없습니다.",
+      "amount": "금액",
+      "fee": "수수료",
+      "payBy": "결제 기한",
+      "requiredConfirmations": "필요한 확인 수",
+      "recipient": "수령인",
+      "confirmations": "확인 수",
+      "mintedBill": "발행된 지폐",
+      "keptTitle": "Hub 보유",
+      "keptDescription": "Hub가 주문 없이 보유한 결제: 최대 수수료, 또는 유효한 주문과 일치하지 않은 주문 주소로의 결제입니다.",
+      "kind": {
+        "lightning": "라이트닝",
+        "onchain": "온체인"
+      },
+      "state": {
+        "open": "미결",
+        "paid": "결제됨",
+        "minted": "발행됨",
+        "expired": "만료됨",
+        "closed": "종료됨"
+      },
+      "paymentState": {
+        "seen": "감지됨",
+        "confirmed": "확인됨",
+        "minted": "발행됨",
+        "kept": "보유됨",
+        "reorged": "재구성됨",
+        "dropped": "폐기됨"
+      },
+      "recipientType": {
+        "pubkey": "Nostr 키",
+        "cash": "현금 시크릿",
+        "connection_key": "연결 키"
+      }
+    }
+  }
+}

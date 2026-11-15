@@ -1,0 +1,153 @@
+//go:build integration
+
+// cash_transfer_spinoff_test.go covers spinning a multi-recipient wallet's
+// slice off into a brand-new, dedicated single-cash-mode cash_wallet (NIP-CASH
+// "Spinning a slice off into a dedicated wallet") end to end over a real
+// Nostr relay against a real running instance — the black-box counterpart to
+// nip47/controllers/cash_transfer_controller_test.go's
+// TestHandleCashTransferEvent_TransferIntoCash_ClaimedCotenant_SpinsOffToNewWallet.
+//
+// This is the scenario the original mixing check used to reject outright: a
+// wallet with a co-tenant (here, one who has already redeemed their own
+// slice and so still holds the shared connection) transferring the OTHER
+// slice to cash mode. Rather than reject, cash_transfer now moves that slice's
+// value into a brand-new wallet whose connection is delivered nested-
+// encrypted to the caller's own pubkey — so the co-tenant, despite still
+// holding the shared connection this response itself travels over, gets
+// nothing usable out of it.
+package integration
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
+)
+
+func TestCashTransferSpinOff(t *testing.T) {
+	cfg := requireConfig(t)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "cash-transfer-spinoff-cash-hub", nil)
+	testCashTransferSpinOff(t, cfg, hub, hubAppID, admin)
+}
+
+func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig, hubAppID uint, admin *adminClient) {
+	hubClient := mustConnect(t, hub.Connection)
+
+	t.Run("ClaimedCotenant_SpinsOffToNewWallet_RedeemableThere_NotDecryptableByCotenant", func(t *testing.T) {
+		attackerPriv := newTestPrivkey(t)
+		attackerPub, err := nostr.GetPublicKey(attackerPriv)
+		require.NoError(t, err)
+		victimPriv := newTestPrivkey(t)
+		victimPub, err := nostr.GetPublicKey(victimPriv)
+		require.NoError(t, err)
+
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
+				{IdentityType: "pubkey", IdentityValue: attackerPub, AmountMillis: happyPathAmountMloki},
+				{IdentityType: "pubkey", IdentityValue: victimPub, AmountMillis: happyPathAmountMloki},
+			},
+			Expiry: happyPathExpirySecs,
+		}, &created))
+		shared := mustConnectBill(t, created.CashToken, victimPriv)
+
+		// The attacker redeems their own slice first. It's now claimed, but
+		// the attacker still holds this shared connection and can decrypt
+		// every future request/response on it.
+		attackerInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff attacker redeem")
+		attackerProof := buildClaimProofEvent(t, attackerPriv, created.WalletPubkey, attackerInvoice.PaymentHash, nil, time.Now())
+		var attackerClaim ClaimFundsResult
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+			Invoice:       attackerInvoice.Invoice,
+			IdentityType:  "pubkey",
+			IdentityValue: attackerPub,
+			IdentityEvent: eventJSON(t, attackerProof),
+		}, &attackerClaim))
+		require.NotEmpty(t, attackerClaim.Preimage)
+
+		// The victim now spins their still-unclaimed slice off into its own
+		// dedicated wallet, handing it a caller-generated cash-mode commitment.
+		newSecretHex, newSecretHash := cashSecretAndHash(t)
+		proof := buildTransferProofEvent(t, victimPriv, created.WalletPubkey, "cash", newSecretHash, "", happyPathAmountMloki, nil, time.Now())
+		var transferResult CashTransferResult
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
+			IdentityType:  "pubkey",
+			IdentityValue: victimPub,
+			IdentityEvent: eventJSON(t, proof),
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "cash", IdentityValue: newSecretHash},
+		}, &transferResult))
+		require.Equal(t, "cash", transferResult.IdentityType)
+		require.Equal(t, newSecretHash, transferResult.IdentityValue)
+		require.Equal(t, uint64(happyPathAmountMloki), transferResult.AmountMillis)
+		require.NotEmpty(t, transferResult.NewWalletPubkey)
+		require.NotEmpty(t, transferResult.NewWalletToken)
+
+		// The OLD identity must no longer be able to redeem or transfer — its
+		// slice's value has moved. The co-tenant had already redeemed theirs,
+		// so that spin-off took the last of this wallet: the hub deleted it,
+		// and the redeem below is answered with nothing at all.
+		oldInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff old identity redeem")
+		oldProof := buildClaimProofEvent(t, victimPriv, created.WalletPubkey, oldInvoice.PaymentHash, nil, time.Now())
+		var oldClaimResult ClaimFundsResult
+		requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
+			return shared.Call(ctx, constants.NIP47MethodCashRedeem, ClaimFundsParams{
+				Invoice:       oldInvoice.Invoice,
+				IdentityType:  "pubkey",
+				IdentityValue: victimPub,
+				IdentityEvent: eventJSON(t, oldProof),
+			}, &oldClaimResult)
+		})
+
+		// The attacker — despite holding this shared connection and seeing
+		// this exact same plaintext NewWalletPubkey/NewWalletToken — cannot
+		// decrypt the inner token with their own privkey.
+		attackerCipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, transferResult.NewWalletPubkey, attackerPriv)
+		require.NoError(t, err)
+		_, err = attackerCipher.Decrypt(transferResult.NewWalletToken)
+		require.Error(t, err, "a claimed co-tenant must not be able to decrypt the spun-off wallet's connection")
+
+		// The victim decrypts it with their own privkey plus the plaintext
+		// NewWalletPubkey the response handed them — exactly what a real
+		// black-box recipient has, nothing more (no DB access, no lookup).
+		victimCipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, transferResult.NewWalletPubkey, victimPriv)
+		require.NoError(t, err)
+		decrypted, err := victimCipher.Decrypt(transferResult.NewWalletToken)
+		require.NoError(t, err, "the intended recipient must be able to decrypt the inner token")
+		newWalletToken, err := nipcash.Decode(decrypted)
+		require.NoError(t, err)
+		require.Equal(t, transferResult.NewWalletPubkey, newWalletToken.WalletPubkey)
+
+		// The decrypted token is a genuinely live, spendable connection: the
+		// new wallet holds exactly the victim's slice amount, redeemable with
+		// the cash secret the victim generated locally.
+		// Bearer: the spun-off bill is cash-mode, so its secret in params IS the
+		// authorization and the item carries no slice proof (§Bearer Items).
+		newWalletClient := mustConnectBill(t, decrypted, "")
+		newWalletInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff new wallet redeem")
+		var newWalletClaim ClaimFundsResult
+		require.NoError(t, newWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+			Invoice:    newWalletInvoice.Invoice,
+			CashSecret: newSecretHex,
+		}, &newWalletClaim))
+		require.NotEmpty(t, newWalletClaim.Preimage)
+
+		// And exactly once: a second redeem attempt against the same secret
+		// must fail now that it's spent.
+		replayInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff new wallet double-redeem")
+		// The spun-off bill held one slice, which the redeem above paid out, so
+		// the bill itself is deleted and the replay reaches nothing.
+		requireSpentBillSilent(t, func(ctx context.Context) error {
+			var replayClaim ClaimFundsResult
+			return newWalletClient.Call(ctx, constants.NIP47MethodCashRedeem, ClaimFundsParams{
+				Invoice:    replayInvoice.Invoice,
+				CashSecret: newSecretHex,
+			}, &replayClaim)
+		})
+	})
+}

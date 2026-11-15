@@ -1,0 +1,82 @@
+package service
+
+import (
+	"context"
+
+	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/logger"
+)
+
+type createAppConsumer struct {
+	events.EventSubscriber
+	svc  *service
+	pool *nostr.SimplePool
+}
+
+// When a new app is created, subscribe to it on the relay
+func (s *createAppConsumer) ConsumeEvent(ctx context.Context, event *events.Event, globalProperties map[string]interface{}) {
+	if event.Event != "nwc_app_created" {
+		return
+	}
+
+	properties, ok := event.Properties.(map[string]interface{})
+	if !ok {
+		logger.Logger.Error().Interface("event", event).Msg("Failed to cast event.Properties to map")
+		return
+	}
+	id, ok := properties["id"].(uint)
+	if !ok {
+		logger.Logger.Error().Interface("event", event).Msg("Failed to get app id")
+		return
+	}
+
+	app := db.App{}
+	err := s.svc.db.First(&app, &db.App{
+		ID: id,
+	}).Error
+	if err != nil {
+		logger.Logger.Error().Fields(map[string]interface{}{
+			"id": id,
+		}).Err(err).Msg("Failed to find app for id")
+		return
+	}
+
+	walletPrivKey, walletPubKey, err := s.svc.appWalletKeys(id)
+	if err != nil {
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to derive app wallet keys")
+		return
+	}
+	// Skipped entirely for a cash bill — see db.PublishesNip47InfoEvent.
+	if db.PublishesNip47InfoEvent(app.Kind) {
+		for _, relayUrl := range s.svc.cfg.GetRelayUrls() {
+			s.svc.nip47Service.EnqueueNip47InfoPublishRequest(id, walletPubKey, walletPrivKey, relayUrl)
+		}
+	}
+
+	// With the shared subscription in use, registering the wallet is all that
+	// is needed: the filter never changes, so this app's requests are already
+	// being delivered — including any published before this consumer ran,
+	// which a per-wallet subscription would have missed.
+	if s.svc.cfg.TrustedNwcRelay() && s.svc.walletRegistry != nil {
+		s.svc.walletRegistry.Add(walletPubKey)
+		logger.Logger.Debug().
+			Uint("app_id", id).
+			Str("wallet", walletPubKey).
+			Int("registry_size", s.svc.walletRegistry.Len()).
+			Msg("Serving a new app's wallet")
+		return
+	}
+
+	// Snapshot svc.nostrGroup synchronously, here, rather than let the spawned
+	// goroutine read the field itself — a concurrent ReloadNostr could swap it
+	// to a new group between now and whenever that goroutine actually runs.
+	group := s.svc.nostrGroup
+	go func() {
+		if err := s.svc.startAppWalletSubscription(ctx, s.pool, walletPubKey, group); err != nil {
+			logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to start app wallet subscription")
+		}
+	}()
+}

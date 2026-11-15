@@ -1,0 +1,761 @@
+package nip47
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/flokiorg/lokihub/clock"
+	"gorm.io/gorm"
+	"slices"
+	"time"
+
+	"github.com/flokiorg/lokihub/circle/circlelife"
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/flokiorg/lokihub/nip47/controllers"
+	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/flokiorg/lokihub/nip47/permissions"
+	nostrpool "github.com/flokiorg/lokihub/nostr/pool"
+	"github.com/nbd-wtf/go-nostr"
+	nmilatnip01 "github.com/ohstr/nmilat/nip01"
+	nmilatnip47 "github.com/ohstr/nmilat/nip47"
+	"github.com/ohstr/nmilat/nipcw"
+)
+
+func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrpool.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
+	// Arrival is taken before any decryption (NIP-CASH §Deadlines).
+	meta := standardCallMeta(event, time.Now())
+	var nip47Response *models.Response
+	logger.Logger.Debug().
+		Str("requestEventNostrId", event.ID).
+		Int("eventKind", event.Kind).
+		Msg("Processing Event")
+
+	// go-nostr already checks this, but just to be sure:
+	validEventSignature, err := event.CheckSignature()
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Msg("invalid event signature")
+		return
+	}
+	if !validEventSignature {
+		logger.Logger.Error().
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Msg("invalid event signature")
+		return
+	}
+
+	if lnClient == nil {
+		logger.Logger.Error().
+			Str("requestEventNostrId", event.ID).
+			Msg("cannot handle event due to LNClient not started")
+		return
+	}
+
+	// store request event
+	requestEvent := db.RequestEvent{AppId: nil, NostrId: event.ID, State: db.REQUEST_EVENT_STATE_HANDLER_EXECUTING}
+	err = svc.db.Create(&requestEvent).Error
+	if err != nil {
+		// Not gorm.ErrDuplicatedKey alone: on sqlite (modernc) the violation
+		// arrives untranslated, and a replayed event was logged as a failure.
+		if db.IsDuplicateKeyError(err) {
+			logger.Logger.Warn().
+				Str("requestEventNostrId", event.ID).
+				Msg("Event already processed")
+			return
+		}
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Msg("Failed to save nostr event")
+		return
+	}
+	// check for a p tag
+	var walletPubkey string
+	pTag := event.Tags.Find("p")
+	if pTag != nil {
+		walletPubkey = pTag[1]
+	}
+
+	// A Circle Wallet rotation that has come due completes before a request
+	// by either of its keys is resolved, so the old key stops working at once
+	// and the new one is served (NIP-CW §Recovering a Lost Connection).
+	svc.completeDueRotationsFor(event.PubKey)
+
+	app := db.App{}
+
+	query := svc.db.Where("app_pubkey = ?", event.PubKey)
+
+	if walletPubkey != "" {
+		query = query.Where("wallet_pubkey = ?", walletPubkey)
+	}
+
+	err = query.First(&app).Error
+	if err != nil {
+		// No app row: a pubkey this hub never served, or a bill it destroyed,
+		// which kind 23194 answers with silence (its tombstone is served on the
+		// private transport only).
+		logger.Logger.Error().Err(err).
+			Str("appPubkey", event.PubKey).
+			Str("walletPubkey", walletPubkey).
+			Msg("Failed to find app for nostr pubkey and wallet pubkey")
+		return
+	}
+
+	now := time.Now()
+	err = svc.db.Model(&app).Update("last_used_at", &now).Error
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Uint("appId", app.ID).
+			Msg("Failed to update app last used time")
+	}
+
+	logger.Logger.Debug().
+		Str("requestEventNostrId", event.ID).
+		Int("eventKind", event.Kind).
+		Uint("appId", app.ID).
+		Msg("App found for nostr event")
+
+	appWalletPrivKey := svc.keys.GetNostrSecretKey()
+
+	if app.WalletPubkey != nil {
+		// This is a new child key derived from master using app ID as index
+		appWalletPrivKey, err = svc.keys.GetAppWalletKey(walletKeyAppID(&app))
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Uint("appId", app.ID).
+				Msg("error deriving child key")
+			return
+		}
+	}
+
+	encryption := constants.ENCRYPTION_TYPE_NIP04
+	encryptionTag := event.Tags.Find("encryption")
+	if encryptionTag != nil {
+		encryption = encryptionTag[1]
+	}
+
+	nip47Cipher, err := cipher.NewNip47Cipher(encryption, app.AppPubkey, appWalletPrivKey)
+	if err != nil {
+		cipherErr := err
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Uint("appId", app.ID).
+			Str("encryption", encryption).
+			Msg("Failed to initialize cipher")
+
+		err = svc.db.
+			Model(&requestEvent).
+			Update("state", db.REQUEST_EVENT_STATE_HANDLER_ERROR).
+			Error
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
+		}
+
+		// whenever we are unable to handle the request encryption, we always respond with our preferred encryption
+		// re-create the cipher with NIP-44 to send an error response
+		nip47Cipher, err = cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, app.AppPubkey, appWalletPrivKey)
+
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Uint("appId", app.ID).
+				Str("encryption", encryption).
+				Msg("Failed to initialize cipher")
+			return
+		}
+
+		nip47Response = &models.Response{
+			Error: &models.Error{
+				Code:    constants.ERROR_UNSUPPORTED_ENCRYPTION,
+				Message: cipherErr.Error(),
+			},
+		}
+
+		resp, err := svc.CreateResponse(event, nip47Response, nostr.Tags{}, nip47Cipher, appWalletPrivKey)
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to process event")
+			return
+		}
+		if err := svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app); err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Str("responseEventNostrId", resp.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to publish event")
+		}
+
+		return
+	}
+
+	err = svc.db.
+		Model(&requestEvent).
+		Update("app_id", app.ID).
+		Error
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("appPubkey", event.PubKey).
+			Msg("Failed to save app to nostr event")
+
+		nip47Response = &models.Response{
+			Error: &models.Error{
+				Code:    constants.ERROR_INTERNAL,
+				Message: fmt.Sprintf("Failed to save app to nostr event: %s", err.Error()),
+			},
+		}
+		resp, err := svc.CreateResponse(event, nip47Response, nostr.Tags{}, nip47Cipher, appWalletPrivKey)
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to process event")
+		} else if err := svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app); err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Str("responseEventNostrId", resp.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to publish event")
+		}
+
+		err = svc.db.
+			Model(&requestEvent).
+			Update("state", db.REQUEST_EVENT_STATE_HANDLER_ERROR).
+			Error
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
+		}
+
+		return
+	}
+
+	payload, err := nip47Cipher.Decrypt(event.Content)
+	if err != nil {
+		decryptionErr := err
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Uint("appId", app.ID).
+			Msg("Failed to decrypt content")
+
+		err = svc.db.
+			Model(&requestEvent).
+			Update("state", db.REQUEST_EVENT_STATE_HANDLER_ERROR).
+			Error
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
+		}
+
+		// whenever we are unable to handle the request encryption, we always respond with our preferred encryption
+		// re-create the cipher with NIP-44 to send an error response
+		nip47Cipher, err = cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, app.AppPubkey, appWalletPrivKey)
+
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Uint("appId", app.ID).
+				Str("encryption", encryption).
+				Msg("Failed to initialize cipher")
+			return
+		}
+
+		nip47Response = &models.Response{
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: fmt.Sprintf("failed to decrypt: %s", decryptionErr.Error()),
+			},
+		}
+
+		resp, err := svc.CreateResponse(event, nip47Response, nostr.Tags{}, nip47Cipher, appWalletPrivKey)
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to process event")
+			return
+		}
+		if err := svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app); err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Str("responseEventNostrId", resp.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to publish event")
+		}
+
+		return
+	}
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(payload), nip47Request)
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Msg("Failed to process event")
+
+		err = svc.db.
+			Model(&requestEvent).
+			Update("state", db.REQUEST_EVENT_STATE_HANDLER_ERROR).
+			Error
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
+		}
+
+		return
+	}
+
+	// we ignore potential DB errors here as this only saves the method and content data
+	svc.db.Model(&requestEvent).Updates(map[string]interface{}{
+		"method":       nip47Request.Method,
+		"content_data": payload,
+	})
+	// TODO: replace with a channel
+	// TODO: update all previous occurrences of svc.publishResponseEvent to also use the channel
+	publishResponse := func(nip47Response *models.Response, tags nostr.Tags) {
+		var state string
+		resp, err := svc.CreateResponse(event, nip47Response, tags, nip47Cipher, appWalletPrivKey)
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Uint("appId", app.ID).
+				Msg("Failed to create response")
+			state = db.REQUEST_EVENT_STATE_HANDLER_ERROR
+		} else {
+			err = svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app)
+			if err != nil {
+				logger.Logger.Error().Err(err).
+					Str("requestEventNostrId", event.ID).
+					Str("responseEventNostrId", resp.ID).
+					Int("eventKind", event.Kind).
+					Uint("appId", app.ID).
+					Msg("Failed to publish event")
+				state = db.REQUEST_EVENT_STATE_HANDLER_ERROR
+			} else {
+				logger.Logger.Debug().
+					Str("requestEventNostrId", event.ID).
+					Str("responseEventNostrId", resp.ID).
+					Int("eventKind", event.Kind).
+					Uint("appId", app.ID).
+					Msg("Published response")
+				state = db.REQUEST_EVENT_STATE_HANDLER_EXECUTED
+			}
+		}
+		err = svc.db.
+			Model(&requestEvent).
+			Update("state", state).
+			Error
+		if err != nil {
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
+		}
+	}
+
+	logger.Logger.Debug().
+		Str("requestEventNostrId", event.ID).
+		Int("eventKind", event.Kind).
+		Uint("appId", app.ID).
+		Str("method", nip47Request.Method).
+		Msg("Handling NIP-47 request")
+
+	// cash_wallet apps carve out get_budget from the system-wide always-granted
+	// list: a cash_wallet's connection may be widely shared among its
+	// recipients, and get_budget would otherwise reveal the wallet's total
+	// funded amount across every recipient to any holder of the connection
+	// with no proof required. get_info stays exempted — it's harmless
+	// capability/introspection metadata, and blocking it would break standard
+	// NWC client handshake compatibility for no security benefit.
+	//
+	// This is an explicit method+kind check, not a tweak to the generic
+	// scope-permission pipeline below: RequestMethodToScope(get_budget)
+	// returns "" (by design — get_budget has never required a scope of its
+	// own, since it's only ever reachable via the always-granted list), and
+	// HasPermission's underlying gorm.Find(&AppPermission{Scope: ""}) treats
+	// a zero-value Scope field as "no condition on this column" rather than
+	// "match nothing" — so it would match any permission row the app has and
+	// incorrectly grant get_budget anyway. Blocking it must happen before
+	// that pipeline is reached at all.
+	if app.Kind == db.AppKindCashWallet && nip47Request.Method == models.GET_BUDGET_METHOD {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_RESTRICTED,
+				Message: "get_budget is not available on a cash_wallet",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
+	// A listed circle's own connection answers get_info as its hub, and nothing
+	// else on this transport (WP-25 item 6).
+	if app.Kind == db.AppKindCircleHubConn {
+		svc.serveListingConn(ctx, lnClient, nip47Request, requestEvent.ID, &app, publishResponse)
+		return
+	}
+
+	// A Circle Wallet's current key, whatever the method: refused FROZEN while
+	// the wallet is frozen; otherwise the request cancels a pending rotation
+	// before any method is refused (NIP-CW §Recovering a Lost Connection).
+	if app.Kind == db.AppKindCircleWallet {
+		if app.CircleFrozen {
+			publishResponse(&models.Response{
+				ResultType: nip47Request.Method,
+				Error:      &models.Error{Code: nipcw.ErrFrozen, Message: "this wallet is frozen: its current key is refused until it is unfrozen or rotated"},
+			}, nostr.Tags{})
+			return
+		}
+		notices, err := circlelife.CancelPendingRotation(svc.db, app.ID, clock.Now())
+		if err != nil {
+			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to cancel a pending rotation")
+		}
+		circlelife.Publish(svc.eventPublisher, notices)
+	}
+
+	// Bill methods are served over the PRIVATE transport only (NIP-CASH §The
+	// Private Transport), which requires refusing them here with NOT_IMPLEMENTED —
+	// before the permission check, so a connection without the scope, or an
+	// expired one, gets that same answer rather than RESTRICTED or EXPIRED.
+	//
+	// Not "unknown method", which the dispatch's default case would say: the method
+	// exists and this hub serves it, just not on this transport. A client author
+	// reading that would look for a typo instead of for the announcement.
+	//
+	// The reason they moved is that this transport cannot carry them privately:
+	// every request here is p-tagged with its own bill's wallet pubkey, so a
+	// holder's bills are a public, linkable set, and no amount of encryption
+	// changes that. mint_cash stays on this transport because it is the hub
+	// owner's method on the hub's own connection, and NIP-CASH keeps it off the
+	// private transport for its own reasons.
+	// An Order connection is granted get_info only on this transport, and
+	// cash_order is never served here (NIP-CO §What It Allows), refused before
+	// any scope or method dispatch.
+	if (app.Kind == db.AppKindCashOrder && nip47Request.Method != models.GET_INFO_METHOD) ||
+		nip47Request.Method == constants.NIP47MethodCashOrder {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_NOT_IMPLEMENTED,
+				Message: nip47Request.Method + " is not served on this connection over this transport",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
+	switch nip47Request.Method {
+	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
+		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus,
+		constants.NIP47MethodCashLookup, constants.NIP47MethodCreateCircleWallet,
+		constants.NIP47MethodCashWithdrawQuote, constants.NIP47MethodCashWithdraw:
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code: constants.ERROR_NOT_IMPLEMENTED,
+				Message: fmt.Sprintf(
+					"%s is served over the private transport only — find this hub's kind-11190 announcement and send a kind-23190 request (NIP-CASH §The Private Transport)",
+					nip47Request.Method),
+			},
+		}, nostr.Tags{})
+		return
+	}
+
+	// A Circle Wallet serves only the methods its state allows, before any scope
+	// is read; delete_circle_wallet needs no scope (NIP-CW §Methods).
+	if ok, code, message := circleWalletGate(&app, nip47Request.Method, clock.Now()); !ok {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error:      &models.Error{Code: code, Message: message},
+		}, nostr.Tags{})
+		return
+	}
+	if nip47Request.Method == constants.NIP47MethodDeleteCircleWallet {
+		controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr).
+			HandleDeleteCircleWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+		return
+	}
+
+	if !slices.Contains(permissions.GetAlwaysGrantedMethods(), nip47Request.Method) {
+		scope, err := permissions.RequestMethodToScope(nip47Request.Method)
+		if err != nil {
+			publishResponse(&models.Response{
+				ResultType: nip47Request.Method,
+				Error: &models.Error{
+					Code:    constants.ERROR_INTERNAL,
+					Message: err.Error(),
+				},
+			}, nostr.Tags{})
+			return
+		}
+
+		// The relay could forward old requests, which is fine and actually also intended
+		// as it makes sure we can respond even after a downtime or network issue.
+		// but we should check the creation date of a request and ignore too old requests
+		// for payments and invoice creation.
+		if (scope == constants.PAY_INVOICE_SCOPE || scope == constants.MAKE_INVOICE_SCOPE) && time.Since(event.CreatedAt.Time()).Hours() > 6 {
+			logger.Logger.Error().
+				Uint("request_event_id", requestEvent.ID).
+				Uint("app_id", app.ID).
+				Msg("Received request more than 6 hours old")
+
+			// ignore the request
+			return
+		}
+
+		hasPermission, code, message := svc.permissionsService.HasPermission(&app, scope)
+		if !hasPermission {
+			logger.Logger.Error().
+				Uint("request_event_id", requestEvent.ID).
+				Uint("app_id", app.ID).
+				Str("code", code).
+				Str("message", message).
+				Msg("App does not have permission")
+
+			svc.eventPublisher.Publish(&events.Event{
+				Event: "nwc_permission_denied",
+				Properties: map[string]interface{}{
+					"request_method": nip47Request.Method,
+					"app_name":       app.Name,
+					// "app_pubkey":     app.AppPubkey,
+					"code":    code,
+					"message": message,
+				},
+			})
+
+			publishResponse(&models.Response{
+				ResultType: nip47Request.Method,
+				Error: &models.Error{
+					Code:    code,
+					Message: message,
+				},
+			}, nostr.Tags{})
+			return
+		}
+	}
+
+	controller := controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr).
+		WithPrivateIdentity(svc.privateIdentity).
+		WithGetInfoCaches(svc.getInfoOrders, svc.getInfoListed)
+
+	switch nip47Request.Method {
+	case models.MULTI_PAY_INVOICE_METHOD:
+		controller.
+			HandleMultiPayInvoiceEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+	case models.MULTI_PAY_KEYSEND_METHOD:
+		controller.
+			HandleMultiPayKeysendEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+	case models.PAY_INVOICE_METHOD:
+		controller.
+			HandlePayInvoiceEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
+	case models.PAY_KEYSEND_METHOD:
+		controller.
+			HandlePayKeysendEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
+	case models.GET_BALANCE_METHOD:
+		controller.
+			HandleGetBalanceEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+	case models.GET_BUDGET_METHOD:
+		controller.
+			HandleGetBudgetEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+	case models.MAKE_INVOICE_METHOD:
+		controller.
+			HandleMakeInvoiceEvent(ctx, nip47Request, requestEvent.ID, app.ID, publishResponse)
+	case models.LOOKUP_INVOICE_METHOD:
+		controller.
+			HandleLookupInvoiceEvent(ctx, nip47Request, requestEvent.ID, app.ID, publishResponse)
+	case models.LIST_TRANSACTIONS_METHOD:
+		controller.
+			HandleListTransactionsEvent(ctx, nip47Request, requestEvent.ID, app.ID, publishResponse)
+	case models.GET_INFO_METHOD:
+		controller.
+			HandleGetInfoEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+	case models.SIGN_MESSAGE_METHOD:
+		controller.
+			HandleSignMessageEvent(ctx, nip47Request, requestEvent.ID, publishResponse)
+	case models.CREATE_CONNECTION_METHOD:
+		controller.
+			HandleCreateConnectionEvent(ctx, nip47Request, requestEvent.ID, publishResponse)
+	case constants.NIP47MethodMintCash:
+		controller.
+			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, meta)
+	case models.MAKE_HOLD_INVOICE_METHOD:
+		controller.
+			HandleMakeHoldInvoiceEvent(ctx, nip47Request, requestEvent.ID, app.ID, publishResponse)
+	case models.CANCEL_HOLD_INVOICE_METHOD:
+		controller.
+			HandleCancelHoldInvoiceEvent(ctx, nip47Request, requestEvent.ID, app.ID, publishResponse)
+	case models.SETTLE_HOLD_INVOICE_METHOD:
+		controller.
+			HandleSettleHoldInvoiceEvent(ctx, nip47Request, requestEvent.ID, app.ID, publishResponse)
+	default:
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_NOT_IMPLEMENTED,
+				Message: fmt.Sprintf("Unknown method: %s", nip47Request.Method),
+			},
+		}, nostr.Tags{})
+	}
+}
+
+func (svc *nip47Service) CreateResponse(initialEvent *nostr.Event, content interface{}, tags nostr.Tags, cipher *cipher.Nip47Cipher, appWalletPrivKey string) (result *nostr.Event, err error) {
+	payloadBytes, err := json.Marshal(content)
+	if err != nil {
+		return nil, err
+	}
+
+	msg, err := cipher.Encrypt(string(payloadBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	allTags := nostr.Tags{[]string{"p", initialEvent.PubKey}, []string{"e", initialEvent.ID}}
+	allTags = append(allTags, tags...)
+
+	appWalletPubKey, err := nostr.GetPublicKey(appWalletPrivKey)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Error converting nostr privkey to pubkey")
+		return
+	}
+
+	resp := &nostr.Event{
+		PubKey:    appWalletPubKey,
+		CreatedAt: nostr.Now(),
+		Kind:      models.RESPONSE_KIND,
+		Tags:      allTags,
+		Content:   msg,
+	}
+	err = resp.Sign(appWalletPrivKey)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrpool.SimplePool, requestEvent *db.RequestEvent, resp *nostr.Event, app *db.App) error {
+	var appId *uint
+	if app != nil {
+		appId = &app.ID
+	}
+	responseEvent := db.ResponseEvent{NostrId: resp.ID, RequestId: requestEvent.ID, State: "received"}
+	err := svc.db.Create(&responseEvent).Error
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", requestEvent.NostrId).
+			Interface("appId", appId).
+			Str("replyEventId", resp.ID).
+			Msg("Failed to save response/reply event")
+		return err
+	}
+
+	updateColumns := make(map[string]interface{})
+	publishResultChannel := pool.PublishMany(ctx, svc.cfg.GetRelayUrls(), *resp)
+
+	publishSuccessful := false
+	for result := range publishResultChannel {
+		if result.Error == nil {
+			publishSuccessful = true
+		} else {
+			logger.Logger.Error().Err(result.Error).
+				Uint("requestEventId", requestEvent.ID).
+				Str("requestNostrEventId", requestEvent.NostrId).
+				Interface("appId", appId).
+				Uint("responseEventId", responseEvent.ID).
+				Str("responseNostrEventId", resp.ID).
+				Str("relay", result.RelayURL).
+				Msg("failed to publish response event to relay")
+		}
+	}
+
+	if !publishSuccessful {
+		updateColumns["state"] = db.RESPONSE_EVENT_STATE_PUBLISH_FAILED
+		logger.Logger.Error().Err(err).
+			Uint("requestEventId", requestEvent.ID).
+			Str("requestNostrEventId", requestEvent.NostrId).
+			Interface("appId", appId).
+			Uint("responseEventId", responseEvent.ID).
+			Str("responseNostrEventId", resp.ID).
+			Msg("Failed to publish reply")
+	} else {
+		updateColumns["state"] = db.RESPONSE_EVENT_STATE_PUBLISH_CONFIRMED
+		updateColumns["replied_at"] = time.Now()
+		logger.Logger.Info().
+			Uint("requestEventId", requestEvent.ID).
+			Str("requestNostrEventId", requestEvent.NostrId).
+			Interface("appId", appId).
+			Uint("responseEventId", responseEvent.ID).
+			Str("responseNostrEventId", resp.ID).
+			Msg("Published reply")
+	}
+
+	err = svc.db.
+		Model(&responseEvent).
+		Updates(updateColumns).
+		Error
+	if err != nil {
+		logger.Logger.Error().Err(err).
+			Uint("requestEventId", requestEvent.ID).
+			Str("requestNostrEventId", requestEvent.NostrId).
+			Interface("appId", appId).
+			Uint("responseEventId", responseEvent.ID).
+			Str("responseNostrEventId", resp.ID).
+			Msg("Failed to update response/reply event")
+		return err
+	}
+
+	return nil
+}
+
+// standardCallMeta is a kind-23194 request's arrival and deadline: its expiration
+// tag, read as nmilat reads it (exactly one, unsigned decimal).
+func standardCallMeta(event *nostr.Event, arrived time.Time) models.CallMeta {
+	meta := models.CallMeta{Transport: models.TransportStandard, ArrivedAt: arrived.Unix()}
+	tags := make([][]string, len(event.Tags))
+	for i, t := range event.Tags {
+		tags[i] = t
+	}
+	deadline, present, err := nmilatnip47.RequestExpiration(&nmilatnip01.Event{Tags: tags})
+	meta.Deadline, meta.DeadlinePresent, meta.DeadlineMalformed = deadline, present, err != nil
+	return meta
+}
+
+// completeDueRotationsFor completes the due rotations whose old or new key is
+// key (NIP-CW §Recovering a Lost Connection: lazily, by the request of either
+// key at or after completes_at; the job does the rest).
+func (svc *nip47Service) completeDueRotationsFor(key string) {
+	now := clock.Now()
+	filter := func(q *gorm.DB) *gorm.DB {
+		return q.Where("new_connection_pubkey = ? OR wallet_app_id IN (?)", key,
+			svc.db.Model(&db.App{}).Select("id").Where("app_pubkey = ? AND kind = ?", key, db.AppKindCircleWallet))
+	}
+	// A read first: almost every request has no rotation due, and needs no
+	// write transaction.
+	var due int64
+	if err := filter(svc.db.Model(&db.CircleRotation{}).Where("state = ? AND completes_at <= ?", db.CircleRotationPending, now.Unix())).
+		Count(&due).Error; err != nil || due == 0 {
+		return
+	}
+	notices, _, err := circlelife.CompleteDueRotations(svc.db, now, filter)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to complete due circle rotations")
+		return
+	}
+	circlelife.Publish(svc.eventPublisher, notices)
+}

@@ -1,0 +1,90 @@
+import { Outlet, ScrollRestoration } from "react-router";
+
+import { AppSidebar } from "src/components/AppSidebar";
+import { Banner } from "src/components/Banner";
+import { CommandPalette } from "src/components/CommandPalette";
+import { SidebarInset, SidebarProvider } from "src/components/ui/sidebar";
+import {
+  CommandPaletteProvider,
+  useCommandPaletteContext,
+} from "src/contexts/CommandPaletteContext";
+import { useBanner } from "src/hooks/useBanner";
+import { useInfo } from "src/hooks/useInfo";
+import { useNotifyReceivedPayments } from "src/hooks/useNotifyReceivedPayments";
+import { useRemoveSuccessfulChannelOrder } from "src/hooks/useRemoveSuccessfulChannelOrder";
+import { cn } from "src/lib/utils";
+
+import { GlobalError } from "src/components/GlobalError";
+import { useHealthCheck } from "src/hooks/useHealthCheck";
+
+function AppLayoutInner() {
+  const { data: info } = useInfo();
+  const { data: health, error } = useHealthCheck();
+  const { showBanner, dismissBanner } = useBanner();
+  const { open, setOpen } = useCommandPaletteContext();
+
+  useRemoveSuccessfulChannelOrder();
+  useNotifyReceivedPayments();
+
+  if (health?.message || error) {
+    return (
+      <GlobalError
+        error={error ?? new Error(health?.message || "Unknown error")}
+      />
+    );
+  }
+
+  if (!info) {
+    return null;
+  }
+
+  return (
+    <>
+      {/*
+        React Router does not reset scroll on navigation by default, so without
+        this the window kept its previous offset across a route change —
+        scroll halfway down Transactions, click Node, land halfway down Node.
+        The built-in does the right thing per navigation type: top on a new
+        navigation, restore on back/forward, and honour a hash anchor.
+
+        It manages WINDOW scroll only. TwoColumnFullScreenLayout scrolls its
+        own panel and resets that itself.
+      */}
+      <ScrollRestoration />
+      <div
+        className={cn(
+          "font-sans min-h-[calc(100vh-var(--app-titlebar-height))] w-full flex flex-col pt-[var(--app-titlebar-overlay-height)]",
+          showBanner
+            ? "[--header-height:calc(--spacing(9))]" // Banner height is 36px when visible (sidebar hidden on <md width)
+            : "[--header-height:0]"
+        )}
+      >
+        <SidebarProvider className="flex flex-col">
+          {showBanner && <Banner onDismiss={dismissBanner} />}
+          <div className="flex flex-1">
+            <AppSidebar />
+            <SidebarInset className="min-w-0">
+              <div
+                className={cn(
+                  "flex flex-1 flex-col gap-4 p-4 min-w-0",
+                  showBanner && "mt-14 md:mt-9" // Banner height is 36px with 1 line (>=md width) and 56px with 2 lines (<md width)
+                )}
+              >
+                <Outlet />
+              </div>
+            </SidebarInset>
+          </div>
+        </SidebarProvider>
+      </div>
+      <CommandPalette open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+export default function AppLayout() {
+  return (
+    <CommandPaletteProvider>
+      <AppLayoutInner />
+    </CommandPaletteProvider>
+  );
+}

@@ -1,0 +1,301 @@
+{
+  "title": "一般",
+  "description": "Lokihub の一般設定。",
+  "sections": {
+    "appearance": "外観",
+    "unitsAndCurrency": "単位と通貨",
+    "language": "言語",
+    "advanced": "詳細"
+  },
+  "appearance": {
+    "theme": "テーマ",
+    "themeDescription": "ビジュアルテーマを選択してください",
+    "darkMode": "外観",
+    "darkModeDescription": "ライト・ダーク、またはシステム設定に従うかを選択",
+    "modes": {
+      "system": "システム",
+      "light": "ライト",
+      "dark": "ダーク"
+    },
+    "themes": {
+      "default": "デフォルト"
+    }
+  },
+  "units": {
+    "displayUnit": "表示単位",
+    "displayUnitDescription": "金額の表示方法を選択",
+    "fiatCurrency": "法定通貨",
+    "fiatCurrencyDescription": "優先する法定参照通貨",
+    "auto": "自動"
+  },
+  "language": {
+    "label": "言語",
+    "description": "お好みのインターフェース言語を選択してください",
+    "updated": "言語を更新しました。"
+  },
+  "toasts": {
+    "themeUpdated": "テーマを更新しました。",
+    "appearanceUpdated": "外観を更新しました。",
+    "currencyUpdated": "通貨を {{currency}} に設定しました",
+    "formatUpdated": "{{chain}} の表示形式を更新しました",
+    "currencyFetchFailed": "通貨の取得に失敗しました：{{error}}",
+    "updateFailed": "設定の更新に失敗しました"
+  },
+  "nav": {
+    "general": "一般",
+    "services": "サービス",
+    "autoUnlock": "自動ロック解除",
+    "unlockPassword": "ロック解除パスワード",
+    "backup": "バックアップ",
+    "migrate": "Lokihubを移行",
+    "developer": "開発者",
+    "debugTools": "デバッグツール",
+    "about": "概要"
+  },
+  "shutdown": {
+    "dialogTitle": "Lokihubをオフにしますか？",
+    "dialogDesc": "これによりLokihubがオフになり、ノードがオフラインになります。ロックを解除するまで{{chain}}の送受信ができません。",
+    "cancel": "キャンセル",
+    "confirm": "続行",
+    "toast": "ノードがオフになりました。",
+    "failedToast": "ノードのシャットダウンに失敗しました"
+  },
+  "header": {
+    "title": "設定"
+  },
+  "changePassword": {
+    "title": "ロック解除パスワードを変更",
+    "important": "重要！",
+    "currentPassword": "現在のパスワード",
+    "newPassword": "新しいパスワード",
+    "confirmNew": "新しいパスワードを確認",
+    "save": "保存"
+  },
+  "backup": {
+    "title": "バックアップ",
+    "important": "重要",
+    "passwordLabel": "パスワード",
+    "active": "アクティブ"
+  },
+  "autoUnlock": {
+    "title": "自動ロック解除",
+    "attention": "注意",
+    "passwordLabel": "ロック解除パスワード"
+  },
+  "developer": {
+    "title": "開発者",
+    "tokenType": "トークンタイプ",
+    "tokenExpiry": "トークン有効期限（日数）",
+    "passwordLabel": "ロック解除パスワード",
+    "createToken": "トークンを作成"
+  },
+  "debugTools": {
+    "title": "デバッグツール",
+    "probeInvoice": "インボイスをプローブ",
+    "probeKeysend": "Keysendをプローブ",
+    "networkGraph": "ネットワークグラフを取得",
+    "refundTo": "返金先",
+    "onchainAddress": "オンチェーンアドレス",
+    "cancel": "キャンセル"
+  },
+  "withdraw": {
+    "switch": "オンチェーン出金",
+    "switchDescription": "このノードの Cash Hub が紙幣をオンチェーンアドレスに支払えるようにします (cash_withdraw)。各 Cash Hub でも個別に有効にします。",
+    "notCapable": "このノードのバックエンドはオンチェーン出金を支払えません。",
+    "turnedOn": "オンチェーン出金をオンにしました",
+    "turnedOff": "オンチェーン出金をオフにしました",
+    "switchFailed": "オンチェーン出金を変更できませんでした",
+    "ready": "支払いエンジンは準備完了",
+    "notReady": "支払いエンジンはまだ準備中です",
+    "status": {
+      "eligible": "対象コイン",
+      "setAside": "確保済み",
+      "floor": "下限",
+      "unconfirmed": "未承認",
+      "oldestUnbroadcast": "最も古い未ブロードキャスト",
+      "payouts": "支払い",
+      "bumps": "手数料引き上げ",
+      "reorgs": "再編成",
+      "invalidations": "無効化",
+      "coinsVanished": "消失したコイン",
+      "invariantFailures": "不変条件の失敗"
+    },
+    "hubTitle": "オンチェーン出金",
+    "offered": "この Cash Hub の紙幣に現在提供中",
+    "notOffered": "この Cash Hub の紙幣には提供していません",
+    "hubEnable": "オンチェーン出金を提供する",
+    "blocked": {
+      "nodeOff": "まず設定でノードのオンチェーン出金をオンにしてください。",
+      "notCapable": "このノードのバックエンドはオンチェーン出金を支払えません。"
+    },
+    "feeBase": "出金手数料の基本額 ({{unit}})",
+    "feePpm": "出金手数料 (ppm)",
+    "min": "最小 ({{unit}})",
+    "max": "最大 ({{unit}})",
+    "none": "なし",
+    "errors": {
+      "feeBase": "基本額は小数点以下3桁までの {{unit}} 金額です。",
+      "feePpm": "手数料率は 0 から {{max}} ppm の整数です。",
+      "min": "最小は小数点以下3桁までの {{unit}} 金額です。",
+      "max": "最大は小数点以下3桁までの {{unit}} 金額です。",
+      "minAboveMax": "最小が最大を超えています。"
+    },
+    "scriptTypes": "支払うスクリプトタイプ",
+    "finalDepth": "最終深度 (承認数)",
+    "networkFeeNote": "ネットワーク手数料はアドレスタイプごとにノードがその場で見積もり、見積もりに加算します。",
+    "save": "保存",
+    "saved": "オンチェーン出金の条件を保存しました",
+    "saveFailed": "オンチェーン出金の条件を保存できませんでした",
+    "payouts": {
+      "title": "オンチェーン支払い",
+      "description": "この Cash Hub のオンチェーン出金(新しい順)。オペレーターの操作で支払いは変わりません。キャンセルを求められるのは紙幣の保有者だけです。",
+      "amount": "金額",
+      "fee": "手数料",
+      "hubFee": "Hub 手数料",
+      "networkFee": "ネットワーク手数料",
+      "payout": "支払額",
+      "sentBy": "送信期限",
+      "signed": "署名済み",
+      "unsigned": "未署名",
+      "depth": "深度",
+      "remintedBill": "再発行された紙幣",
+      "detailTitle": "支払い",
+      "address": "アドレス",
+      "requestId": "リクエスト ID",
+      "committed": "確定",
+      "versions": "バージョン",
+      "noVersions": "まだトランザクションはありません。",
+      "inputs_one": "入力 {{count}} 件",
+      "inputs_other": "入力 {{count}} 件",
+      "broadcast": "ブロードキャスト 初回 / 最終",
+      "facts": "アーカイブ記録",
+      "state": {
+        "queued": "待機中",
+        "broadcast": "ブロードキャスト済み",
+        "confirmed": "承認済み",
+        "final": "確定",
+        "cancelled": "キャンセル済み"
+      },
+      "cancel": {
+        "requested": "保有者がキャンセルを要求",
+        "cancelled": "キャンセル済み ({{reason}})"
+      }
+    }
+  },
+  "sellCash": {
+    "connections": {
+      "title": "注文コネクション",
+      "description": "買い手がこの Cash Hub の現金を買う注文を出すためのコネクションです。それぞれ再表示できる cashorder1… 文字列で、秘密は公開情報です。",
+      "labelPlaceholder": "ラベル（任意）",
+      "create": "コネクションを作成",
+      "createdToast": "注文コネクションを作成しました",
+      "createFailed": "注文コネクションを作成できませんでした",
+      "created": "作成",
+      "retired": "廃止済み",
+      "retiredToast": "注文コネクションを廃止しました",
+      "retireFailed": "注文コネクションを廃止できませんでした",
+      "empty": "まだ注文コネクションはありません。",
+      "unlabeled": "ラベルなし",
+      "cannotSign": "ノードは現在このコネクションに署名できません。署名できるようになると文字列が再表示されます。",
+      "show": "表示",
+      "hide": "非表示",
+      "copy": "コピー",
+      "retire": "廃止",
+      "retireTitle": "この注文コネクションを廃止しますか？",
+      "retireWarning": "この操作は取り消せません。新しい注文は出せなくなりますが、既存の注文は引き続き発行され、読み取ることもできます。",
+      "cancel": "キャンセル",
+      "retireConfirm": "廃止"
+    },
+    "terms": {
+      "title": "販売条件",
+      "selling": "この Cash Hub は現金を販売しています。",
+      "notSellingYet": "この Cash Hub はまだ販売していません。開始するには下で条件を設定してください。",
+      "lightningTitle": "ライトニング",
+      "onchainTitle": "オンチェーン",
+      "min": "最小（{{unit}}）",
+      "max": "最大（{{unit}}）",
+      "feeBase": "基本手数料（{{unit}}）",
+      "feePpm": "手数料（ppm）",
+      "window": "ウィンドウ（秒）",
+      "ceiling": "未決注文の上限（{{unit}}）",
+      "tiersTitle": "オンチェーン承認ティア",
+      "tiersHint": "各金額までの支払いには相応の承認数が必要です。最後のティアは開放で、より大きい値をすべて対象とします。",
+      "tierUpTo": "上限（{{unit}}）",
+      "tierOpen": "それ以上",
+      "tierN": "承認数",
+      "tierAdd": "ティアを追加",
+      "tierRemove": "ティアを削除",
+      "billTitle": "ビル条件",
+      "redeemFeeBase": "償還基本手数料（{{unit}}）",
+      "redeemFeePpm": "償還手数料（ppm）",
+      "minTransfer": "最小送金額（{{unit}}）",
+      "openTitle": "未決注文の制限",
+      "openOnchainMax": "未決オンチェーン注文の最大数（0 = 無制限）",
+      "outboundWarnTitle": "オンチェーン上限がライトニング送出容量を超過",
+      "outboundWarn": "未決オンチェーン注文の上限（{{ceiling}}）がノードのライトニング送出容量（{{outbound}}）を超えています。Hub はすべてのオンチェーン注文をビルに発行できない場合があります。",
+      "save": "保存",
+      "saved": "販売条件を保存しました",
+      "saveFailed": "販売条件を保存できませんでした",
+      "errors": {
+        "lightningMin": "ライトニングの最小は小数3桁までの {{unit}} 金額です。",
+        "lightningMax": "ライトニングの最大は小数3桁までの {{unit}} 金額です。",
+        "lightningFeeBase": "ライトニングの基本手数料は小数3桁までの {{unit}} 金額です。",
+        "lightningFeePpm": "ライトニングの手数料は 0 から {{max}} ppm までの整数です。",
+        "lightningWindow": "ライトニングのウィンドウは整数秒です。",
+        "lightningMinAboveMax": "ライトニングの最小が最大を上回っています。",
+        "lightningCeiling": "ライトニングの未決注文上限は正の {{unit}} 金額です。",
+        "onchainMin": "オンチェーンの最小は小数3桁までの {{unit}} 金額です。",
+        "onchainMax": "オンチェーンの最大は小数3桁までの {{unit}} 金額です。",
+        "onchainFeeBase": "オンチェーンの基本手数料は小数3桁までの {{unit}} 金額です。",
+        "onchainFeePpm": "オンチェーンの手数料は 0 から {{max}} ppm までの整数です。",
+        "onchainWindow": "オンチェーンのウィンドウは整数秒です。",
+        "onchainMinAboveMax": "オンチェーンの最小が最大を上回っています。",
+        "onchainWhole": "オンチェーンの金額は整数 {{unit}} です。",
+        "onchainCeiling": "オンチェーンの未決注文上限は正の {{unit}} 金額です。",
+        "onchainCeilingWhole": "オンチェーンの未決注文上限は整数 {{unit}} 金額です。",
+        "tiers": "各ティアには少なくとも1承認が必要で、金額は昇順でなければならず、開放は最後のティアのみです。",
+        "redeemFeeBase": "償還基本手数料は小数3桁までの {{unit}} 金額です。",
+        "redeemFeePpm": "償還手数料は 0 から {{max}} ppm までの整数です。",
+        "minTransfer": "最小送金額は小数3桁までの {{unit}} 金額です。",
+        "openOnchainMax": "未決オンチェーン注文の最大数は整数です。"
+      }
+    },
+    "orders": {
+      "title": "注文",
+      "description": "この Cash Hub に出された注文を新しい順に、各注文の支払いとともに表示します。オペレーター向けの情報のみ：現金トークンも買い手の鍵もありません。",
+      "amount": "金額",
+      "fee": "手数料",
+      "payBy": "支払期限",
+      "requiredConfirmations": "必要な承認数",
+      "recipient": "受取人",
+      "confirmations": "承認数",
+      "mintedBill": "発行済みビル",
+      "keptTitle": "Hub による保持",
+      "keptDescription": "Hub が注文なしで保持した支払い：手数料まで、あるいは有効な注文に一致しなかった注文アドレスへの支払いです。",
+      "kind": {
+        "lightning": "ライトニング",
+        "onchain": "オンチェーン"
+      },
+      "state": {
+        "open": "未決",
+        "paid": "支払済み",
+        "minted": "発行済み",
+        "expired": "期限切れ",
+        "closed": "クローズ"
+      },
+      "paymentState": {
+        "seen": "検出",
+        "confirmed": "承認済み",
+        "minted": "発行済み",
+        "kept": "保持",
+        "reorged": "再編成",
+        "dropped": "破棄"
+      },
+      "recipientType": {
+        "pubkey": "Nostr 鍵",
+        "cash": "現金シークレット",
+        "connection_key": "接続鍵"
+      }
+    }
+  }
+}

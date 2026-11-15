@@ -1,0 +1,402 @@
+//go:build integration
+
+package integration
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ohstr/nmilat/nipIC"
+	"github.com/ohstr/nmilat/nipcash"
+	cashclient "github.com/ohstr/nmilat/nipcash/client"
+	"github.com/ohstr/nmilat/nipcw"
+	cwclient "github.com/ohstr/nmilat/nipcw/client"
+)
+
+// This file drives lokihub's cash_hub/circle_hub implementations with
+// nmilat's own published nipcash/nipcw client SDK (github.com/ohstr/nmilat),
+// rather than this suite's hand-rolled wire.go structs + generic
+// integration/nwcclient.Client - proof that lokihub-as-Hub is wire-compatible
+// with the real caller-side library described in
+// docs/nips/nmilat-migration-examples.md, not just internally self-consistent.
+//
+// The rest of this suite (cash_hub_test.go, cash_redeem_test.go, the
+// *_audit_*/adversarial files, ...) deliberately keeps using the raw
+// nwcclient path: those tests exist to send malformed/adversarial wire
+// payloads (invalid identity_type, tampered proofs, wrong-amount bindings,
+// ...) that nipcash's typed API refuses to construct client-side in the
+// first place (see e.g. ErrMixedCashAllocation) - the point of those
+// tests is exercising the Hub's own server-side rejection, which a
+// well-behaved SDK client can't be coerced into attempting.
+
+// Every BILL connection below is built from the cash token, never from the
+// pairing URI the same mint returns. Both carry the same wallet pubkey, relays
+// and connection secret, so both connect — but only the token carries the mint
+// signature, and the private transport recovers the Hub's identity from that
+// signature in order to verify the transport announcement it then trusts. A
+// client connected by pairing URI reaches the Hub and can still call
+// get_balance; it simply cannot call a bill method, because there is nothing to
+// check the announcement against. That is the shape of the failure to expect
+// here, and it surfaces at the first bill call rather than at Connect.
+
+const nmilatHappyPathAmountMillis = 5_000
+const nmilatHappyPathExpiry = time.Hour
+
+func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
+	cfg := requireConfig(t)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "nmilat-cash-hub", nil)
+
+	// Minting goes over the hub's signed cashhub1 string; every bill-creating call
+	// is written ahead to a journal first (NIP-CASH §request_id).
+	hubClient, err := cashclient.ConnectCashHub(ctxT(t), hub.CashHubToken)
+	require.NoError(t, err)
+	t.Cleanup(hubClient.Close)
+	journal := newMemJournal()
+	mint := func(t *testing.T, recipients ...nipcash.Allocation) *nipcash.MintCashResult {
+		t.Helper()
+		result, err := hubClient.MintCash(ctxT(t), nipcash.MintCashParams{
+			Recipients: recipients, Expiry: nmilatHappyPathExpiry, RequestID: newRequestID(t),
+		}, journal, testDevice)
+		require.NoError(t, err)
+		require.NotEmpty(t, result.CashToken)
+		return result
+	}
+
+	t.Run("MintRedeem_Pubkey", func(t *testing.T) {
+		priv := newTestPrivkey(t)
+		pub := mustPubkey(t, priv)
+
+		result := mint(t, nipcash.Send(nipcash.Pubkey(pub), nmilatHappyPathAmountMillis))
+		require.NotEmpty(t, result.CashToken)
+
+		wallet, err := cashclient.Connect(ctxT(t), result.CashToken)
+		require.NoError(t, err)
+		t.Cleanup(wallet.Close)
+
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, nmilatHappyPathAmountMillis, "nmilat sdk redeem")
+		redeemResult, err := wallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
+			Invoice:    invoice.Invoice,
+			Credential: nipcash.BySigning(priv),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, redeemResult.Preimage)
+	})
+
+	// MintRedeem_ConnectionKey exercises NIP-CASH's third identity mode — the
+	// most protocol-heavy of the three (an Identity Authority attestation,
+	// nipIC.NewConnectionKey's platform+externalID hashing, and the
+	// claimant's own separate Nostr keypair signing the per-call proof) —
+	// through nmilat's real client end to end, the one path
+	// MintRedeem_Pubkey/_Cash above don't touch at all.
+	t.Run("MintRedeem_ConnectionKey", func(t *testing.T) {
+		iaPriv := createEphemeralTrustedIA(t, cfg)
+		iaPub := mustPubkey(t, iaPriv)
+
+		const platform = nipIC.WebIdentity("discord")
+		const externalID = "100000000000000042" // a canonical discord user id
+		connKey, err := nipIC.NewConnectionKey(platform, externalID)
+		require.NoError(t, err)
+		recipient, err := nipcash.ConnectionKey(platform, externalID, iaPub)
+		require.NoError(t, err)
+
+		result := mint(t, nipcash.Send(recipient, nmilatHappyPathAmountMillis))
+		require.NotEmpty(t, result.CashToken)
+
+		wallet, err := cashclient.Connect(ctxT(t), result.CashToken)
+		require.NoError(t, err)
+		t.Cleanup(wallet.Close)
+
+		// The claimant proves control of connKey via their own real Nostr
+		// identity, witnessed by the IA's attestation — two separate
+		// keypairs, neither of which is the wallet's own connection secret.
+		claimantPriv := newTestPrivkey(t)
+		claimantPub := mustPubkey(t, claimantPriv)
+
+		attEvent, err := nipIC.NewAttestation(nipIC.AttestationParams{
+			PrivateKey:    iaPriv,
+			ConnectionKey: connKey,
+			UserPubkey:    claimantPub,
+			Platform:      platform,
+			Evidence: nipIC.Evidence{
+				Platform:   platform,
+				UserID:     externalID,
+				Username:   "sdk-tester",
+				VerifiedAt: time.Now().Unix(),
+			},
+			AuthType:       "oauth",
+			ExpirationDays: 1,
+		})
+		require.NoError(t, err)
+		attestation, err := nipIC.ParseAttestation(attEvent)
+		require.NoError(t, err)
+
+		cred, err := nipcash.BySigningConnectionKey(claimantPriv, attestation)
+		require.NoError(t, err)
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, nmilatHappyPathAmountMillis, "nmilat sdk connection_key redeem")
+		redeemResult, err := wallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
+			Invoice:    invoice.Invoice,
+			Credential: cred,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, redeemResult.Preimage)
+	})
+
+	// CashStatus exercises the one migrated method the rest of this file
+	// never calls at all — a multi-recipient roster read, through nmilat's
+	// real client.
+	t.Run("CashStatus", func(t *testing.T) {
+		privA := newTestPrivkey(t)
+		pubA := mustPubkey(t, privA)
+		pubB := mustPubkey(t, newTestPrivkey(t))
+
+		minted := mint(t, nipcash.Send(nipcash.Pubkey(pubA), nmilatHappyPathAmountMillis), nipcash.Send(nipcash.Pubkey(pubB), nmilatHappyPathAmountMillis*2))
+
+		// Dialled with the TOKEN, not the pairing URI, and that is now a requirement
+		// rather than a preference: bill methods run over the private transport, whose
+		// hub identity comes from the bill's own mint signature — which a pairing URI
+		// does not carry. A client holding only a pairing URI can mint, but cannot act
+		// on a bill.
+		//
+		// A credential is likewise now required: the transport authorizes per item, so
+		// the identity that was implicit in the connection has to be stated. ScopeAll
+		// because this test reads the whole roster; the default is the caller's own row.
+		wallet, err := cashclient.Connect(ctxT(t), minted.CashToken)
+		require.NoError(t, err)
+		t.Cleanup(wallet.Close)
+
+		roster, err := wallet.CashStatus(ctxT(t), nipcash.BySigning(privA), nipcash.ScopeAll)
+		require.NoError(t, err)
+		require.Len(t, roster.Recipients, 2)
+		for _, r := range roster.Recipients {
+			assert.Equal(t, "pubkey", r.IdentityType)
+			assert.False(t, r.Claimed)
+			switch r.IdentityValue {
+			case pubA:
+				assert.EqualValues(t, nmilatHappyPathAmountMillis, r.AmountMillis)
+			case pubB:
+				assert.EqualValues(t, nmilatHappyPathAmountMillis*2, r.AmountMillis)
+			default:
+				t.Errorf("unexpected recipient identity_value %q", r.IdentityValue)
+			}
+		}
+	})
+
+	t.Run("MintRedeem_Cash", func(t *testing.T) {
+		// The caller generates the secret; only its commitment reaches the Hub.
+		target, err := nipcash.NewCashTarget()
+		require.NoError(t, err)
+		result := mint(t, nipcash.Send(target, nmilatHappyPathAmountMillis))
+		require.Len(t, result.Recipients, 1)
+		require.Equal(t, target.Commitment(), result.Recipients[0].IdentityValue)
+		secret := target.Secret()
+
+		wallet, err := cashclient.Connect(ctxT(t), result.CashToken)
+		require.NoError(t, err)
+		t.Cleanup(wallet.Close)
+
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, nmilatHappyPathAmountMillis, "nmilat sdk cash-mode redeem")
+		redeemResult, err := wallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
+			Invoice:    invoice.Invoice,
+			Credential: nipcash.BySecret(secret),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, redeemResult.Preimage)
+	})
+
+	t.Run("Transfer_FullInPlace", func(t *testing.T) {
+		srcPriv := newTestPrivkey(t)
+		srcPub := mustPubkey(t, srcPriv)
+		dstPriv := newTestPrivkey(t)
+		dstPub := mustPubkey(t, dstPriv)
+
+		minted := mint(t, nipcash.Send(nipcash.Pubkey(srcPub), nmilatHappyPathAmountMillis))
+
+		wallet, err := cashclient.Connect(ctxT(t), minted.CashToken)
+		require.NoError(t, err)
+		t.Cleanup(wallet.Close)
+
+		transferResult, err := wallet.CashTransfer(ctxT(t), nipcash.CashTransferParams{
+			Credential:    nipcash.BySigning(srcPriv),
+			To:            nipcash.Pubkey(dstPub),
+			CurrentAmount: nmilatHappyPathAmountMillis,
+			RequestID:     newRequestID(t),
+		}, journal, testDevice)
+		require.NoError(t, err)
+		require.Empty(t, transferResult.NewWalletToken, "an in-place full transfer reuses the same connection/token")
+
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, nmilatHappyPathAmountMillis, "nmilat sdk transfer redeem")
+		redeemResult, err := wallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
+			Invoice:    invoice.Invoice,
+			Credential: nipcash.BySigning(dstPriv),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, redeemResult.Preimage)
+	})
+
+	t.Run("Transfer_Split", func(t *testing.T) {
+		srcPriv := newTestPrivkey(t)
+		srcPub := mustPubkey(t, srcPriv)
+		dstPriv := newTestPrivkey(t)
+		dstPub := mustPubkey(t, dstPriv)
+
+		const total = uint64(nmilatHappyPathAmountMillis * 2)
+		const splitAmount = uint64(nmilatHappyPathAmountMillis)
+
+		minted := mint(t, nipcash.Send(nipcash.Pubkey(srcPub), total))
+
+		wallet, err := cashclient.Connect(ctxT(t), minted.CashToken)
+		require.NoError(t, err)
+		t.Cleanup(wallet.Close)
+
+		split := splitAmount
+		transferResult, err := wallet.CashTransfer(ctxT(t), nipcash.CashTransferParams{
+			Credential:    nipcash.BySigning(srcPriv),
+			To:            nipcash.Pubkey(dstPub),
+			CurrentAmount: total,
+			SplitAmount:   &split,
+			RequestID:     newRequestID(t),
+		}, journal, testDevice)
+		require.NoError(t, err)
+		require.NotEmpty(t, transferResult.NewWalletToken, "split-off piece for the recipient")
+		require.NotEmpty(t, transferResult.RemainderWalletToken, "caller's own change, in a brand-new wallet")
+
+		newWallet, err := cashclient.Connect(ctxT(t), transferResult.NewWalletToken)
+		require.NoError(t, err)
+		t.Cleanup(newWallet.Close)
+		recipientInvoice := mintInvoiceFromSimpleWallet(t, cfg, splitAmount, "nmilat sdk split redeem (recipient)")
+		recipientRedeem, err := newWallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
+			Invoice:    recipientInvoice.Invoice,
+			Credential: nipcash.BySigning(dstPriv),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, recipientRedeem.Preimage)
+
+		remainderWallet, err := cashclient.Connect(ctxT(t), transferResult.RemainderWalletToken)
+		require.NoError(t, err)
+		t.Cleanup(remainderWallet.Close)
+		remainderInvoice := mintInvoiceFromSimpleWallet(t, cfg, total-splitAmount, "nmilat sdk split redeem (remainder)")
+		remainderRedeem, err := remainderWallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
+			Invoice:    remainderInvoice.Invoice,
+			Credential: nipcash.BySigning(srcPriv),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, remainderRedeem.Preimage)
+	})
+
+	t.Run("Consolidate", func(t *testing.T) {
+		ownerPriv := newTestPrivkey(t)
+		ownerPub := mustPubkey(t, ownerPriv)
+
+		mintedA := mint(t, nipcash.Send(nipcash.Pubkey(ownerPub), nmilatHappyPathAmountMillis))
+		mintedB := mint(t, nipcash.Send(nipcash.Pubkey(ownerPub), nmilatHappyPathAmountMillis))
+
+		// The TOKEN, not the pairing URI: the private transport recovers the hub
+		// identity from the bill's own mint signature, which a pairing URI omits.
+		walletA, err := cashclient.Connect(ctxT(t), mintedA.CashToken)
+		require.NoError(t, err)
+		t.Cleanup(walletA.Close)
+
+		// The target is sources[0] (NIP-CASH §Consolidating Tokens), so the call is
+		// authorized by the first source's own credential.
+		consolidateResult, err := walletA.CashConsolidate(ctxT(t), nipcash.CashConsolidateParams{
+			Sources: []nipcash.Source{
+				nipcash.From(mintedA.WalletPubkey, nmilatHappyPathAmountMillis, nipcash.BySigning(ownerPriv)),
+				nipcash.From(mintedB.WalletPubkey, nmilatHappyPathAmountMillis, nipcash.BySigning(ownerPriv)),
+			},
+			To:        nipcash.Pubkey(ownerPub),
+			RequestID: newRequestID(t),
+		}, journal, testDevice)
+		require.NoError(t, err)
+		require.NotEmpty(t, consolidateResult.NewWalletToken)
+		require.EqualValues(t, nmilatHappyPathAmountMillis*2, consolidateResult.AmountMillis)
+
+		merged, err := cashclient.Connect(ctxT(t), consolidateResult.NewWalletToken)
+		require.NoError(t, err)
+		t.Cleanup(merged.Close)
+
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, nmilatHappyPathAmountMillis*2, "nmilat sdk consolidate redeem")
+		redeemResult, err := merged.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
+			Invoice:    invoice.Invoice,
+			Credential: nipcash.BySigning(ownerPriv),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, redeemResult.Preimage)
+	})
+}
+
+// TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt exercises nipcw's
+// client alongside nipcash's, composing the two the way
+// docs/nips/nmilat-migration-examples.md's "Redeeming Straight Into a
+// Circle Wallet" section describes: a member self-serves a Circle Wallet
+// via nipcw, then redeems a cash token minted by a same-host Cash Hub
+// straight into it - the one invoice-amount case that always resolves
+// same-node, full face value, zero fee.
+func TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt(t *testing.T) {
+	cfg := requireConfig(t)
+
+	memberPriv := newTestPrivkey(t)
+	memberPub := mustPubkey(t, memberPriv)
+
+	circleHub, _, _ := createEphemeralCircleHub(t, cfg, "nmilat-circle-hub", circlePolicyAllowlist, []string{memberPriv}, ephemeralCircleHubOpts{})
+
+	circleHubClient, err := cwclient.Connect(ctxT(t), circleHub.CircleHubToken, cwclient.Options{})
+	require.NoError(t, err)
+	t.Cleanup(circleHubClient.Close)
+
+	// The member generates the wallet's connection key; the Hub only ever sees
+	// its public half (NIP-CW §Request).
+	connection, err := nipcw.NewConnectionKey()
+	require.NoError(t, err)
+	resp, err := circleHubClient.Join(ctxT(t), nipcw.CreateCircleWalletParams{
+		Credential:       nipcw.BySigning(memberPriv),
+		Connection:       connection,
+		MaxAmountMillis:  circleHappyPathAmountMloki,
+		MaxReceiveMillis: circleHappyPathAmountMloki, // room for the redeem below
+		Expiry:           nmilatHappyPathExpiry,
+	}, joinOpts, &memJoinJournal{})
+	require.NoError(t, err)
+	wallet := resp.Wallet()
+
+	// The Circle Wallet itself is an ordinary NWC connection once created -
+	// generic calls against it (make_invoice/get_balance) go through this
+	// suite's existing nwcclient, same as the rest of the suite; only the
+	// NIP-CASH/NIP-CW protocol calls above go through nmilat's typed SDK.
+	member := mustConnectCircleWallet(t, circleWalletConnection{WalletPubkey: wallet.WalletPubkey, Relays: wallet.Relays, Secret: wallet.Secret})
+
+	cashHub, _, _ := createEphemeralCashHub(t, cfg, "nmilat-cash-hub-for-circle", nil)
+	cashHubClient, err := cashclient.ConnectCashHub(ctxT(t), cashHub.CashHubToken)
+	require.NoError(t, err)
+	t.Cleanup(cashHubClient.Close)
+
+	minted, err := cashHubClient.MintCash(ctxT(t), nipcash.MintCashParams{
+		Recipients: []nipcash.Allocation{nipcash.Send(nipcash.Pubkey(memberPub), nmilatHappyPathAmountMillis)},
+		Expiry:     nmilatHappyPathExpiry,
+		RequestID:  newRequestID(t),
+	}, newMemJournal(), testDevice)
+	require.NoError(t, err)
+
+	cashWallet, err := cashclient.Connect(ctxT(t), minted.CashToken)
+	require.NoError(t, err)
+	t.Cleanup(cashWallet.Close)
+
+	var invoice MakeInvoiceResult
+	require.NoError(t, member.Call(ctxT(t), "make_invoice", MakeInvoiceParams{
+		Amount:      nmilatHappyPathAmountMillis,
+		Description: "nmilat sdk circle wallet redeem",
+	}, &invoice))
+	require.NotEmpty(t, invoice.Invoice)
+
+	redeemResult, err := cashWallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
+		Invoice:    invoice.Invoice,
+		Credential: nipcash.BySigning(memberPriv),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, redeemResult.Preimage)
+
+	var balance GetBalanceResult
+	require.NoError(t, member.Call(ctxT(t), "get_balance", struct{}{}, &balance))
+	require.EqualValues(t, nmilatHappyPathAmountMillis, balance.Balance, "same-host redemption resolves same-node: full face value, zero fee")
+}

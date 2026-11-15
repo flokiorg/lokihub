@@ -1,0 +1,433 @@
+package http
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"testing"
+
+	"github.com/flokiorg/lokihub/api"
+	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/tests/db"
+	"github.com/flokiorg/lokihub/tests/mocks"
+	"github.com/flokiorg/lokihub/ttlcache"
+	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestUnlock_IncorrectPassword(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := events.NewEventPublisher()
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+	mockConfig.On("CheckUnlockPassword", "123").Return(false)
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "full"}
+	jsonBody, _ := json.Marshal(requestBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	mockConfig.AssertNotCalled(t, "GetJWTSecret")
+}
+
+func TestUnlock_UnknownPermission(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := events.NewEventPublisher()
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+	mockConfig.On("CheckUnlockPassword", "123").Return(true)
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "unknown"}
+	jsonBody, _ := json.Marshal(requestBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	mockConfig.AssertNotCalled(t, "GetJWTSecret")
+}
+
+func TestGetApps_NoToken(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := mocks.NewMockEventPublisher(t)
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/apps", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestGetApps_ReadonlyPermission(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := events.NewEventPublisher()
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+	mockConfig.On("CheckUnlockPassword", "123").Return(true)
+	mockConfig.On("GetJWTSecret").Return("dummy secret", nil)
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "readonly"}
+	jsonBody, _ := json.Marshal(requestBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	body, err := io.ReadAll(rec.Body)
+	require.NoError(t, err)
+
+	type authTokenResponse struct {
+		Token string `json:"token"`
+	}
+
+	var unlockAuthTokenResponse authTokenResponse
+	err = json.Unmarshal(body, &unlockAuthTokenResponse)
+	require.NoError(t, err)
+	assert.NotEmpty(t, unlockAuthTokenResponse.Token)
+
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/apps", nil)
+	req2.Header.Set("Authorization", "Bearer "+unlockAuthTokenResponse.Token)
+	rec2 := httptest.NewRecorder()
+	e.ServeHTTP(rec2, req2)
+
+	assert.Equal(t, http.StatusOK, rec2.Code)
+}
+
+func TestGetApps_FullPermission(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := events.NewEventPublisher()
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+	mockConfig.On("CheckUnlockPassword", "123").Return(true)
+	mockConfig.On("GetJWTSecret").Return("dummy secret", nil)
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "full"}
+	jsonBody, _ := json.Marshal(requestBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	body, err := io.ReadAll(rec.Body)
+	require.NoError(t, err)
+
+	type authTokenResponse struct {
+		Token string `json:"token"`
+	}
+
+	var unlockAuthTokenResponse authTokenResponse
+	err = json.Unmarshal(body, &unlockAuthTokenResponse)
+	require.NoError(t, err)
+	assert.NotEmpty(t, unlockAuthTokenResponse.Token)
+
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/apps", nil)
+	req2.Header.Set("Authorization", "Bearer "+unlockAuthTokenResponse.Token)
+	rec2 := httptest.NewRecorder()
+	e.ServeHTTP(rec2, req2)
+
+	assert.Equal(t, http.StatusOK, rec2.Code)
+}
+
+func TestCreateApp_NoToken(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := mocks.NewMockEventPublisher(t)
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	requestBody := api.CreateAppRequest{Name: "Test app", Scopes: []string{constants.PAY_INVOICE_SCOPE}}
+	jsonBody, _ := json.Marshal(requestBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/apps", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestCreateApp_FullPermission(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := events.NewEventPublisher()
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+	mockConfig.On("CheckUnlockPassword", "123").Return(true)
+	mockConfig.On("GetJWTSecret").Return("dummy secret", nil)
+	mockConfig.On("GetAdvertisedRelayUrls").Return([]string{})
+	mockConfig.On("Get", "LightningAddress", "").Return("test@loki", nil)
+
+	mockKeys := mocks.NewMockKeys(t)
+	mockKeys.On("GetAppWalletKey", uint(1)).Return("", nil)
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mockKeys)
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "full"}
+	jsonBody, _ := json.Marshal(requestBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	body, err := io.ReadAll(rec.Body)
+	require.NoError(t, err)
+
+	type authTokenResponse struct {
+		Token string `json:"token"`
+	}
+
+	var unlockAuthTokenResponse authTokenResponse
+	err = json.Unmarshal(body, &unlockAuthTokenResponse)
+	require.NoError(t, err)
+	assert.NotEmpty(t, unlockAuthTokenResponse.Token)
+
+	requestBody2 := api.CreateAppRequest{Name: "Test app", Scopes: []string{constants.PAY_INVOICE_SCOPE}}
+	jsonBody2, _ := json.Marshal(requestBody2)
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/apps", bytes.NewBuffer(jsonBody2))
+	req2.Header.Set("Authorization", "Bearer "+unlockAuthTokenResponse.Token)
+	req2.Header.Set("Content-Type", "application/json") // Set Content-Type header
+
+	rec2 := httptest.NewRecorder()
+	e.ServeHTTP(rec2, req2)
+
+	assert.Equal(t, http.StatusOK, rec2.Code)
+}
+
+func TestEventRoute_RegisteredAtApiEvent(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := events.NewEventPublisher()
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	var atApiEvent, atDoubleApiEvent bool
+	for _, r := range e.Routes() {
+		if r.Method != http.MethodPost {
+			continue
+		}
+		switch r.Path {
+		case "/api/event":
+			atApiEvent = true
+		case "/api/api/event":
+			atDoubleApiEvent = true
+		}
+	}
+	assert.True(t, atApiEvent, "POST /api/event must be registered")
+	assert.False(t, atDoubleApiEvent, "POST /api/api/event must not be registered (double /api prefix)")
+}
+
+func TestCreateApp_ReadonlyPermission(t *testing.T) {
+	e := echo.New()
+	logger.Init(strconv.Itoa(int(4)))
+	mockSvc := mocks.NewMockService(t)
+	gormDb, err := db.NewDB(t)
+	require.NoError(t, err)
+	defer db.CloseDB(gormDb)
+
+	mockEventPublisher := events.NewEventPublisher()
+
+	mockConfig := mocks.NewMockConfig(t)
+	mockConfig.On("GetEnv").Return(&config.AppConfig{})
+	mockConfig.On("CheckUnlockPassword", "123").Return(true)
+	mockConfig.On("GetJWTSecret").Return("dummy secret", nil)
+
+	mockKeys := mocks.NewMockKeys(t)
+
+	mockSvc.On("GetDB").Return(gormDb)
+	mockSvc.On("GetConfig").Return(mockConfig)
+	mockSvc.On("GetKeys").Return(mockKeys)
+	mockSvc.On("GetHubInfoSvc").Return(mocks.NewMockHubInfoService(t))
+	stubInfoCaches(mockSvc)
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
+
+	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
+	httpSvc.RegisterSharedRoutes(e)
+
+	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "readonly"}
+	jsonBody, _ := json.Marshal(requestBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	body, err := io.ReadAll(rec.Body)
+	require.NoError(t, err)
+
+	type authTokenResponse struct {
+		Token string `json:"token"`
+	}
+
+	var unlockAuthTokenResponse authTokenResponse
+	err = json.Unmarshal(body, &unlockAuthTokenResponse)
+	require.NoError(t, err)
+	assert.NotEmpty(t, unlockAuthTokenResponse.Token)
+
+	requestBody2 := api.CreateAppRequest{Name: "Test app", Scopes: []string{constants.PAY_INVOICE_SCOPE}}
+	jsonBody2, _ := json.Marshal(requestBody2)
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/apps", bytes.NewBuffer(jsonBody2))
+	req2.Header.Set("Authorization", "Bearer "+unlockAuthTokenResponse.Token)
+	req2.Header.Set("Content-Type", "application/json") // Set Content-Type header
+
+	rec2 := httptest.NewRecorder()
+	e.ServeHTTP(rec2, req2)
+
+	assert.Equal(t, http.StatusForbidden, rec2.Code)
+}
+
+// stubInfoCaches answers the two get_info cache getters NewAPI reads: the API
+// under test has no caches.
+func stubInfoCaches(svc *mocks.MockService) {
+	svc.On("GetOrderInfoCache").Return((*ttlcache.Cache[string])(nil)).Maybe()
+	svc.On("GetListedInfoCache").Return((*ttlcache.Cache[uint])(nil)).Maybe()
+}

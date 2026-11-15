@@ -1,0 +1,665 @@
+package service
+
+import (
+	"context"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"sync/atomic"
+	"time"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip44"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nodesign"
+	nmilatnip01 "github.com/ohstr/nmilat/nip01"
+	"github.com/ohstr/nmilat/nipcash/transport"
+)
+
+// privateTransport holds what the receive path needs, resolved once at startup so
+// the hot path never re-derives a key or re-reads config.
+type privateTransport struct {
+	// inboxPrivKey opens every inbound envelope. Held in process deliberately:
+	// the node could not do this at a workable speed (602 µs per event, measured)
+	// and flnd's ECDH returns a hashed value NIP-44 cannot consume.
+	inboxPrivKey string
+	// inboxXOnly is what clients p-tag and encrypt to, and what the relay filter
+	// matches. It changes only on an inbox rotation, so no resubscribe is needed
+	// when a bill is minted or destroyed.
+	inboxXOnly string
+	// keyRing, once set (at start or by a rotation), replaces the two fields
+	// above: the current key and the retired keys still in their grace.
+	keyRing atomic.Pointer[inboxRing]
+	// rekey asks the subscription to resubscribe with the ring's inboxes.
+	rekey chan struct{}
+	// nodeXOnly is the hub's LN identity in Nostr form — the key that signs the
+	// announcement and the key a client recovers from a bill's mint signature.
+	nodeXOnly string
+
+	// nonces remembers served envelopes (E3), persisted so a replay inside
+	// not_after is dropped across a restart.
+	nonces servedNonces
+	// relayBudget rate-limits, per relay connection, the envelopes decrypted
+	// (before E1); nil serves everything.
+	relayBudget *relayEnvelopeBudget
+
+	droppedEvents atomic.Int64
+	// omittedItems counts items served envelopes chose not to answer — an unknown
+	// target, a proof that did not verify, a method not on the allowlist. Counted
+	// rather than logged per item because an attacker can drive this path, and because
+	// it is also entirely normal traffic: a client asking about a bill it no longer
+	// holds gets exactly this. A rising count against steady envelopes is the signal
+	// worth watching, not any single occurrence.
+	omittedItems atomic.Int64
+	// rejectedEnvelopes counts envelopes that passed the wire gate but were dropped
+	// at E1 to E3 or because their nonce could not be recorded. Separate from
+	// droppedEvents because these are the expensive rejections — each already cost
+	// an ECDH — so the two numbers answer different operational questions.
+	rejectedEnvelopes atomic.Int64
+	// refusedEnvelopes counts envelopes answered with an envelope-level error (E4
+	// to E6).
+	refusedEnvelopes atomic.Int64
+	// budgetDropped counts events dropped undecrypted by the per-relay budget.
+	budgetDropped atomic.Int64
+
+	// liveness and the probe settings keep the inbox subscription honest; see
+	// watchInboxLiveness. Zero values fall back to the inboxProbe* defaults.
+	liveness      *inboxLiveness
+	probeInterval time.Duration
+	probeTimeout  time.Duration
+}
+
+// PrivateTransportStatus is a point-in-time snapshot of the hub's
+// private-transport announcement — for display (e.g. a Services page) and
+// for diagnosing a client-reported ErrNoAnnouncement without reading hub
+// logs. The zero value means the hub hasn't attempted to start the private
+// transport yet.
+type PrivateTransportStatus struct {
+	NodeIdentity    string
+	InboxPubkey     string
+	Announced       bool
+	AnnouncedRelays int
+	TotalRelays     int
+	// Error is the last publishTransportAnnouncement failure, if any. Empty
+	// when Announced is true.
+	Error     string
+	UpdatedAt time.Time
+	// InboxDelivering is the last liveness probe's verdict: whether every relay
+	// that accepted a probe to the hub's own inbox delivered it back.
+	// InboxCheckedAt is zero until the first probe.
+	InboxDelivering bool
+	InboxCheckedAt  time.Time
+	// InboxResubscribes counts inbox resubscriptions since startup.
+	InboxResubscribes int
+}
+
+func (svc *service) setPrivateTransportInboxHealth(delivering bool) {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
+	status := svc.loadPrivateTransportStatus()
+	status.InboxDelivering = delivering
+	status.InboxCheckedAt = time.Now()
+	svc.privateTransportStatus.Store(&status)
+}
+
+func (svc *service) countPrivateTransportResubscribe() {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
+	status := svc.loadPrivateTransportStatus()
+	status.InboxResubscribes++
+	svc.privateTransportStatus.Store(&status)
+}
+
+// GetPrivateTransportStatus returns the hub's current private-transport
+// status. Safe to call before startPrivateTransport has run (returns the
+// zero value) and concurrently with it being updated.
+func (svc *service) GetPrivateTransportStatus() PrivateTransportStatus {
+	return svc.loadPrivateTransportStatus()
+}
+
+// privateJoinIdentity is what get_info reports as circle_wallet.identity: the node
+// identity once this run's private transport has started, otherwise "".
+func (svc *service) privateJoinIdentity() string {
+	return svc.loadPrivateTransportStatus().NodeIdentity
+}
+
+func (svc *service) loadPrivateTransportStatus() PrivateTransportStatus {
+	if p := svc.privateTransportStatus.Load(); p != nil {
+		return *p
+	}
+	return PrivateTransportStatus{}
+}
+
+func (svc *service) resetPrivateTransportStatus() {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
+	svc.privateTransportStatus.Store(&PrivateTransportStatus{})
+}
+
+// setPrivateTransportIdentity records the node/inbox identity as soon as
+// it's resolved — before the announcement is attempted — so a failed publish
+// still leaves the identity visible rather than the whole status blank.
+func (svc *service) setPrivateTransportIdentity(nodeXOnly, inboxXOnly string) {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
+	status := svc.loadPrivateTransportStatus()
+	status.NodeIdentity = nodeXOnly
+	status.InboxPubkey = inboxXOnly
+	svc.privateTransportStatus.Store(&status)
+}
+
+func (svc *service) setPrivateTransportAnnounceResult(announcedRelays, totalRelays int, announceErr error) {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
+	status := svc.loadPrivateTransportStatus()
+	status.Announced = announceErr == nil
+	status.AnnouncedRelays = announcedRelays
+	status.TotalRelays = totalRelays
+	if announceErr != nil {
+		status.Error = announceErr.Error()
+	} else {
+		status.Error = ""
+	}
+	status.UpdatedAt = time.Now()
+	svc.privateTransportStatus.Store(&status)
+}
+
+// minWrapBytes is a floor on an inbound envelope's ciphertext. Anything shorter
+// cannot be a NIP-44 payload carrying even an empty envelope, so it is rejected
+// without touching the decrypt path.
+const minWrapBytes = 128
+
+// nodeXOnlyIdentity derives the hub's Nostr-format identity from the LN
+// node's cached GetPubkey (compressed, 66 hex) by dropping the prefix byte.
+// That conversion is exact rather than lossy: BIP340 treats an x-only key as
+// its even-Y lift, and since ECDH and schnorr verification both agree with
+// that lift, the map from an LN identity to a Nostr identity is one-to-one.
+//
+// Shared by every caller that needs this identity (private-transport setup,
+// node profile publishing) so they derive it identically. Callers are
+// responsible for checking svc.lnClient is non-nil first, with their own
+// context-appropriate error message.
+func (svc *service) nodeXOnlyIdentity() (string, error) {
+	compressed := svc.lnClient.GetPubkey()
+	if len(compressed) != 66 {
+		return "", fmt.Errorf("node pubkey is %d hex characters, want 66 (compressed)", len(compressed))
+	}
+	return compressed[2:], nil
+}
+
+// newPrivateTransport resolves the inbox key and the node identity.
+func (svc *service) newPrivateTransport() (*privateTransport, error) {
+	if svc.lnClient == nil {
+		return nil, errors.New("private transport needs an LN client for the hub's node identity")
+	}
+	nodeXOnly, err := svc.nodeXOnlyIdentity()
+	if err != nil {
+		return nil, err
+	}
+
+	state, err := db.LoadInboxRing(svc.db, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	ring, err := svc.buildInboxRing(state, nodeXOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	pt := &privateTransport{
+		inboxPrivKey: ring.current.priv,
+		inboxXOnly:   ring.current.xonly,
+		nodeXOnly:    nodeXOnly,
+		nonces:       dbServedNonces{db: svc.db},
+		relayBudget:  newRelayEnvelopeBudget(svc.cfg.GetEnv().PrivateInboxEventsPerMin),
+		rekey:        make(chan struct{}, 1),
+	}
+	pt.keyRing.Store(ring)
+	return pt, nil
+}
+
+// envelopeRefusal is an envelope refused at E4 to E6: it gets an envelope-level
+// error reply, nothing runs, and its nonce stays unserved.
+type envelopeRefusal struct {
+	code   string
+	header *transport.Envelope
+	reason error
+}
+
+func (e *envelopeRefusal) Error() string {
+	return fmt.Sprintf("envelope refused %s: %v", e.code, e.reason)
+}
+
+// unwrap opens one inbound event and serves NIP-CASH §Serving an Envelope's E1
+// to E6 through nmilat's ClassifyEnvelope: a drop is an error, a refusal an
+// *envelopeRefusal (answered with its code), and a run marks the nonce served,
+// in its own transaction, before any item runs. A nonce that cannot be recorded
+// drops the envelope: fail closed.
+//
+// The conversation key comes back too: the reply is encrypted under a key
+// derived from it and the envelope's reply_to, which saves an ECDH on the way
+// back out. Proof-of-work nonce and expiration tags on the event are never read
+// (not_after alone decides freshness), so a re-mined copy of a served envelope
+// is the same envelope and is dropped at E3.
+func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, now time.Time) (*transport.Envelope, [32]byte, error) {
+	// The sender is a fresh ephemeral key, which is why nothing here is
+	// cacheable and why this cost is paid per event, junk included. The key is
+	// the inbox the event names: the current one, or one retired in its grace.
+	inboxPrivKey, ok := pt.keyFor(firstPTagValue(event), now)
+	if !ok {
+		return nil, [32]byte{}, errors.New("not addressed to an inbox of this hub")
+	}
+	conversationKey, err := nip44.GenerateConversationKey(event.PubKey, inboxPrivKey)
+	if err != nil {
+		return nil, conversationKey, fmt.Errorf("conversation key: %w", err)
+	}
+	plaintext, decryptErr := nip44.Decrypt(event.Content, conversationKey)
+
+	verdict := transport.ClassifyEnvelope([]byte(plaintext), decryptErr, limits, now, pt.nonces.Seen)
+	if verdict.Action != transport.ServeDrop && verdict.Envelope != nil {
+		if err := checkEnvelopeHeader([]byte(plaintext), verdict.Envelope, verdict.Served, limits, now); err != nil {
+			return nil, conversationKey, fmt.Errorf("dropped: %w", err)
+		}
+	}
+	switch verdict.Action {
+	case transport.ServeDrop:
+		return nil, conversationKey, fmt.Errorf("dropped: %w", verdict.Reason)
+	case transport.ServeRefuse:
+		// Past E4 the nonce counts as served, refused or not (§Serving an
+		// Envelope): an E5/E6 refusal, or a later BAD_REQUEST, marks it, so a
+		// replay of the refused envelope is dropped at E3, not answered again.
+		if verdict.Served && !pt.nonces.MarkServed(verdict.Envelope.Nonce, verdict.Envelope.NotAfter) {
+			return nil, conversationKey, fmt.Errorf("envelope nonce %s… already served or not recorded", verdict.Envelope.Nonce[:8])
+		}
+		return nil, conversationKey, &envelopeRefusal{code: verdict.Code, header: verdict.Envelope, reason: verdict.Reason}
+	default:
+		// ServeRun: served below.
+	}
+	envelope := verdict.Envelope
+	if !pt.nonces.MarkServed(envelope.Nonce, envelope.NotAfter) {
+		return nil, conversationKey, fmt.Errorf("envelope nonce %s… already served or not recorded", envelope.Nonce[:8])
+	}
+	markAnsweredRejections([]byte(plaintext), envelope)
+	return envelope, conversationKey, nil
+}
+
+// resolvePrivateTransport derives this run's private transport and records its identity.
+// It forgets the previous run first, so a restart that cannot start the transport stops
+// reporting circle_wallet.identity in get_info.
+func (svc *service) resolvePrivateTransport() (*privateTransport, error) {
+	svc.resetPrivateTransportStatus()
+	pt, err := svc.newPrivateTransport()
+	if err != nil {
+		return nil, err
+	}
+	svc.setPrivateTransportIdentity(pt.nodeXOnly, pt.inbox())
+	return pt, nil
+}
+
+// startPrivateTransport resolves the inbox key, announces it, and opens the
+// subscription — in that order on purpose. Announcing before subscribing would
+// leave a window where a client has been told where to write and nothing is
+// reading; the reverse order costs nothing.
+func (svc *service) startPrivateTransport(ctx context.Context, pool *nostr.SimplePool, group *errgroup.Group) error {
+	if err := nodesign.Guard.Allow(ctx); err != nil {
+		svc.resetPrivateTransportStatus()
+		return fmt.Errorf("cash serving refuses to start: %w", err)
+	}
+	pt, err := svc.resolvePrivateTransport()
+	if err != nil {
+		return err
+	}
+	svc.inboxRotation.mu.Lock()
+	svc.inboxRotation.ctx, svc.inboxRotation.pool, svc.inboxRotation.pt = ctx, pool, pt
+	svc.inboxRotation.mu.Unlock()
+	pt.rekeyAfterGrace()
+
+	// Forget served nonces once their not_after has passed.
+	if store, ok := pt.nonces.(dbServedNonces); ok {
+		store.startPruner(ctx, group)
+	}
+
+	group.Go(func() error {
+		return svc.startPrivateTransportSubscription(ctx, pool, pt, group)
+	})
+
+	if err := svc.publishTransportAnnouncement(ctx, pool, pt); err != nil {
+		// The subscription is already live, so the hub can serve anyone who
+		// already knows the inbox key. Only newcomers are affected, which is why
+		// this is not fatal — but it is an error, because an unannounced hub is
+		// unreachable to every client that has not talked to it before.
+		return fmt.Errorf("announcement failed, private transport is unreachable to new clients: %w", err)
+	}
+	return nil
+}
+
+// publishTransportAnnouncement tells clients which key to encrypt to.
+//
+// Signed by the LN node identity rather than by the inbox key, and that is the
+// entire point: a client recovers the node identity from its bill's mint
+// signature, so the node key is the only thing it can anchor trust to. An
+// announcement signed by the inbox key would be vouching for itself, and anyone
+// could publish one.
+//
+// Once per startup. The node signature costs ~1.15 ms, which is why this is not
+// on any per-request path.
+func (svc *service) publishTransportAnnouncement(ctx context.Context, pool *nostr.SimplePool, pt *privateTransport) (err error) {
+	// The announcement NAMES the relays clients reach us on (advertised), but is
+	// PUBLISHED to the relays we dial. These differ when the dial URL is not
+	// client-reachable (e.g. a docker-internal hostname vs a host/public URL).
+	dialRelays := svc.cfg.GetRelayUrls()
+	advertisedRelays := svc.cfg.GetAdvertisedRelayUrls()
+	var publishedTo int
+	// Named return + defer so every exit path below — including the early
+	// ones that never reach the publish loop — updates the retained status
+	// the same way, instead of needing its own call before each return.
+	defer func() {
+		svc.setPrivateTransportAnnounceResult(publishedTo, len(dialRelays), err)
+	}()
+
+	signer, ok := svc.lnClient.(lnclient.TransportSigner)
+	if !ok {
+		err = errors.New("this LN backend cannot sign the transport announcement (needs BIP340 over the node key)")
+		return err
+	}
+
+	ev, buildErr := transport.NewAnnouncement(
+		pt.nodeXOnly, pt.inbox(), svc.cfg.PrivateEnvelopeLimits(), advertisedRelays,
+	)
+	if buildErr != nil {
+		err = fmt.Errorf("build announcement: %w", buildErr)
+		return err
+	}
+
+	// The node hashes what it is given, so it must receive the event's
+	// serialization, not its id — see AnnouncementSigningPayload. Handing over the
+	// id yields a valid signature over the wrong digest and fails verification
+	// with nothing indicating why.
+	payload, payloadErr := transport.AnnouncementSigningPayload(ev)
+	if payloadErr != nil {
+		err = fmt.Errorf("serialize announcement: %w", payloadErr)
+		return err
+	}
+	sig, signErr := signer.SignSchnorrNodeKey(ctx, payload)
+	if signErr != nil {
+		err = fmt.Errorf("node refused to sign the announcement: %w", signErr)
+		return err
+	}
+	ev.Sig = hex.EncodeToString(sig)
+
+	// Verify our own announcement before publishing it. A bad signature here is
+	// unrecoverable in production: every client would reject it and conclude the
+	// hub is unreachable, which is indistinguishable from the hub being down.
+	if _, verifyErr := transport.ParseAnnouncement(ev, pt.nodeXOnly); verifyErr != nil {
+		err = fmt.Errorf("refusing to publish an announcement that does not verify: %w", verifyErr)
+		return err
+	}
+
+	published, convErr := toGoNostrEvent(ev)
+	if convErr != nil {
+		err = convErr
+		return err
+	}
+
+	publishedTo += publishToAll(ctx, pool, dialRelays, *published, "the transport announcement")
+	if publishedTo == 0 {
+		err = errors.New("no relay accepted the transport announcement")
+		return err
+	}
+
+	logger.Logger.Info().
+		Str("inbox", pt.inbox()).
+		Str("node", pt.nodeXOnly).
+		Int("relays", publishedTo).
+		Msg("Published private transport announcement")
+	return nil
+}
+
+// toGoNostrEvent converts nmilat's event into go-nostr's, which is what the pool
+// publishes. Both are NIP-01 events; only the Go types differ.
+func toGoNostrEvent(ev *nmilatnip01.Event) (*nostr.Event, error) {
+	tags := make(nostr.Tags, 0, len(ev.Tags))
+	for _, tag := range ev.Tags {
+		tags = append(tags, nostr.Tag(tag))
+	}
+	return &nostr.Event{
+		ID:        ev.ID,
+		PubKey:    ev.PubKey,
+		CreatedAt: nostr.Timestamp(ev.CreatedAt), //nolint:gosec // unix seconds
+		Kind:      ev.Kind,
+		Tags:      tags,
+		Content:   ev.Content,
+		Sig:       ev.Sig,
+	}, nil
+}
+
+// startPrivateTransportSubscription opens the one subscription that serves every
+// bill on the private transport.
+//
+// The filter's `p` values are the hub's inbox keys — one, or two for
+// max_request_age after an inbox rotation — so unlike the per-wallet
+// subscriptions it changes only on a rotation: no resubscribe when a bill is
+// minted or destroyed, and no window in which a freshly minted bill is unserved.
+// That also means the relay does the first cut for us, which matters because
+// matching here would otherwise cost a decryption attempt per event.
+func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool *nostr.SimplePool, pt *privateTransport, group *errgroup.Group) error {
+	pt.logDroppedEventsPeriodically(ctx, group)
+	if pt.liveness == nil {
+		pt.liveness = newInboxLiveness()
+	}
+	if pt.probeInterval <= 0 {
+		pt.probeInterval = inboxProbeInterval
+	}
+	if pt.probeTimeout <= 0 {
+		pt.probeTimeout = inboxProbeTimeout
+	}
+
+	for {
+		// The filter is rebuilt each time: a rotation adds the new inbox and keeps
+		// the retired one through its grace.
+		filter := nostr.Filter{
+			Kinds: []int{transport.KindPrivateRequest},
+			Tags:  nostr.TagMap{"p": pt.inboxPTags(time.Now())},
+		}
+		subCtx, cancelSubscription := context.WithCancel(ctx)
+		eventsChannel := subscribeInbox(subCtx, pool, svc.cfg.GetRelayUrls(), filter)
+		group.Go(func() error {
+			svc.watchInboxLiveness(subCtx, pool, pt, cancelSubscription)
+			return nil
+		})
+		var rekeyed atomic.Bool
+		group.Go(func() error {
+			select {
+			case <-pt.rekey:
+				rekeyed.Store(true)
+				cancelSubscription()
+			case <-subCtx.Done():
+			}
+			return nil
+		})
+
+		err := svc.watchPrivateSubscription(subCtx, pool, eventsChannel, pt, group)
+		cancelSubscription()
+		if ctx.Err() != nil {
+			return nil
+		}
+		if rekeyed.Load() {
+			logger.Logger.Info().Strs("inboxes", pt.inboxPTags(time.Now())).Msg("Private transport inboxes changed, resubscribing")
+			continue
+		}
+
+		// Every other end resubscribes: the stream closing, or the liveness
+		// probe finding the inbox deaf. Returning here left the inbox
+		// unsubscribed until the next restart.
+		svc.countPrivateTransportResubscribe()
+		logger.Logger.Error().Err(err).Msg("Private transport subscription ended, resubscribing")
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
+// watchPrivateSubscription mirrors watchTrustedSubscription's lifecycle: the gate
+// runs synchronously before any goroutine is spawned, so junk cannot make this hub
+// schedule work.
+//
+// Note there is deliberately no `since` on the filter and none may be added: a
+// wrapped event's created_at is randomised up to two days into the past, so a
+// `since` would silently drop a fraction of legitimate traffic.
+func (svc *service) watchPrivateSubscription(ctx context.Context, pool *nostr.SimplePool, eventsChannel <-chan nostr.RelayEvent, pt *privateTransport, group *errgroup.Group) error {
+	// Closed exactly once, by the drain goroutine below, on every exit path —
+	// including ctx cancellation. That used to not be true: the drain
+	// goroutine `return`ed directly on ctx.Done() without ever reaching its
+	// final signal, so this function's own ctx.Done() case raced ahead and
+	// returned while that goroutine (and whatever it was mid-logging or
+	// mid-dispatching) was still running. Nothing downstream — including
+	// nostrGroup.Wait() during shutdown, since the goroutine was also never
+	// registered with `group` — actually waited for it.
+	eventsChannelClosed := make(chan struct{})
+
+	group.Go(func() error {
+		defer close(eventsChannelClosed)
+		for event := range eventsChannel {
+			if ctx.Err() != nil {
+				// Keep draining rather than returning early: the point is to
+				// let eventsChannel close on its own (it does once every
+				// per-relay goroutine notices this same ctx is done — see
+				// SimplePool.subMany), so the `defer` above always fires
+				// instead of racing this function's caller.
+				continue
+			}
+			if pt.liveness != nil && pt.liveness.observe(event) {
+				continue
+			}
+			if !pt.acceptsPrivateEvent(event.Event) {
+				continue
+			}
+
+			var arrivedOn string
+			if event.Relay != nil {
+				arrivedOn = event.Relay.URL
+			}
+			// The MAY of §Serving an Envelope: a per-relay budget, applied before any
+			// decryption, so a flood costs the hub no ECDH.
+			if !pt.relayBudget.allow(arrivedOn, time.Now()) {
+				pt.budgetDropped.Add(1)
+				continue
+			}
+
+			envelope, conversationKey, err := pt.unwrap(event.Event, svc.cfg.PrivateEnvelopeLimits(), time.Now())
+			var refusal *envelopeRefusal
+			if errors.As(err, &refusal) {
+				pt.refusedEnvelopes.Add(1)
+				logger.Logger.Debug().Err(err).Str("id", event.Event.ID).Msg("Refused a private transport envelope")
+				group.Go(func() error {
+					if pubErr := svc.publishPrivateRefusal(ctx, pool, refusal, conversationKey, arrivedOn); pubErr != nil {
+						logger.Logger.Warn().Err(pubErr).Msg("Could not deliver an envelope-level refusal")
+					}
+					return nil
+				})
+				continue
+			}
+			if err != nil {
+				// Counted rather than logged per event: this path is one an
+				// attacker drives, and formatting a message for each is
+				// itself a denial of service. Debug for a working trail.
+				pt.rejectedEnvelopes.Add(1)
+				logger.Logger.Debug().Err(err).Str("id", event.Event.ID).
+					Msg("Dropped a private transport envelope")
+				continue
+			}
+
+			logger.Logger.Debug().
+				Str("id", event.Event.ID).
+				Int("items", len(envelope.Items)).
+				Msg("Unwrapped a private transport envelope")
+
+			// Dispatched on its own goroutine so one slow envelope — a redemption
+			// waiting on a Lightning payment, say — cannot stall every envelope
+			// queued behind it. Replay protection already happened inside unwrap,
+			// so a duplicate cannot slip past while this one is still in flight.
+			//
+			// No loop-variable capture to worry about: envelope and conversationKey
+			// are declared inside this iteration's body, not by the range clause.
+			// The reply goes back to the relay this request arrived on.
+			group.Go(func() error {
+				svc.dispatchEnvelope(ctx, pool, pt, svc.lnClient, envelope, conversationKey, arrivedOn)
+				return nil
+			})
+		}
+		logger.Logger.Debug().Msg("Private transport subscription events channel ended")
+		return nil
+	})
+
+	// Always wait for the drain goroutine above to actually finish, whether
+	// this generation ended because ctx was cancelled or because the relay
+	// subscription died on its own. The two cases differ only in what we tell
+	// the retry loop in startPrivateTransportSubscription afterwards.
+	<-eventsChannelClosed
+	if ctx.Err() != nil {
+		return nil
+	}
+	return errors.New("private transport subscription exited abnormally")
+}
+
+// acceptsPrivateEvent is the wire gate: allocation-free, no crypto, no database.
+//
+// It cannot do much, and that is inherent rather than a shortcoming. The inbox key
+// is public — it is in an announcement on a relay — so anyone can address a
+// well-formed event to it, and any test the hub could apply without its private
+// key an attacker can satisfy. Discovering that an envelope is junk costs one ECDH
+// (~166 µs measured), which is the intrinsic price of an anonymous inbox.
+//
+// So this rejects only what is cheap to reject, and the real defence is admission
+// control at the relay: a per-session publish rate limit, with per-kind PoW held in
+// reserve for when a hub is actually under attack.
+func (pt *privateTransport) acceptsPrivateEvent(event *nostr.Event) bool {
+	if event == nil || event.Kind != transport.KindPrivateRequest {
+		pt.droppedEvents.Add(1)
+		return false
+	}
+	// A compare against the ring's few keys, not a map probe: there is one
+	// inbox key, two for max_request_age after a rotation, unlike the standard
+	// path's registry of every wallet.
+	if _, ok := pt.keyFor(firstPTagValue(event), time.Now()); !ok {
+		pt.droppedEvents.Add(1)
+		return false
+	}
+	if len(event.Content) < minWrapBytes {
+		pt.droppedEvents.Add(1)
+		return false
+	}
+	return true
+}
+
+// logDroppedEventsPeriodically summarises what the gate discarded, on a timer
+// rather than per event — formatting and IO on a path an attacker drives is itself
+// a denial of service.
+func (pt *privateTransport) logDroppedEventsPeriodically(ctx context.Context, group *errgroup.Group) {
+	group.Go(func() error {
+		ticker := time.NewTicker(droppedEventLogInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				if dropped := pt.droppedEvents.Swap(0); dropped > 0 {
+					logger.Logger.Info().
+						Int64("dropped", dropped).
+						Dur("interval", droppedEventLogInterval).
+						Msg("Discarded events addressed to this hub's private transport inbox")
+				}
+			}
+		}
+	})
+}
+
+func (e *envelopeRefusal) Unwrap() error { return e.reason }

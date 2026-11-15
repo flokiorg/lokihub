@@ -1,0 +1,1569 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"time"
+
+	"github.com/flokiorg/lokihub/cash/cashorder"
+	"github.com/flokiorg/lokihub/circle/circlelife"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lsps/lsps1"
+	"github.com/flokiorg/lokihub/lsps/lsps2"
+	"github.com/flokiorg/lokihub/lsps/manager"
+)
+
+type API interface {
+	ListingsAPI
+	CreateApp(createAppRequest *CreateAppRequest) (*CreateAppResponse, error)
+	UpdateApp(app *db.App, updateAppRequest *UpdateAppRequest) error
+	Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, amountMloki uint64) error
+	DeleteApp(app *db.App) error
+	DeleteAppWithOptions(app *db.App, opts DeleteAppOptions) error
+	ReplaceCircleAllowlist(app *db.App, pubkeys []string) error
+	RemoveCircleAllowedPubkey(app *db.App, pubkey string) error
+	// RefreshCircleFollowSet re-fetches a follow_set circle's set from relays.
+	RefreshCircleFollowSet(ctx context.Context, app *db.App) error
+	ListCircleAllowlist(app *db.App) ([]string, error)
+	// GetCircleIdentityFollowSet returns a follow_set identity's set as this
+	// hub reads it, hidden members included.
+	GetCircleIdentityFollowSet(ctx context.Context, id uint) (*FollowSetResponse, error)
+	// PublishCircleIdentityFollowSet publishes a new version of a follow set
+	// this hub authors (the provider is the node identity).
+	PublishCircleIdentityFollowSet(ctx context.Context, id uint, request *FollowSetRequest) (*FollowSetResponse, error)
+	// ListCircleChildrenBalances returns a page of a circle_hub's circle_wallet
+	// children, each with its current isolated balance. limit == 0 returns
+	// every child unpaginated (used by the pre-delete confirmation UI).
+	ListCircleChildrenBalances(app *db.App, limit uint64, offset uint64) ([]CircleChildBalance, uint64, error)
+	DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResult, error)
+	// SubmitCircleMemberRequest submits a member request the member signed
+	// (NIP-CW §Recovering a Lost Connection) to a circle hub; the result names
+	// the NIP-CW code it was refused with, if any.
+	SubmitCircleMemberRequest(app *db.App, event json.RawMessage) (*circlelife.MemberRequestResult, error)
+	// Order connections and selling terms of a Cash Hub (NIP-CO).
+	CreateOrderConnection(hub *db.App, label string) (*cashorder.Connection, error)
+	ListOrderConnections(hub *db.App) ([]cashorder.Connection, error)
+	RetireOrderConnection(hub *db.App, connAppID uint) error
+	GetOrderTerms(hub *db.App) (*cashorder.Settings, error)
+	PutOrderTerms(hub *db.App, s cashorder.Settings) error
+	// ListOrders lists a Cash Hub's placed orders and the payments it kept with
+	// no order, for the operator console (WP-19 item 8). It exposes no secret.
+	ListOrders(hub *db.App) (*cashorder.OrdersView, error)
+	// SetCircleAccepting opens or closes a circle hub to new members (NIP-CW
+	// §The Circle Wallet Hub Connection, accepting).
+	SetCircleAccepting(app *db.App, accepting bool) error
+	// DeleteCircleWalletChild removes a single circle_wallet child in any state
+	// (empty or with a remaining balance), unlike DeleteCircleHub which only
+	// operates on the whole hub at once.
+	DeleteCircleWalletChild(hubAppID uint, childAppID uint) error
+	// ListCircleIdentities returns every CircleIdentity, for the circle-creation-time picker.
+	ListCircleIdentities() ([]CircleIdentitySummary, error)
+	// GetCircleIdentity returns identity details plus policy-specific counts and
+	// (for allowlist policy) the full pubkey list, and how many circle_hub
+	// apps currently reference it.
+	GetCircleIdentity(ctx context.Context, id uint) (*CircleIdentityResponse, error)
+	// DeleteCircleIdentity removes a standalone CircleIdentity — refuses
+	// (ErrInvalidParams) if any circle_hub app still references it.
+	DeleteCircleIdentity(id uint) error
+	// GetApp returns full detail for a single app — for a circle_hub app with
+	// a follow_set identity, this may cold-fetch the member count
+	// once (single deliberate target, like GetCircleIdentity), unlike ListApps
+	// which never blocks on a whole page of apps.
+	GetApp(ctx context.Context, app *db.App) *App
+	ListApps(limit uint64, offset uint64, filters ListAppsFilters, orderBy string) (*ListAppsResponse, error)
+
+	ListChannels(ctx context.Context) ([]Channel, error)
+
+	ResetRouter(key string) error
+	ChangeUnlockPassword(changeUnlockPasswordRequest *ChangeUnlockPasswordRequest) error
+	SetAutoUnlockPassword(unlockPassword string) error
+	Stop() error
+	GetNodeConnectionInfo(ctx context.Context) (*lnclient.NodeConnectionInfo, error)
+	GetNodeStatus(ctx context.Context) (*lnclient.NodeStatus, error)
+	ListPeers(ctx context.Context) ([]lnclient.PeerDetails, error)
+	ConnectPeer(ctx context.Context, connectPeerRequest *ConnectPeerRequest) error
+	DisconnectPeer(ctx context.Context, peerId string) error
+	OpenChannel(ctx context.Context, openChannelRequest *OpenChannelRequest) (*OpenChannelResponse, error)
+
+	CloseChannel(ctx context.Context, peerId, channelId string, force bool) (*CloseChannelResponse, error)
+	UpdateChannel(ctx context.Context, updateChannelRequest *UpdateChannelRequest) error
+
+	GetNewOnchainAddress(ctx context.Context) (string, error)
+	GetUnusedOnchainAddress(ctx context.Context) (string, error)
+	SignMessage(ctx context.Context, message string) (*SignMessageResponse, error)
+	RedeemOnchainFunds(ctx context.Context, toAddress string, amount uint64, feeRate *uint64, sendAll bool) (*RedeemOnchainFundsResponse, error)
+	GetBalances(ctx context.Context) (*BalancesResponse, error)
+	ListTransactions(ctx context.Context, appId *uint, limit uint64, offset uint64) (*ListTransactionsResponse, error)
+	ListOnchainTransactions(ctx context.Context, limit, offset uint64) ([]lnclient.OnchainTransaction, error)
+	SendPayment(ctx context.Context, invoice string, amountMloki *uint64, appID *uint, metadata map[string]interface{}) (*SendPaymentResponse, error)
+	CreateInvoice(ctx context.Context, req *MakeInvoiceRequest) (*MakeInvoiceResponse, error)
+	LookupInvoice(ctx context.Context, paymentHash string) (*LookupInvoiceResponse, error)
+	RequestMempoolApi(ctx context.Context, endpoint string) (interface{}, error)
+	GetServices(ctx context.Context) (interface{}, error)
+	GetInfo(ctx context.Context) (*InfoResponse, error)
+	GetMnemonic(unlockPassword string) (*MnemonicResponse, error)
+	SetNextBackupReminder(backupReminderRequest *BackupReminderRequest) error
+	Start(startRequest *StartRequest) error
+	Setup(ctx context.Context, setupRequest *SetupRequest) error
+	SetupLocal(ctx context.Context, setupRequest *SetupLocalRequest) error
+	SetupManual(ctx context.Context, setupRequest *SetupManualRequest) error
+	GetSetupStatus(ctx context.Context) (*SetupStatusResponse, error)
+	SendPaymentProbes(ctx context.Context, sendPaymentProbesRequest *SendPaymentProbesRequest) (*SendPaymentProbesResponse, error)
+	SendSpontaneousPaymentProbes(ctx context.Context, sendSpontaneousPaymentProbesRequest *SendSpontaneousPaymentProbesRequest) (*SendSpontaneousPaymentProbesResponse, error)
+	GetNetworkGraph(ctx context.Context, nodeIds []string) (NetworkGraphResponse, error)
+	SyncWallet() error
+	GetLogOutput(ctx context.Context, logType string, getLogRequest *GetLogOutputRequest) (*GetLogOutputResponse, error)
+
+	CreateBackup(unlockPassword string, w io.Writer) error
+	RestoreBackup(unlockPassword string, r io.Reader) error
+	MigrateNodeStorage(ctx context.Context, to string) error
+	GetWalletCapabilities(ctx context.Context) (*WalletCapabilitiesResponse, error)
+	Health(ctx context.Context) (*HealthResponse, error)
+	SetCurrency(currency string) error
+	SetFlokicoinDisplayFormat(format string) error
+	UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) error
+	SetNodeAlias(ctx context.Context, nodeAlias string) error
+	PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error
+	// RotatePrivateTransportInbox rotates the private transport's inbox key
+	// (NIP-CASH §The Hub Announcement) and returns the new inbox.
+	RotatePrivateTransportInbox() (*RotateInboxResponse, error)
+	PublishNodeNote(ctx context.Context, request PublishNodeNoteRequest) (*PublishNodeNoteResponse, error)
+	GetCustomNodeCommands() (*CustomNodeCommandsResponse, error)
+	ExecuteCustomNodeCommand(ctx context.Context, command string) (interface{}, error)
+	SendEvent(event string, properties interface{})
+	GetForwards() (*GetForwardsResponse, error)
+
+	// LSPS
+	LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsRequest) (*LSPS0ListProtocolsResponse, error)
+	LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (*LSPS1GetInfoResponse, error)
+	LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderRequest) (interface{}, error)
+	LSPS1GetOrder(ctx context.Context, req *LSPS1GetOrderRequest) (interface{}, error)
+	LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (interface{}, error) // Returns OpeningFeeParams
+	LSPS2Buy(ctx context.Context, req *LSPS2BuyRequest) (*LSPS2BuyResponse, error)
+	LSPS5SetWebhook(ctx context.Context, req *LSPS5SetWebhookRequest) (interface{}, error)
+	LSPS5ListWebhooks(ctx context.Context, req *LSPS5ListWebhooksRequest) (interface{}, error)
+	LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookRequest) (interface{}, error)
+	// UpdateLSPS1OrderState updates orderID's state on behalf of lspPubkey.
+	// Rejects the update if orderID's persisted LSPPubkey doesn't match
+	// lspPubkey — the caller (an LSPS5 webhook notification) only proves it
+	// controls lspPubkey, not that it's the LSP that actually owns this order.
+	UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, state, fundingOutpoint string) error
+	LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, error)
+
+	// LSP catalogue (NIP-LSP announcements, WP-26)
+	LSPCatalogueAPI
+
+	// Invoice Fee Estimation
+	EstimateInvoiceFee(ctx context.Context, invoice string) (uint64, error)
+
+	// Cash wallets / claims
+	// ListCashWalletClaims returns a page of a cash_hub's recipient slices
+	// (one row per CashWalletClaim, across every cash_wallet child). limit == 0
+	// returns every row unpaginated. status filters by CashAllocationStatus*
+	// ("" means unfiltered); counts in the returned CashWalletClaimCounts
+	// always reflect the full, unfiltered set so a UI can show per-tab totals
+	// regardless of which tab is selected.
+	ListCashWalletClaims(appID uint, limit uint64, offset uint64, status string) ([]CashWalletClaimResponse, uint64, CashWalletClaimCounts, error)
+	// GetCashHubStats totals a cash_hub's activity in money rather than row
+	// counts, spanning live and archived slices alike.
+	GetCashHubStats(appID uint) (*CashHubStatsResponse, error)
+	// GetAllCashHubStats is the same totals across every cash_hub on the
+	// node, for the Cash Hubs list.
+	GetAllCashHubStats() (*CashHubStatsResponse, error)
+	// GetCircleHubStats totals one circle_hub's member activity.
+	GetCircleHubStats(appID uint) (*CircleHubStatsResponse, error)
+	// CreateCashWallet creates, funds, and reveals a shared Cash wallet serving
+	// every recipient in the request in one shot — the admin equivalent of a
+	// hub owner calling mint_cash over NWC.
+	CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*CreateCashWalletResponse, error)
+	// DeleteCashClaim removes an unclaimed slice, sweeping its amount
+	// back to the hub. To delete the whole wallet (all its slices), use
+	// DeleteCashWallet instead. Rejects if walletAppID is not actually a
+	// cash_wallet child of hubAppID, mirroring DeleteCashWallet's own check —
+	// callers must not be able to reach into a hub they don't own by
+	// supplying an arbitrary walletAppID/claimID pair.
+	DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) error
+	// DeleteCashWallet reclaims any remaining balance back to the hub and
+	// deletes a cash_wallet child, regardless of how much of it has been spent.
+	DeleteCashWallet(hubAppID uint, walletAppID uint) error
+	GetCashWalletConnection(appID uint) (*CashWalletConnectionResponse, error)
+	// GetCashWalletRecipients returns every recipient slice of a single
+	// cash_wallet (claimed or not), scoped by the wallet's own app ID rather
+	// than its parent hub's — for a cash_wallet's own AppDetails page to show
+	// who it serves, which may be more than one beneficiary.
+	GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, error)
+
+	// Identity Authority registry
+	ListIdentityAuthorities() ([]IdentityAuthorityResponse, error)
+	AddIdentityAuthority(req *AddIdentityAuthorityRequest) (*IdentityAuthorityResponse, error)
+	DeleteIdentityAuthority(pubkey string) error
+}
+
+type App struct {
+	ID            uint       `json:"id"`
+	Name          string     `json:"name"`
+	Description   string     `json:"description"`
+	AppPubkey     string     `json:"appPubkey"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	LastUsedAt    *time.Time `json:"lastUsedAt"`
+	ExpiresAt     *time.Time `json:"expiresAt"`
+	Scopes        []string   `json:"scopes"`
+	MaxAmountLoki uint64     `json:"maxAmount"`
+	BudgetUsage   uint64     `json:"budgetUsage"`
+	BudgetRenewal string     `json:"budgetRenewal"`
+	Kind          string     `json:"kind"`
+	// ParentAppID/ParentKind mirror db.App — set only on a Cash/Circle Hub's
+	// own children (cash_wallet/circle_wallet), identifying which specific
+	// hub issued them. Used by the frontend to group siblings under the same
+	// hub for the connection switcher, instead of the hub's own ID/kind.
+	ParentAppID *uint  `json:"parentAppId,omitempty"`
+	ParentKind  string `json:"parentKind,omitempty"`
+	// Isolated is derived from Kind (db.App.IsIsolated) — true for every kind
+	// that maintains its own balance (isolated, cash_hub, cash_wallet,
+	// circle_hub, circle_wallet). Kept as an explicit field because the
+	// frontend gates isolated-balance UI (e.g. the increase/decrease buttons)
+	// on it directly rather than duplicating the kind list client-side.
+	Isolated           bool     `json:"isolated"`
+	WalletPubkey       string   `json:"walletPubkey"`
+	UniqueWalletPubkey bool     `json:"uniqueWalletPubkey"`
+	Balance            int64    `json:"balance"`
+	Metadata           Metadata `json:"metadata,omitempty"`
+	// CircleIdentity is set only for circle_hub apps — a lightweight
+	// summary of the attached identity plus policy-specific counts, so the
+	// frontend Circles card doesn't need an extra round-trip per app.
+	CircleIdentity *CircleIdentitySummaryWithCounts `json:"circleIdentity,omitempty"`
+	// CashPerWalletMaxMloki/CashMaxExpSecs/CashMinTransferMloki/CashRedeemFeePpm
+	// are set only for cash_hub apps — the hub-wide defaults set at creation
+	// time, surfaced here so Edit Connection can display and update them
+	// instead of only being settable once. CashMinTransferMloki is the
+	// default floor (0 = no floor) a freshly-minted wallet's slices inherit
+	// for cash_transfer splitting — see db.CashHubConfig.MinTransferMloki.
+	// CashRedeemFeePpm is the default per-million cash_redeem fee (0 = free)
+	// a freshly-minted wallet's slices inherit, charged only on a genuine
+	// external redemption — see db.CashHubConfig.RedeemFeePpm. CashMaxExpSecs
+	// of 0 means "never" — no ceiling on how long an issued wallet may
+	// remain unredeemed; see db.CashHubConfig.MaxExpSecs.
+	CashPerWalletMaxMloki *int `json:"cashPerWalletMaxMloki,omitempty"`
+	CashMaxExpSecs        *int `json:"cashMaxExpSecs,omitempty"`
+	// CashSpentRetentionSecs is how long this Hub keeps answering cash_status
+	// for a bill it has destroyed, before returning to silence. 0 disables the
+	// tombstone. See db.CashHubConfig.SpentRetentionSecs.
+	CashSpentRetentionSecs *int   `json:"cashSpentRetentionSecs,omitempty"`
+	CashMinTransferMloki   *int64 `json:"cashMinTransferMloki,omitempty"`
+	CashRedeemFeePpm       *int   `json:"cashRedeemFeePpm,omitempty"`
+	// CashRedeemFeeBaseMloki is the FLAT part of the same fee (0 = none). Routing
+	// cost barely scales with amount, so a purely proportional fee cannot cover a
+	// small slice's own delivery — see db.CashHubConfig.RedeemFeeBaseMloki.
+	CashRedeemFeeBaseMloki *int64 `json:"cashRedeemFeeBaseMloki,omitempty"`
+	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
+	// are set only for circle_hub apps — the hub-wide defaults set at
+	// creation time, for the same reason as above.
+	CircleMaxExpSecs        *int    `json:"circleMaxExpSecs,omitempty"`
+	CircleFeesPpm           *int    `json:"circleFeesPpm,omitempty"`
+	CirclePerWalletMaxMloki *int    `json:"circlePerWalletMaxMloki,omitempty"`
+	CircleMinBudgetRenewal  *string `json:"circleMinBudgetRenewal,omitempty"`
+	// CircleDefaultExpSecs is the lifetime a join naming none gets (0 = never);
+	// CirclePerWalletMaxReceiveMloki the ceiling on a member's max_receive.
+	CircleDefaultExpSecs           *int   `json:"circleDefaultExpSecs,omitempty"`
+	CirclePerWalletMaxReceiveMloki *int64 `json:"circlePerWalletMaxReceiveMloki,omitempty"`
+	// The circle money model (NIP-CW §Own Funds and Caps): holdings ceiling,
+	// routing-fee reserve rule, optional outbound ceiling and its period.
+	CircleHoldingsCeilingMloki *int64  `json:"circleHoldingsCeilingMloki,omitempty"`
+	CircleFeeReservePpm        *int    `json:"circleFeeReservePpm,omitempty"`
+	CircleFeeReserveMinMloki   *int64  `json:"circleFeeReserveMinMloki,omitempty"`
+	CircleOutboundCeilingMloki *int64  `json:"circleOutboundCeilingMloki,omitempty"`
+	CircleOutboundPeriod       *string `json:"circleOutboundPeriod,omitempty"`
+	// CircleGraceSecs and CircleDustThresholdMloki: the lifecycle settings
+	// (NIP-CW §Lifecycle and Deletion).
+	CircleGraceSecs          *int64 `json:"circleGraceSecs,omitempty"`
+	CircleDustThresholdMloki *int64 `json:"circleDustThresholdMloki,omitempty"`
+	// CircleAccepting is false once the host closed the circle to new members;
+	// CircleTeardownRequestedAt is set once the host tore it down.
+	CircleAccepting           *bool  `json:"circleAccepting,omitempty"`
+	CircleTeardownRequestedAt *int64 `json:"circleTeardownRequestedAt,omitempty"`
+	// CircleRotationEnabled and CircleRotationDelaySecs: member requests
+	// (NIP-CW §Recovering a Lost Connection) and the delay new wallets get.
+	CircleRotationEnabled   *bool  `json:"circleRotationEnabled,omitempty"`
+	CircleRotationDelaySecs *int64 `json:"circleRotationDelaySecs,omitempty"`
+}
+
+// CircleIdentitySummary is the bare identity, used for the circle-creation-time picker.
+// UsedByCount is how many circle_hub apps currently reference this identity —
+// the picker and the manage-identities list both need it to show which identities
+// are safe to delete without a per-row round trip.
+type CircleIdentitySummary struct {
+	ID             uint   `json:"id"`
+	Name           string `json:"name"`
+	Policy         string `json:"policy"`
+	ProviderPubkey string `json:"providerPubkey"`
+	// FollowSetD is a follow_set identity's `d` identifier.
+	FollowSetD string `json:"followSetD,omitempty"`
+	// Managed is true for a follow set this hub publishes, as the node
+	// identity. Any other follow set is only read.
+	Managed     bool `json:"managed"`
+	UsedByCount int  `json:"usedByCount"`
+}
+
+// CircleIdentitySummaryWithCounts adds policy-specific counts, used when an
+// identity is embedded inline on an App (list/get). MemberCount is only
+// populated once the follow set has been read — nil means "not yet known,"
+// not "zero" — the frontend should render a loading state in that case rather
+// than treating it as an authoritative zero.
+type CircleIdentitySummaryWithCounts struct {
+	CircleIdentitySummary
+	MemberCount    *int   `json:"memberCount,omitempty"`
+	FollowSetTitle string `json:"followSetTitle,omitempty"`
+	AllowlistCount int    `json:"allowlistCount"`
+	// PolicySyncedAt is "last policy update" — when the current membership was
+	// last confirmed from its source of truth: for "follow_set", the relay
+	// cache's last fetch time (nil if not yet read, same semantics as
+	// MemberCount); for "allowlist", the last time a pubkey was added or
+	// removed (nil if the allowlist has never been populated).
+	PolicySyncedAt *time.Time `json:"policySyncedAt,omitempty"`
+}
+
+// FollowSetRequest is a new version of a follow set this hub publishes.
+type FollowSetRequest struct {
+	Title         string   `json:"title"`
+	Description   string   `json:"description"`
+	PublicMembers []string `json:"publicMembers"`
+	HiddenMembers []string `json:"hiddenMembers"`
+}
+
+// FollowSetResponse is a follow_set identity's set as this hub reads it.
+type FollowSetResponse struct {
+	Address        string `json:"address"`
+	ProviderPubkey string `json:"providerPubkey"`
+	D              string `json:"d"`
+	Managed        bool   `json:"managed"`
+	// Resolved is false while the set hasn't been found on any relay. The
+	// circle then answers NOT_READY, and the fields below are empty.
+	Resolved      bool       `json:"resolved"`
+	Title         string     `json:"title"`
+	Description   string     `json:"description"`
+	PublicMembers []string   `json:"publicMembers"`
+	HiddenMembers []string   `json:"hiddenMembers"`
+	SyncedAt      *time.Time `json:"syncedAt,omitempty"`
+	// HiddenMembersAvailable is whether this hub can publish hidden members:
+	// they need the private transport running.
+	HiddenMembersAvailable bool `json:"hiddenMembersAvailable"`
+}
+
+// CircleIdentityResponse is the full single-identity detail response —
+// includes (for allowlist policy) the full pubkey list, unlike the inline
+// per-App summary above which stays lean for list responses. UsedByCount is
+// inherited from CircleIdentitySummary.
+type CircleIdentityResponse struct {
+	CircleIdentitySummaryWithCounts
+	AllowlistPubkeys []string `json:"allowlistPubkeys,omitempty"`
+}
+
+type ListAppsFilters struct {
+	Name          string `json:"name"`
+	AppStoreAppId string `json:"appStoreAppId"`
+	Unused        bool   `json:"unused"`
+	SubWallets    *bool  `json:"subWallets"`
+	// Kind + TopLevelOnly group top-level subwallets of the same kind
+	// together (e.g. "my other Cash Hubs") — TopLevelOnly restricts to
+	// parent_app_id IS NULL so a hub's own children (which share the
+	// sibling *_wallet kind, not the hub kind) never leak in.
+	Kind         string `json:"kind"`
+	TopLevelOnly bool   `json:"topLevelOnly"`
+	// ParentAppId groups one specific hub's children together (e.g. "other
+	// wallets under this Cash Hub") — mirrors db.App.ParentAppID. Also lifts
+	// the cash_wallet general-listing exclusion in ListApps, since asking
+	// for a specific hub's children is exactly the narrow, intentional case
+	// that exclusion is meant to still allow.
+	ParentAppId *uint `json:"parentAppId"`
+}
+
+type ListAppsResponse struct {
+	Apps       []App  `json:"apps"`
+	TotalCount uint64 `json:"totalCount"`
+}
+
+type UpdateAppRequest struct {
+	Name            *string   `json:"name"`
+	MaxAmountLoki   *uint64   `json:"maxAmount"`
+	BudgetRenewal   *string   `json:"budgetRenewal"`
+	ExpiresAt       *string   `json:"expiresAt"`
+	UpdateExpiresAt bool      `json:"updateExpiresAt"`
+	Scopes          []string  `json:"scopes"`
+	Metadata        *Metadata `json:"metadata"`
+	// CashPerWalletMaxMloki/CashMaxExpSecs/CashMinTransferMloki/CashRedeemFeePpm
+	// update a cash_hub's CashHubConfig; nil leaves the corresponding field
+	// unchanged. Ignored for other app kinds.
+	CashPerWalletMaxMloki *int `json:"cashPerWalletMaxMloki"`
+	CashMaxExpSecs        *int `json:"cashMaxExpSecs"`
+	// CashSpentRetentionSecs: see CreateAppRequest's own field. 0 disables the
+	// spent-bill tombstone; nil leaves the stored value unchanged.
+	CashSpentRetentionSecs *int   `json:"cashSpentRetentionSecs"`
+	CashMinTransferMloki   *int64 `json:"cashMinTransferMloki"`
+	CashRedeemFeePpm       *int   `json:"cashRedeemFeePpm"`
+	CashRedeemFeeBaseMloki *int64 `json:"cashRedeemFeeBaseMloki"`
+	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
+	// update a circle_hub's CircleHubConfig; nil leaves the
+	// corresponding field unchanged. Ignored for other app kinds.
+	CircleMaxExpSecs               *int    `json:"circleMaxExpSecs"`
+	CircleDefaultExpSecs           *int    `json:"circleDefaultExpSecs"`
+	CircleFeesPpm                  *int    `json:"circleFeesPpm"`
+	CirclePerWalletMaxMloki        *int    `json:"circlePerWalletMaxMloki"`
+	CirclePerWalletMaxReceiveMloki *int64  `json:"circlePerWalletMaxReceiveMloki"`
+	CircleMinBudgetRenewal         *string `json:"circleMinBudgetRenewal"`
+	CircleHoldingsCeilingMloki     *int64  `json:"circleHoldingsCeilingMloki"`
+	CircleFeeReservePpm            *int    `json:"circleFeeReservePpm"`
+	CircleFeeReserveMinMloki       *int64  `json:"circleFeeReserveMinMloki"`
+	CircleOutboundCeilingMloki     *int64  `json:"circleOutboundCeilingMloki"`
+	CircleOutboundPeriod           *string `json:"circleOutboundPeriod"`
+	CircleGraceSecs                *int64  `json:"circleGraceSecs"`
+	CircleDustThresholdMloki       *int64  `json:"circleDustThresholdMloki"`
+	CircleRotationEnabled          *bool   `json:"circleRotationEnabled"`
+	CircleRotationDelaySecs        *int64  `json:"circleRotationDelaySecs"`
+}
+
+type TransferRequest struct {
+	AmountLoki uint64 `json:"amountLoki"`
+	FromAppId  *uint  `json:"fromAppId"`
+	ToAppId    *uint  `json:"toAppId"`
+}
+
+type CreateAppRequest struct {
+	Name                  string   `json:"name"`
+	Pubkey                string   `json:"pubkey"`
+	MaxAmountLoki         uint64   `json:"maxAmount"`
+	BudgetRenewal         string   `json:"budgetRenewal"`
+	ExpiresAt             string   `json:"expiresAt"`
+	Scopes                []string `json:"scopes"`
+	ReturnTo              string   `json:"returnTo"`
+	Kind                  string   `json:"kind"`
+	Metadata              Metadata `json:"metadata,omitempty"`
+	UnlockPassword        string   `json:"unlockPassword"`
+	CashPerWalletMaxMloki int      `json:"cashPerWalletMaxMloki"`
+	CashMaxExpSecs        int      `json:"cashMaxExpSecs"`
+	// CashMinTransferMloki omitted means DEFAULT_CASH_MIN_TRANSFER_MLOKI; 0 is no floor.
+	CashMinTransferMloki *int64 `json:"cashMinTransferMloki"`
+	CashRedeemFeePpm     int    `json:"cashRedeemFeePpm"`
+	// CashRedeemFeeBaseMloki is the FLAT part of the same fee (0 = none) — see
+	// db.CashHubConfig.RedeemFeeBaseMloki for why a proportional-only fee cannot
+	// cover a small slice's own routing cost.
+	CashRedeemFeeBaseMloki int64 `json:"cashRedeemFeeBaseMloki"`
+	// CashSpentRetentionSecs: how long this Hub answers cash_status about a
+	// destroyed bill before returning to silence.
+	//
+	// A pointer, unlike its sibling ints above, because 0 is a meaningful
+	// value here — it disables the tombstone — and must stay distinguishable
+	// from the field being omitted, which means
+	// constants.DEFAULT_CASH_SPENT_RETENTION_SECS.
+	CashSpentRetentionSecs  *int   `json:"cashSpentRetentionSecs,omitempty"`
+	CircleMaxExpSecs        int    `json:"circleMaxExpSecs"`
+	CircleFeesPpm           int    `json:"circleFeesPpm"`
+	CirclePerWalletMaxMloki int    `json:"circlePerWalletMaxMloki"`
+	CircleMinBudgetRenewal  string `json:"circleMinBudgetRenewal"`
+	// CircleDefaultExpSecs (0 = the ceiling) and CirclePerWalletMaxReceiveMloki
+	// (0 = the send ceiling).
+	CircleDefaultExpSecs           int   `json:"circleDefaultExpSecs"`
+	CirclePerWalletMaxReceiveMloki int64 `json:"circlePerWalletMaxReceiveMloki"`
+	// The circle money model; 0 or empty takes lokihub's default.
+	CircleHoldingsCeilingMloki int64  `json:"circleHoldingsCeilingMloki"`
+	CircleFeeReservePpm        int    `json:"circleFeeReservePpm"`
+	CircleFeeReserveMinMloki   int64  `json:"circleFeeReserveMinMloki"`
+	CircleOutboundCeilingMloki int64  `json:"circleOutboundCeilingMloki"`
+	CircleOutboundPeriod       string `json:"circleOutboundPeriod"`
+	// CircleGraceSecs (0 = 7 days) and CircleDustThresholdMloki (0 = 1000).
+	CircleGraceSecs          int64 `json:"circleGraceSecs"`
+	CircleDustThresholdMloki int64 `json:"circleDustThresholdMloki"`
+	// CircleRotationEnabled and CircleRotationDelaySecs (0 = 5 days).
+	CircleRotationEnabled   bool  `json:"circleRotationEnabled"`
+	CircleRotationDelaySecs int64 `json:"circleRotationDelaySecs"`
+	// CircleIdentityId reuses an existing CircleIdentity — when set, CirclePolicy/
+	// CircleIdentityName/ProviderPubkey below are ignored.
+	CircleIdentityId *uint `json:"circleIdentityId"`
+	// CircleIdentityName/CirclePolicy/ProviderPubkey/FollowSetD create a
+	// brand-new CircleIdentity — used only when CircleIdentityId is nil.
+	CircleIdentityName string `json:"circleIdentityName"`
+	CirclePolicy       string `json:"circlePolicy"`
+	// ProviderPubkey may be empty for a follow_set circle, meaning the node
+	// identity, which lets this hub publish the set itself.
+	ProviderPubkey string `json:"providerPubkey"`
+	FollowSetD     string `json:"followSetD"`
+	// FollowSet, when set, is published as the new identity's set before the
+	// hub is created. Only for a set the node identity authors.
+	FollowSet *FollowSetRequest `json:"followSet"`
+}
+
+type CreateLightningAddressRequest struct {
+	Address string `json:"address"`
+	AppId   uint   `json:"appId"`
+}
+
+// Cash wallet / claim types.
+
+// CashWalletRecipient describes one recipient's requested slice when creating
+// a (possibly shared) Cash wallet — a wallet may serve several recipients at
+// once, each with their own amount, all sharing the wallet's one expiry.
+type CashWalletRecipient struct {
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "cash"
+	IdentityValue string `json:"identity_value,omitempty"`
+	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
+	AmountMloki   int64  `json:"amount_mloki"`
+	// CashSecret is response-only: populated when identity_type == "cash",
+	// and only in the create_cash_wallet response — it is never retrievable
+	// again afterward (NIP-CASH §Cash-Mode Slices). A caller MUST NOT set it on a
+	// request; there is nothing for it to mean there.
+	CashSecret string `json:"cash_secret,omitempty"`
+}
+
+// CreateCashWalletRequest's split floor (MinTransferMloki) is NOT a request
+// field — it's inherited from the issuing Cash Hub's own configured default
+// (db.CashHubConfig), not supplied per call. See
+// CreateAppRequest.CashMinTransferMloki for where a hub owner actually sets it.
+type CreateCashWalletRequest struct {
+	Recipients []CashWalletRecipient `json:"recipients"`
+	ExpirySecs int                   `json:"expiry_secs,omitempty"` // shared by every recipient; 0 => hub's max
+	// RequestID and Expiration make an operator's mint recoverable like one over
+	// NWC (NIP-CASH §request_id, §Deadlines): the id is marked used, Expiration
+	// (unix seconds) is the deadline, and the record commits with the bill.
+	// Optional until the browser sends them (WP-19); Expiration needs RequestID.
+	RequestID  string `json:"request_id,omitempty"`
+	Expiration int64  `json:"expiration,omitempty"`
+}
+
+// CreateCashWalletResponse carries the bill's cash_token, its only credential
+// (NIP-CASH §Minting Cash, Response); there is no URI form.
+type CreateCashWalletResponse struct {
+	AppID     uint   `json:"app_id"`
+	CashToken string `json:"cash_token"`
+	// ExpiresAt is omitted when this wallet never expires — the Cash Hub's
+	// own CashMaxExpSecs is 0 ("never") and the request didn't carry its
+	// own ExpirySecs.
+	ExpiresAt  *int64                `json:"expires_at,omitempty"`
+	Recipients []CashWalletRecipient `json:"recipients"`
+}
+
+// ListCashWalletClaimsResponse is the paginated response for
+// ListCashWalletClaims — mirrors ListTransactionsResponse's shape.
+type ListCashWalletClaimsResponse struct {
+	Claims     []CashWalletClaimResponse `json:"claims"`
+	TotalCount uint64                    `json:"totalCount"`
+	Counts     CashWalletClaimCounts     `json:"counts"`
+}
+
+// The status vocabulary itself lives in db (db.CashSliceStatus*), because it
+// is shared by the SQL that derives it, the archive column that stores it, and
+// this wire format — putting it here would mean db importing api.
+
+// CashWalletClaimCounts totals a hub's slices by status, over the full
+// unfiltered set — meant for a UI's per-facet counts.
+type CashWalletClaimCounts struct {
+	All       uint64 `json:"all"`
+	Unclaimed uint64 `json:"unclaimed"`
+	Redeemed  uint64 `json:"redeemed"`
+	Split     uint64 `json:"split"`
+	Expired   uint64 `json:"expired"`
+	// Reclaimed is an unclaimed slice whose bill was destroyed before its
+	// window passed — the value went back to the hub, but the recipient was
+	// cut off rather than timing out. WrittenOff is one whose value could not
+	// be returned anywhere because the parent hub was gone.
+	Reclaimed  uint64 `json:"reclaimed"`
+	WrittenOff uint64 `json:"written_off"`
+	// Claimed is the legacy umbrella over Redeemed+Split, from before the
+	// vocabulary distinguished how a slice's value left. Still emitted so a
+	// client that has not been updated keeps rendering across a deploy.
+	Claimed uint64 `json:"claimed"`
+}
+
+// CashWalletClaimResponse represents one recipient's slice of a cash_wallet.
+// ID is the claim's own row ID (delete via DeleteCashClaim, unclaimed
+// only); WalletAppID identifies the shared connection this slice belongs to
+// (reveal via GetCashWalletConnection, delete the whole wallet via
+// DeleteCashWallet). Claimed is a plain boolean (ClaimedAt != nil) — unlike
+// the old single-recipient-per-wallet model, there's no spend-fraction
+// derivation here, since cash_redeem either pays a slice out completely or
+// not at all.
+type CashWalletClaimResponse struct {
+	ID            uint   `json:"id"`
+	WalletAppID   uint   `json:"wallet_app_id"`
+	IdentityType  string `json:"identity_type"`
+	IdentityValue string `json:"identity_value"`
+	AmountMloki   int64  `json:"amount_mloki"`
+	ExpiresAt     *int64 `json:"expires_at,omitempty"` // inherited from the wallet
+	Claimed       bool   `json:"claimed"`
+	ClaimedAt     *int64 `json:"claimed_at,omitempty"`
+	CreatedAt     int64  `json:"created_at"`
+	// MinTransferMloki is this slice's own split floor — how small a future
+	// split off it (or the remainder left behind) may be (0 = no floor). Set
+	// once, at creation or inherited from a split's source slice — see
+	// db.CashWalletClaim's own doc comments.
+	MinTransferMloki int64 `json:"min_transfer_mloki"`
+	// RedeemFeePpm is this slice's own locked-in redeem fee rate (0 = free),
+	// fixed once at creation or inherited unchanged from a split's source
+	// slice — never retroactively affected by a later change to the Hub's
+	// own default (NIP-CASH.md §The Redeem Fee). Exposed so the Hub owner
+	// can actually verify that immutability guarantee on a specific,
+	// already-issued lokicash, not just trust the Hub Settings UI's own copy
+	// about it — see db.CashWalletClaim.RedeemFeePpm's own doc comment.
+	RedeemFeePpm int `json:"redeem_fee_ppm"`
+	// SpunOffToWalletAppID is set when this slice's value was moved into a
+	// brand-new dedicated cash_wallet via a split, rather than redeemed —
+	// purely informational, for the UI to explain why a claim is claimed
+	// with no matching payment.
+	SpunOffToWalletAppID *uint `json:"spun_off_to_wallet_app_id,omitempty"`
+	// CashToken is the wallet's own connection, packaged as a
+	// lokicash1... string (NIP-CASH §The Cash Token) — identical for every
+	// claim sharing the same WalletAppID. Only ever populated for the page
+	// of results actually being returned (ListCashWalletClaims derives it
+	// after pagination, once per unique wallet on that page, not for every
+	// claim across the whole hub).
+	//
+	// Populated for an archived row too, read verbatim from the archive
+	// rather than minted again. It is a record there, not a credential: the
+	// bill is destroyed, so it moves no money, and a caller who tries it over
+	// NWC gets the "spent" tombstone or silence. Empty for a bill minted
+	// before the archive stored it.
+	CashToken string `json:"cash_token,omitempty"`
+	// Status is a db.CashSliceStatus* value. Previously the client re-derived
+	// display state from Claimed and SpunOffToWalletAppID, which cannot
+	// express the terminal states an archived slice carries.
+	Status string `json:"status"`
+	// Archived means this slice's bill no longer exists; the row comes from
+	// the archive. Load-bearing rather than cosmetic: live claim ids and
+	// archive ids come from different sequences and WILL collide, so a client
+	// keying on ID alone — a dedupe map, a delete URL — must pair it with
+	// this, and must not offer to delete an archived row.
+	Archived bool `json:"archived"`
+	// RetainedUntil (unix seconds) is set for an archived bill whose Hub keeps
+	// answering cash_status about it: until then its token is still a live
+	// credential (NIP-CASH §Archival on Deletion), not just a record.
+	RetainedUntil *int64 `json:"retained_until,omitempty"`
+	// WalletPubkey identifies the bill itself. Populated for every row, and
+	// the identifier to correlate with relay logs — and the fallback label
+	// for an archived bill old enough that no token was stored for it.
+	WalletPubkey string `json:"wallet_pubkey,omitempty"`
+	// PaymentHash is the payout's proof for a redeemed slice, carried through
+	// from the claim (and into the archive, since the transaction row it came
+	// from cascades away with the bill).
+	PaymentHash string `json:"payment_hash,omitempty"`
+	// SettledAt and RedeemFeeMloki complete the payout record a Hub owner
+	// needs to account for a bill after it is gone: when the payment actually
+	// settled, and what the Hub actually charged for it. RedeemFeePpm above is
+	// only the agreed *rate*; this is the amount taken. Both are already
+	// carried into the archive for exactly this reason, and were simply never
+	// exposed — leaving the archive readable in the database but not in the
+	// UI that exists to account for it.
+	SettledAt      *int64 `json:"settled_at,omitempty"`
+	RedeemFeeMloki int64  `json:"redeem_fee_mloki,omitempty"`
+	// Ordered and Reminted: a slice minted for an order, or re-minted by a
+	// cancelled on-chain withdrawal; its owner can neither remove it nor delete
+	// its bill (NIP-CASH §Data Model).
+	Ordered  bool `json:"ordered,omitempty"`
+	Reminted bool `json:"reminted,omitempty"`
+}
+
+// CashHubStatsResponse is the hub dashboard's data: what a hub owes, what has
+// flowed through it, and how fast bills come back.
+//
+// Amounts are mloki. A count accompanies every amount because a figure like
+// "outstanding" means different things as money and as a number of unredeemed
+// bills, and an operator watches both.
+type CashHubStatsResponse struct {
+	// OutstandingMloki is the hub's live liability — value still redeemable.
+	// The headline figure, and one nothing surfaced before the archive existed.
+	OutstandingMloki int64  `json:"outstanding_mloki"`
+	OutstandingCount uint64 `json:"outstanding_count"`
+
+	IssuedMloki int64  `json:"issued_mloki"`
+	IssuedCount uint64 `json:"issued_count"`
+	// MintedMloki is what the hub actually put into circulation. IssuedMloki
+	// counts every slice ever created, which double-counts a full split; this
+	// is the figure the operator-facing "Issued" tile shows.
+	MintedMloki   int64  `json:"minted_mloki"`
+	RedeemedMloki int64  `json:"redeemed_mloki"`
+	RedeemedCount uint64 `json:"redeemed_count"`
+	// SplitMloki moved into another bill rather than leaving the hub — churn,
+	// deliberately not counted as an outflow.
+	SplitMloki int64  `json:"split_mloki"`
+	SplitCount uint64 `json:"split_count"`
+	// ReturnedMloki came back because a bill expired or was deleted unclaimed.
+	ReturnedMloki int64  `json:"returned_mloki"`
+	ReturnedCount uint64 `json:"returned_count"`
+	// WrittenOffMloki could not be returned anywhere — a loss, not a recovery,
+	// so it is never folded into ReturnedMloki.
+	WrittenOffMloki int64  `json:"written_off_mloki"`
+	WrittenOffCount uint64 `json:"written_off_count"`
+
+	FeesEarnedMloki int64 `json:"fees_earned_mloki"`
+
+	// BackingMloki is what the issued bills themselves hold: the sum of every
+	// live cash_wallet's own isolated balance.
+	//
+	// This, not the hub's balance, is what OutstandingMloki is a claim on.
+	// Minting is not bookkeeping inside the hub — cashwallet.Commit does a
+	// real internal transfer, so the backing money physically leaves the
+	// hub's ledger and lives in the bill's own app row from that moment.
+	// A hub that has minted its whole balance is fully solvent with a hub
+	// balance of zero, and comparing those two figures reports the healthy
+	// end state of ordinary operation as a shortfall.
+	//
+	// ShortfallMloki is the figure that actually means insolvency: summed
+	// per bill, how much any individual bill's unclaimed slices exceed that
+	// same bill's own balance. Aggregates cannot show this — a large unminted
+	// balance would mask one underfunded bill — so it is computed per bill
+	// and only the deficits are summed.
+	BackingMloki   int64 `json:"backing_mloki"`
+	ShortfallMloki int64 `json:"shortfall_mloki"`
+
+	// HubsCount and BalanceMloki are the node-wide endpoint's own two
+	// figures and are zero on a single hub's response, which already has
+	// both on its own App row. Filled by GetAllCashHubStats rather than by
+	// the apps service — see the note there.
+	HubsCount    uint64 `json:"hubs_count"`
+	BalanceMloki int64  `json:"balance_mloki"`
+
+	// MedianTimeToRedeemSecs is null until something has been redeemed.
+	MedianTimeToRedeemSecs *int64 `json:"median_time_to_redeem_secs"`
+
+	Daily []CashHubDailyPointResponse `json:"daily"`
+
+	// ExpiryBuckets partitions OutstandingMloki by how long is left to redeem
+	// it, and PerHub splits it by hub. Both are node-wide only, and both are
+	// empty on a single hub's response.
+	ExpiryBuckets []CashExpiryBucketResponse   `json:"expiry_buckets"`
+	PerHub        []CashHubOutstandingResponse `json:"per_hub"`
+}
+
+// CircleHubStatsResponse is a circle hub's dashboard data.
+//
+// A circle hub's money question is the mirror of a cash hub's: a cash hub owes
+// value it handed out as bearer bills, a circle hub has allocated value into
+// wallets its members still hold and it can reclaim. So the headline is an
+// allocation rather than a liability, and the risk is drift — budgets filling
+// up, or one member spending far more than the rest — rather than insolvency.
+type CircleHubStatsResponse struct {
+	MembersCount uint64 `json:"members_count"`
+	// EligibleCount is null for a "follow_set"-policy circle, whose eligible
+	// set is a follow set on relays rather than anything this hub stores.
+	// Null means "not knowable here", never zero.
+	EligibleCount *uint64 `json:"eligible_count"`
+	// AllocatedMloki is what members currently hold between them.
+	AllocatedMloki int64 `json:"allocated_mloki"`
+
+	SpentMloki    int64  `json:"spent_mloki"`
+	SpentCount    uint64 `json:"spent_count"`
+	ReceivedMloki int64  `json:"received_mloki"`
+	ReceivedCount uint64 `json:"received_count"`
+	// FeesEarnedMloki is the hub's forwarding cut on member payments.
+	FeesEarnedMloki int64 `json:"fees_earned_mloki"`
+
+	Daily     []CircleHubDailyPointResponse  `json:"daily"`
+	PerMember []CircleMemberActivityResponse `json:"per_member"`
+}
+
+// CircleHubDailyPointResponse is one day of member activity, oldest first.
+// Every day in the window is present even when nothing happened.
+type CircleHubDailyPointResponse struct {
+	Date          string `json:"date"` // YYYY-MM-DD, UTC
+	SpentMloki    int64  `json:"spent_mloki"`
+	ReceivedMloki int64  `json:"received_mloki"`
+}
+
+// CircleMemberActivityResponse is one member's share, ordered biggest spender
+// first. Every member appears, including those who have never spent.
+type CircleMemberActivityResponse struct {
+	WalletAppID  uint   `json:"wallet_app_id"`
+	Name         string `json:"name"`
+	SpentMloki   int64  `json:"spent_mloki"`
+	BalanceMloki int64  `json:"balance_mloki"`
+	// MaxAmountMloki is the member's own budget cap, 0 when uncapped.
+	MaxAmountMloki int64 `json:"max_amount_mloki"`
+	// BudgetUsedMloki is spend in the member's current budget period — the
+	// figure the cap above actually governs. SpentMloki is all-time.
+	BudgetUsedMloki int64 `json:"budget_used_mloki"`
+}
+
+// CashExpiryBucketResponse is one slice of the expiry runway. The buckets sum
+// back to OutstandingMloki exactly — they partition the same population.
+type CashExpiryBucketResponse struct {
+	// Key is "24h" | "7d" | "30d" | "later" | "never", already in order.
+	Key   string `json:"key"`
+	Mloki int64  `json:"mloki"`
+	Count uint64 `json:"count"`
+}
+
+// CashHubOutstandingResponse is one hub's share of the node's liability,
+// alongside what that hub holds to cover it. Every cash hub appears, including
+// those owing nothing.
+type CashHubOutstandingResponse struct {
+	HubAppID         uint   `json:"hub_app_id"`
+	Name             string `json:"name"`
+	OutstandingMloki int64  `json:"outstanding_mloki"`
+	OutstandingCount uint64 `json:"outstanding_count"`
+	BalanceMloki     int64  `json:"balance_mloki"`
+}
+
+// CashHubDailyPointResponse is one day of flow, oldest first. Every day in the
+// window is present even when nothing happened, so a chart has no gaps.
+type CashHubDailyPointResponse struct {
+	Date          string `json:"date"` // YYYY-MM-DD, UTC
+	IssuedMloki   int64  `json:"issued_mloki"`
+	RedeemedMloki int64  `json:"redeemed_mloki"`
+	ReturnedMloki int64  `json:"returned_mloki"`
+	// SplitMloki/WrittenOffMloki: the other two ways a slice stops being
+	// outstanding. A client reconstructing the outstanding curve from this
+	// series must subtract all four, or it overstates the curve and its
+	// right-hand end will not meet OutstandingMloki.
+	SplitMloki      int64 `json:"split_mloki"`
+	WrittenOffMloki int64 `json:"written_off_mloki"`
+}
+
+// CashWalletConnectionResponse is a bill's cash_token as issued, its only
+// credential.
+type CashWalletConnectionResponse struct {
+	CashToken string `json:"cash_token"`
+}
+
+// Identity Authority registry types.
+
+type AddIdentityAuthorityRequest struct {
+	Pubkey    string   `json:"pubkey"`
+	Name      string   `json:"name"`
+	RelayURLs []string `json:"relay_urls,omitempty"`
+}
+
+type IdentityAuthorityResponse struct {
+	Pubkey    string   `json:"pubkey"`
+	Name      string   `json:"name"`
+	RelayURLs []string `json:"relay_urls,omitempty"`
+	CreatedAt int64    `json:"created_at"`
+	// UnredeemedSliceCount is how many currently-unclaimed connection_key Cash
+	// Wallet slices this IA has attested for right now — the live blast
+	// radius a revocation would immediately strand, computed by
+	// ListIdentityAuthorities (never populated by AddIdentityAuthority's own
+	// response, which has nothing to count yet).
+	UnredeemedSliceCount int `json:"unredeemed_slice_count"`
+}
+
+type StartRequest struct {
+	UnlockPassword string `json:"unlockPassword"`
+}
+
+type UnlockRequest struct {
+	UnlockPassword  string  `json:"unlockPassword"`
+	TokenExpiryDays *uint64 `json:"tokenExpiryDays"`
+	Permission      string  `json:"permission,omitempty"` // "full" or "readonly"
+}
+
+type BackupReminderRequest struct {
+	NextBackupReminder string `json:"nextBackupReminder"`
+}
+
+type SendEventRequest struct {
+	Event      string      `json:"event"`
+	Properties interface{} `json:"properties"`
+}
+
+type SetupRequest struct {
+	LNBackendType  string `json:"backendType"`
+	UnlockPassword string `json:"unlockPassword"`
+
+	Mnemonic           string `json:"mnemonic"`
+	NextBackupReminder string `json:"nextBackupReminder"`
+
+	// AutoConnect logic
+	AutoConnect bool `json:"autoConnect"`
+	// CustomConfig logic
+	CustomConfig *CustomConfig `json:"customConfig"`
+
+	// FLND fields
+	FLNDAddress      string `json:"flndAddress"`
+	FLNDCertFile     string `json:"flndCertFile"`
+	FLNDMacaroonFile string `json:"flndMacaroonFile"`
+	FLNDCertHex      string `json:"flndCertHex"`
+	FLNDMacaroonHex  string `json:"flndMacaroonHex"`
+
+	Relay      string `json:"relay"`
+	MempoolApi string `json:"mempoolApi"`
+}
+
+type SetupLocalRequest struct {
+	UnlockPassword string `json:"unlockPassword"`
+	Relay          string `json:"relay"`
+	MempoolApi     string `json:"mempoolApi"`
+}
+
+type SetupManualRequest struct {
+	UnlockPassword  string `json:"unlockPassword"`
+	FLNDAddress     string `json:"flndAddress"`
+	FLNDCertHex     string `json:"flndCertHex"`
+	FLNDMacaroonHex string `json:"flndMacaroonHex"`
+	Relay           string `json:"relay"`
+	MempoolApi      string `json:"mempoolApi"`
+}
+
+type SetupStatusResponse struct {
+	Active bool `json:"active"`
+}
+
+type CustomConfig struct {
+	DataDir   string `json:"datadir"`
+	RpcListen string `json:"rpcListen"`
+}
+
+type CreateAppResponse struct {
+	PairingUri    string   `json:"pairingUri"`
+	PairingSecret string   `json:"pairingSecretKey"`
+	Pubkey        string   `json:"pairingPublicKey"`
+	RelayUrls     []string `json:"relayUrls"`
+	WalletPubkey  string   `json:"walletPubkey"`
+	Lud16         string   `json:"lud16"`
+	Id            uint     `json:"id"`
+	Name          string   `json:"name"`
+	ReturnTo      string   `json:"returnTo"`
+	// CashHubToken and CircleHubToken are an alternative bech32 encoding of
+	// the same pairing data as PairingUri (ohstr/nips NIP-CASH.md §The Cash
+	// Hub Connection, NIP-CW.md §The Circle Wallet Hub Connection) —
+	// populated only when Kind is cash_hub/circle_hub respectively, and, like
+	// PairingUri, shown to the operator this one time only.
+	CashHubToken   *string `json:"cashHubToken,omitempty"`
+	CircleHubToken *string `json:"circleHubToken,omitempty"`
+}
+
+type User struct {
+	Email string `json:"email"`
+}
+
+// CircleChildBalance describes one circle_wallet child's current isolated balance,
+// used both for the wallets list and to warn an admin before deleting its circle_hub.
+type CircleChildBalance struct {
+	AppID uint   `json:"appId"`
+	Name  string `json:"name"`
+	// RequesterPubkey is the circle member's nostr identity (from
+	// CircleWalletMembership), used by the frontend to resolve a profile
+	// (avatar/display name) for the list — distinct from AppPubkey, which
+	// is this wallet's own NWC connection pubkey.
+	RequesterPubkey string `json:"requesterPubkey"`
+	AppPubkey       string `json:"appPubkey"`
+	BalanceMloki    int64  `json:"balanceMloki"`
+	// State is the wallet's lifecycle state (NIP-CW §Lifecycle and Deletion):
+	// active, suspended, expired or closing; GraceEndsAt when its grace period
+	// ends (unix, nil while it has none); ExpiresAt its expiry (nil: never).
+	State       string `json:"state"`
+	GraceEndsAt *int64 `json:"graceEndsAt,omitempty"`
+	ExpiresAt   *int64 `json:"expiresAt,omitempty"`
+	// DustThresholdMloki is the most the Hub may keep when the wallet goes.
+	DustThresholdMloki int64 `json:"dustThresholdMloki"`
+	// Frozen is true while a member request froze the wallet: its key is
+	// refused everything until an unfreeze or a completed rotation.
+	Frozen bool `json:"frozen"`
+	// PendingRotation is the wallet's pending move to a new connection key.
+	PendingRotation *CirclePendingRotation `json:"pendingRotation,omitempty"`
+}
+
+// CirclePendingRotation is a pending rotation as the host sees it.
+type CirclePendingRotation struct {
+	ConnectionPubkey string `json:"connectionPubkey"`
+	CompletesAt      int64  `json:"completesAt"`
+}
+
+// ListCircleChildrenBalancesResponse is the paginated response for
+// ListCircleChildrenBalances — mirrors ListTransactionsResponse's shape.
+type ListCircleChildrenBalancesResponse struct {
+	Children   []CircleChildBalance `json:"children"`
+	TotalCount uint64               `json:"totalCount"`
+}
+
+// DeleteCircleHubResult reports what DeleteCircleHub actually did:
+// whether the provider itself was deleted, and which children were deleted vs
+// left intact (skipped children only occur with CircleDeleteModeEmptyOnly when
+// they still hold a nonzero balance — in that case HubDeleted is false).
+type DeleteCircleHubResult struct {
+	HubDeleted      bool   `json:"hubDeleted"`
+	DeletedChildIDs []uint `json:"deletedChildIds"`
+	SkippedChildIDs []uint `json:"skippedChildIds"`
+	// ClosingChildIDs are the wallets the teardown moved to Closing, or found
+	// Expired or Closing already: each goes once its grace is over and it holds
+	// at most dust (NIP-CW §Lifecycle and Deletion).
+	ClosingChildIDs []uint `json:"closingChildIds"`
+}
+
+type InfoResponseRelay struct {
+	Url    string `json:"url"`
+	Online bool   `json:"online"`
+}
+
+// LSPInfo is a trusted LSP (WP-26): Pubkey is the node id LSPS uses, empty
+// until resolved; Status and Usable are its announcement's.
+type LSPInfo struct {
+	NodeKey string `json:"nodeKey"`
+	Name    string `json:"name"`
+	Pubkey  string `json:"pubkey"`
+	Host    string `json:"host"`
+	Website string `json:"website"`
+	Active  bool   `json:"active"`
+	Status  string `json:"status"`
+	Usable  bool   `json:"usable"`
+}
+
+type InfoResponse struct {
+	BackendType                 string               `json:"backendType"`
+	SetupCompleted              bool                 `json:"setupCompleted"`
+	Running                     bool                 `json:"running"`
+	Unlocked                    bool                 `json:"unlocked"`
+	Version                     string               `json:"version"`
+	Network                     string               `json:"network"`
+	StartupState                string               `json:"startupState"`
+	StartupError                string               `json:"startupError"`
+	StartupErrorTime            time.Time            `json:"startupErrorTime"`
+	AutoUnlockPasswordSupported bool                 `json:"autoUnlockPasswordSupported"`
+	AutoUnlockPasswordEnabled   bool                 `json:"autoUnlockPasswordEnabled"`
+	Currency                    string               `json:"currency"`
+	FlokicoinDisplayFormat      string               `json:"flokicoinDisplayFormat"`
+	Relays                      []InfoResponseRelay  `json:"relays"`
+	Relay                       string               `json:"relay"`
+	GeneralRelay                string               `json:"generalRelay"`
+	TrustedNwcRelay             bool                 `json:"trustedNwcRelay"`
+	PrivateEnvelope             PrivateEnvelopeInfo  `json:"privateEnvelope"`
+	PrivateTransport            PrivateTransportInfo `json:"privateTransport"`
+	// PendingCashRedeems counts cash_redeem payouts whose outcome is not known
+	// yet; each one's slice stays claimed until it settles or fails.
+	PendingCashRedeems int    `json:"pendingCashRedeems"`
+	SearchRelay        string `json:"searchRelay"`
+	NodeAlias          string `json:"nodeAlias"`
+	MempoolUrl         string `json:"mempoolUrl"`
+	// LokihubStoreUrl is the operator-selected app-store base URL, empty when
+	// the app store is OFF. The frontend uses it to decide between the app-store
+	// listing and the "configure an app store under Settings → Services" empty
+	// state. Redacted for unauthenticated callers (fingerprinting surface).
+	LokihubStoreUrl string    `json:"lokihubStoreUrl"`
+	LSPs            []LSPInfo `json:"lsps"`
+	WorkDir         string    `json:"workDir"`
+	EnablePolling   bool      `json:"enablePolling"`
+	// LSPService is the attached-lspd status (plan §3.4), populated only for an
+	// authenticated caller and only when an LSP service endpoint is configured;
+	// omitted (nil) otherwise so the frontend can gate its backoffice nav on it.
+	LSPService *LSPServiceInfo `json:"lspService,omitempty"`
+}
+
+// LSPServiceInfo surfaces whether the Hub is attached to an lspd daemon
+// (plan §3.4), modeled on PrivateTransportInfo. Configured is endpoint-present;
+// Reachable is lspd's /info answered; Attached is reachable AND the admin key
+// was accepted. Error explains a non-attached state ("unreachable", "key
+// mismatch (403)", a signer error). All degrade gracefully — never an error.
+type LSPServiceInfo struct {
+	Configured bool       `json:"configured"`
+	Reachable  bool       `json:"reachable"`
+	Attached   bool       `json:"attached"`
+	Endpoint   string     `json:"endpoint,omitempty"`
+	Pubkey     string     `json:"pubkey,omitempty"`
+	Version    string     `json:"version,omitempty"`
+	Alias      string     `json:"alias,omitempty"`
+	Error      string     `json:"error,omitempty"`
+	CheckedAt  *time.Time `json:"checkedAt,omitempty"`
+}
+
+// RedactForUnauthenticated strips fields that let an unauthenticated caller
+// fingerprint a configured node (alias, relays, LSP host/pubkey, version,
+// network, etc). It's a no-op during initial setup (SetupCompleted false),
+// since the setup wizard reads these same fields before any credential
+// exists. Callers must only invoke this once they've established the
+// request is not authenticated.
+func (r *InfoResponse) RedactForUnauthenticated() {
+	if !r.SetupCompleted {
+		return
+	}
+	r.BackendType = ""
+	r.Version = ""
+	r.Network = ""
+	r.AutoUnlockPasswordSupported = false
+	r.AutoUnlockPasswordEnabled = false
+	r.Currency = ""
+	r.FlokicoinDisplayFormat = ""
+	r.Relays = []InfoResponseRelay{}
+	r.Relay = ""
+	r.GeneralRelay = ""
+	r.PrivateTransport = PrivateTransportInfo{}
+	r.SearchRelay = ""
+	r.NodeAlias = ""
+	r.MempoolUrl = ""
+	r.LokihubStoreUrl = ""
+	r.LSPs = []LSPInfo{}
+	r.EnablePolling = false
+	r.LSPService = nil
+}
+
+// PrivateEnvelopeInfo is the private-transport batch envelope policy, as read
+// and written through hub settings.
+//
+// CeilingBytes and EstimatedWireBytes are read-only and populated on reads only:
+// the first is the hard NIP-44 plaintext ceiling that MaxBytes is validated
+// against, the second is how large a full envelope becomes once base64-encoded,
+// which is the figure a relay's max_message_length has to cover. Surfacing both
+// is the difference between an operator choosing MaxBytes informed and guessing.
+type PrivateEnvelopeInfo struct {
+	MaxBytes int `json:"maxBytes"`
+	MaxItems int `json:"maxItems"`
+	// MaxConsolidateSources is necessarily lower than NIP-CASH's cap of 100 on
+	// the standard transport: each source carries its own signed proof, so 100
+	// sources exceeds NIP-44's plaintext ceiling outright.
+	MaxConsolidateSources int `json:"maxConsolidateSources"`
+	PadBucketBytes        int `json:"padBucketBytes"`
+	MaxVerifyBudget       int `json:"maxVerifyBudget"`
+	CeilingBytes          int `json:"ceilingBytes,omitempty"`
+	EstimatedWireBytes    int `json:"estimatedWireBytes,omitempty"`
+	// MaxConsolidateItemBytes is read-only: how large the largest permitted
+	// consolidate item encodes to, so an operator can see the cap's real cost
+	// against MaxBytes rather than inferring it.
+	MaxConsolidateItemBytes int `json:"maxConsolidateItemBytes,omitempty"`
+}
+
+// PrivateTransportInfo is the hub's NIP-CASH private-transport announcement
+// status, read-only. Node/inbox identity are x-only hex (Nostr pubkey
+// format, not the LN node's compressed form). Announced is false — with
+// Error explaining why — when the hub's LN backend cannot sign the
+// announcement or no configured relay accepted it; bill methods
+// (cash_status/cash_redeem/cash_transfer/cash_consolidate) are unreachable
+// to any client that hasn't talked to this hub before until it is.
+type PrivateTransportInfo struct {
+	NodeIdentity    string `json:"nodeIdentity,omitempty"`
+	InboxPubkey     string `json:"inboxPubkey,omitempty"`
+	Announced       bool   `json:"announced"`
+	AnnouncedRelays int    `json:"announcedRelays"`
+	TotalRelays     int    `json:"totalRelays"`
+	Error           string `json:"error,omitempty"`
+	// InboxDelivering is whether the inbox's last self-probe came back from
+	// every relay that accepted it; meaningful once InboxCheckedAt is set.
+	InboxDelivering   bool       `json:"inboxDelivering"`
+	InboxCheckedAt    *time.Time `json:"inboxCheckedAt,omitempty"`
+	InboxResubscribes int        `json:"inboxResubscribes"`
+}
+
+type UpdateSettingsRequest struct {
+	Currency               string  `json:"currency"`
+	FlokicoinDisplayFormat string  `json:"flokicoinDisplayFormat"`
+	Relay                  string  `json:"relay"`
+	GeneralRelay           *string `json:"generalRelay"`
+	TrustedNwcRelay        *bool   `json:"trustedNwcRelay"`
+	// PrivateEnvelope, when present, replaces the whole envelope policy. It is
+	// all-or-nothing rather than four independent fields because the values are
+	// validated against each other (a pad bucket cannot exceed the ceiling), so
+	// a partial update could not be checked coherently.
+	PrivateEnvelope *PrivateEnvelopeInfo `json:"privateEnvelope"`
+	SearchRelay     *string              `json:"searchRelay"`
+	MempoolApi      string               `json:"mempoolApi"`
+	// ImageProxyMode / ImageProxyTemplate set the profile-image gating choice
+	// (P0-B). Mode is one of off/direct/proxy; an empty mode leaves it
+	// unchanged. Template is a pointer so an absent field leaves it unchanged
+	// while an explicit empty string clears it. In "proxy" mode a non-empty,
+	// valid template is required.
+	ImageProxyMode     string  `json:"imageProxyMode"`
+	ImageProxyTemplate *string `json:"imageProxyTemplate"`
+	// LokihubStoreURL is a pointer so an explicit empty string can turn the app
+	// store OFF (feature disabled, no sync, no fetch); nil leaves it untouched.
+	// A non-empty value is validated as an HTTP URL and triggers an immediate
+	// catalogue sync.
+	LokihubStoreURL *string `json:"lokihubStoreUrl"`
+}
+
+type SetNodeAliasRequest struct {
+	NodeAlias string `json:"nodeAlias"`
+}
+
+// RotateInboxResponse is the inbox a rotation moved to. AnnounceError is set
+// when the rotation stands but its announcement failed (it is retried by the
+// next start, or another rotation).
+type RotateInboxResponse struct {
+	InboxPubkey   string `json:"inboxPubkey"`
+	AnnounceError string `json:"announceError,omitempty"`
+}
+
+// PublishNodeProfileRequest is the full kind-0 profile to publish for the
+// hub's own node identity — kind 0 is replaceable, so this replaces rather
+// than patches; a caller that wants to keep an existing field must resend it.
+type PublishNodeProfileRequest struct {
+	Name    string `json:"name"`
+	About   string `json:"about"`
+	Picture string `json:"picture"`
+	Banner  string `json:"banner"`
+	Nip05   string `json:"nip05"`
+	Lud16   string `json:"lud16"`
+}
+
+// PublishNodeNoteRequest is a plain-text kind-1 note to publish for the
+// hub's own node identity. First version: text only, no media/attachments.
+type PublishNodeNoteRequest struct {
+	Content string `json:"content"`
+}
+
+type PublishNodeNoteResponse struct {
+	ID        string `json:"id"`
+	CreatedAt int64  `json:"createdAt"`
+}
+
+type MnemonicRequest struct {
+	UnlockPassword string `json:"unlockPassword"`
+}
+
+type MnemonicResponse struct {
+	Mnemonic string `json:"mnemonic"`
+}
+
+type ChangeUnlockPasswordRequest struct {
+	CurrentUnlockPassword string `json:"currentUnlockPassword"`
+	NewUnlockPassword     string `json:"newUnlockPassword"`
+}
+type AutoUnlockRequest struct {
+	UnlockPassword string `json:"unlockPassword"`
+}
+
+type ConnectPeerRequest = lnclient.ConnectPeerRequest
+type OpenChannelRequest = lnclient.OpenChannelRequest
+type OpenChannelResponse = lnclient.OpenChannelResponse
+type CloseChannelResponse = lnclient.CloseChannelResponse
+type UpdateChannelRequest = lnclient.UpdateChannelRequest
+
+type RedeemOnchainFundsRequest struct {
+	ToAddress string  `json:"toAddress"`
+	Amount    uint64  `json:"amount"`
+	FeeRate   *uint64 `json:"feeRate"`
+	SendAll   bool    `json:"sendAll"`
+}
+
+type RedeemOnchainFundsResponse struct {
+	TxId string `json:"txId"`
+}
+
+type OnchainBalanceResponse = lnclient.OnchainBalanceResponse
+type BalancesResponse = lnclient.BalancesResponse
+
+type SendPaymentResponse = Transaction
+type MakeInvoiceResponse = Transaction
+type LookupInvoiceResponse = Transaction
+
+type ListTransactionsResponse struct {
+	TotalCount   uint64        `json:"totalCount"`
+	Transactions []Transaction `json:"transactions"`
+}
+
+type Transaction struct {
+	Type            string      `json:"type"`
+	State           string      `json:"state"`
+	Invoice         string      `json:"invoice"`
+	Description     string      `json:"description"`
+	DescriptionHash string      `json:"descriptionHash"`
+	Preimage        *string     `json:"preimage"`
+	PaymentHash     string      `json:"paymentHash"`
+	Amount          uint64      `json:"amount"`
+	FeesPaid        uint64      `json:"feesPaid"`
+	FeeSkim         uint64      `json:"feeSkim,omitempty"`
+	UpdatedAt       string      `json:"updatedAt"`
+	CreatedAt       string      `json:"createdAt"`
+	SettledAt       *string     `json:"settledAt"`
+	AppId           *uint       `json:"appId"`
+	Metadata        Metadata    `json:"metadata,omitempty"`
+	Boostagram      *Boostagram `json:"boostagram,omitempty"`
+	FailureReason   string      `json:"failureReason"`
+}
+
+type Metadata = map[string]interface{}
+
+type Boostagram struct {
+	AppName         string `json:"appName"`
+	Name            string `json:"name"`
+	Podcast         string `json:"podcast"`
+	URL             string `json:"url"`
+	Episode         string `json:"episode,omitempty"`
+	FeedId          string `json:"feedId,omitempty"`
+	ItemId          string `json:"itemId,omitempty"`
+	Timestamp       int64  `json:"ts,omitempty"`
+	Message         string `json:"message,omitempty"`
+	SenderId        string `json:"senderId"`
+	SenderName      string `json:"senderName"`
+	Time            string `json:"time"`
+	Action          string `json:"action"`
+	ValueMlokiTotal int64  `json:"valueMlokiTotal"`
+}
+
+// debug api
+type SendPaymentProbesRequest struct {
+	Invoice string `json:"invoice"`
+}
+
+type SendPaymentProbesResponse struct {
+	Error string `json:"error"`
+}
+
+type SendSpontaneousPaymentProbesRequest struct {
+	Amount uint64 `json:"amount"`
+	NodeId string `json:"nodeId"`
+}
+
+type SendSpontaneousPaymentProbesResponse struct {
+	Error string `json:"error"`
+}
+
+const (
+	LogTypeNode = "node"
+	LogTypeApp  = "app"
+)
+
+type GetLogOutputRequest struct {
+	MaxLen int `query:"maxLen"`
+}
+
+type GetLogOutputResponse struct {
+	Log string `json:"logs"`
+}
+
+type SignMessageRequest struct {
+	Message string `json:"message"`
+}
+
+type SignMessageResponse struct {
+	Message   string `json:"message"`
+	Signature string `json:"signature"`
+}
+
+// LSPS Types
+
+// LSPS0
+type LSPS0ListProtocolsRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+}
+
+type LSPS0ListProtocolsResponse struct {
+	Protocols []int `json:"protocols"`
+}
+
+// LSPS1
+type LSPS1GetInfoRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+	Token     string `json:"token,omitempty"`
+}
+
+type LSPS1CreateOrderRequest struct {
+	LSPPubkey            string                  `json:"lsp_pubkey"`
+	LSPBalanceLoki       uint64                  `json:"amount_loki"`
+	ClientBalanceLoki    uint64                  `json:"client_balance_loki"`
+	ChannelExpiryBlocks  uint32                  `json:"channel_expiry_blocks"`
+	Token                *string                 `json:"token,omitempty"`
+	RefundOnchainAddress *string                 `json:"refund_onchain_address,omitempty"`
+	AnnounceChannel      bool                    `json:"announce_channel"`
+	OpeningFeeParams     *lsps1.OpeningFeeParams `json:"opening_fee_params,omitempty"`
+	// AcceptedTerms are the live values worse than announced that the user
+	// saw and accepted (LSPS1GetInfoResponse.Terms).
+	AcceptedTerms []manager.AcceptedTerm `json:"accepted_terms,omitempty"`
+}
+
+// LSPS1GetInfoResponse is the LSP's first LSPS1 option set, with its bounds
+// compared with the announced ones (NIP-LSP §Client Behavior, Live check).
+type LSPS1GetInfoResponse struct {
+	lsps1.Options
+	Terms *manager.Terms `json:"terms"`
+}
+
+type LSPS1GetOrderRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+	OrderID   string `json:"orderId"`
+	Token     string `json:"token,omitempty"`
+}
+
+type LSPS1ListOrdersResponse struct {
+	Orders []LSPS1Order `json:"orders"`
+}
+
+type LSPS1Order struct {
+	OrderID           string    `json:"orderId"`
+	LSPPubkey         string    `json:"lspPubkey"`
+	State             string    `json:"state"`
+	PaymentInvoice    string    `json:"paymentInvoice"`
+	FeeTotal          uint64    `json:"feeTotal"`
+	OrderTotal        uint64    `json:"orderTotal"`
+	LSPBalanceLoki    uint64    `json:"lspBalanceLoki"`
+	ClientBalanceLoki uint64    `json:"clientBalanceLoki"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+}
+
+// LSPS2
+type LSPS2GetInfoRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+	Token     string `json:"token,omitempty"`
+}
+
+// LSPS2OpeningFeeParams mirrors lsps2.OpeningFeeParams but for API usage if needed,
+// strictly we can reuse the type from lsps2 package if we import it,
+// but usually API types are separate. However, to avoid duplication and alignment issues,
+// we can embed or use the lsps2 type if it serializes to compatible JSON.
+// The lsps2.OpeningFeeParams has JSON tags, so we can use it.
+type LSPS2OpeningFeeParams = lsps2.OpeningFeeParams
+
+type LSPS2BuyRequest struct {
+	LSPPubkey        string                `json:"lspPubkey"`
+	PaymentSizeMloki *uint64               `json:"paymentSizeMloki,omitempty"`
+	OpeningFeeParams LSPS2OpeningFeeParams `json:"openingFeeParams"`
+	// AcceptedTerms are the live values worse than announced that the user
+	// saw and accepted (LSPS2GetInfoResponse.Terms).
+	AcceptedTerms []manager.AcceptedTerm `json:"acceptedTerms,omitempty"`
+}
+
+// LSPS2GetInfoResponse is the fee row offered first, compared with the
+// announced one (NIP-LSP §Client Behavior, Live check).
+type LSPS2GetInfoResponse struct {
+	lsps2.OpeningFeeParams
+	Terms *manager.Terms `json:"terms"`
+}
+
+type LSPS2BuyResponse struct {
+	RequestID       string `json:"requestId"`
+	InterceptSCID   uint64 `json:"interceptScid,string"`
+	CLTVExpiryDelta uint16 `json:"cltvExpiryDelta"`
+	LSPNodeID       string `json:"lspNodeID"`
+	// ClientTrustsLSP surfaces the buy response's client_trusts_lsp flag so the
+	// UI can tell the user whether this JIT buy requires trusting the LSP with
+	// the incoming amount (no zero-conf) — LOKIHUB-0028.
+	ClientTrustsLSP bool `json:"clientTrustsLSP"`
+}
+
+// LSPS5
+type LSPS5SetWebhookRequest struct {
+	LSPPubkey string   `json:"lspPubkey"`
+	URL       string   `json:"url"`
+	Events    []string `json:"events"`
+	Signature string   `json:"signature"`
+	Transport string   `json:"transport,omitempty"`
+}
+
+type LSPS5ListWebhooksRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+}
+
+type LSPS5RemoveWebhookRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+	URL       string `json:"url"`
+}
+
+type PayInvoiceRequest struct {
+	Amount   *uint64  `json:"amount"`
+	AppId    *uint    `json:"appId"`
+	Metadata Metadata `json:"metadata"`
+}
+
+type MakeOfferRequest struct {
+	Description string `json:"description"`
+}
+
+type MakeInvoiceRequest struct {
+	Amount                       uint64 `json:"amount"`
+	Description                  string `json:"description"`
+	DescriptionHash              string `json:"descriptionHash,omitempty"`
+	AppId                        *uint  `json:"appId,omitempty"`
+	LSPJitChannelSCID            string `json:"lspJitChannelSCID,omitempty"`
+	LSPCltvExpiryDelta           uint16 `json:"lspCltvExpiryDelta,omitempty"`
+	LSPPubkey                    string `json:"lspPubkey,omitempty"`
+	LSPFeeBaseMloki              uint64 `json:"lspFeeBaseMloki,omitempty"`
+	LSPFeeProportionalMillionths uint32 `json:"lspFeeProportionalMillionths,omitempty"`
+}
+
+type ResetRouterRequest struct {
+	Key string `json:"key"`
+}
+
+type BasicBackupRequest struct {
+	UnlockPassword string `json:"unlockPassword"`
+}
+
+type BasicRestoreWailsRequest struct {
+	UnlockPassword string `json:"unlockPassword"`
+}
+
+type NetworkGraphResponse = lnclient.NetworkGraphResponse
+
+type WalletCapabilitiesResponse struct {
+	Scopes            []string `json:"scopes"`
+	Methods           []string `json:"methods"`
+	NotificationTypes []string `json:"notificationTypes"`
+}
+
+type Channel struct {
+	LocalBalance                             int64       `json:"localBalance"`
+	LocalSpendableBalance                    int64       `json:"localSpendableBalance"`
+	RemoteBalance                            int64       `json:"remoteBalance"`
+	Id                                       string      `json:"id"`
+	RemotePubkey                             string      `json:"remotePubkey"`
+	FundingTxId                              string      `json:"fundingTxId"`
+	FundingTxVout                            uint32      `json:"fundingTxVout"`
+	Active                                   bool        `json:"active"`
+	Public                                   bool        `json:"public"`
+	InternalChannel                          interface{} `json:"internalChannel"`
+	Confirmations                            *uint32     `json:"confirmations"`
+	ConfirmationsRequired                    *uint32     `json:"confirmationsRequired"`
+	ForwardingFeeBaseMloki                   uint32      `json:"forwardingFeeBaseMloki"`
+	ForwardingFeeProportionalMillionths      uint32      `json:"forwardingFeeProportionalMillionths"`
+	UnspendablePunishmentReserve             uint64      `json:"unspendablePunishmentReserve"`
+	CounterpartyUnspendablePunishmentReserve uint64      `json:"counterpartyUnspendablePunishmentReserve"`
+	Error                                    *string     `json:"error"`
+	Status                                   string      `json:"status"`
+	IsOutbound                               bool        `json:"isOutbound"`
+}
+
+type MigrateNodeStorageRequest struct {
+	To string `json:"to"`
+}
+
+type HealthAlarmKind string
+
+const (
+	HealthAlarmKindNodeNotReady      HealthAlarmKind = "node_not_ready"
+	HealthAlarmKindChannelsOffline   HealthAlarmKind = "channels_offline"
+	HealthAlarmKindNostrRelayOffline HealthAlarmKind = "nostr_relay_offline"
+)
+
+type HealthAlarm struct {
+	Kind       HealthAlarmKind `json:"kind"`
+	RawDetails any             `json:"rawDetails,omitempty"`
+}
+
+func NewHealthAlarm(kind HealthAlarmKind, rawDetails any) HealthAlarm {
+	return HealthAlarm{
+		Kind:       kind,
+		RawDetails: rawDetails,
+	}
+}
+
+type HealthResponse struct {
+	Alarms []HealthAlarm `json:"alarms,omitempty"`
+}
+
+type CustomNodeCommandArgDef struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type CustomNodeCommandDef struct {
+	Name        string                    `json:"name"`
+	Description string                    `json:"description"`
+	Args        []CustomNodeCommandArgDef `json:"args"`
+}
+
+type CustomNodeCommandsResponse struct {
+	Commands []CustomNodeCommandDef `json:"commands"`
+}
+
+type ExecuteCustomNodeCommandRequest struct {
+	Command string `json:"command"`
+}
+
+type GetForwardsResponse struct {
+	OutboundAmountForwardedMloki uint64 `json:"outboundAmountForwardedMloki"`
+	TotalFeeEarnedMloki          uint64 `json:"totalFeeEarnedMloki"`
+	NumForwards                  uint64 `json:"numForwards"`
+}
+
+// DeleteAppOptions carries the owner's confirmations for a delete.
+type DeleteAppOptions struct {
+	// ConfirmWatchEnd confirms that deleting a Cash Hub ends the watch on its
+	// paid on-chain order addresses (delete-check confirmation_required).
+	ConfirmWatchEnd bool `json:"confirmWatchEnd"`
+}

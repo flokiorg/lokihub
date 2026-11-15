@@ -1,0 +1,330 @@
+{
+  "title": "General",
+  "description": "General Lokihub settings.",
+  "sections": {
+    "appearance": "Appearance",
+    "unitsAndCurrency": "Units & Currency",
+    "language": "Language",
+    "advanced": "Advanced"
+  },
+  "appearance": {
+    "theme": "Theme",
+    "themeDescription": "Choose your visual theme",
+    "darkMode": "Appearance",
+    "darkModeDescription": "Choose light, dark, or follow your system setting",
+    "modes": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "themes": {
+      "default": "Default"
+    }
+  },
+  "units": {
+    "displayUnit": "Display Unit",
+    "displayUnitDescription": "Choose how amounts are displayed",
+    "fiatCurrency": "Fiat Currency",
+    "fiatCurrencyDescription": "Your preferred fiat reference currency",
+    "auto": "Auto"
+  },
+  "language": {
+    "label": "Language",
+    "description": "Choose your preferred interface language",
+    "updated": "Language updated."
+  },
+  "nav": {
+    "general": "General",
+    "services": "Services",
+    "autoUnlock": "Auto Unlock",
+    "unlockPassword": "Unlock Password",
+    "backup": "Backup",
+    "migrate": "Migrate Lokihub",
+    "developer": "Developer",
+    "debugTools": "Debug Tools",
+    "about": "About"
+  },
+  "shutdown": {
+    "dialogTitle": "Do you want to turn off your Lokihub?",
+    "dialogDesc": "This will turn off your Lokihub and make your node offline. You won't be able to send or receive {{chain}} until you unlock it.",
+    "cancel": "Cancel",
+    "confirm": "Continue",
+    "toast": "Your node has been turned off.",
+    "failedToast": "Failed to shutdown node"
+  },
+  "header": {
+    "title": "Settings"
+  },
+  "changePassword": {
+    "title": "Unlock Password",
+    "description": "Change unlock password to your Hub. Your node will restart after password change.",
+    "important": "Important!",
+    "importantDesc": "Password can't be reset or recovered. Make sure to back it up!",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNew": "Confirm New Password",
+    "save": "Save",
+    "changeButton": "Change Password"
+  },
+  "backup": {
+    "title": "Backup",
+    "important": "Important",
+    "passwordLabel": "Password",
+    "active": "Active"
+  },
+  "autoUnlock": {
+    "title": "Auto Unlock",
+    "description": "Configure Lokihub will automatically unlock on start (e.g. after machine reboot)",
+    "bodyText": "In some situations it can be impractical to manually unlock the wallet every time Lokihub is started. In those cases you can save the unlock password in plaintext so that Lokihub can auto-unlock itself.",
+    "attention": "Attention",
+    "attentionDesc": "Everyone who has access to the machine running this hub could read that password and take your funds. Use this only in a secure environment.",
+    "passwordLabel": "Unlock Password",
+    "enableButton": "Enable Auto Unlock",
+    "disableButton": "Disable Auto Unlock"
+  },
+  "developer": {
+    "title": "Developer",
+    "description": "Power your apps with Lokihub.",
+    "nwcTitle": "Power your apps with NWC",
+    "nwcDesc": "Lokihub can power your lightning apps and services in all environments using Nostr Wallet Connect, an open protocol to connect lightning wallets and apps",
+    "learnMore": "Learn More on nwc.dev",
+    "apiTitle": "Experimental API access",
+    "apiDesc": "You can use your auth token to access the Lokihub internal API. However, whenever possible, we recommend using the NWC API directly for more stability. Please note that the internal API may change or be removed entirely in the future.",
+    "configureToken": "Configure Token",
+    "tokenType": "Token Type",
+    "tokenExpiry": "Token Expiry (Days)",
+    "passwordLabel": "Unlock Password",
+    "createToken": "Create Token",
+    "fullAccess": "Full Access",
+    "fullAccessDesc": "Complete control over your hub - can read data and perform all operations (send payments, manage apps, etc.)",
+    "readonlyAccess": "Read-Only Access",
+    "readonlyAccessDesc": "View-only access - can read balances, transactions, and other data but cannot perform operations"
+  },
+  "about": {
+    "title": "About",
+    "description": "Info about your Lokihub",
+    "version": "Lokihub Version",
+    "nodeBackend": "Lightning Node Backend",
+    "workDir": "Work Directory",
+    "nostrRelays": "Nostr Relays",
+    "online": "online",
+    "offline": "offline"
+  },
+  "debugTools": {
+    "title": "Debug Tools",
+    "probeInvoice": "Probe Invoice",
+    "probeKeysend": "Probe Keysend",
+    "networkGraph": "Get Network Graph",
+    "refundTo": "Refund to",
+    "onchainAddress": "On-chain address",
+    "cancel": "Cancel"
+  },
+  "toasts": {
+    "themeUpdated": "Theme updated.",
+    "appearanceUpdated": "Appearance updated.",
+    "currencyUpdated": "Currency set to {{currency}}",
+    "formatUpdated": "{{chain}} display format updated",
+    "currencyFetchFailed": "Failed to fetch currencies: {{error}}",
+    "updateFailed": "Failed to update settings"
+  },
+  "withdraw": {
+    "switch": "On-chain withdrawals",
+    "switchDescription": "Lets Cash Hubs on this node pay bills out to on-chain addresses (cash_withdraw). Each Cash Hub also turns them on for itself.",
+    "notCapable": "This node's backend cannot pay on-chain withdrawals.",
+    "turnedOn": "On-chain withdrawals are on",
+    "turnedOff": "On-chain withdrawals are off",
+    "switchFailed": "Could not change on-chain withdrawals",
+    "ready": "Payout engine ready",
+    "notReady": "Payout engine not ready yet",
+    "status": {
+      "eligible": "Eligible coins",
+      "setAside": "Set aside",
+      "floor": "Floor",
+      "unconfirmed": "Unconfirmed",
+      "oldestUnbroadcast": "Oldest unbroadcast",
+      "payouts": "Payouts",
+      "bumps": "Fee bumps",
+      "reorgs": "Reorgs",
+      "invalidations": "Invalidations",
+      "coinsVanished": "Coins vanished",
+      "invariantFailures": "Invariant failures"
+    },
+    "hubTitle": "On-chain withdrawals",
+    "offered": "Offered to this Cash Hub's bills now",
+    "notOffered": "Not offered to this Cash Hub's bills",
+    "hubEnable": "Offer on-chain withdrawals",
+    "blocked": {
+      "nodeOff": "Turn on-chain withdrawals on for the node in Settings first.",
+      "notCapable": "This node's backend cannot pay on-chain withdrawals."
+    },
+    "feeBase": "Withdraw fee base ({{unit}})",
+    "feePpm": "Withdraw fee (ppm)",
+    "min": "Minimum ({{unit}})",
+    "max": "Maximum ({{unit}})",
+    "none": "none",
+    "errors": {
+      "feeBase": "The fee base is a {{unit}} amount of at most three decimals.",
+      "feePpm": "The fee rate is a whole number from 0 to {{max}} ppm.",
+      "min": "The minimum is a {{unit}} amount of at most three decimals.",
+      "max": "The maximum is a {{unit}} amount of at most three decimals.",
+      "minAboveMax": "The minimum is above the maximum."
+    },
+    "scriptTypes": "Script types paid",
+    "finalDepth": "Final depth (confirmations)",
+    "networkFeeNote": "The network fee is estimated live by the node for each address type and added to the quote.",
+    "save": "Save",
+    "saved": "On-chain withdrawal terms saved",
+    "saveFailed": "Could not save the on-chain withdrawal terms",
+    "payouts": {
+      "title": "On-chain payouts",
+      "description": "This Cash Hub's on-chain withdrawals, newest first. No operator action changes a payout; only the bill's holder can ask to cancel one.",
+      "amount": "Amount",
+      "fee": "Fee",
+      "hubFee": "Hub fee",
+      "networkFee": "network fee",
+      "payout": "Payout",
+      "sentBy": "Send by",
+      "signed": "signed",
+      "unsigned": "not signed yet",
+      "depth": "Depth",
+      "remintedBill": "Re-minted bill",
+      "detailTitle": "Payout",
+      "address": "Address",
+      "requestId": "Request id",
+      "committed": "Committed",
+      "versions": "Versions",
+      "noVersions": "No transaction yet.",
+      "inputs_one": "{{count}} input",
+      "inputs_other": "{{count}} inputs",
+      "broadcast": "Broadcast first / last",
+      "facts": "Archive facts",
+      "state": {
+        "queued": "queued",
+        "broadcast": "broadcast",
+        "confirmed": "confirmed",
+        "final": "final",
+        "cancelled": "cancelled"
+      },
+      "cancel": {
+        "requested": "cancel requested by the holder",
+        "cancelled": "cancelled ({{reason}})"
+      }
+    }
+  },
+  "sellCash": {
+    "connections": {
+      "title": "Order connections",
+      "description": "Connections buyers place orders on to buy this Cash Hub's cash. Each is a cashorder1… string you can show again; its secret is public.",
+      "labelPlaceholder": "Label (optional)",
+      "create": "Create connection",
+      "createdToast": "Order connection created",
+      "createFailed": "Could not create the order connection",
+      "created": "Created",
+      "retired": "Retired",
+      "retiredToast": "Order connection retired",
+      "retireFailed": "Could not retire the order connection",
+      "empty": "No order connections yet.",
+      "unlabeled": "Unlabeled",
+      "cannotSign": "The node cannot sign this connection right now; its string will show again once it can.",
+      "show": "Show",
+      "hide": "Hide",
+      "copy": "Copy",
+      "retire": "Retire",
+      "retireTitle": "Retire this order connection?",
+      "retireWarning": "This cannot be undone. No new orders can be placed on it, but its existing orders still mint and can still be read.",
+      "cancel": "Cancel",
+      "retireConfirm": "Retire"
+    },
+    "terms": {
+      "title": "Selling terms",
+      "selling": "This Cash Hub is selling cash.",
+      "notSellingYet": "This Cash Hub is not selling yet. Set terms below to start.",
+      "lightningTitle": "Lightning",
+      "onchainTitle": "On-chain",
+      "min": "Minimum ({{unit}})",
+      "max": "Maximum ({{unit}})",
+      "feeBase": "Fee base ({{unit}})",
+      "feePpm": "Fee (ppm)",
+      "window": "Window (seconds)",
+      "ceiling": "Open-order ceiling ({{unit}})",
+      "tiersTitle": "On-chain confirmation tiers",
+      "tiersHint": "A payment up to each amount needs its confirmations; the last tier is open and covers every larger value.",
+      "tierUpTo": "Up to ({{unit}})",
+      "tierOpen": "Larger",
+      "tierN": "Confirmations",
+      "tierAdd": "Add tier",
+      "tierRemove": "Remove tier",
+      "billTitle": "Bill terms",
+      "redeemFeeBase": "Redeem fee base ({{unit}})",
+      "redeemFeePpm": "Redeem fee (ppm)",
+      "minTransfer": "Minimum transfer ({{unit}})",
+      "openTitle": "Open-order limits",
+      "openOnchainMax": "Most open on-chain orders (0 = no limit)",
+      "outboundWarnTitle": "On-chain ceiling above Lightning outbound",
+      "outboundWarn": "The on-chain open-order ceiling ({{ceiling}}) is above the node's Lightning outbound capacity ({{outbound}}). The Hub may not be able to mint every on-chain order into a bill.",
+      "save": "Save",
+      "saved": "Selling terms saved",
+      "saveFailed": "Could not save the selling terms",
+      "errors": {
+        "lightningMin": "The Lightning minimum is a {{unit}} amount of at most three decimals.",
+        "lightningMax": "The Lightning maximum is a {{unit}} amount of at most three decimals.",
+        "lightningFeeBase": "The Lightning fee base is a {{unit}} amount of at most three decimals.",
+        "lightningFeePpm": "The Lightning fee rate is a whole number from 0 to {{max}} ppm.",
+        "lightningWindow": "The Lightning window is a whole number of seconds.",
+        "lightningMinAboveMax": "The Lightning minimum is above the maximum.",
+        "lightningCeiling": "The Lightning open-order ceiling is a positive {{unit}} amount.",
+        "onchainMin": "The on-chain minimum is a {{unit}} amount of at most three decimals.",
+        "onchainMax": "The on-chain maximum is a {{unit}} amount of at most three decimals.",
+        "onchainFeeBase": "The on-chain fee base is a {{unit}} amount of at most three decimals.",
+        "onchainFeePpm": "The on-chain fee rate is a whole number from 0 to {{max}} ppm.",
+        "onchainWindow": "The on-chain window is a whole number of seconds.",
+        "onchainMinAboveMax": "The on-chain minimum is above the maximum.",
+        "onchainWhole": "On-chain amounts are whole {{unit}}.",
+        "onchainCeiling": "The on-chain open-order ceiling is a positive {{unit}} amount.",
+        "onchainCeilingWhole": "The on-chain open-order ceiling is a whole {{unit}} amount.",
+        "tiers": "Each tier needs at least one confirmation, amounts must ascend, and only the last tier is open.",
+        "redeemFeeBase": "The redeem fee base is a {{unit}} amount of at most three decimals.",
+        "redeemFeePpm": "The redeem fee rate is a whole number from 0 to {{max}} ppm.",
+        "minTransfer": "The minimum transfer is a {{unit}} amount of at most three decimals.",
+        "openOnchainMax": "The most open on-chain orders is a whole number."
+      }
+    },
+    "orders": {
+      "title": "Orders",
+      "description": "Orders placed on this Cash Hub, newest first, with the payments to each. Operator facts only: no cash token and no buyer key.",
+      "amount": "Amount",
+      "fee": "Fee",
+      "payBy": "Pay by",
+      "requiredConfirmations": "Confirmations needed",
+      "recipient": "Recipient",
+      "confirmations": "Confirmations",
+      "mintedBill": "Minted bill",
+      "keptTitle": "Kept by the Hub",
+      "keptDescription": "Payments the Hub kept with no order: at most the fee, or a payment to an order address that matched no live order.",
+      "kind": {
+        "lightning": "Lightning",
+        "onchain": "On-chain"
+      },
+      "state": {
+        "open": "open",
+        "paid": "paid",
+        "minted": "minted",
+        "expired": "expired",
+        "closed": "closed"
+      },
+      "paymentState": {
+        "seen": "seen",
+        "confirmed": "confirmed",
+        "minted": "minted",
+        "kept": "kept",
+        "reorged": "reorged",
+        "dropped": "dropped"
+      },
+      "recipientType": {
+        "pubkey": "Nostr key",
+        "cash": "cash secret",
+        "connection_key": "connection key"
+      }
+    }
+  }
+}

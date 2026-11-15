@@ -1,0 +1,365 @@
+package constants
+
+import (
+	"errors"
+	"time"
+
+	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcw"
+)
+
+// Sentinel errors used by service and controller layers.
+var (
+	ErrInvalidParams     = errors.New("invalid params")
+	ErrKindImmutable     = errors.New("app kind is immutable")
+	ErrQuotaExceeded     = errors.New("quota exceeded")
+	ErrInsufficientFunds = errors.New("insufficient funds")
+	ErrDuplicate         = errors.New("duplicate entry")
+	// ErrNotFound distinguishes "the caller's request was malformed" from
+	// "there's nothing there (anymore)" for callers that need to pick a
+	// different NWC error code for each — e.g. ReassignCashSliceIdentity's
+	// race-loss case is reported this way rather than as ErrInvalidParams,
+	// and cash_transfer_controller.go needs to tell them apart to return
+	// NOT_FOUND vs BAD_REQUEST correctly (see its own doc comment).
+	ErrNotFound = errors.New("not found")
+
+	// ErrSocialCacheWarmingUp is returned by a following-policy authorization
+	// check when the hub's in-memory Nostr social cache hasn't finished its
+	// initial startup warm-up yet (see service.StartNostrSocialCacheRefresher).
+	// Lives here rather than in service so nip47/controllers can check it
+	// without importing service (see the service→nip47→nip47/controllers cycle
+	// note on controllers.NostrSocialCache).
+	ErrSocialCacheWarmingUp = errors.New("social cache is still warming up")
+
+	// ErrCircleMembershipUnresolved is returned by a following-policy
+	// authorization check when the provider's contact list has never been
+	// fetched successfully. NIP-CW forbids treating an unresolved list as an
+	// empty one, so callers answer NOT_READY, not "not a member".
+	ErrCircleMembershipUnresolved = errors.New("circle membership list is not resolved yet")
+)
+
+// shared constants used by multiple packages
+
+const (
+	TRANSACTION_TYPE_INCOMING = "incoming"
+	TRANSACTION_TYPE_OUTGOING = "outgoing"
+
+	TRANSACTION_STATE_PENDING  = "PENDING"
+	TRANSACTION_STATE_SETTLED  = "SETTLED"
+	TRANSACTION_STATE_FAILED   = "FAILED"
+	TRANSACTION_STATE_ACCEPTED = "ACCEPTED"
+)
+
+const (
+	APP_SHUTDOWN_TIMEOUT = 15 * time.Second
+)
+
+const (
+	BUDGET_RENEWAL_DAILY   = "daily"
+	BUDGET_RENEWAL_WEEKLY  = "weekly"
+	BUDGET_RENEWAL_MONTHLY = "monthly"
+	BUDGET_RENEWAL_YEARLY  = "yearly"
+	BUDGET_RENEWAL_NEVER   = "never"
+)
+
+func GetBudgetRenewals() []string {
+	return []string{
+		BUDGET_RENEWAL_DAILY,
+		BUDGET_RENEWAL_WEEKLY,
+		BUDGET_RENEWAL_MONTHLY,
+		BUDGET_RENEWAL_YEARLY,
+		BUDGET_RENEWAL_NEVER,
+	}
+}
+
+// budgetRenewalRank orders renewal periods from tightest (daily) to loosest
+// (never, i.e. the spend cap is never reset — the closest thing to "no
+// periodic budget" the enum has).
+var budgetRenewalRank = map[string]int{
+	BUDGET_RENEWAL_DAILY:   0,
+	BUDGET_RENEWAL_WEEKLY:  1,
+	BUDGET_RENEWAL_MONTHLY: 2,
+	BUDGET_RENEWAL_YEARLY:  3,
+	BUDGET_RENEWAL_NEVER:   4,
+}
+
+// BudgetRenewalRank returns renewal's position in the tightest-to-loosest
+// ordering above, or -1 if renewal isn't one of GetBudgetRenewals(). Callers
+// use this to enforce renewal-frequency bounds with plain integer comparison,
+// e.g. a Circle Hub's min_budget_renewal floor (reject requests with a
+// lower/tighter rank than the floor).
+func BudgetRenewalRank(renewal string) int {
+	rank, ok := budgetRenewalRank[renewal]
+	if !ok {
+		return -1
+	}
+	return rank
+}
+
+const (
+	PAY_INVOICE_SCOPE       = "pay_invoice" // also covers pay_keysend and multi_* payment methods
+	GET_BALANCE_SCOPE       = "get_balance"
+	GET_INFO_SCOPE          = "get_info"
+	MAKE_INVOICE_SCOPE      = "make_invoice"
+	LOOKUP_INVOICE_SCOPE    = "lookup_invoice"
+	LIST_TRANSACTIONS_SCOPE = "list_transactions"
+	SIGN_MESSAGE_SCOPE      = "sign_message"
+	NOTIFICATIONS_SCOPE     = "notifications" // covers all notification types
+	SUPERUSER_SCOPE         = "superuser"
+
+	// Cash Hub scope — grants mint_cash on an isolated wallet
+	CASH_HUB_SCOPE = "cash_hub"
+	// Circle Wallet scope — grants create_circle_wallet on a circle_admin wallet
+	CIRCLE_WALLET_SCOPE = "circle_wallet"
+	// Cash Redeem scope — granted on cash_wallet children only. Covers
+	// cash_redeem (pay out a recipient's proven slice) and cash_status
+	// (read-only roster of a shared wallet's recipients/claim status).
+	// Deliberately does NOT cover pay_invoice/lookup_invoice/list_transactions:
+	// a cash_wallet's connection may be widely shared, so its method surface is
+	// a narrow, explicit allowlist rather than a normal wallet's scope set.
+	CASH_REDEEM_SCOPE = "cash_redeem"
+	// CASH_TRANSFER_SCOPE is granted on cash_wallet children only, alongside
+	// CASH_REDEEM_SCOPE — every cash_wallet connection gets both, always
+	// (cashwallet.cashWalletScopes is a fixed, non-configurable list; there is
+	// no way to grant one without the other today). Kept as its own scope
+	// rather than folded into CASH_REDEEM_SCOPE because cash_transfer
+	// never moves funds — it doesn't belong in PayCapableScopes the way
+	// cash_redeem does, and lumping them together would make cash_transfer
+	// inherit budget-consuming semantics it shouldn't have.
+	CASH_TRANSFER_SCOPE = "cash_transfer"
+	// CASH_CONSOLIDATE_SCOPE is granted on cash_wallet children alongside
+	// CASH_REDEEM_SCOPE/CASH_TRANSFER_SCOPE (same fixed, non-configurable list).
+	// Like cash_transfer it never draws budget in the pay_invoice sense — it only
+	// combines slices this same node already custodies (NIP-CASH §Consolidating
+	// Tokens) — so it stays out of PayCapableScopes for the same reason.
+	CASH_CONSOLIDATE_SCOPE = "cash_consolidate"
+)
+
+// NIP-47 method names for Cash and Circle Wallet operations. Aliased to
+// nmilat's own exported nipcash/nipcw method-name constants (nmilat
+// migration) rather than re-hardcoded literals, so these can never
+// drift from the protocol layer's own definition of them.
+const (
+	NIP47MethodMintCash           = nipcash.MethodMintCash
+	NIP47MethodCreateCircleWallet = nipcw.MethodCreateCircleWallet
+	// NIP47MethodDeleteCircleWallet is a member's own deletion of its Circle
+	// Wallet (NIP-CW §Deleting a Circle Wallet), on every Circle Wallet
+	// connection.
+	NIP47MethodDeleteCircleWallet = nipcw.MethodDeleteCircleWallet
+	// NIP47MethodCashOrder places an order on an Order connection (NIP-CO).
+	NIP47MethodCashOrder = nipcash.MethodCashOrder
+	// NIP47MethodCashRedeem pays out a proven recipient's slice of a shared
+	// cash_wallet in one shot (NIP-CASH §Redeeming Funds).
+	NIP47MethodCashRedeem = nipcash.MethodCashRedeem
+	// NIP47MethodCashTransfer reassigns, or partially splits off, an
+	// unclaimed slice's value (NIP-CASH §Transferring/Splitting a Slice)
+	// without redeeming it.
+	NIP47MethodCashTransfer = nipcash.MethodCashTransfer
+	// NIP47MethodCashConsolidate combines several same-hub slices this node
+	// custodies into one new cash token (NIP-CASH §Consolidating Tokens).
+	NIP47MethodCashConsolidate = nipcash.MethodCashConsolidate
+	// NIP47MethodCashLookup looks up a call by its request_id (NIP-CASH §Looking
+	// Up a Call). Private transport only; it moves nothing.
+	NIP47MethodCashLookup = nipcash.MethodCashLookup
+	// NIP47MethodCashStatus asks a bill for its state. It answers with the
+	// full roster of that bill's recipients (identity, entitled amount,
+	// claimed status) — no invoice or preimage detail, since a cash_wallet has
+	// no list_transactions grant — or, for a bill this hub has destroyed, with
+	// a "spent" tombstone on the private transport.
+	//
+	// Despite the name it is NOT scoped to the caller's own slice: every
+	// holder of the connection sees every row (NIP-CASH §Cash Status).
+	NIP47MethodCashStatus = nipcash.MethodCashStatus
+	// NIP47MethodCashWithdrawQuote and NIP47MethodCashWithdraw quote and commit an
+	// on-chain withdrawal of a slice (NIP-CASH §Redeeming On-chain). Private
+	// transport only.
+	NIP47MethodCashWithdrawQuote = nipcash.MethodCashWithdrawQuote
+	NIP47MethodCashWithdraw      = nipcash.MethodCashWithdraw
+)
+
+// Bech32 HRPs for a Cash Hub's / Circle Wallet Hub's own connection string
+// (ohstr/nips NIP-CASH.md §The Cash Hub Connection, NIP-CW.md §The Circle
+// Wallet Hub Connection) — an alternative encoding of the same pairing data
+// as PairingUri, built via nipcash.EncodeCashHubConnection /
+// nipcw.EncodeCircleHubConnection. Aliased the same way NIP47Method* above
+// aliases nipcash/nipcw's own constants, rather than a hardcoded literal.
+const (
+	CashHubTokenHRP   = nipcash.CashHubConnectionHRP
+	CircleHubTokenHRP = nipcw.CircleHubConnectionHRP
+)
+
+// PayCapableScopes lists every scope whose AppPermission row can carry
+// MaxAmountLoki/BudgetRenewal budget semantics for SendPaymentSync/
+// SendKeysend and for app budget/expiry display (api.GetApp/ListApps/
+// UpdateApp, get_budget). Historically only PAY_INVOICE_SCOPE played this
+// role; CASH_REDEEM_SCOPE joins it because cash_wallet children no longer
+// carry PAY_INVOICE_SCOPE at all. Any future scope that authorizes its own
+// distinct payment-shaped method should be added here too.
+var PayCapableScopes = []string{PAY_INVOICE_SCOPE, CASH_REDEEM_SCOPE}
+
+// PPM_DIVISOR is the parts-per-million base used by CircleHubConfig.FeesPpm:
+// a circle_hub forwarding fee of feesPpm on an outgoing payment of amount
+// mloki skims floor(amount * feesPpm / PPM_DIVISOR) mloki. 1_000_000 ppm is
+// therefore 100% — MAX_FEES_PPM below caps configured values at that ceiling.
+const PPM_DIVISOR = 1_000_000
+
+// MAX_FEES_PPM is the upper bound accepted for CircleHubConfig.FeesPpm
+// (1_000_000 ppm = 100%, skimming the entire payment makes no sense but is
+// the mathematically sound ceiling; UpdateCircleHubConfig/CreateCircleHub
+// reject anything higher).
+const MAX_FEES_PPM = PPM_DIVISOR
+
+// MIN_FEE_RESERVE_MLOKI is the least an outgoing Lightning payment holds back
+// for routing fees (see transactions.CalculateFeeReserveMloki).
+const MIN_FEE_RESERVE_MLOKI = 10_000
+
+// Circle money model defaults (NIP-CW §Own Funds and Caps): the routing-fee
+// reserve a Hub gets unless its host sets another, the outbound ceiling's
+// period, and a holdings ceiling left unset sized as this many wallets at their
+// full receive ceiling.
+const (
+	CIRCLE_DEFAULT_FEE_RESERVE_PPM          = 10_000
+	CIRCLE_DEFAULT_FEE_RESERVE_MIN_MLOKI    = 10_000
+	CIRCLE_DEFAULT_OUTBOUND_PERIOD          = BUDGET_RENEWAL_MONTHLY
+	CIRCLE_DEFAULT_HOLDINGS_CEILING_WALLETS = 100
+	// CIRCLE_DEFAULT_GRACE_SECS (7 days) and CIRCLE_DEFAULT_DUST_MLOKI are the
+	// grace period and dust threshold a Hub gets unless its host sets others.
+	CIRCLE_DEFAULT_GRACE_SECS = 604_800
+	CIRCLE_DEFAULT_DUST_MLOKI = 1_000
+	// CIRCLE_MAX_DUST_MLOKI is the default bound on a Hub's dust threshold
+	// (CIRCLE_MAX_DUST_MLOKI in the environment): the default routing-fee
+	// reserve floor, a balance too small to pay out over Lightning.
+	CIRCLE_MAX_DUST_MLOKI = CIRCLE_DEFAULT_FEE_RESERVE_MIN_MLOKI
+	// CIRCLE_DEFAULT_ROTATION_DELAY_SECS is the rotation delay NIP-CW
+	// recommends: 5 days.
+	CIRCLE_DEFAULT_ROTATION_DELAY_SECS = 432_000
+)
+
+// CIRCLE_MEMBERSHIP_STALENESS_SECS bounds how old the membership a Circle
+// Wallet Hub acts on may be: the follow sets are refreshed every 300 seconds.
+const CIRCLE_MEMBERSHIP_STALENESS_SECS = 600
+
+// MIN_CIRCLE_WALLET_MAX_MLOKI is the fee reserve plus 1 loki: the smallest send
+// cap under which a Circle Wallet can pay outside this node. It bounds the
+// operator's per-wallet ceiling only; a join takes any max_amount (NIP-CW step
+// 6 has no floor), and a smaller cap is a wallet that pays only on this node.
+const MIN_CIRCLE_WALLET_MAX_MLOKI = MIN_FEE_RESERVE_MLOKI + 1_000
+
+// MAX_EXPIRY_SECS is the upper bound accepted for any config or request field
+// expressed in raw expiry seconds that eventually feeds into
+// time.Duration(secs) * time.Second (e.g. db.CashHubConfig.MaxExpSecs and a
+// mint_cash caller's own ExpirySecs, cashwallet.Resolve). time.Duration is an
+// int64 count of NANOSECONDS, so it silently wraps once the equivalent
+// seconds value exceeds roughly 292 years — a value large enough to overflow
+// that conversion would produce an arbitrary, possibly-already-past
+// ExpiresAt instead of a validation error. 100 years is comfortably below
+// that wraparound point (leaving a ~3x margin) while still being far beyond
+// any wallet lifetime a real caller would ever need, so it never constrains
+// a legitimate "effectively never expires" request.
+const MAX_EXPIRY_SECS = 100 * 365 * 24 * 60 * 60
+
+// DEFAULT_CASH_MIN_TRANSFER_MLOKI is a new Cash Hub's default split floor
+// (db.CashHubConfig.MinTransferMloki) when its creator names none: one whole
+// loki, so a split never carves off a piece no payment could carry. NIP-CASH
+// asks for a shipped default above zero; 0 stays available as "no floor".
+const DEFAULT_CASH_MIN_TRANSFER_MLOKI = 1000
+
+// DEFAULT_CASH_SPENT_RETENTION_SECS is a new Cash Hub's default window for
+// answering cash_status about a bill it has already destroyed
+// (db.CashHubConfig.SpentRetentionSecs). 15 days is long enough to cover the
+// gap between a bill being spent and its holder next opening a wallet, without
+// the Hub answering for bills nobody is still asking about. 0 disables it.
+const DEFAULT_CASH_SPENT_RETENTION_SECS = 15 * 24 * 60 * 60
+
+// No relay URLs are hardcoded. lokihub connects only to relays the user has
+// explicitly selected under Settings > Services (GeneralRelay/SearchRelay
+// config), seeded from the suggestion catalogue in seed.yaml (nostr_relay) —
+// never auto-seeded on first run. A hub with no selected relays connects to
+// nothing for general social data and degrades gracefully.
+
+// Additional NIP-47 error codes used by new controllers.
+const (
+	ERROR_RATE_LIMITED  = "RATE_LIMITED"
+	ERROR_NOT_SUPPORTED = "NOT_SUPPORTED"
+	ERROR_NOT_READY     = "NOT_READY"
+)
+
+// limit encoded metadata length, otherwise relays may have trouble listing multiple transactions
+// given a relay limit of 512000 bytes and ideally being able to list 25 transactions,
+// each transaction would have to have a maximum size of 20480
+// accounting for encryption and other metadata in the response, this is set to 4096 characters
+const INVOICE_METADATA_MAX_LENGTH = 4096
+
+// errors used by NIP-47 and the transaction service
+const (
+	ERROR_INTERNAL             = "INTERNAL"
+	ERROR_NOT_IMPLEMENTED      = "NOT_IMPLEMENTED"
+	ERROR_QUOTA_EXCEEDED       = "QUOTA_EXCEEDED"
+	ERROR_INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE"
+	ERROR_UNAUTHORIZED         = "UNAUTHORIZED"
+	// ERROR_REQUEST_REUSED: the request_id was already used on this node (NIP-CASH §request_id).
+	ERROR_REQUEST_REUSED = nipcash.ErrCodeRequestReused
+	// ERROR_PAYMENT_FAILED: cash_redeem's payment failed before it could have
+	// settled, and the slice stays claimable (NIP-CASH §Errors).
+	ERROR_PAYMENT_FAILED         = nipcash.ErrCodePaymentFailed
+	ERROR_EXPIRED                = "EXPIRED"
+	ERROR_RESTRICTED             = "RESTRICTED"
+	ERROR_BAD_REQUEST            = "BAD_REQUEST"
+	ERROR_NOT_FOUND              = "NOT_FOUND"
+	ERROR_UNSUPPORTED_ENCRYPTION = "UNSUPPORTED_ENCRYPTION"
+	ERROR_OTHER                  = "OTHER"
+)
+
+const (
+	ENCRYPTION_TYPE_NIP04    = "nip04"
+	ENCRYPTION_TYPE_NIP44_V2 = "nip44_v2"
+)
+
+const SUBWALLET_APPSTORE_APP_ID = "lokies"
+
+const (
+	FLOKICOIN_DISPLAY_FORMAT_FLC  = "flc"
+	FLOKICOIN_DISPLAY_FORMAT_LOKI = "loki"
+	FLOKICOIN_DISPLAY_FORMAT_AUTO = "auto"
+)
+
+const (
+	APP_STORE_SYNC_INTERVAL = 6 * time.Hour
+	APP_STORE_CACHE_DIR     = "appstore"
+)
+
+const (
+	DEFAULT_ENABLE_NOSTR_NOTIFICATIONS = true
+	DEFAULT_ENABLE_HTTP_WEBHOOKS       = false
+	DEFAULT_ENABLE_POLLING             = false
+	APP_IDENTIFIER                     = "lokihub"
+)
+
+// LSPS5 Internal Event Names
+const (
+	LSPS5_EVENT_NOTIFICATION      = "lsps5.notification"
+	LSPS5_EVENT_PAYMENT_INCOMING  = "lsps5.payment_incoming"
+	LSPS5_EVENT_EXPIRY_SOON       = "lsps5.expiry_soon"
+	LSPS5_EVENT_LIQUIDITY_REQUEST = "lsps5.liquidity_request"
+	LSPS5_EVENT_ONION_MESSAGE     = "lsps5.onion_message"
+	// LSPS5_EVENT_ORDER_STATE_NOTIFICATION is the raw inbound notification (Nostr/webhook received,
+	// DB not yet updated). Only lspsEventConsumer reacts to it.
+	LSPS5_EVENT_ORDER_STATE_NOTIFICATION = "lsps5.order_state_notification"
+	// LSPS5_EVENT_ORDER_STATE_CHANGED is published by HandleOrderStateUpdate after the DB write.
+	// The frontend SSE subscriber forwards this to the browser.
+	LSPS5_EVENT_ORDER_STATE_CHANGED         = "lsps5.order_state_changed"
+	LSPS5_EVENT_WEBHOOK_REGISTERED          = "lsps5.webhook_registered"
+	LSPS5_EVENT_WEBHOOK_REGISTRATION_FAILED = "lsps5.webhook_registration_failed"
+	LSPS5_EVENT_WEBHOOKS_LISTED             = "lsps5.webhooks_listed"
+	LSPS5_EVENT_WEBHOOK_REMOVED             = "lsps5.webhook_removed"
+	LSPS5_EVENT_WEBHOOK_REMOVAL_FAILED      = "lsps5.webhook_removal_failed"
+)
+
+// LSPS1 Internal Event Names
+const (
+	LSPS1_EVENT_NOTIFICATION = "lsps1.notification"
+)
+
+// CashTokenHRP is the bech32 prefix of this Hub's bills (`lokicash1...`). The
+// provenance labels are nmilat's and the same for every prefix.
+const CashTokenHRP = "lokicash"

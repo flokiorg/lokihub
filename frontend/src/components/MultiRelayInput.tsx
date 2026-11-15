@@ -1,0 +1,212 @@
+import { Check, Plus, X, Zap } from "lucide-react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { ServiceOption } from "src/components/ServiceCardSelector";
+import { Button } from "src/components/ui/button";
+import { Input } from "src/components/ui/input";
+import { validateWebSocketURL } from "src/utils/validation";
+
+interface MultiRelayInputProps {
+  value: string; // comma-separated relay URLs
+  onChange: (value: string) => void;
+  options?: ServiceOption[]; // community relay options
+  placeholder?: string;
+}
+
+export function MultiRelayInput({
+  value,
+  onChange,
+  options = [],
+  placeholder = "wss://relay.example.com",
+}: MultiRelayInputProps) {
+  const { t } = useTranslation("channels");
+  const [newRelay, setNewRelay] = useState("");
+  const [error, setError] = useState("");
+
+  const selectedRelays = value
+    ? value
+        .split(",")
+        .map((r) => r.trim())
+        .filter((r) => r.length > 0)
+    : [];
+
+  const communityRelayUrls = options.map((opt) => opt.value);
+  const customRelays = selectedRelays.filter(
+    (url) => !communityRelayUrls.includes(url)
+  );
+
+  const validateRelay = (url: string): boolean => {
+    const validationError = validateWebSocketURL(url, "Relay URL");
+    if (validationError) {
+      setError(validationError);
+      return false;
+    }
+    if (selectedRelays.includes(url)) {
+      setError(t("relay.alreadyAdded"));
+      return false;
+    }
+    setError("");
+    return true;
+  };
+
+  const toggleCommunityRelay = (relayUrl: string) => {
+    let updatedRelays: string[];
+    if (selectedRelays.includes(relayUrl)) {
+      updatedRelays = selectedRelays.filter((r) => r !== relayUrl);
+    } else {
+      updatedRelays = [...selectedRelays, relayUrl];
+    }
+    onChange(updatedRelays.join(","));
+  };
+
+  const addCustomRelay = () => {
+    const trimmedRelay = newRelay.trim();
+    if (!trimmedRelay) return;
+
+    if (validateRelay(trimmedRelay)) {
+      const updatedRelays = [...selectedRelays, trimmedRelay];
+      onChange(updatedRelays.join(","));
+      setNewRelay("");
+      setError("");
+    }
+  };
+
+  const removeCustomRelay = (relayUrl: string) => {
+    const updatedRelays = selectedRelays.filter((r) => r !== relayUrl);
+    onChange(updatedRelays.join(","));
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addCustomRelay();
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Community Relays - Selectable Cards */}
+      {options.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">{t("relay.communityRelays")}</p>
+          <div className="grid grid-cols-1 gap-3">
+            {options.map((option, index) => {
+              const isSelected = selectedRelays.includes(option.value);
+              return (
+                <div
+                  dir="ltr"
+                  key={index}
+                  onClick={() => toggleCommunityRelay(option.value)}
+                  className={`
+                    relative group flex items-start justify-between p-4 rounded-xl border transition-all cursor-pointer select-none overflow-hidden
+                    ${
+                      isSelected
+                        ? "border-primary ring-1 ring-primary"
+                        : "border-border hover:border-primary"
+                    }
+                  `}
+                >
+                  <div
+                    className={`
+                      absolute inset-0 transition-opacity duration-200 pointer-events-none
+                      ${isSelected ? "bg-primary opacity-5" : "bg-muted opacity-0 group-hover:opacity-50"}
+                    `}
+                  />
+
+                  <div className="flex gap-3 relative z-10">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <div className="relative p-2 rounded-lg overflow-hidden">
+                        <div
+                          className={`absolute inset-0 ${isSelected ? "bg-primary opacity-20" : "bg-muted opacity-100"}`}
+                        />
+                        <Zap className="w-4 h-4 text-primary relative z-10" />
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-left">
+                      <div className="font-semibold text-sm">
+                        {option.name || "Unknown Relay"}
+                      </div>
+                      {option.description && (
+                        <div className="text-sm text-muted-foreground">
+                          {option.description}
+                        </div>
+                      )}
+                      <div className="text-xs font-mono text-muted-foreground opacity-80">
+                        {option.value}
+                      </div>
+                    </div>
+                  </div>
+
+                  {isSelected && (
+                    <div className="flex-shrink-0 text-primary relative z-10">
+                      <div className="bg-primary text-primary-foreground rounded-full p-0.5">
+                        <Check className="w-3 h-3" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Custom Relays - With Delete */}
+      {customRelays.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">{t("relay.customRelays")}</p>
+          <div className="space-y-2">
+            {customRelays.map((relay, index) => (
+              <div
+                dir="ltr"
+                key={index}
+                className="flex items-center gap-2 p-2 bg-muted rounded-md"
+              >
+                <span className="flex-1 text-sm font-mono break-all">
+                  {relay}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeCustomRelay(relay)}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add custom relay */}
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{t("relay.addCustomRelay")}</p>
+        <div className="flex gap-2" dir="ltr">
+          <div className="flex-1">
+            <Input
+              type="text"
+              dir="ltr"
+              value={newRelay}
+              onChange={(e) => setNewRelay(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={placeholder}
+              className="font-mono text-sm"
+            />
+            {error && <p className="text-sm text-destructive mt-1">{error}</p>}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addCustomRelay}
+            className="shrink-0"
+          >
+            <Plus className="h-4 w-4 me-2" />
+            {t("relay.add")}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

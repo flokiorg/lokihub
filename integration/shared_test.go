@@ -1,0 +1,788 @@
+//go:build integration
+
+package integration
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipIC"
+	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcw"
+	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/integration/nwcclient"
+)
+
+// cashSecretAndHash returns a fresh random cash secret (hex) and the
+// hex-encoded sha256 commitment of it — the value a caller submits as a
+// cash-mode new_identity's identity_value in cash_transfer (NIP-CASH §Cash-Mode
+// Slices): the wallet never mints or returns a cash secret over the
+// shared cash_wallet connection, so the caller always generates their own.
+func cashSecretAndHash(t *testing.T) (secretHex, hashHex string) {
+	t.Helper()
+	raw := make([]byte, 32)
+	_, err := rand.Read(raw)
+	require.NoError(t, err)
+	hash := sha256.Sum256(raw)
+	return hex.EncodeToString(raw), hex.EncodeToString(hash[:])
+}
+
+// Mirrors the unexported kind constants in
+// nip47/controllers/cash_redeem_controller.go (Kind 23198: NIP-CASH's
+// per-claim proof of identity, bound to one wallet + one invoice; Kind
+// 35522: Identity Authority attestation, connection_key mode only — this one
+// is NIP-IC's own kind, genuinely reused rather than owned by NIP-CASH) and
+// nip47/controllers/create_circle_wallet_identity.go (Kind 23199: NIP-CW's
+// own, separate per-call identity proof). Sourced directly from nmilat's own
+// exported constants rather than re-hardcoded literals (nmilat migration, PR
+// #90), so this mirror can't drift from what those controllers actually
+// check.
+const (
+	nostrKindClaimProof          = nipcash.KindClaimProof
+	nostrKindCircleIdentityProof = nipcw.KindCircleIdentityProof
+	nostrKindIAAttestation       = nipIC.KindAttestation
+)
+
+// buildClaimProofEvent builds and signs a kind-23198 claim proof bound to
+// walletPubkey and bolt11Hash — the binding that makes an intercepted proof
+// unusable for any invoice other than the one it was signed for, which
+// matters because a cash_wallet's connection is meant to be shared/public.
+// extraTags carries the connection_key-mode-only tags (connection_key + an
+// e-tag referencing the attestation event).
+func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash string, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
+	t.Helper()
+	tags := nostr.Tags{{"d", walletPubkey}, {"m", "cash_redeem"}, {"bolt11_hash", bolt11Hash}}
+	tags = append(tags, extraTags...)
+	ev := &nostr.Event{
+		Kind:      nostrKindClaimProof,
+		CreatedAt: nostr.Timestamp(createdAt.Unix()),
+		Tags:      tags,
+	}
+	require.NoError(t, ev.Sign(signerPrivkey))
+	transferProofSigners.Store(ev.ID, signerPrivkey)
+	return ev
+}
+
+// buildTransferProofEvent builds and signs a kind-23198 transfer proof bound
+// to walletPubkey, the target (newIdentityType, newIdentityValue,
+// newIAPubkey), AND the exact amountMloki this proof authorizes — the
+// binding that stops an intercepted proof from being redirected to a
+// different new_identity (including a different Identity Authority for a
+// connection_key target — a captured proof used to be replayable with a
+// swapped, still-trusted IA even with identity_value unchanged), or replayed
+// for a different amount_millis, than what it was
+// actually signed for (NIP-CASH §Transferring and Splitting a Slice). For a
+// full transfer, pass the slice's exact current amount (never a
+// sentinel/omitted value — the server resolves an omitted request
+// amount_millis to the slice's live full amount and requires the proof to
+// match that exact number). Mirrors buildClaimProofEvent, but bound via
+// new_identity_hash/amount_millis instead of bolt11_hash
+// (nip47/controllers/cash_transfer_controller.go's newIdentityHash).
+// newIdentityValue is "" for a cash-mode target; newIAPubkey is "" for
+// non-connection_key targets.
+func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdentityType, newIdentityValue, newIAPubkey string, amountMloki uint64, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
+	t.Helper()
+	sum := sha256.Sum256([]byte(newIdentityType + ":" + newIdentityValue + ":" + newIAPubkey))
+	tags := nostr.Tags{
+		{"d", walletPubkey},
+		{"m", "cash_transfer"},
+		{"new_identity_hash", hex.EncodeToString(sum[:])},
+		{"amount_millis", strconv.FormatUint(amountMloki, 10)},
+	}
+	tags = append(tags, extraTags...)
+	ev := &nostr.Event{
+		Kind:      nostrKindClaimProof,
+		CreatedAt: nostr.Timestamp(createdAt.Unix()),
+		Tags:      tags,
+	}
+	require.NoError(t, ev.Sign(signerPrivkey))
+	transferProofSigners.Store(ev.ID, signerPrivkey)
+	return ev
+}
+
+// transferProofSigners remembers who signed each claim proof the suite built, so
+// a consolidate call can re-bind its sources' proofs to the call
+// (rebindConsolidateProofs) and an item proof is signed by its claim proof's
+// signer (claimSignerOf).
+var transferProofSigners sync.Map
+
+// rebindConsolidateProofs makes each source's claim proof a cash_consolidate
+// proof of this call: m cash_consolidate and s, the hash of every source wallet
+// (NIP-CASH §Claim Proofs). The suite builds sources with the transfer builder,
+// whose other bindings a consolidate shares; a proof the suite did not sign is
+// left as it is.
+func rebindConsolidateProofs(t *testing.T, raw json.RawMessage) json.RawMessage {
+	t.Helper()
+	var params map[string]json.RawMessage
+	if json.Unmarshal(raw, &params) != nil {
+		return raw
+	}
+	var sources []map[string]json.RawMessage
+	if json.Unmarshal(params["sources"], &sources) != nil {
+		return raw
+	}
+	wallets := make([]string, 0, len(sources))
+	for _, src := range sources {
+		var w string
+		_ = json.Unmarshal(src["wallet_pubkey"], &w)
+		wallets = append(wallets, w)
+	}
+	sum := sha256.Sum256([]byte(strings.Join(wallets, "")))
+	sHash := hex.EncodeToString(sum[:])
+	for _, src := range sources {
+		var evJSON string
+		if json.Unmarshal(src["identity_event"], &evJSON) != nil {
+			continue
+		}
+		var ev nostr.Event
+		if json.Unmarshal([]byte(evJSON), &ev) != nil {
+			continue
+		}
+		priv, ok := transferProofSigners.Load(ev.ID)
+		if !ok {
+			continue
+		}
+		tags := nostr.Tags{}
+		for _, tag := range ev.Tags {
+			if len(tag) > 0 && (tag[0] == "m" || tag[0] == "s") {
+				continue
+			}
+			tags = append(tags, tag)
+		}
+		ev.Tags = append(tags, nostr.Tag{"m", "cash_consolidate"}, nostr.Tag{"s", sHash})
+		require.NoError(t, ev.Sign(priv.(string)))
+		transferProofSigners.Store(ev.ID, priv)
+		rebound, err := json.Marshal(ev)
+		require.NoError(t, err)
+		src["identity_event"], err = json.Marshal(string(rebound))
+		require.NoError(t, err)
+	}
+	var err error
+	params["sources"], err = json.Marshal(sources)
+	require.NoError(t, err)
+	out, err := json.Marshal(params)
+	require.NoError(t, err)
+	return out
+}
+
+// buildIAAttestationEvent builds and signs a kind-35522 IA attestation,
+// carrying the platform/evidence tags the Hub's attestation check requires
+// (matching a real nipIC.NewAttestation-produced event's shape) alongside the
+// usual d/p/expiration bindings. platform/evidence content is fixed and not
+// test-parameterized since no test here needs to vary it.
+func buildIAAttestationEvent(t *testing.T, iaPrivkey, connectionKey, claimantNostrPubkey string, expireOffset time.Duration) *nostr.Event {
+	t.Helper()
+	ev := &nostr.Event{
+		Kind:      nostrKindIAAttestation,
+		CreatedAt: nostr.Now(),
+		Tags: nostr.Tags{
+			{"d", connectionKey},
+			{"p", claimantNostrPubkey},
+			{"platform", "discord"},
+			{"evidence", `{"version":1,"platform":"discord","auth_type":"public_post","user_id":"test-user"}`},
+			{"expiration", fmt.Sprintf("%d", time.Now().Add(expireOffset).Unix())},
+		},
+	}
+	require.NoError(t, ev.Sign(iaPrivkey))
+	return ev
+}
+
+// buildCircleWalletIdentityEvent builds and signs a kind-23199 proof that the
+// caller controls requesterPrivkey, bound to this specific circle hub via the
+// d-tag (nip47/controllers/create_circle_wallet_identity.go) — hubWalletPubkey
+// is the hub connection's own WalletPubkey(), the pubkey in its pairing URI
+// (NIP-CW's own "the Hub's own pubkey" wording — see NIP-CW.md's Identity
+// Proof section). It is NOT ClientPubkey(): that's derived from the
+// connection's own secret and never appears anywhere a member holding just
+// the shared connection string could learn it — binding here to AppPubkey
+// (lokihub's ClientPubkey equivalent) made create_circle_wallet unusable by
+// any real external client until fixed.
+func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubWalletPubkey string) *nostr.Event {
+	t.Helper()
+	ev := &nostr.Event{
+		Kind:      nostrKindCircleIdentityProof,
+		CreatedAt: nostr.Now(),
+		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", circleConnectionPubkey(mustPubkey(t, requesterPrivkey))}},
+	}
+	require.NoError(t, ev.Sign(requesterPrivkey))
+	circleProofSigners.Store(ev.ID, requesterPrivkey)
+	return ev
+}
+
+// buildCircleWalletIdentityEventCustom is like buildCircleWalletIdentityEvent
+// but allows overriding the d-tag and created-at timestamp, for exercising
+// malformed/adversarial identity proofs (bound to the wrong hub, stale, or
+// with a future timestamp) that the plain helper can't express.
+func buildCircleWalletIdentityEventCustom(t *testing.T, signerPrivkey, dTagValue string, createdAt time.Time) *nostr.Event {
+	t.Helper()
+	ev := &nostr.Event{
+		Kind:      nostrKindCircleIdentityProof,
+		CreatedAt: nostr.Timestamp(createdAt.Unix()),
+		Tags:      nostr.Tags{{"d", dTagValue}, {"connection", circleConnectionPubkey(mustPubkey(t, signerPrivkey))}},
+	}
+	require.NoError(t, ev.Sign(signerPrivkey))
+	circleProofSigners.Store(ev.ID, signerPrivkey)
+	return ev
+}
+
+// distinctCircleWalletIdentityEvent is like buildCircleWalletIdentityEvent
+// but takes an extra disambiguating tag value, guaranteeing a unique event id
+// even when built within the same wall-clock second as another proof for the
+// same signer+hub. nostr.Now()/nostr.Timestamp has only second precision, so
+// two otherwise-identical proofs built back-to-back for the same identity
+// (e.g. by adjacent subtests in circle_hub_test.go) can be byte-identical and
+// collide on the single-use replay guard — mirrors
+// distinctCircleWalletRequest in
+// nip47/controllers/create_circle_wallet_membership_test.go, the same fix at
+// the unit-test level.
+func distinctCircleWalletIdentityEvent(t *testing.T, signerPrivkey, hubWalletPubkey, disambiguator string) *nostr.Event {
+	t.Helper()
+	ev := &nostr.Event{
+		Kind:      nostrKindCircleIdentityProof,
+		CreatedAt: nostr.Now(),
+		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", circleConnectionPubkey(mustPubkey(t, signerPrivkey))}, {"disambiguator", disambiguator}},
+	}
+	require.NoError(t, ev.Sign(signerPrivkey))
+	circleProofSigners.Store(ev.ID, signerPrivkey)
+	return ev
+}
+
+// eventJSONWithTamperedID marshals ev with its `id` field mutated to a
+// different, well-formed-looking value — go-nostr's CheckSignature() doesn't
+// verify id against the event's own content (only CheckID() does), so this
+// simulates a captured proof resubmitted with only its id field changed, to
+// prove the id-tamper defense actually rejects it rather than accepting a
+// signature that happens to still verify.
+func eventJSONWithTamperedID(t *testing.T, ev *nostr.Event) string {
+	t.Helper()
+	b, err := json.Marshal(ev)
+	require.NoError(t, err)
+	var m map[string]interface{}
+	require.NoError(t, json.Unmarshal(b, &m))
+	tamperedID := strings.Repeat("1", 64)
+	require.NotEqual(t, ev.ID, tamperedID)
+	m["id"] = tamperedID
+	out, err := json.Marshal(m)
+	require.NoError(t, err)
+	return string(out)
+}
+
+func eventJSON(t *testing.T, ev *nostr.Event) string {
+	t.Helper()
+	b, err := json.Marshal(ev)
+	require.NoError(t, err)
+	return string(b)
+}
+
+// requireConfig loads the integration config or skips the test entirely when
+// it's missing, so this suite is a no-op for anyone who hasn't provisioned
+// real hubs yet.
+func requireConfig(t *testing.T) *Config {
+	t.Helper()
+	path := configPathFromEnv()
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Skipf("skipping: could not load integration config (%v) - see integration/README.md to set one up", err)
+	}
+	return cfg
+}
+
+// mustConnect connects an nwcclient.Client through a signed cashhub1 or
+// circlehub1 string (or a simple wallet's pairing URI) and registers it for
+// cleanup.
+func mustConnect(t *testing.T, connection string) *nwcclient.Client {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := nwcclient.ConnectAny(ctx, connection)
+	require.NoError(t, err, "connect to %s", connection)
+	if strings.HasPrefix(connection, nipcw.CircleHubConnectionHRP+"1") {
+		client.PrivateCall = func(ctx context.Context, method string, params, result any) (bool, error) {
+			if method != constants.NIP47MethodCreateCircleWallet {
+				return false, nil
+			}
+			return true, privateJoinCall(t, ctx, connection, params, result)
+		}
+	}
+	client.Logger = t.Logf
+	t.Cleanup(client.Close)
+	return client
+}
+
+// mustConnectCircleWallet connects a member to its circle wallet and registers
+// the client for cleanup.
+func mustConnectCircleWallet(t *testing.T, c circleWalletConnection) *nwcclient.Client {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := nwcclient.ConnectCircleWallet(ctx, c.WalletPubkey, c.Relays, c.Secret)
+	require.NoError(t, err, "connect to the circle wallet")
+	client.Logger = t.Logf
+	t.Cleanup(client.Close)
+	return client
+}
+
+// newTestPrivkey generates a fresh random nostr private key, e.g. to act as
+// a one-off Cash wallet beneficiary.
+func newTestPrivkey(t *testing.T) string {
+	t.Helper()
+	return nostr.GeneratePrivateKey()
+}
+
+// drainedWalletSilenceWindow is how long a request to a deleted cash wallet is
+// given before its silence counts as the answer. Deliberately short: the hub
+// never answers one, and several call sites sit inside 12-15 iteration loops,
+// so the full request budget here would add minutes to the suite to learn
+// nothing. A live wallet answers these in ~100-200ms, and even if a loaded hub
+// were slow enough to look silent, the deletion check below has already
+// settled the question out-of-band - this half only shows the request path
+// stays quiet.
+const drainedWalletSilenceWindow = 2 * time.Second
+
+// drainedWalletDeleteWindow is how long the bill is given to actually
+// disappear. The hub deletes it after answering, so a short wait is expected;
+// anything longer than this means it is not being deleted at all.
+const drainedWalletDeleteWindow = 10 * time.Second
+
+// requireCashWalletDrainedAway asserts that a cash wallet whose last slice was
+// just spent no longer exists, and that the hub now says nothing about it.
+//
+// A bill with no value left is deleted (nip47/controllers.
+// maybeAutoDeleteDrainedCashWallet), the way real cash stops existing once it
+// is spent: a cash_transfer that consumes the source slice moves the value
+// into the carved and remainder wallets, leaving the source holding nothing.
+// Requests still naming it are then met with silence rather than an error - a
+// pubkey this hub once served must stay indistinguishable from one it never
+// served, or the hub becomes an oracle for which wallets live here.
+//
+// Both halves are checked, because neither on its own is enough. Silence is
+// also what a merely slow hub looks like, so the deletion is confirmed
+// out-of-band through the admin API first; and the deletion alone would not
+// show that the request path stays quiet. Together they are the stronger form
+// of the "its balance is now zero" assertion these call sites used to make -
+// the hub only deletes once every slice is claimed AND the balance is zero.
+//
+// Pass a nil call to assert the deletion alone.
+func requireCashWalletDrainedAway(t *testing.T, admin *adminClient, hubAppID uint, walletPubkey string, call func(ctx context.Context) error) {
+	t.Helper()
+
+	// Proven from the archive rather than from an absence. Matching on the
+	// wallet pubkey, never the identity: a split's remainder wallet inherits
+	// the source slice's identity value verbatim, so that value is still
+	// present afterwards on a different bill.
+	//
+	// An earlier version asserted only that no LIVE row named the bill, with a
+	// guard requiring at least one decodable token so the check could not pass
+	// vacuously. That guard was wrong: when a redeem empties a hub's only bill
+	// there are no live rows left at all, and no tokens to decode. Asserting
+	// the archived row EXISTS is both non-vacuous and a stronger statement --
+	// it is the archive itself under test.
+	// Polled rather than read once: the hub archives and deletes a drained
+	// bill AFTER publishing its response (deliberately -- the cleanup must
+	// never delay or fail a caller's request), so the response can legitimately
+	// arrive before the delete has committed. Asserting on a single read races
+	// that window and fails for a bill that is about to disappear.
+	var live, archived int
+	deadline := time.Now().Add(drainedWalletDeleteWindow)
+	for {
+		claims, err := admin.listCashWalletClaims(hubAppID)
+		require.NoError(t, err, "listing this hub's cash wallet claims")
+
+		live, archived = 0, 0
+		for _, claim := range claims {
+			if claim.WalletPubkey != walletPubkey {
+				continue
+			}
+			if claim.Archived {
+				archived++
+			} else {
+				live++
+			}
+		}
+		// Polled: the hub archives and deletes a drained bill AFTER publishing
+		// its response, deliberately, so the cleanup can never delay or fail a
+		// caller's request. A single read races that window.
+		if archived > 0 && live == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	require.Zero(t, live,
+		"a fully-drained cash bill must be deleted, not left behind holding nothing (waited %s)",
+		drainedWalletDeleteWindow)
+	require.NotZero(t, archived,
+		"a deleted bill must leave its slices in the archive -- deletion without a record is the thing this replaced")
+
+	if call == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), drainedWalletSilenceWindow)
+	defer cancel()
+
+	err := call(ctx)
+	require.Error(t, err, "a deleted cash wallet must not answer")
+	// Two shapes of silence, same meaning. On kind 23194 it is a timeout; on the private
+	// transport the hub answers the ENVELOPE and says nothing about the item, which reaches
+	// a caller as an omission. Both are information-free by design — indistinguishable from
+	// a pubkey this hub never served — which is exactly the property being asserted.
+	require.True(t,
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted) || isBillGone(err),
+		"a deleted cash wallet must be met with silence; any answer tells the caller this hub once served that pubkey (got %v)", err)
+}
+
+// requireSpentBillSilent asserts that a bill which has just been spent in full
+// stops answering.
+//
+// It replaces two older assertions: reading a zero balance off the bill, and
+// expecting NOT_FOUND from a replayed redeem. Both assumed a bill outlives its
+// last slice. It no longer does -- a bill with nothing left is deleted, and a
+// deleted bill is met with silence, so that a spent bill is indistinguishable
+// from a pubkey this hub never served (NIP-CASH, Lifecycle and Deletion).
+//
+// Retried rather than asserted once, because the hub deletes the bill AFTER
+// answering the request that emptied it: for a moment afterwards the bill is
+// still there and still replies. Asserting immediately would be flaky in the
+// opposite direction to requireCashWalletDrainedAway's own poll.
+//
+// Where a test has admin access, prefer requireCashWalletDrainedAway: it also
+// proves the bill is genuinely gone rather than merely quiet.
+func requireSpentBillSilent(t *testing.T, call func(ctx context.Context) error) {
+	t.Helper()
+
+	deadline := time.Now().Add(drainedWalletDeleteWindow)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), drainedWalletSilenceWindow)
+		err := call(ctx)
+		cancel()
+
+		// Two shapes of the same thing. On kind 23194 silence is a timeout; on the private
+		// transport the hub answers the ENVELOPE and simply says nothing about the item,
+		// which reaches a caller as an omission. Both are information-free by design —
+		// deliberately indistinguishable from a bill the hub never held — so both satisfy
+		// "stopped answering". Accepting only the timeout would fail this test for the very
+		// behaviour it is asserting.
+		// A value method on the private transport gets the bill's tombstone
+		// instead: the bill is gone just the same.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted) || isBillGone(err) {
+			return
+		}
+		if time.Now().After(deadline) {
+			require.Fail(t,
+				"a spent bill must stop answering",
+				"still replying %s after its last slice was spent; answering tells a caller this hub once served that pubkey (last result: %v)",
+				drainedWalletDeleteWindow, err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// requireNWCErrorCode asserts err is an *nwcclient.NWCError with the given code.
+func requireNWCErrorCode(t *testing.T, err error, code string) {
+	t.Helper()
+	require.Error(t, err)
+	var nwcErr *nwcclient.NWCError
+	require.True(t, errors.As(err, &nwcErr), "expected an *nwcclient.NWCError, got %T: %v", err, err)
+	t.Logf("got expected nwc error: code=%s message=%q", nwcErr.Code, nwcErr.Message)
+	require.Equal(t, code, nwcErr.Code)
+}
+
+// ctxT returns a context bound to the test's default timeout budget.
+func ctxT(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), nwcclient.DefaultCallTimeout)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+// skipIfEnvUnset skips the test unless the given env var is set to a
+// non-empty, truthy-ish value — used to gate opt-in tests (e.g. rate-limit
+// exhaustion) that consume a real hub's shared hourly quota.
+func skipIfEnvUnset(t *testing.T, envVar string) {
+	t.Helper()
+	if os.Getenv(envVar) == "" {
+		t.Skipf("skipping: set %s=1 to run this opt-in test (it consumes real quota on the hub)", envVar)
+	}
+}
+
+// mustPubkey derives the nostr pubkey for a privkey, failing the test on error.
+func mustPubkey(t *testing.T, privkey string) string {
+	t.Helper()
+	pub, err := nostr.GetPublicKey(privkey)
+	require.NoError(t, err)
+	return pub
+}
+
+// newTestConnectionKey generates a fresh random 32-byte hex string usable as
+// a connection_key, e.g. to simulate a one-off LIDP-issued identity. Reusing
+// nostr.GeneratePrivateKey() here is just a convenient source of random
+// 32-byte hex - it has no nostr-keypair meaning in this context.
+func newTestConnectionKey(t *testing.T) string {
+	t.Helper()
+	return nostr.GeneratePrivateKey()
+}
+
+// mintInvoiceFromSimpleWallet mints a real invoice from a fresh, throwaway
+// simple wallet (see createEphemeralSimpleWallet) - a plain isolated app kept
+// independent of any cash_hub/circle_hub, used to fund invoices for full-drain
+// payment scenarios. Every call gets its own ephemeral wallet: nothing in
+// this suite ever checks a simple wallet's own balance/history afterward, so
+// there's no need to share one across calls (see createEphemeralSimpleWallet
+// - unlike circle wallets, a plain isolated app has no per-identity cap to
+// worry about reusing around).
+func mintInvoiceFromSimpleWallet(t *testing.T, cfg *Config, amountMloki uint64, description string) MakeInvoiceResult {
+	t.Helper()
+	simpleWallet := createEphemeralSimpleWallet(t, cfg)
+	client := mustConnect(t, simpleWallet.Connection)
+
+	var invoice MakeInvoiceResult
+	require.NoError(t, client.Call(ctxT(t), "make_invoice", MakeInvoiceParams{
+		Amount:      amountMloki,
+		Description: description,
+	}, &invoice))
+	require.NotEmpty(t, invoice.Invoice)
+	return invoice
+}
+
+// payInvoiceFromSimpleWallet is the mirror of mintInvoiceFromSimpleWallet: a
+// fresh, throwaway simple wallet pays a real invoice, used by
+// circle_wallet_scope_test.go to fund a circle wallet child from an external
+// source.
+func payInvoiceFromSimpleWallet(t *testing.T, cfg *Config, invoice string) PayInvoiceResult {
+	t.Helper()
+	simpleWallet := createEphemeralSimpleWallet(t, cfg)
+	client := mustConnect(t, simpleWallet.Connection)
+
+	var result PayInvoiceResult
+	require.NoError(t, client.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: invoice}, &result))
+	require.NotEmpty(t, result.Preimage)
+	return result
+}
+
+// billTotalMillis reads a bill's remaining value the way a recipient now has to:
+// through cash_status, over the private transport, summing the rows that are still
+// unclaimed.
+//
+// It replaces get_balance, which a bill no longer serves. That method returned the
+// whole wallet's funded total to anyone holding the shared connection with no proof
+// required — the same disclosure get_budget is carved out of the always-granted list
+// for — so it was dropped from cashWalletScopes. See cashwallet/create.go.
+//
+// Summing UNCLAIMED rows is what makes this the equivalent of the old call rather
+// than a different measurement: a claimed slice's value has already left the bill,
+// and get_balance reported what remained.
+//
+// signerPriv must hold a slice of the bill: cash_status is scoped, and a caller with
+// no slice is refused NOT_FOUND whatever the bill's identity modes are.
+func billTotalMillis(t *testing.T, token, signerPriv string) uint64 {
+	t.Helper()
+
+	var status CashStatusResult
+	require.NoError(t, privateCall(t, token, constants.NIP47MethodCashStatus,
+		CashStatusParams{Scope: "all"}, signerPriv, &status),
+		"reading a bill's remaining value via cash_status")
+
+	var total uint64
+	for _, r := range status.Recipients {
+		if r.Claimed {
+			continue
+		}
+		total += uint64(r.AmountMillis)
+	}
+	return total
+}
+
+// billSilentOnStatus builds the "is this bill gone?" probe for
+// requireCashWalletDrainedAway, asking cash_status instead of get_balance.
+//
+// The distinction matters to what the caller is testing. get_balance is now refused
+// with a coded RESTRICTED — an immediate, definite answer — which is NOT the silence
+// a destroyed bill produces and would make a silence assertion pass for entirely the
+// wrong reason. cash_status over the private transport genuinely goes quiet when the
+// bill no longer exists, which is the property under test.
+func billSilentOnStatus(t *testing.T, token, signerPriv string) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		var status CashStatusResult
+		return privateCallCtx(t, ctx, token, constants.NIP47MethodCashStatus,
+			CashStatusParams{Scope: "all"}, signerPriv, &status)
+	}
+}
+
+// unclaimedMillis sums the still-unclaimed rows of a cash_status roster — a bill's
+// remaining value, and the direct replacement for what get_balance used to report.
+//
+// Only UNCLAIMED rows: a claimed slice's value has already left the bill, which is
+// what get_balance also reflected. Summing every row instead would report the bill's
+// ORIGINAL total and quietly turn "nothing moved" assertions into ones that cannot
+// fail.
+func unclaimedMillis(status CashStatusResult) uint64 {
+	var total uint64
+	for _, r := range status.Recipients {
+		if r.Claimed {
+			continue
+		}
+		total += uint64(r.AmountMillis)
+	}
+	return total
+}
+
+// requireSpentBillTombstoned polls a destroyed bill until it reports itself spent,
+// carrying no roster.
+//
+// This replaces requireSpentBillSilent at the cash_status call sites, because silence
+// is no longer the property. A Hub retains a destroyed bill for a bounded window
+// precisely so its holder gets a definitive "spent" instead of having to infer one
+// from silence — so a spent bill ANSWERS cash_status, on purpose, and asserting the
+// absence of an answer would be asserting against the feature.
+//
+// What must still hold is that the answer discloses nothing: a tombstone names the
+// state and carries no recipients. That is the assertion here.
+//
+// Polled rather than read once, for the same reason the silence variant polls: the Hub
+// answers the request that empties a bill BEFORE destroying it, so for a moment
+// afterwards the bill is still live and still returns its roster.
+func requireSpentBillTombstoned(t *testing.T, conn billCaller) {
+	t.Helper()
+
+	deadline := time.Now().Add(drainedWalletDeleteWindow)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), drainedWalletSilenceWindow)
+		var status CashStatusResult
+		err := conn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &status)
+		cancel()
+
+		if err == nil && status.Status == nipcash.StatusSpent {
+			require.Empty(t, status.Recipients,
+				"a tombstone must carry no roster — the bill and its slices are gone")
+			return
+		}
+		// An omission is also acceptable: past its retention window, or on a Hub with
+		// retention disabled, a destroyed bill genuinely does fall silent.
+		if errors.Is(err, errPrivateOmitted) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		if time.Now().After(deadline) {
+			require.Fail(t,
+				"a spent bill must answer only a tombstone, or nothing at all",
+				"still returning %d roster row(s) %s after its last slice was spent (err: %v, error field: %q)",
+				len(status.Recipients), drainedWalletDeleteWindow, err, status.Status)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// balanceOf is c's balance in mloki, as get_balance reports it.
+func balanceOf(t *testing.T, c *nwcclient.Client) int64 {
+	t.Helper()
+	var b GetBalanceResult
+	require.NoError(t, c.Call(ctxT(t), "get_balance", struct{}{}, &b))
+	return b.Balance
+}
+
+// claimSignerOf is the key that signed the claim proof an item carries (for
+// cash_consolidate, sources[0]'s), when the suite built it; "" otherwise.
+// NIP-CASH §Claim Proofs: the item proof must be signed by the same key.
+func claimSignerOf(raw json.RawMessage) string {
+	var params struct {
+		IdentityEvent string `json:"identity_event"`
+		Sources       []struct {
+			IdentityEvent string `json:"identity_event"`
+		} `json:"sources"`
+	}
+	if json.Unmarshal(raw, &params) != nil {
+		return ""
+	}
+	evJSON := params.IdentityEvent
+	if evJSON == "" && len(params.Sources) > 0 {
+		evJSON = params.Sources[0].IdentityEvent
+	}
+	var ev nostr.Event
+	if evJSON == "" || json.Unmarshal([]byte(evJSON), &ev) != nil {
+		return ""
+	}
+	if priv, ok := transferProofSigners.Load(ev.ID); ok {
+		return priv.(string)
+	}
+	return ""
+}
+
+// circleProofSigners remembers who signed each join proof the suite built, so a
+// private join can be bound to its request's terms and signed by its member.
+var circleProofSigners sync.Map
+
+// reboundJoinProofs keeps the first binding of each suite-built proof, so a proof
+// sent again is the same event, bound to the terms it was first sent with: a
+// replay stays a replay rather than a fresh proof.
+var reboundJoinProofs sync.Map
+
+// bindJoinProof completes a join the way the suite builds it: max_receive asks
+// for as much as max_amount when absent, and a proof the suite signed gets the
+// request's terms tag (NIP-CW §Identity Proof, check 7) and is re-signed. It
+// returns the params and the proof's signer ("" for a proof the suite did not
+// sign, which is sent as it is).
+func bindJoinProof(t *testing.T, raw json.RawMessage) (json.RawMessage, string) {
+	t.Helper()
+	var params map[string]any
+	if json.Unmarshal(raw, &params) != nil || params == nil {
+		return raw, ""
+	}
+	if _, ok := params["max_receive"]; !ok {
+		params["max_receive"] = params["max_amount"]
+	}
+	signer := ""
+	evJSON, _ := params["identity_event"].(string)
+	var ev nostr.Event
+	if json.Unmarshal([]byte(evJSON), &ev) == nil {
+		if priv, ok := circleProofSigners.Load(ev.ID); ok {
+			signer = priv.(string)
+			if rebound, ok := reboundJoinProofs.Load(ev.ID); ok {
+				params["identity_event"] = rebound.(string)
+				out, err := json.Marshal(params)
+				require.NoError(t, err)
+				return out, signer
+			}
+			originalID := ev.ID
+			req, err := json.Marshal(params)
+			require.NoError(t, err)
+			if parsed, err := nipcw.ParseCreateCircleWalletRequest(req); err == nil {
+				if terms, err := nipcw.TermsTag(parsed.Terms()); err == nil {
+					kept := nostr.Tags{}
+					for _, tag := range ev.Tags {
+						if len(tag) > 0 && tag[0] != "terms" {
+							kept = append(kept, tag)
+						}
+					}
+					ev.Tags = append(kept, nostr.Tag{"terms", terms})
+					require.NoError(t, ev.Sign(signer))
+					circleProofSigners.Store(ev.ID, signer)
+					rebound, err := json.Marshal(ev)
+					require.NoError(t, err)
+					params["identity_event"] = string(rebound)
+					reboundJoinProofs.Store(originalID, string(rebound))
+				}
+			}
+		}
+	}
+	out, err := json.Marshal(params)
+	require.NoError(t, err)
+	return out, signer
+}

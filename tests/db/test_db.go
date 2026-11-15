@@ -1,0 +1,105 @@
+package db
+
+import (
+	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/peterldowns/pgtestdb"
+	"gorm.io/gorm"
+
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/migrations"
+	"github.com/flokiorg/lokihub/logger"
+)
+
+const defaultTestDB = "test.db"
+
+func GetTestDatabaseURI() string {
+	ret := os.Getenv("TEST_DATABASE_URI")
+	if ret == "" {
+		// TODO: use in-memory DB, or a temporary file
+		return defaultTestDB
+	}
+
+	return ret
+}
+
+// NewDB opens a migrated test database.
+//
+// Takes testing.TB rather than *testing.T so benchmarks can use it too;
+// pgtestdb's own TB interface is satisfied by both.
+func NewDB(t testing.TB) (*gorm.DB, error) {
+	dbUri := GetTestDatabaseURI()
+
+	if dbUri == defaultTestDB {
+		// Give each test its own sqlite file under a temp dir (auto-removed at
+		// test end) instead of a shared "test.db". A prior test's hub can keep
+		// connections open past CloseDB; on a shared file those accumulate across
+		// the suite and deadlock the next test's open/migrate (seen hanging the
+		// full -tags testhooks http suite). A per-test path isolates them.
+		dbUri = filepath.Join(t.TempDir(), defaultTestDB)
+	}
+
+	logger.Logger.Info().Str("uri", dbUri).Msg("Creating new test DB with URI")
+	return NewDBWithURI(t, dbUri)
+}
+
+func NewDBWithURI(t testing.TB, uri string) (*gorm.DB, error) {
+	if db.IsPostgresURI(uri) {
+		parsedURI, err := url.Parse(uri)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse postgres DB URI: %w", err)
+		}
+
+		var user, password string
+		if userInfo := parsedURI.User; userInfo != nil {
+			user = userInfo.Username()
+			password, _ = userInfo.Password()
+		}
+
+		dbName := strings.TrimPrefix(parsedURI.Path, "/")
+
+		config := pgtestdb.Custom(t, pgtestdb.Config{
+			DriverName:                "pgx",
+			Host:                      parsedURI.Hostname(),
+			Port:                      parsedURI.Port(),
+			User:                      user,
+			Password:                  password,
+			Database:                  dbName,
+			ForceTerminateConnections: true,
+		}, pgtestdb.NoopMigrator{})
+
+		uri = config.URL()
+	}
+
+	gormDB, err := db.NewDBWithConfig(&db.Config{
+		URI:        uri,
+		LogQueries: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := migrations.Migrate(gormDB); err != nil {
+		return nil, fmt.Errorf("failed to migrate test DB: %w", err)
+	}
+
+	return gormDB, nil
+}
+
+func CloseDB(d *gorm.DB) {
+	if err := db.Stop(d); err != nil {
+		panic("failed to close database: " + err.Error())
+	}
+
+	if GetTestDatabaseURI() == defaultTestDB {
+		logger.Logger.Info().Str("uri", defaultTestDB).Msg("removing test db")
+		if err := os.Remove(defaultTestDB); err != nil && !os.IsNotExist(err) {
+			logger.Logger.Warn().Err(err).Str("uri", defaultTestDB).Msg("failed to remove test db")
+		}
+	}
+}

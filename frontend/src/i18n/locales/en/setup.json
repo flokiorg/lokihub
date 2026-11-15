@@ -1,0 +1,197 @@
+{
+  "steps": {
+    "welcome": "Welcome",
+    "nodeSetup": "Node Setup",
+    "unlockPassword": "Set Unlock Password",
+    "backup": "Backup",
+    "complete": "Setup Complete"
+  },
+  "intro": {
+    "slide1": {
+      "title": "Welcome to Lokihub",
+      "subtitle": "A powerful, all-in-one {{chain}} Lightning wallet powering the next web of engagement.",
+      "next": "Next"
+    },
+    "slide2": {
+      "title": "Always Ready",
+      "description": "Your wallet is online and ready to use on any device, anytime."
+    },
+    "slide3": {
+      "title": "Secure & Private",
+      "description": "Encrypted by your password. Only you can access your funds."
+    },
+    "slide4": {
+      "title": "Connect Apps",
+      "description": "Link up with apps and join the Web of Fun."
+    },
+    "slideAriaLabel": "Go to slide {{index}}"
+  },
+  "welcome": {
+    "title": "Welcome to Lokihub",
+    "subtitle": "A powerful, all-in-one {{chain}} Lightning wallet powering the next web of engagement.",
+    "getStarted": "Get Started"
+  },
+  "start": {
+    "title": "Start",
+    "description": "Enter your password to unlock and start Lokihub.",
+    "passwordLabel": "Password",
+    "pleaseWait": "Please wait...",
+    "starting": "Starting Lokihub may take a few minutes.",
+    "takingLong": "This is taking longer than usual. Your node may be slow to reach or unreachable — check that it is running, or open the data folder to review the logs.",
+    "openDataFolder": "Open data folder",
+    "reload": "Reload",
+    "failedToStart": "Failed to start",
+    "failedToConnect": "Failed to connect"
+  },
+  "unlock": {
+    "title": "Login",
+    "description": "Enter your unlock password to continue",
+    "passwordLabel": "Password",
+    "login": "Login",
+    "failedToConnect": "Failed to connect"
+  },
+  "password": {
+    "title": "Create Password",
+    "description": "Your password is used to access your wallet, and it can't be reset or recovered if you lose it.",
+    "label": "Password",
+    "repeatLabel": "Repeat Password",
+    "repeatPlaceholder": "Re-enter the password",
+    "securedConfirm": "I've secured this password in a safe place",
+    "irrecoverableConfirm": "I understand this password cannot be recovered",
+    "createButton": "Create Password",
+    "notConfirmed": "Please confirm you have saved your password",
+    "mismatch": "Passwords don't match",
+    "tooShort": "Password must be at least 8 characters"
+  },
+  "finish": {
+    "loading": "Setting up your Hub...",
+    "connectionTimeout": "Connection timed out. Please check your node.",
+    "failedToConnect": "Failed to connect"
+  },
+  "security": {
+    "title": "Security & Recovery",
+    "description": "Take your time to understand how to secure and recover your funds on Lokihub.",
+    "confirmed": "I understand how to secure and recover funds"
+  },
+  "restore": {
+    "title": "Import Wallet from Migration File",
+    "description": "Upload your encrypted wallet migration file.",
+    "import": "Import Wallet",
+    "restartingTitle": "Restart your Hub",
+    "restartingDesc": "Lokihub needs to restart to finish restoring your node",
+    "restartingMessage": "If you're running in the cloud, your Lokihub will restart automatically. Otherwise, please manually restart your Lokihub to finish the restore process.",
+    "waitingForRestart": "Waiting for restart...",
+    "warning1": "As part of the node restore process your Lokihub will be shut down.",
+    "warning2": "If you're running in the cloud, your Lokihub will restart automatically. Otherwise, please manually restart your Loki Hub to finish the restore process."
+  },
+  "complete": {
+    "title": "All done!",
+    "description": "Your node is ready to use.",
+    "goHome": "Go to Dashboard"
+  },
+  "services": {
+    "title": "Hub Configuration",
+    "description": "Configure external services for your node.",
+    "loading": "Loading...",
+    "continue": "Continue",
+    "fetchError": "Failed to fetch Hub Configuration. Please check your connection.",
+    "communityNote": "These explorer and relay suggestions are built-in defaults. You can select one, or enter any explorer or relay you prefer.",
+    "connectHint": "Connect a trusted service",
+    "warning": "Warning",
+    "warningText": "You are responsible for the services you connect to. Ensure you trust the providers of these URLs.",
+    "configErrors": "Configuration Errors",
+    "unsavedChanges": {
+      "title": "Unsaved changes",
+      "description": "You've made changes to your services configuration that haven't been saved. If you leave now, these changes will be lost.",
+      "stay": "Keep Editing",
+      "discard": "Leave Without Saving",
+      "save": "Save & Leave",
+      "saving": "Saving..."
+    },
+    "explorer": {
+      "title": "Block Explorer",
+      "description": "Used for fee estimation and transaction details.",
+      "custom": "Custom Explorer"
+    },
+    "appStore": {
+      "title": "App Store",
+      "description": "Optional. Pick a store to browse community apps. Leave empty to keep the app store off — nothing is fetched until you select one.",
+      "custom": "Custom App Store"
+    },
+    "relayGroup": {
+      "title": "Nostr Relays",
+      "description": "Each purpose below keeps its own independent relay list — changing one doesn't affect the others."
+    },
+    "relay": {
+      "tabLabel": "Wallet Connect",
+      "title": "Nostr Relays",
+      "description": "Used for Nostr Wallet Connect (NWC) communication. Multiple relays improve availability."
+    },
+    "generalRelay": {
+      "tabLabel": "General",
+      "title": "General Relays",
+      "description": "Used to fetch Nostr profiles, notes, and events — including Circle followers and contact lists (kind:0/kind:1/kind:3)."
+    },
+    "searchRelay": {
+      "tabLabel": "Search",
+      "title": "Search Relays",
+      "description": "Used only for NIP-50 search queries."
+    },
+    "lsp": {
+      "title": "Lightning Service Providers",
+      "description": "LSPs that announce themselves on your relays. Tick the ones you trust; only those are contacted and used for inbound liquidity.",
+      "claimsNote": "Names, descriptions and websites are what each LSP says about itself, not verified facts. Graph facts come from your own node.",
+      "filterText": "Filter by name or node id",
+      "allProtocols": "All",
+      "addPlaceholder": "Add by node key or node id",
+      "add": "Add",
+      "notFound": "No usable announcement was found for this node",
+      "trust": "Trust this LSP",
+      "trustError": "Could not change trust",
+      "untitled": "Untitled LSP",
+      "sameTitle": "Same name as another LSP",
+      "status": {
+        "open": "Open",
+        "paused": "Paused",
+        "closed": "Closed"
+      },
+      "notAnnounced": "No usable announcement",
+      "claimedWebsite": "Website (claimed)",
+      "feeHint": "JIT channel fee from {{min}} {{unit}} + {{ppm}} ppm",
+      "inGraph": "In your node's graph: {{channels}} channels, {{capacity}} {{unit}}",
+      "notInGraphFact": "Not in your node's graph",
+      "notInGraph": "{{count}} not in your node's graph",
+      "notInGraph_one": "{{count}} not in your node's graph",
+      "checkOk": "Live check: matches the announcement",
+      "checkWorse": "Live check: worse than announced; you will be asked again before buying",
+      "checkMissing": "Live check: an announced service is missing; not used",
+      "checkUnreachable": "Live check: could not reach the LSP",
+      "recheck": "Check again",
+      "details": "Details",
+      "showImage": "Show image",
+      "empty": "No LSP announcements found on your relays yet.",
+      "noTrusted": "No trusted LSP: choose one in Settings",
+      "reason": {
+        "paused": "paused",
+        "closed": "closed",
+        "notAnnounced": "no longer announced",
+        "unreachable": "unreachable"
+      }
+    },
+    "swap": {
+      "title": "Swap Service",
+      "description": "Enables Lightning to on-chain swaps (and vice-versa).",
+      "custom": "Custom Swap Service"
+    },
+    "validation": {
+      "relayRequired": "At least one relay is required",
+      "explorerRequired": "Explorer URL is required",
+      "swapRequired": "Swap Service URL is required when enabled",
+      "invalidUrl": "{{field}}: invalid URL format"
+    },
+    "trustedNwcRelay": {
+      "title": "I run these relays",
+      "description": "Events from these relays are accepted without checking their signatures. Only safe for relays you operate yourself."
+    }
+  }
+}

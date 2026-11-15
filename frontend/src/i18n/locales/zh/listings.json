@@ -1,0 +1,111 @@
+{
+  "nav": "挂牌",
+  "page": {
+    "title": "挂牌",
+    "description": "本 Hub 在中继上挂牌的报价，让没有链接的人也能找到",
+    "empty": "尚未挂牌",
+    "emptyHint": "在下方挂牌一个圈子。Cash Hub 连接永远不会挂牌。",
+    "listCircle": "挂牌一个圈子"
+  },
+  "card": {
+    "untitled": "未命名报价",
+    "typeOrder": "现金订单",
+    "typeCircle": "圈子"
+  },
+  "status": {
+    "open": "开放",
+    "paused": "已暂停",
+    "closed": "已关闭"
+  },
+  "health": {
+    "listed": "已挂牌",
+    "paused": "已挂牌，已暂停",
+    "closing": "已关闭，保留至最后版本过期",
+    "deleted": "已撤牌",
+    "refreshed": "{{count}} 天前刷新",
+    "relays": "在 {{total}} 个中继中的 {{ok}} 个上",
+    "operatorVerified": "运营者已验证",
+    "operatorNotNamed": "运营者尚未声明",
+    "failing": "没有中继接受最后版本，正在重试"
+  },
+  "dialog": {
+    "title": "挂牌此报价",
+    "editTitle": "编辑挂牌",
+    "description": "挂牌只做宣传；条款总是在有人点开时由报价本身给出。",
+    "list": "挂牌",
+    "save": "保存"
+  },
+  "warnings": {
+    "public": "挂牌会公开此报价，任何人都能找到此节点。",
+    "pow": "未设置工作量证明中继时，收件箱的工作量证明处于关闭状态；任何人都能发送请求。",
+    "circleTerms": "对于圈子，其准入策略和剩余可接收额度将对任何人可见。",
+    "followSet": "此圈子的关注集是公开的。对不应公开的成员请考虑使用隐藏条目。挂牌标题不会取自关注集。",
+    "operator": "指明运营者会公开地把其账户与此节点关联。"
+  },
+  "form": {
+    "title": "标题",
+    "content": "描述",
+    "image": "图片（https）",
+    "location": "地点（如 Lisbon, Baixa）",
+    "regions": "区域",
+    "regionsHint": "3 或 4 个字符的 geohash 前缀",
+    "languages": "语言（ISO-639-1）",
+    "operator": "运营者（npub 或 hex，可选）",
+    "operatorRelay": "运营者的中继",
+    "followSetA": "添加关注集地址",
+    "followSetConfirm": "我了解关注集是公开的",
+    "preview": "预览"
+  },
+  "problems": {
+    "title": "标题须为一行，最多 40 个字符。",
+    "content": "描述最多 280 个字符。",
+    "image": "图片须为 https URL。",
+    "location": "地点须为一行，最多 40 个字符，不含链接。",
+    "languages": "语言为两个字母的 ISO-639-1 代码。",
+    "regions": "区域为 3 或 4 个字符的 geohash 前缀。",
+    "operator": "运营者须为 npub 或 64 位十六进制公钥。",
+    "operatorRelay": "运营者的中继须为 websocket URL。"
+  },
+  "toast": {
+    "listed": "已挂牌",
+    "updated": "挂牌已更新"
+  },
+  "errors": {
+    "save": "无法保存挂牌",
+    "action": "无法更新挂牌",
+    "relays": "无法保存挂牌中继",
+    "regenerate": "无法重新生成连接"
+  },
+  "address": {
+    "label": "挂牌地址",
+    "copied": "已复制",
+    "copyTag": "复制 a 标签",
+    "copyCommand": "复制运营者命令",
+    "hint": "运营者在自己的 Nostr 客户端或用 cashctl 声明此报价；本应用从不索取其密钥。"
+  },
+  "connection": {
+    "label": "挂牌连接（公开）"
+  },
+  "actions": {
+    "pause": "暂停",
+    "resume": "恢复",
+    "edit": "编辑",
+    "unlist": "撤牌",
+    "checkOperator": "检查运营者",
+    "revokeConnection": "撤销挂牌连接"
+  },
+  "relays": {
+    "title": "挂牌中继",
+    "description": "挂牌和本节点的中继列表发送到：{{relays}}。留空则使用通用中继。",
+    "save": "保存",
+    "saved": "挂牌中继已保存"
+  },
+  "regenerate": {
+    "button": "撤销并重新签发 Cash Hub 连接",
+    "title": "撤销此 Cash Hub 连接？",
+    "description": "如果连接字符串曾被公开，请执行此操作。旧字符串立即失效，新字符串只显示一次。票据和记录不受影响；请用新字符串重新连接你的铸币客户端。",
+    "cancel": "取消",
+    "confirm": "撤销并重新签发",
+    "shownOnce": "新连接，只显示一次："
+  }
+}

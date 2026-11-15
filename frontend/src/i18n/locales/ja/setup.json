@@ -1,0 +1,176 @@
+{
+  "steps": {
+    "welcome": "ようこそ",
+    "nodeSetup": "ノードのセットアップ",
+    "unlockPassword": "ロック解除パスワードを設定",
+    "backup": "バックアップ",
+    "complete": "セットアップ完了"
+  },
+  "welcome": {
+    "title": "Lokihub へようこそ",
+    "subtitle": "Lightning ノード管理インターフェース",
+    "getStarted": "はじめる"
+  },
+  "password": {
+    "title": "ロック解除パスワードを設定",
+    "description": "このパスワードはノードへのアクセスを保護します。安全な場所に保管してください。",
+    "label": "パスワード",
+    "confirm": "パスワードの確認",
+    "mismatch": "パスワードが一致しません",
+    "tooShort": "パスワードは8文字以上必要です",
+    "repeatLabel": "パスワードを繰り返す",
+    "repeatPlaceholder": "パスワードを再入力",
+    "securedConfirm": "このパスワードを安全な場所に保存しました",
+    "irrecoverableConfirm": "このパスワードは回復できないことを理解しています",
+    "createButton": "パスワードを作成",
+    "notConfirmed": "パスワードを保存したことを確認してください"
+  },
+  "backup": {
+    "title": "リカバリーフレーズをバックアップ",
+    "description": "これらの単語を順番に書き留め、安全な場所に保管してください。ウォレットの復元に必要です。",
+    "confirmed": "リカバリーフレーズを書き留めました",
+    "warning": "リカバリーフレーズは絶対に他人に教えないでください。"
+  },
+  "complete": {
+    "title": "準備完了です！",
+    "description": "ノードが使えるようになりました。",
+    "goHome": "ダッシュボードへ"
+  },
+  "intro": {
+    "slide1": {
+      "title": "Lokihubへようこそ",
+      "subtitle": "次世代のエンゲージメントウェブを支える{{chain}}の Lightning ウォレット。",
+      "next": "次へ"
+    },
+    "slide2": {
+      "title": "常に準備完了",
+      "description": "どのデバイスでも、いつでもウォレットを使えます。"
+    },
+    "slide3": {
+      "title": "安全でプライベート",
+      "description": "パスワードで暗号化。あなただけが資金にアクセスできます。"
+    },
+    "slide4": {
+      "title": "アプリを接続",
+      "description": "アプリを繋いで、楽しいウェブに参加しよう。"
+    },
+    "slideAriaLabel": "スライド{{index}}へ"
+  },
+  "start": {
+    "title": "開始",
+    "description": "パスワードを入力してLokihubのロックを解除して起動します。",
+    "passwordLabel": "パスワード",
+    "pleaseWait": "しばらくお待ちください...",
+    "starting": "Lokihubの起動には数分かかる場合があります。",
+    "failedToStart": "起動に失敗しました",
+    "failedToConnect": "接続に失敗しました"
+  },
+  "unlock": {
+    "title": "ログイン",
+    "description": "続行するにはロック解除パスワードを入力してください",
+    "passwordLabel": "パスワード",
+    "login": "ログイン",
+    "failedToConnect": "接続に失敗しました"
+  },
+  "finish": {
+    "loading": "Hubのセットアップ中...",
+    "connectionTimeout": "接続がタイムアウトしました。ノードを確認してください。",
+    "failedToConnect": "接続に失敗しました"
+  },
+  "security": {
+    "title": "セキュリティと復元",
+    "description": "Lokihubで資金を保護・復元する方法を理解しましょう。",
+    "confirmed": "資金の保護と復元方法を理解しました"
+  },
+  "restore": {
+    "title": "移行ファイルからウォレットをインポート",
+    "description": "暗号化されたウォレット移行ファイルをアップロードしてください。",
+    "import": "ウォレットをインポート",
+    "restartingTitle": "Hubを再起動してください",
+    "restartingDesc": "ノードの復元を完了するためにLokihubを再起動する必要があります",
+    "restartingMessage": "クラウドで実行している場合、Lokihubは自動的に再起動します。そうでない場合は、手動でLokihubを再起動して復元プロセスを完了してください。",
+    "waitingForRestart": "再起動を待っています...",
+    "warning1": "ノード復元プロセスの一部として、Lokihubがシャットダウンされます。",
+    "warning2": "クラウドで実行している場合、Lokihubは自動的に再起動します。そうでない場合は、手動でLoki Hubを再起動して復元プロセスを完了してください。"
+  },
+  "services": {
+    "title": "ハブ設定",
+    "description": "ノードの外部サービスを設定します。",
+    "loading": "読み込み中...",
+    "continue": "続ける",
+    "fetchError": "ハブ設定の取得に失敗しました。接続を確認してください。",
+    "communityNote": "これらのエクスプローラーとリレーの提案は組み込みの既定値です。いずれかを選択するか、任意のエクスプローラーやリレーを入力できます。",
+    "warning": "警告",
+    "warningText": "接続するサービスの責任はあなたにあります。これらのURLのプロバイダーを信頼していることを確認してください。",
+    "configErrors": "設定エラー",
+    "unsavedChanges": {
+      "title": "未保存の変更",
+      "description": "サービス設定に未保存の変更があります。このままページを離れると、変更内容は失われます。",
+      "stay": "編集を続ける",
+      "discard": "保存せずに離れる",
+      "save": "保存して離れる",
+      "saving": "保存中..."
+    },
+    "explorer": {
+      "title": "{{chain}}エクスプローラー",
+      "description": "手数料の見積もりとトランザクション詳細に使用します。",
+      "custom": "カスタムエクスプローラー"
+    },
+    "relay": {
+      "title": "Nostrリレー",
+      "description": "Wallet Connect (NWC) 通信のために複数のNostrリレーに接続します。複数のリレーにより可用性が向上します。"
+    },
+    "lsp": {
+      "title": "Lightning サービスプロバイダー",
+      "description": "あなたのリレーで自身を告知している LSP です。信頼するものにチェックを付けてください。チェックしたものだけに接続し、受信流動性に使います。",
+      "claimsNote": "名前・説明・ウェブサイトは各 LSP の自己申告で、検証された事実ではありません。グラフ情報はあなたのノードによるものです。",
+      "filterText": "名前またはノード id で絞り込み",
+      "allProtocols": "すべて",
+      "addPlaceholder": "ノード鍵またはノード id で追加",
+      "add": "追加",
+      "notFound": "このノードの有効な告知が見つかりません",
+      "trust": "この LSP を信頼する",
+      "trustError": "信頼を変更できませんでした",
+      "untitled": "無題の LSP",
+      "sameTitle": "他の LSP と同じ名前",
+      "status": {
+        "open": "受付中",
+        "paused": "一時停止",
+        "closed": "終了"
+      },
+      "notAnnounced": "有効な告知なし",
+      "claimedWebsite": "ウェブサイト（自己申告）",
+      "feeHint": "JIT チャネル手数料 {{min}} {{unit}} + {{ppm}} ppm から",
+      "inGraph": "あなたのノードのグラフ内: {{channels}} チャネル、{{capacity}} {{unit}}",
+      "notInGraphFact": "あなたのノードのグラフにありません",
+      "notInGraph": "グラフ外の LSP {{count}} 件",
+      "checkOk": "ライブ確認: 告知と一致",
+      "checkWorse": "ライブ確認: 告知より不利です。購入前に再確認します",
+      "checkMissing": "ライブ確認: 告知されたサービスがありません。使用しません",
+      "checkUnreachable": "ライブ確認: LSP に接続できませんでした",
+      "recheck": "再確認",
+      "details": "詳細",
+      "showImage": "画像を表示",
+      "empty": "あなたのリレーにはまだ LSP の告知がありません。",
+      "noTrusted": "信頼する LSP がありません: 設定で選んでください",
+      "reason": {
+        "paused": "一時停止中",
+        "closed": "終了",
+        "notAnnounced": "告知されていません",
+        "unreachable": "接続不可"
+      }
+    },
+    "swap": {
+      "title": "スワップサービス",
+      "description": "Lightning とオンチェーンのスワップ（およびその逆）を有効にします。",
+      "custom": "カスタムスワップサービス"
+    },
+    "validation": {
+      "relayRequired": "少なくとも1つのリレーが必要です",
+      "explorerRequired": "{{chain}}エクスプローラーのURLは必須です",
+      "swapRequired": "有効時はスワップサービスのURLが必須です",
+      "invalidUrl": "{{field}}：URLフォーマットが無効です"
+    },
+    "connectHint": "信頼できるサービスに接続"
+  }
+}

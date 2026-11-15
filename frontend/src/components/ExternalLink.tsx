@@ -1,0 +1,32 @@
+import { Link } from "react-router";
+import { cn } from "src/lib/utils";
+import { isHttpMode } from "src/utils/isHttpMode";
+import { openLink } from "src/utils/openLink";
+
+type Props = {
+  to: string;
+  className?: string;
+  children?: React.ReactNode;
+};
+
+export default function ExternalLink({ to, className, children }: Props) {
+  const _isHttpMode = isHttpMode();
+
+  return _isHttpMode ? (
+    <Link
+      to={to}
+      target="_blank"
+      rel="noreferrer noopener"
+      className={className}
+    >
+      {children}
+    </Link>
+  ) : (
+    <span
+      className={cn("cursor-pointer", className)}
+      onClick={() => openLink(to)}
+    >
+      {children}
+    </span>
+  );
+}

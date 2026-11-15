@@ -1,0 +1,50 @@
+# LSPS1 manual channel purchase: the client places an order for inbound
+# liquidity, the LSP returns a bolt11 invoice, a third-party payer pays it
+# (an ordinary invoice -- no JIT/phantom hop involved, unlike LSPS2), and
+# flspd's settlement service opens the channel once the payment settles.
+#
+# Unlike lsps2_jit_happy_path.yaml, this one is not currently known-failing:
+# it has no zero-conf channel and no interceptor balance-sync race, so it
+# reaches COMPLETED cleanly. See test/itest/lsps1_settle_test.go for the
+# Go-level proof this mirrors.
+name: lsps1_order_settle_and_open
+description: >
+  Place an LSPS1 order, pay the resulting invoice, and assert the order
+  reaches COMPLETED and the real channel opens between the LSP and client.
+steps:
+  - auto_accept_channels:
+      as: client
+  - connect_peer:
+      from: client
+      to: lsp
+  - connect_peer:
+      from: payer
+      to: lsp
+  - open_channel:
+      from: payer
+      to: lsp
+      capacity_loki: 50000000
+      min_confs: 1
+  - mine_blocks:
+      count: 6
+  - lsps1_create_order:
+      as: client
+      lsp: lsp
+      token: itest-token
+      lsp_balance_loki: 100000
+      client_balance_loki: 0
+      save_as: order1
+  - pay_invoice:
+      as: payer
+      invoice: order1
+      outgoing_channel_to: lsp
+      timeout_seconds: 60
+  - wait_for_lsps1_order_state:
+      as: client
+      lsp: lsp
+      order: order1
+      state: COMPLETED
+      timeout_seconds: 60
+assertions:
+  - channel_exists:
+      between: [lsp, client]

@@ -1,0 +1,74 @@
+# LSPS2 JIT channel purchase: client asks the LSP for a quote, creates an
+# invoice with a routing hint through the not-yet-real channel, a
+# third-party payer pays it, and flspd's HTLC interceptor opens the real
+# channel on receipt.
+#
+# Was KNOWN FAILING for a long stretch (see BACKLOG.md's T4-1/T4-2
+# writeups) across what turned out to be four distinct, now-fixed bugs:
+# (1) JIT channel capacity didn't budget for the ~1% mandatory channel
+# reserve, so the channel could nominally exceed the payment size yet
+# still be unable to forward it; (2) flspd's post-open UpdateChannelPolicy
+# call (for TimeLockDelta) raced the channel's own link registration and
+# could silently not take effect; (3) TestLsps2JitHappyPath's own
+# CreateJitInvoice built the invoice for the gross amount with a
+# zero-fee route hint, which the client's link correctly rejected as
+# underpaying the onion's declared amount (this LSP only implements
+# LSPS2's client_trusts_lsp=false mode); (4) this same payer<->lsp
+# channel is reused (and its balance permanently spent) across every run
+# against this long-lived devnet, so a string of successful runs
+# eventually drains it below the payment size, at which point every
+# further attempt fails instantly with a completely unrelated-looking
+# FAILURE_REASON_NO_ROUTE / "insufficient local balance" -- this alone
+# was chased across multiple earlier sessions as mysterious, unrelated
+# payer-side pathfinding flakiness. See interceptor/intercept_handler.go,
+# lightning/client.go's UpdateChannelPolicy/IsChannelPolicyApplied, and
+# test/itest/lsps2_client.go's CreateJitInvoice for the fixes; BACKLOG.md
+# has the full investigation.
+#
+# Verified passing in isolation ~25/26 runs after these fixes (the rare
+# miss was a one-off right after the payer<->lsp channel topology
+# changed). Can still occasionally fail when run alongside other
+# scenarios in the same TestScenarios batch -- that's the same
+# already-documented, unrelated devnet-state-sharing gap that makes
+# lsps1_recovery_after_restart flaky too (channels/balance accumulate
+# unbounded across scenario runs with no per-run reconciliation), not a
+# regression of this scenario specifically.
+name: lsps2_jit_happy_path
+description: >
+  Buy a JIT channel via LSPS2, pay the resulting invoice, and assert the
+  real zero-conf channel opens between the LSP and the client.
+steps:
+  - auto_accept_channels:
+      as: client
+  - connect_peer:
+      from: client
+      to: lsp
+  - connect_peer:
+      from: payer
+      to: lsp
+  - open_channel:
+      from: payer
+      to: lsp
+      capacity_loki: 50000000
+      min_confs: 1
+  - mine_blocks:
+      count: 6
+  - lsps2_buy:
+      as: client
+      lsp: lsp
+      token: itest-token
+      payment_size_mloki: 5000000000
+      save_as: buy1
+  - create_jit_invoice:
+      as: client
+      from: buy1
+      memo: itest JIT purchase
+      save_as: invoice1
+  - pay_invoice:
+      as: payer
+      invoice: invoice1
+      outgoing_channel_to: lsp
+      timeout_seconds: 100
+assertions:
+  - channel_exists:
+      between: [lsp, client]

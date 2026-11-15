@@ -1,0 +1,23 @@
+# `just dev bootstrap` writes config.local.yaml (git-ignored) with these fields
+# for the regtest dev stack; copying this file by hand is optional. Never point
+# this suite at a mainnet Hub (see integration/README.md).
+#
+# token is a bearer JWT from POST {base_url}/api/unlock (unlockPassword,
+# permission "full", tokenExpiryDays); bootstrap mints one valid for a year.
+admin_api:
+  base_url: "http://localhost:5610"
+  token: "<jwt from POST /api/unlock>"
+
+# The Hub's own relay: the RELAY value in .env, also one of its GeneralRelay
+# settings. Never a public relay.
+relay_url: "ws://relay:5500"
+
+# How a test reaches the regtest stack's chain node and payer node.
+regtest:
+  chain_rpc: "localhost:25213"
+  chain_rpc_user: "dev"
+  chain_rpc_pass: "dev"
+  chain_rpc_cert: "/path/to/lokihub/data/regtest/chain/rpc.cert"
+  payer_grpc: "localhost:10006"
+  payer_macaroon: "/path/to/lokihub/data/regtest/payer/data/chain/flokicoin/regtest/admin.macaroon"
+  payer_tls_cert: "/path/to/lokihub/data/regtest/payer/tls.cert"

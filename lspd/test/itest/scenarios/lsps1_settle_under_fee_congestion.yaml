@@ -1,0 +1,66 @@
+# T4-3 fault injection: mempool fee congestion. Same LSPS1 manual-purchase
+# flow as lsps1_order_settle_and_open.yaml, but with the fake mempool API
+# (every flspd-under-test process is wired to one -- see
+# test/itest/fake_mempool.go) reporting a heavily congested fee market
+# before the order is even created, proving flspd's settlement service
+# still opens the channel correctly (doesn't error out, doesn't stall)
+# when chain-fee estimation returns elevated rates rather than the
+# low, uncongested baseline every other scenario implicitly relies on.
+name: lsps1_settle_under_fee_congestion
+description: >
+  Simulate a congested mempool (elevated fees across every priority tier),
+  then run the same LSPS1 settle-and-open flow as
+  lsps1_order_settle_and_open.yaml, asserting it still reaches COMPLETED
+  with exactly one new channel despite the elevated fee environment.
+steps:
+  - set_mempool_fees:
+      fastest_fee: 200
+      half_hour_fee: 150
+      hour_fee: 100
+      economy_fee: 80
+      minimum_fee: 50
+  - auto_accept_channels:
+      as: client
+  - connect_peer:
+      from: client
+      to: lsp
+  - connect_peer:
+      from: payer
+      to: lsp
+  - open_channel:
+      from: payer
+      to: lsp
+      capacity_loki: 50000000
+      min_confs: 1
+  - mine_blocks:
+      count: 6
+  - count_channels:
+      as: lsp
+      peer: client
+      save_as: channels_before
+  - lsps1_create_order:
+      as: client
+      lsp: lsp
+      token: itest-token
+      lsp_balance_loki: 100000
+      client_balance_loki: 0
+      save_as: order1
+  - pay_invoice:
+      as: payer
+      invoice: order1
+      outgoing_channel_to: lsp
+      timeout_seconds: 60
+  - wait_for_lsps1_order_state:
+      as: client
+      lsp: lsp
+      order: order1
+      state: COMPLETED
+      timeout_seconds: 60
+assertions:
+  - channel_exists:
+      between: [lsp, client]
+  - channel_count_delta:
+      as: lsp
+      peer: client
+      since: channels_before
+      delta: 1

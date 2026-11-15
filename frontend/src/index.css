@@ -1,0 +1,272 @@
+@import "tailwindcss";
+@import "sonner/dist/styles.css";
+
+html,
+body {
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root {
+  /* Windows reserves a row; macOS overlays the page background. */
+  --app-titlebar-height: 0px;
+  --app-titlebar-overlay-height: 0px;
+}
+
+html[data-titlebar-platform="windows"] {
+  --app-titlebar-height: 2rem;
+}
+
+html[data-titlebar-platform="darwin"] {
+  --app-titlebar-overlay-height: 2rem;
+}
+
+/* Fixed sidebars need explicit sizing below the Windows title bar. */
+html[data-titlebar-platform="windows"] [data-slot="sidebar-container"] {
+  top: calc(var(--app-titlebar-height) + var(--header-height, 0px));
+  height: calc(100svh - var(--app-titlebar-height) - var(--header-height, 0px)) !important;
+}
+
+/* Keep the sidebar's own background behind the native traffic lights. */
+html[data-titlebar-platform="darwin"] [data-slot="sidebar-inner"] {
+  padding-top: var(--app-titlebar-overlay-height);
+}
+
+html[data-titlebar-platform] [data-slot="sidebar-wrapper"] {
+  min-height: calc(100svh - var(--app-titlebar-height) - var(--app-titlebar-overlay-height));
+}
+
+@import "./themes/default.css";
+
+@import "./themes/nostr.css";
+@import "./themes/matrix.css";
+@import "./themes/ghibli.css";
+@import "./themes/claymorphism.css";
+
+@import "./themes/index.css";
+
+@layer base {
+  button:not([disabled]),
+  [role="button"]:not([disabled]) {
+    cursor: pointer;
+  }
+}
+
+@layer base {
+  button:not([disabled]),
+  [role="button"]:not([disabled]) {
+    cursor: pointer;
+  }
+}
+
+@layer base {
+  [role="menuitem"]:not([disabled]),
+  [data-slot="command-item"],
+  [data-slot="field"] {
+    cursor: pointer !important;
+  }
+}
+
+@layer utilities {
+  .perspective-500 {
+    perspective: 500px;
+  }
+  .transform-style-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  .rotate-x-180 {
+    transform: rotateX(180deg);
+  }
+  .text-hero-heading {
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  }
+  .text-hero-subtitle {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* flokicoin-connect styles */
+html {
+  --bc-color-brand: hsl(0 0% 0%); /* use a different brand color in dark mode */
+  --bc-color-brand-dark: hsl(
+    0 0% 100%
+  ); /* use a different brand color in dark mode */
+  --bc-brand-mix: 100%; /* how much to mix the brand color with default foreground color */
+}
+
+/* https://github.com/tailwindlabs/tailwindcss/discussions/12127 */
+.break-anywhere {
+  overflow-wrap: anywhere;
+}
+
+/* Removes an arrow on the datalist of word suggestions when you are typing a word in the import secret key page.
+   See https://stackoverflow.com/questions/20937475/remove-datalist-dropdown-arrow-in-chrome */
+input[type="text"]::-webkit-calendar-picker-indicator {
+  display: none !important;
+}
+
+/* used by AppAvatar as fallback for apps without known images  */
+.avatar-gradient-0 {
+  background: linear-gradient(135deg, var(--chart-1), var(--chart-3));
+}
+.avatar-gradient-1 {
+  background: linear-gradient(135deg, var(--chart-2), var(--chart-4));
+}
+.avatar-gradient-2 {
+  background: linear-gradient(135deg, var(--chart-3), var(--chart-5));
+}
+.avatar-gradient-3 {
+  background: linear-gradient(135deg, var(--chart-4), var(--chart-1));
+}
+.avatar-gradient-4 {
+  background: linear-gradient(135deg, var(--chart-5), var(--chart-2));
+}
+.avatar-gradient-5 {
+  background: linear-gradient(135deg, var(--chart-1), var(--chart-4));
+}
+.avatar-gradient-6 {
+  background: linear-gradient(135deg, var(--chart-2), var(--chart-5));
+}
+.avatar-gradient-7 {
+  background: linear-gradient(135deg, var(--chart-3), var(--chart-1));
+}
+.avatar-gradient-8 {
+  background: linear-gradient(135deg, var(--chart-4), var(--chart-2));
+}
+.avatar-gradient-9 {
+  background: linear-gradient(135deg, var(--chart-5), var(--chart-3));
+}
+
+/* =============================================================
+   RTL SUPPORT — Arabic (ar) & Farsi/Persian (fa)
+   Best practices for right-to-left language rendering
+   ============================================================= */
+
+/**
+ * 1. RTL-specific font families
+ *    Inter has no Arabic/Farsi glyphs. We set language-specific
+ *    font stacks via :lang() selectors so the correct script renders
+ *    even if only a portion of the page is in that language.
+ */
+:lang(ar) {
+  font-family: "Noto Sans Arabic", "Arabic UI Text", "Geeza Pro", "Tahoma", system-ui, sans-serif;
+  /* Arabic needs ~10% more line-height due to stacked diacritics */
+  line-height: 1.7;
+  /* Arabic benefits from slightly wider letter spacing at small sizes */
+  word-spacing: 0.05em;
+}
+
+:lang(fa) {
+  font-family: "Vazirmatn", "Iranian Sans", "Tahoma", system-ui, sans-serif;
+  line-height: 1.7;
+  word-spacing: 0.03em;
+}
+
+/**
+ * 2. Directional layout — sidebar, navigation, content area
+ *    When dir="rtl" is set on <html>, these rules ensure the entire
+ *    UI mirrors correctly.
+ */
+
+/* Mirror sidebar from left to right */
+[dir="rtl"] [data-sidebar="sidebar"] {
+  right: 0;
+  left: auto;
+  border-right: none;
+  border-left: var(--sidebar-border, 1px solid hsl(var(--border)));
+}
+
+/* Fix sidebar rail/trigger position */
+[dir="rtl"] [data-sidebar="rail"] {
+  right: auto;
+  left: 0;
+  border-left: none;
+  border-right: 1px solid hsl(var(--border) / 0.5);
+}
+
+/**
+ * 3. Navigation item text alignment in RTL
+ *    flex-direction: row in an RTL document already flows right-to-left,
+ *    so no explicit override is needed — the browser handles it automatically.
+ */
+
+/**
+ * 4. Form layout — labels and inputs align RTL
+ */
+[dir="rtl"] label,
+[dir="rtl"] input,
+[dir="rtl"] textarea,
+[dir="rtl"] select {
+  text-align: right;
+}
+
+/* Inputs that contain numbers/addresses should stay LTR even in RTL context */
+[dir="rtl"] input[type="number"],
+[dir="rtl"] input[type="tel"],
+[dir="rtl"] input[type="email"],
+[dir="rtl"] input[type="url"],
+[dir="rtl"] .ltr-content {
+  direction: ltr;
+  text-align: left;
+}
+
+/**
+ * 5. Icon flip utilities — arrows and chevrons should reverse in RTL
+ *    Apply .rtl-flip to any directional icon (back arrow, chevron, etc.)
+ */
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
+}
+
+/* Auto-flip common directional Lucide icons in RTL */
+[dir="rtl"] [data-lucide="arrow-left"],
+[dir="rtl"] [data-lucide="arrow-right"],
+[dir="rtl"] [data-lucide="chevron-left"],
+[dir="rtl"] [data-lucide="chevron-right"],
+[dir="rtl"] [data-lucide="chevrons-left"],
+[dir="rtl"] [data-lucide="chevrons-right"] {
+  transform: scaleX(-1);
+}
+
+/**
+ * 6. Card and dialog — text alignment in RTL
+ */
+[dir="rtl"] .card-header,
+[dir="rtl"] [data-slot="card-header"],
+[dir="rtl"] [data-slot="card-title"],
+[dir="rtl"] [data-slot="card-description"] {
+  text-align: right;
+}
+
+/**
+ * 7. Toast notifications — position from right in RTL
+ */
+[dir="rtl"] [data-sonner-toaster] {
+  right: auto !important;
+  left: max(var(--offset), env(safe-area-inset-left)) !important;
+}
+
+/**
+ * 8. Progress bars — fill from right in RTL
+ */
+[dir="rtl"] [role="progressbar"] > div {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/**
+ * 9. QR code / sensitive content — always stays LTR
+ */
+.sensitive,
+[data-sensitive="true"] {
+  direction: ltr;
+  unicode-bidi: isolate;
+}

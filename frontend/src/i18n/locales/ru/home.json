@@ -1,0 +1,24 @@
+{
+  "greeting": {
+    "morning": "Доброе утро",
+    "afternoon": "Добрый день",
+    "evening": "Добрый вечер",
+    "withName": "{{greeting}}, {{name}}!"
+  },
+  "widgets": {
+    "statsForNerds": "Статистика для гиков",
+    "nodeStatus": "Статус ноды",
+    "blockHeight": "Высота блока",
+    "onchainFees": "Комиссии сети",
+    "forwards": "Пересылки",
+    "latestApps": "Недавно использованные приложения"
+  },
+  "alerts": {
+    "newApp": "Подключено новое приложение",
+    "updatedApp": "Приложение обновлено",
+    "dismiss": "Закрыть"
+  },
+  "search": {
+    "placeholder": "Поиск"
+  }
+}

@@ -1,0 +1,176 @@
+{
+  "steps": {
+    "welcome": "환영합니다",
+    "nodeSetup": "노드 설정",
+    "unlockPassword": "잠금 해제 비밀번호 설정",
+    "backup": "백업",
+    "complete": "설정 완료"
+  },
+  "welcome": {
+    "title": "Lokihub에 오신 것을 환영합니다",
+    "subtitle": "Lightning 노드 관리 인터페이스",
+    "getStarted": "시작하기"
+  },
+  "password": {
+    "title": "잠금 해제 비밀번호를 설정하세요",
+    "description": "이 비밀번호는 노드 접근을 보호합니다. 안전한 곳에 보관하세요.",
+    "label": "비밀번호",
+    "confirm": "비밀번호 확인",
+    "mismatch": "비밀번호가 일치하지 않습니다",
+    "tooShort": "비밀번호는 8자 이상이어야 합니다",
+    "repeatLabel": "비밀번호 반복",
+    "repeatPlaceholder": "비밀번호 재입력",
+    "securedConfirm": "이 비밀번호를 안전한 곳에 저장했습니다",
+    "irrecoverableConfirm": "이 비밀번호는 복구할 수 없다는 것을 이해합니다",
+    "createButton": "비밀번호 생성",
+    "notConfirmed": "비밀번호를 저장했는지 확인해 주세요"
+  },
+  "backup": {
+    "title": "복구 문구를 백업하세요",
+    "description": "이 단어들을 순서대로 적어 안전한 곳에 보관하세요. 지갑 복구에 필요합니다.",
+    "confirmed": "복구 문구를 기록했습니다",
+    "warning": "복구 문구를 절대 다른 사람과 공유하지 마세요."
+  },
+  "complete": {
+    "title": "모든 준비가 완료되었습니다",
+    "description": "노드를 사용할 준비가 되었습니다.",
+    "goHome": "대시보드로 이동"
+  },
+  "intro": {
+    "slide1": {
+      "title": "Lokihub에 오신 것을 환영합니다",
+      "subtitle": "다음 세대의 참여 웹을 지원하는 강력한 올인원 {{chain}} Lightning 지갑.",
+      "next": "다음"
+    },
+    "slide2": {
+      "title": "항상 준비됨",
+      "description": "언제 어디서나 모든 기기에서 지갑을 사용할 수 있습니다."
+    },
+    "slide3": {
+      "title": "안전하고 프라이빗",
+      "description": "비밀번호로 암호화됩니다. 오직 본인만 자금에 접근할 수 있습니다."
+    },
+    "slide4": {
+      "title": "앱 연결",
+      "description": "앱과 연결하고 재미있는 웹에 참여하세요."
+    },
+    "slideAriaLabel": "슬라이드 {{index}}로 이동"
+  },
+  "start": {
+    "title": "시작",
+    "description": "비밀번호를 입력하여 Lokihub의 잠금을 해제하고 시작합니다.",
+    "passwordLabel": "비밀번호",
+    "pleaseWait": "잠시 기다려 주세요...",
+    "starting": "Lokihub 시작에 몇 분이 소요될 수 있습니다.",
+    "failedToStart": "시작 실패",
+    "failedToConnect": "연결 실패"
+  },
+  "unlock": {
+    "title": "로그인",
+    "description": "계속하려면 잠금 해제 비밀번호를 입력하세요",
+    "passwordLabel": "비밀번호",
+    "login": "로그인",
+    "failedToConnect": "연결 실패"
+  },
+  "finish": {
+    "loading": "허브 설정 중...",
+    "connectionTimeout": "연결 시간이 초과되었습니다. 노드를 확인하세요.",
+    "failedToConnect": "연결 실패"
+  },
+  "security": {
+    "title": "보안 및 복구",
+    "description": "Lokihub에서 자금을 보호하고 복구하는 방법을 이해하는 시간을 가져보세요.",
+    "confirmed": "자금 보안 및 복구 방법을 이해했습니다"
+  },
+  "restore": {
+    "title": "마이그레이션 파일에서 지갑 가져오기",
+    "description": "암호화된 지갑 마이그레이션 파일을 업로드하세요.",
+    "import": "지갑 가져오기",
+    "restartingTitle": "허브 재시작",
+    "restartingDesc": "노드 복원을 완료하려면 Lokihub을 재시작해야 합니다",
+    "restartingMessage": "클라우드에서 실행 중인 경우 Lokihub이 자동으로 재시작됩니다. 그렇지 않으면 복원 프로세스를 완료하기 위해 수동으로 Lokihub을 재시작해 주세요.",
+    "waitingForRestart": "재시작 대기 중...",
+    "warning1": "노드 복원 프로세스의 일환으로 Lokihub이 종료됩니다.",
+    "warning2": "클라우드에서 실행 중인 경우 Lokihub이 자동으로 재시작됩니다. 그렇지 않으면 복원 프로세스를 완료하기 위해 수동으로 Loki Hub를 재시작해 주세요."
+  },
+  "services": {
+    "title": "허브 구성",
+    "description": "노드의 외부 서비스를 구성합니다.",
+    "loading": "불러오는 중...",
+    "continue": "계속",
+    "fetchError": "허브 구성을 가져오지 못했습니다. 연결을 확인하세요.",
+    "communityNote": "이 탐색기 및 릴레이 제안은 내장된 기본값입니다. 하나를 선택하거나 원하는 탐색기 또는 릴레이를 입력할 수 있습니다.",
+    "warning": "경고",
+    "warningText": "연결하는 서비스에 대한 책임은 귀하에게 있습니다. 이 URL의 제공업체를 신뢰하는지 확인하세요.",
+    "configErrors": "구성 오류",
+    "unsavedChanges": {
+      "title": "저장되지 않은 변경 사항",
+      "description": "서비스 설정을 변경했지만 아직 저장하지 않았습니다. 지금 나가면 변경 사항이 사라집니다.",
+      "stay": "계속 편집",
+      "discard": "저장하지 않고 나가기",
+      "save": "저장 후 나가기",
+      "saving": "저장 중..."
+    },
+    "explorer": {
+      "title": "{{chain}} 탐색기",
+      "description": "수수료 추정 및 트랜잭션 세부 정보에 사용됩니다.",
+      "custom": "사용자 정의 탐색기"
+    },
+    "relay": {
+      "title": "Nostr 릴레이",
+      "description": "Wallet Connect (NWC) 통신을 위해 여러 Nostr 릴레이에 연결합니다. 여러 릴레이는 가용성을 향상시킵니다."
+    },
+    "lsp": {
+      "title": "라이트닝 서비스 제공자",
+      "description": "내 릴레이에 스스로를 알리는 LSP입니다. 신뢰하는 것을 체크하세요. 체크한 LSP만 연결하고 인바운드 유동성에 사용합니다.",
+      "claimsNote": "이름, 설명, 웹사이트는 각 LSP의 주장이며 검증된 사실이 아닙니다. 그래프 정보는 내 노드에서 가져옵니다.",
+      "filterText": "이름 또는 노드 id로 필터",
+      "allProtocols": "전체",
+      "addPlaceholder": "노드 키 또는 노드 id로 추가",
+      "add": "추가",
+      "notFound": "이 노드의 사용 가능한 공지를 찾지 못했습니다",
+      "trust": "이 LSP 신뢰",
+      "trustError": "신뢰를 변경할 수 없습니다",
+      "untitled": "이름 없는 LSP",
+      "sameTitle": "다른 LSP와 같은 이름",
+      "status": {
+        "open": "열림",
+        "paused": "일시 중지",
+        "closed": "닫힘"
+      },
+      "notAnnounced": "사용 가능한 공지 없음",
+      "claimedWebsite": "웹사이트(주장)",
+      "feeHint": "JIT 채널 수수료 {{min}} {{unit}} + {{ppm}} ppm부터",
+      "inGraph": "내 노드 그래프에 있음: 채널 {{channels}}개, {{capacity}} {{unit}}",
+      "notInGraphFact": "내 노드 그래프에 없음",
+      "notInGraph": "내 노드 그래프 밖 {{count}}개",
+      "checkOk": "실시간 확인: 공지와 일치",
+      "checkWorse": "실시간 확인: 공지보다 불리함; 구매 전에 다시 묻습니다",
+      "checkMissing": "실시간 확인: 공지된 서비스가 없음; 사용 안 함",
+      "checkUnreachable": "실시간 확인: LSP에 연결할 수 없음",
+      "recheck": "다시 확인",
+      "details": "자세히",
+      "showImage": "이미지 보기",
+      "empty": "아직 내 릴레이에 LSP 공지가 없습니다.",
+      "noTrusted": "신뢰하는 LSP 없음: 설정에서 선택하세요",
+      "reason": {
+        "paused": "일시 중지",
+        "closed": "닫힘",
+        "notAnnounced": "더 이상 공지되지 않음",
+        "unreachable": "연결 불가"
+      }
+    },
+    "swap": {
+      "title": "스왑 서비스",
+      "description": "Lightning과 온체인 간의 스왑(및 그 반대)을 활성화합니다.",
+      "custom": "사용자 정의 스왑 서비스"
+    },
+    "validation": {
+      "relayRequired": "릴레이가 하나 이상 필요합니다",
+      "explorerRequired": "{{chain}} 탐색기 URL은 필수입니다",
+      "swapRequired": "활성화 시 스왑 서비스 URL은 필수입니다",
+      "invalidUrl": "{{field}}: 잘못된 URL 형식"
+    },
+    "connectHint": "신뢰할 수 있는 서비스 연결"
+  }
+}

@@ -1,0 +1,693 @@
+import dayjs from "dayjs";
+import {
+  AlertTriangleIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  HeartIcon,
+  HourglassIcon,
+  InfoIcon,
+  LinkIcon,
+  Settings2Icon,
+  SparklesIcon,
+  UnplugIcon,
+  ZapIcon,
+} from "lucide-react";
+import React from "react";
+import { Link, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
+import AppHeader from "src/components/AppHeader.tsx";
+import { ChannelsCards } from "src/components/channels/ChannelsCards.tsx";
+import { ChannelsTable } from "src/components/channels/ChannelsTable.tsx";
+import { HealthCheckAlert } from "src/components/channels/HealthcheckAlert";
+import { NodeHealthInfoDialog } from "src/components/channels/NodeHealthInfoDialog";
+import { OnchainTransactionsTable } from "src/components/channels/OnchainTransactionsTable.tsx";
+import EmptyState from "src/components/EmptyState.tsx";
+import ExternalLink from "src/components/ExternalLink";
+import FormattedFiatAmount from "src/components/FormattedFiatAmount";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
+import LowReceivingCapacityAlert from "src/components/LowReceivingCapacityAlert";
+import { NostrAvatar } from "src/components/NostrAvatar";
+import ResponsiveButton from "src/components/ResponsiveButton";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "src/components/ui/alert.tsx";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "src/components/ui/card.tsx";
+import CircleProgress from "src/components/ui/custom/circle-progress";
+import { LinkButton } from "src/components/ui/custom/link-button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "src/components/ui/dropdown-menu.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "src/components/ui/tooltip.tsx";
+import { ONCHAIN_DUST_LOKI } from "src/constants.ts";
+import { useBalances } from "src/hooks/useBalances.ts";
+import { useChannels } from "src/hooks/useChannels";
+import { useLocale } from "src/hooks/useLocale";
+import { useInfo } from "src/hooks/useInfo";
+
+import { useNodeConnectionInfo } from "src/hooks/useNodeConnectionInfo.ts";
+import { useNodeIdentity } from "src/hooks/useNodeIdentity.ts";
+import { useNodeDetails } from "src/hooks/useNodeDetails";
+import { useSyncWallet } from "src/hooks/useSyncWallet.ts";
+import { copyToClipboard } from "src/lib/clipboard.ts";
+import { cn } from "src/lib/utils.ts";
+import {
+  Channel,
+  LongUnconfirmedZeroConfChannel,
+  MempoolTransaction,
+  PendingBalancesDetails,
+} from "src/types";
+import { request } from "src/utils/request";
+import { shortenMiddle } from "src/utils/nostr";
+
+export default function Channels() {
+  useSyncWallet();
+
+  const { data: channels } = useChannels(true);
+  const { data: nodeConnectionInfo } = useNodeConnectionInfo();
+  const nodeIdentity = useNodeIdentity();
+  const { hasChannelManagement } = useInfo();
+  const { data: balances } = useBalances(true);
+  const navigate = useNavigate();
+  const { t } = useTranslation("channels");
+  const { isRTL } = useLocale();
+  const [longUnconfirmedZeroConfChannels, setLongUnconfirmedZeroConfChannels] =
+    React.useState<LongUnconfirmedZeroConfChannel[]>([]);
+
+  const nodeHealth = channels ? getNodeHealth(channels) : 0;
+
+  const findUnconfirmedChannels = React.useCallback(async () => {
+    if (!channels) {
+      return [];
+    }
+
+    const _longUnconfirmedZeroConfChannels: LongUnconfirmedZeroConfChannel[] =
+      [];
+    for (const channel of channels) {
+      // only check for unconfirmed 0-conf active channels
+      if (
+        channel.status !== "online" ||
+        channel.confirmationsRequired !== 0 ||
+        !!channel.confirmations
+      ) {
+        continue;
+      }
+      try {
+        const mempoolTransactionResponse = await request<MempoolTransaction>(
+          `/api/mempool?endpoint=/tx/${channel.fundingTxId}`
+        );
+        if (!mempoolTransactionResponse) {
+          throw new Error("No response");
+        }
+        if (mempoolTransactionResponse.status.confirmed) {
+          continue;
+        }
+        // see if the transaction is in the mempool, and has been for how long
+        const unconfirmedTransactionTimeResponse = await request<number[]>(
+          `/api/mempool?endpoint=/v1/transaction-times?txId[]=${channel.fundingTxId}`
+        );
+        if (!unconfirmedTransactionTimeResponse?.length) {
+          throw new Error("No response");
+        }
+
+        const timestamp = unconfirmedTransactionTimeResponse[0];
+        const unconfirmedHours = dayjs().diff(timestamp * 1000, "hours");
+        if (unconfirmedHours === 0) {
+          // channel has been unconfirmed for less than an hour
+          continue;
+        }
+
+        _longUnconfirmedZeroConfChannels.push({
+          id: channel.id,
+          message: "Unconfirmed for " + unconfirmedHours + " hours",
+        });
+      } catch (error) {
+        _longUnconfirmedZeroConfChannels.push({
+          id: channel.id,
+          message: "Channel transaction not in the mempool yet",
+        });
+      }
+    }
+    setLongUnconfirmedZeroConfChannels(_longUnconfirmedZeroConfChannels);
+  }, [channels]);
+
+  React.useEffect(() => {
+    findUnconfirmedChannels();
+  }, [findUnconfirmedChannels]);
+
+  return (
+    <>
+      <AppHeader
+        title={t("title")}
+        contentRight={
+          hasChannelManagement && (
+            <div className="flex gap-3 items-center justify-center">
+              {nodeIdentity.nostrHex && (
+                <Link
+                  to="/wallet/node-profile"
+                  className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm hover:bg-accent"
+                >
+                  <NostrAvatar
+                    pubkey={nodeIdentity.nostrHex}
+                    className="h-6 w-6"
+                  />
+                  {nodeIdentity.npub && (
+                    <span className="hidden sm:inline font-mono">
+                      {shortenMiddle(nodeIdentity.npub, 8, 4)}
+                    </span>
+                  )}
+                </Link>
+              )}
+              <DropdownMenu modal={false}>
+                <ResponsiveButton
+                  asChild
+                  icon={Settings2Icon}
+                  text={t("menu.advanced")}
+                  variant="secondary"
+                >
+                  <DropdownMenuTrigger />
+                </ResponsiveButton>
+                <DropdownMenuContent className="w-56" align="end">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{t("menu.node")}</DropdownMenuLabel>
+                    <DropdownMenuItem>
+                      <div
+                        className="flex flex-row gap-2 items-center w-full cursor-pointer"
+                        onClick={() => {
+                          if (!nodeConnectionInfo) {
+                            return;
+                          }
+                          copyToClipboard(nodeConnectionInfo.pubkey);
+                        }}
+                      >
+                        <div>{t("menu.publicKey")}</div>
+                        <div className="overflow-hidden text-ellipsis flex-1 text-muted-foreground text-xs">
+                          {nodeConnectionInfo?.pubkey || "Loading..."}
+                        </div>
+                        {nodeConnectionInfo && (
+                          <CopyIcon className="shrink-0 size-4" />
+                        )}
+                      </div>
+                    </DropdownMenuItem>
+                    {nodeConnectionInfo?.address &&
+                      nodeConnectionInfo?.port && (
+                        <DropdownMenuItem>
+                          <div
+                            className="flex flex-row gap-2 items-center w-full cursor-pointer"
+                            onClick={() => {
+                              const connectionAddress = `${nodeConnectionInfo.pubkey}@${nodeConnectionInfo.address}:${nodeConnectionInfo.port}`;
+                              copyToClipboard(connectionAddress);
+                            }}
+                          >
+                            <div>URI</div>
+                            <div className="overflow-hidden text-ellipsis flex-1 text-muted-foreground text-xs">
+                              {nodeConnectionInfo.pubkey.substring(0, 6)}...@
+                              {nodeConnectionInfo.address}:
+                              {nodeConnectionInfo.port}
+                            </div>
+                            <CopyIcon className="shrink-0 size-4" />
+                          </div>
+                        </DropdownMenuItem>
+                      )}
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{t("menu.onchain")}</DropdownMenuLabel>
+                    <DropdownMenuItem asChild>
+                      <Link to="/channels/onchain/deposit-flokicoin">
+                        {t("menu.deposit")}
+                      </Link>
+                    </DropdownMenuItem>
+                    {(balances?.onchain.spendable || 0) > ONCHAIN_DUST_LOKI && (
+                      <DropdownMenuItem
+                        onClick={() => navigate("/wallet/withdraw")}
+                      >
+                        {t("menu.withdraw")}
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{t("menu.history")}</DropdownMenuLabel>
+                    <DropdownMenuItem asChild>
+                      <Link to="/channels/history">
+                        {t("menu.liquidityOrders")}
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>
+                      {t("menu.management")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem>
+                      <Link className="w-full" to="/peers">
+                        {t("menu.connectedPeers")}
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Link className="w-full" to="/wallet/sign-message">
+                        {t("menu.signMessage")}
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="w-full" asChild>
+                      <Link
+                        className="w-full flex flex-row items-center cursor-pointer"
+                        to="/wallet/node-alias"
+                      >
+                        <SparklesIcon className="size-4 me-2 text-muted-foreground" />
+                        {t("menu.setNodeAlias")}
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <LinkButton to="/channels/outgoing">
+                {t("channels.open")}
+              </LinkButton>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <NodeHealthInfoDialog
+                        trigger={
+                          <CircleProgress
+                            value={nodeHealth}
+                            className="w-9 h-9 relative cursor-pointer"
+                          >
+                            {nodeHealth === 100 && (
+                              <div className="absolute w-full h-full opacity-20">
+                                <div className="absolute w-full h-full bg-primary animate-pulse" />
+                              </div>
+                            )}
+                            <HeartIcon
+                              className="size-4"
+                              stroke={"var(--color-primary)"}
+                              strokeWidth={3}
+                              fill={
+                                nodeHealth === 100
+                                  ? "var(--color-primary)"
+                                  : "transparent"
+                              }
+                            />
+                          </CircleProgress>
+                        }
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t("channels.nodeHealth.tooltip", { percent: nodeHealth })}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )
+        }
+      ></AppHeader>
+
+      <HealthCheckAlert />
+
+      {hasChannelManagement && (
+        <>
+          {!!channels?.length && (
+            <>
+              {/* If all channels have less than 20% incoming capacity, show a warning */}
+              {channels?.every(
+                (channel) =>
+                  channel.remoteBalance <
+                  (channel.localBalance + channel.remoteBalance) * 0.2
+              ) && <LowReceivingCapacityAlert />}
+            </>
+          )}
+
+          <div
+            className={cn(
+              "flex flex-col sm:flex-row flex-wrap gap-3 slashed-zero"
+            )}
+          >
+            <Card className="flex flex-1 sm:flex-2 flex-col">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="font-semibold text-2xl">
+                  {t("node.lightning")}
+                </CardTitle>
+                <ZapIcon className="h-6 w-6 text-muted-foreground" />
+              </CardHeader>
+
+              <CardContent className="flex flex-col sm:flex-row ps-0 flex-wrap">
+                <div className="flex flex-col flex-1">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pe-0">
+                    <CardTitle className="text-sm font-medium">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <div
+                              className={cn(
+                                "flex flex-row gap-1 items-center justify-start text-sm font-medium",
+                                isRTL && "flex-row-reverse"
+                              )}
+                            >
+                              {t("node.spendingBalance")}
+                              <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Your spending balance is the funds on your side of
+                            your channels, which you can use to make lightning
+                            payments. Your total lightning balance is{" "}
+                            <FormattedFlokicoinAmount
+                              amount={
+                                channels
+                                  ?.map((channel) => channel.localBalance)
+                                  .reduce((a, b) => a + b, 0) || 0
+                              }
+                            />{" "}
+                            which includes{" "}
+                            <FormattedFlokicoinAmount
+                              amount={
+                                channels
+                                  ?.map((channel) =>
+                                    Math.min(
+                                      channel.localBalance,
+                                      channel.unspendablePunishmentReserve *
+                                        1000
+                                    )
+                                  )
+                                  .reduce((a, b) => a + b, 0) || 0
+                              }
+                            />{" "}
+                            reserved in your channels which cannot be spent.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grow pb-0">
+                    {!balances && (
+                      <div>
+                        <div className="animate-pulse d-inline ">
+                          <div className="h-2.5 bg-primary rounded-full w-12 my-2"></div>
+                        </div>
+                      </div>
+                    )}
+                    {balances && (
+                      <>
+                        <div className="text-xl font-medium balance sensitive mb-1">
+                          <FormattedFlokicoinAmount
+                            amount={balances.lightning.totalSpendable}
+                          />
+                        </div>
+                        <FormattedFiatAmount
+                          amount={balances.lightning.totalSpendable / 1000}
+                        />
+                      </>
+                    )}
+                  </CardContent>
+                </div>
+                <div className="flex flex-col flex-1">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pe-0">
+                    <CardTitle className="text-sm font-medium">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <div
+                              className={cn(
+                                "flex flex-row gap-1 items-center justify-start text-sm font-medium",
+                                isRTL && "flex-row-reverse"
+                              )}
+                            >
+                              {t("node.receiveLimit")}
+                              <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Your receiving limit is the funds owned by your
+                            channel partner, which will be moved to your side
+                            when you receive lightning payments.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grow pb-0">
+                    {balances && (
+                      <>
+                        <div className="text-xl font-medium balance sensitive mb-1">
+                          <FormattedFlokicoinAmount
+                            amount={balances.lightning.totalReceivable}
+                          />
+                        </div>
+                        <FormattedFiatAmount
+                          amount={balances.lightning.totalReceivable / 1000}
+                        />
+                      </>
+                    )}
+                  </CardContent>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="flex flex-1 flex-col">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-2xl font-semibold">
+                  {t("node.onchain")}
+                </CardTitle>
+                <LinkIcon className="h-6 w-6 text-muted-foreground" />
+              </CardHeader>
+              <CardContent className="grow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 ps-0">
+                  <CardTitle className="text-sm font-medium">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <div
+                            className={cn(
+                              "flex flex-row gap-1 items-center text-sm font-medium",
+                              isRTL && "flex-row-reverse"
+                            )}
+                          >
+                            {t("node.balance")}
+                            <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Your on-chain balance can be used to open new outgoing
+                          lightning channels and to ensure channels can be
+                          closed when required. When channels are closed, funds
+                          on your side of your channel will be returned to your
+                          on-chain balance.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </CardTitle>
+                </CardHeader>
+                {!balances && (
+                  <div>
+                    <div className="animate-pulse d-inline ">
+                      <div className="h-2.5 bg-primary rounded-full w-12 my-2"></div>
+                    </div>
+                  </div>
+                )}
+                <div>
+                  {balances && (
+                    <>
+                      <div className="mb-1">
+                        <span className="text-xl font-medium balance sensitive mb-1 me-1">
+                          <FormattedFlokicoinAmount
+                            amount={balances.onchain.spendable * 1000}
+                          />
+                        </span>
+                        {!!channels?.length &&
+                          balances.onchain.reserved +
+                            balances.onchain.spendable <
+                            25_000 && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <AlertTriangleIcon className="size-3 text-muted-foreground" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  You have insufficient funds in reserve to
+                                  close channels or bump on-chain transactions
+                                  and currently rely on the counterparty. It is
+                                  recommended to deposit at least{" "}
+                                  <FormattedFlokicoinAmount
+                                    amount={25_000 * 1000}
+                                  />{" "}
+                                  to your on-chain balance.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                      </div>
+                      <FormattedFiatAmount
+                        amount={balances.onchain.spendable}
+                        className="mb-1"
+                      />
+                      {balances &&
+                        balances.onchain.spendable !==
+                          balances.onchain.total && (
+                          <p className="text-xs text-muted-foreground animate-pulse">
+                            +
+                            <FormattedFlokicoinAmount
+                              amount={
+                                (balances.onchain.total -
+                                  balances.onchain.spendable) *
+                                1000
+                              }
+                            />{" "}
+                            incoming
+                          </p>
+                        )}
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {balances &&
+            balances.onchain.pendingBalancesFromChannelClosures > 0 && (
+              <Alert>
+                <HourglassIcon />
+                <AlertTitle>{t("channels.pendingClosed")}</AlertTitle>
+                <AlertDescription className="block">
+                  You have{" "}
+                  <FormattedFlokicoinAmount
+                    amount={
+                      balances.onchain.pendingBalancesFromChannelClosures * 1000
+                    }
+                  />{" "}
+                  pending from closed channels with
+                  {[
+                    ...balances.onchain.pendingBalancesDetails,
+                    ...balances.onchain.pendingSweepBalancesDetails,
+                  ].map((details, index) => {
+                    const isLast =
+                      index <
+                      balances.onchain.pendingBalancesDetails.length - 1;
+                    return (
+                      <PendingBalancesDetailsItem
+                        details={details}
+                        isLast={isLast}
+                      />
+                    );
+                  })}
+                  . Once spendable again these will become available in your
+                  on-chain balance. Funds from channels that were force closed
+                  may take up to 1 week to become available.
+                </AlertDescription>
+              </Alert>
+            )}
+
+          {channels && channels.length === 0 && (
+            <EmptyState
+              icon={UnplugIcon}
+              title="No Channels Available"
+              description="Connect to the Lightning Network by establishing your first channel and start transacting."
+              buttonText="Open Channel"
+              buttonLink="/channels/outgoing"
+            />
+          )}
+
+          <ChannelsTable
+            channels={channels}
+            longUnconfirmedZeroConfChannels={longUnconfirmedZeroConfChannels}
+          />
+          <ChannelsCards
+            channels={channels}
+            longUnconfirmedZeroConfChannels={longUnconfirmedZeroConfChannels}
+          />
+          <OnchainTransactionsTable />
+        </>
+      )}
+    </>
+  );
+}
+
+function getNodeHealth(channels: Channel[]) {
+  const totalChannelCapacitySats = channels
+    .map((channel) => (channel.localBalance + channel.remoteBalance) / 1000)
+    .reduce((a, b) => a + b, 0);
+  const averageChannelBalance =
+    channels
+      .map((channel) => {
+        const totalBalance = channel.localBalance + channel.remoteBalance;
+        const expectedBalance = totalBalance / 2;
+        const actualBalance =
+          Math.min(channel.localBalance, channel.remoteBalance) /
+          expectedBalance;
+        return actualBalance;
+      })
+      .reduce((a, b) => a + b, 0) / (channels.length || 1);
+
+  const numUniqueChannelPartners = new Set(
+    channels.map((channel) => channel.remotePubkey)
+  ).size;
+
+  const nodeHealth = Math.ceil(
+    numUniqueChannelPartners *
+      (100 / 2) * // 2 or more channels is great
+      (Math.min(totalChannelCapacitySats, 1_000_000) / 1_000_000) * // 1 million loki or more is great
+      (0.9 + averageChannelBalance * 0.1) // +10% for perfectly balanced channels
+  );
+
+  if (nodeHealth > 95) {
+    // prevent OCD
+    return 100;
+  }
+
+  return nodeHealth;
+}
+
+type PendingBalancesDetailsItemProps = {
+  details: PendingBalancesDetails;
+  isLast: boolean;
+};
+
+function PendingBalancesDetailsItem({
+  details,
+  isLast,
+}: PendingBalancesDetailsItemProps) {
+  const { data: info } = useInfo();
+  const { data: nodeDetails } = useNodeDetails(details.nodeId);
+
+  return (
+    <div key={details.channelId} className="inline">
+      &nbsp;
+      <ExternalLink
+        to={`${info?.mempoolUrl}/lightning/node/${details.nodeId}`}
+        className="underline"
+      >
+        {nodeDetails?.alias || "Unknown"}
+        <ExternalLinkIcon className="ms-1 w-4 h-4 inline" />
+      </ExternalLink>{" "}
+      (<FormattedFlokicoinAmount amount={details.amount * 1000} />
+      )&nbsp;
+      <ExternalLink
+        to={`${info?.mempoolUrl}/tx/${details.fundingTxId}#flow=&vout=${details.fundingTxVout}`}
+        className="underline"
+      >
+        funding tx
+        <ExternalLinkIcon className="ms-1 w-4 h-4 inline" />
+      </ExternalLink>
+      {isLast && ","}
+    </div>
+  );
+}

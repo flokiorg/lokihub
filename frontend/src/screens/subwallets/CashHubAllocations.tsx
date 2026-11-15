@@ -1,0 +1,2142 @@
+import {
+  BanknoteIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CoinsIcon,
+  KeyRound,
+  PlusCircleIcon,
+  PlusIcon,
+  QrCodeIcon,
+  Trash2Icon,
+  UserRoundIcon,
+  XIcon,
+} from "lucide-react";
+import { TFunction } from "i18next";
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
+import {
+  CashStatusBadge,
+  CashStatusLegend,
+} from "src/components/cash/CashStatusBadge";
+import { NostrProfileRow } from "src/components/circles/NostrProfileRow";
+import { NostrPubkeyInput } from "src/components/circles/NostrPubkeyInput";
+import { NostrAvatar } from "src/components/NostrAvatar";
+import { CurrencyInput } from "src/components/CurrencyInput";
+import { DurationInput } from "src/components/DurationInput";
+import { RevealConnectionDialog } from "src/components/connections/RevealConnectionDialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "src/components/ui/alert-dialog";
+import { Avatar, AvatarFallback } from "src/components/ui/avatar";
+import { Badge } from "src/components/ui/badge";
+import { groupLock, ownerLock } from "src/components/cash/locks";
+import { OwnerLockBadge } from "src/components/cash/OwnerLockBadge";
+import { Button } from "src/components/ui/button";
+import { Checkbox } from "src/components/ui/checkbox";
+import { CustomPagination } from "src/components/CustomPagination";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "src/components/ui/dialog";
+import { Input } from "src/components/ui/input";
+import { Label } from "src/components/ui/label";
+import { LoadingButton } from "src/components/ui/custom/loading-button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "src/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "src/components/ui/tabs";
+import { LIST_CASH_ALLOCATIONS_LIMIT } from "src/constants";
+import { useApp } from "src/hooks/useApp";
+import { useAvatarSrc } from "src/hooks/useAvatarSrc";
+import { useIdentityAuthorities } from "src/hooks/useIdentityAuthorities";
+import { useNip05Verification } from "src/hooks/useNip05Verification";
+import { useNostrProfile } from "src/hooks/useNostrProfile";
+import { NostrProfile, useNostrProfiles } from "src/hooks/useNostrProfiles";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { copyToClipboard } from "src/lib/clipboard";
+import { cn } from "src/lib/utils";
+import { formatClaimDeadline } from "src/utils/cashWallet";
+import { decodeNConnection } from "src/utils/nconnection";
+import { safeNpubEncode, shortenMiddle } from "src/utils/nostr";
+import {
+  App,
+  CreateCashWalletRequest,
+  CreateCashWalletRequestRecipient,
+  CreateCashWalletResponse,
+  CashSliceStatus,
+  CashWalletClaim,
+  CashWalletClaimCounts,
+  CashWalletConnectionResponse,
+  ListCashWalletClaimsResponse,
+} from "src/types";
+import { handleRequestError } from "src/utils/handleRequestError";
+import { request } from "src/utils/request";
+
+type CashHubAllocationsProps = {
+  appId: number;
+  onFormOpenChange?: (open: boolean) => void;
+};
+
+export type CashHubAllocationsHandle = {
+  openAdd: () => void;
+};
+
+// How many identity pills a row shows before collapsing the rest into a
+// "+N" badge — keeps the row a single line regardless of how many
+// beneficiaries (up to maxRecipientsPerWallet) share the wallet.
+const maxVisiblePills = 5;
+
+let recipientRowCounter = 0;
+// identityType defaults to "cash" — the simplest option, requiring
+// nothing from the recipient — but a row added alongside an existing one
+// (addRow, below) MUST pass "pubkey" explicitly instead: cash mode can only
+// ever be a wallet's sole recipient (NIP-CASH §Cash-Mode Slices), so defaulting
+// a second-or-later row to it would start the form in an already-invalid
+// state.
+function newRecipientRow(
+  amountLoki: number,
+  identityType: RecipientRow["identityType"] = "cash"
+): RecipientRow {
+  recipientRowCounter += 1;
+  return {
+    key: `r${recipientRowCounter}`,
+    identityType,
+    pubkeyValue: "",
+    resolvedPubkeyHex: undefined,
+    nconnectionValue: "",
+    resolvedConnectionKeyHex: undefined,
+    resolvedConnectionKeyPlatform: undefined,
+    iaPubkeyValue: "",
+    resolvedIaPubkeyHex: undefined,
+    resolvedIaRelayHints: undefined,
+    // Undefined until the operator picks one explicitly — the render layer
+    // defaults it to "existing" whenever any Identity Authority is already
+    // declared in Settings, "manual" otherwise (see iaModeFor below).
+    iaMode: undefined,
+    amountLoki,
+  };
+}
+
+type RecipientRow = {
+  key: string;
+  identityType: "pubkey" | "connection_key" | "cash";
+  pubkeyValue: string;
+  resolvedPubkeyHex?: string;
+  // nconnectionValue: the raw nconnection1... string the operator pasted
+  // (NIP-IC's EncodeNConnection) — never a raw ConnectionKey hex anymore,
+  // so nobody has to compute hex(SHA256(platform + ":" + externalID)) by
+  // hand; whoever minted the connection (a Discord bot, etc.) already
+  // packaged that into one shareable string. resolvedConnectionKeyHex is
+  // decodeNConnection's output, the value actually sent as identity_value.
+  nconnectionValue: string;
+  resolvedConnectionKeyHex?: string;
+  resolvedConnectionKeyPlatform?: string;
+  iaPubkeyValue: string;
+  // The hex pubkey NostrPubkeyInput resolved iaPubkeyValue to (hex, npub,
+  // nprofile, or NIP-05 all accepted) — or, on the "existing" branch below,
+  // simply the selected IdentityAuthority's own pubkey. This, not
+  // iaPubkeyValue itself, is what goes on the wire as ia_pubkey.
+  resolvedIaPubkeyHex?: string;
+  // Relay hints the manually-entered IA's own nprofile/NIP-05 pointed at
+  // (NostrPubkeyInput's onResolved 2nd argument) — undefined for a saved IA
+  // (already known-good) or when the input carried no hints of its own.
+  // Only widens IAResolvedIdentity's own profile lookup, never sent on the
+  // wire.
+  resolvedIaRelayHints?: string[];
+  // "existing" shows a Select sourced from Settings' declared Identity
+  // Authorities; "manual" shows the free-text pubkey Input. A row can switch
+  // between the two any number of times before submission.
+  iaMode?: "existing" | "manual";
+  amountLoki: number;
+};
+
+// __manual__ can never collide with a real hex pubkey (odd length, non-hex
+// chars) — used as the Select's sentinel value for "switch to manual entry."
+const MANUAL_IA_SENTINEL = "__manual__";
+
+function iaModeFor(
+  row: RecipientRow,
+  hasSavedIAs: boolean
+): "existing" | "manual" {
+  return row.iaMode ?? (hasSavedIAs ? "existing" : "manual");
+}
+
+// A cash-mode row has no identity at all — the wallet mints the secret itself
+// (NIP-CASH §Cash-Mode Slices) — so there is no identity_value to send for it.
+function recipientIdentityValue(row: RecipientRow): string | undefined {
+  if (row.identityType === "cash") {
+    return undefined;
+  }
+  return row.identityType === "pubkey"
+    ? row.resolvedPubkeyHex
+    : row.resolvedConnectionKeyHex;
+}
+
+// A pubkey pill's leading glyph: the recipient's own profile picture when
+// they have one (proxied through our backend, same as NostrAvatar, so the
+// browser never connects straight to an arbitrary Nostr media host), or the
+// generic identity icon otherwise — deliberately never initials. A pill is
+// meant to read as "an icon plus a short identifier," and initials read as
+// a half-resolved name, which contradicts the whole point of not showing
+// names here.
+function PillIdentityGlyph({ profile }: { profile: NostrProfile | undefined }) {
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const pictureUrl = useAvatarSrc(profile?.picture);
+
+  if (!pictureUrl || imageFailed) {
+    return <UserRoundIcon className="h-3 w-3 shrink-0" />;
+  }
+  return (
+    <img
+      src={pictureUrl}
+      alt=""
+      onError={() => setImageFailed(true)}
+      className="h-3.5 w-3.5 shrink-0 rounded-full object-cover"
+    />
+  );
+}
+
+// A pubkey pill's text: a verified nip05 reads far better than a hex
+// fragment, but an unverified one is just an unchecked claim from the
+// profile's own kind:0 event — falls back to a short npub (never raw hex)
+// whenever nip05 is absent or hasn't been confirmed to resolve back to this
+// pubkey yet.
+function pillIdentityLabel(
+  pubkey: string,
+  profile: NostrProfile | undefined,
+  isVerifiedNip05: boolean
+): string {
+  if (isVerifiedNip05 && profile?.nip05) {
+    return profile.nip05;
+  }
+  // A display name or an unverified nip05 still beats a short npub for
+  // recognising who a slice is for. They rank BELOW a verified nip05 and
+  // are never presented as equivalent to one: only the verified case gets
+  // the check glyph, and an unverified nip05 carries a title saying so.
+  // Anyone can write any nip05 into their own kind:0, so it is a claim
+  // until the .well-known lookup resolves back to this pubkey.
+  return (
+    profile?.displayName ||
+    profile?.name ||
+    profile?.nip05 ||
+    shortenMiddle(safeNpubEncode(pubkey) ?? pubkey, 8, 4)
+  );
+}
+
+const EMPTY_PROFILE_MAP: Map<string, NostrProfile> = new Map();
+
+// Confirms exactly what will be sent as ia_pubkey once NostrPubkeyInput
+// resolves the operator's free-text entry: a verified nip05 alongside its
+// npub if one exists, otherwise the npub alongside the raw hex — always
+// both forms together (never nip05/npub alone), since this pubkey is a
+// trust anchor an operator may want to double-check against a value they
+// have on hand in either form, and neither form alone is always the one
+// they're holding. The avatar/name are pure recognition aids on top of
+// that — relayHints (an nprofile/NIP-05's own claimed relays) only widens
+// where this lookup searches, it never changes what's trusted.
+function IAResolvedIdentity({
+  hex,
+  relayHints,
+}: {
+  hex: string;
+  relayHints?: string[];
+}) {
+  const { t } = useTranslation("circles");
+  const { profile, isLoading } = useNostrProfile(hex, relayHints);
+  const profileMap = React.useMemo(() => {
+    if (!profile?.nip05) {
+      return EMPTY_PROFILE_MAP;
+    }
+    return new Map([[hex, profile]]);
+  }, [hex, profile]);
+  const { verified } = useNip05Verification(profileMap);
+
+  const npub = shortenMiddle(safeNpubEncode(hex) ?? hex);
+  const identity =
+    verified.has(hex) && profile?.nip05
+      ? `${profile.nip05} (${npub})`
+      : `${npub} (${shortenMiddle(hex)})`;
+  const name = profile?.displayName || profile?.name;
+
+  return (
+    <div className="flex items-center gap-2">
+      <NostrAvatar
+        pubkey={hex}
+        profile={profile}
+        isLoading={isLoading}
+        className="h-6 w-6"
+      />
+      <p className="text-sm text-muted-foreground">
+        {name && <span className="font-medium text-foreground">{name} </span>}
+        {t("cashHubAllocations.iaResolvedTo", { identity })}
+      </p>
+    </div>
+  );
+}
+
+function formatDurationLabel(
+  seconds: number | undefined,
+  t: TFunction<"circles">
+): string | undefined {
+  if (!seconds) {
+    return undefined;
+  }
+  if (seconds % 86400 === 0) {
+    return t("cashHubAllocations.durationDays", { count: seconds / 86400 });
+  }
+  if (seconds % 3600 === 0) {
+    return t("cashHubAllocations.durationHours", { count: seconds / 3600 });
+  }
+  return t("cashHubAllocations.durationMinutes", {
+    count: Math.round(seconds / 60),
+  });
+}
+
+export const CashHubAllocations = React.forwardRef<
+  CashHubAllocationsHandle,
+  CashHubAllocationsProps
+>(function CashHubAllocations({ appId, onFormOpenChange }, ref) {
+  const { t } = useTranslation("circles");
+  const { t: tc } = useTranslation("common");
+  const id = String(appId);
+  const navigate = useNavigate();
+  const { data: hub } = useApp(appId);
+  const [claims, setClaims] = React.useState<CashWalletClaim[]>([]);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const [counts, setCounts] = React.useState<CashWalletClaimCounts>({
+    all: 0,
+    unclaimed: 0,
+    redeemed: 0,
+    split: 0,
+    reclaimed: 0,
+    written_off: 0,
+    claimed: 0,
+    expired: 0,
+  });
+  // "" means the "All" tab - kept distinct from CashSliceStatus so the
+  // query param can be omitted rather than sent as an empty string.
+  //
+  // The facets are the six-status vocabulary (CashSliceStatus), not the
+  // legacy unclaimed/claimed/expired triple: "claimed" lumped a Lightning
+  // redemption together with value that merely moved into another wallet
+  // (a split or consolidate), which the KPIs and charts on the Cash Hub
+  // dashboard above this list already count separately.
+  // Unclaimed by default, not "All". The unredeemed bills are the ones an
+  // operator can still act on; "All" buried them under every bill the hub
+  // ever issued, archived ones included.
+  const [status, setStatus] = React.useState<CashSliceStatus | "">("unclaimed");
+  const [page, setPage] = React.useState(1);
+  const [isLoading, setLoading] = React.useState(false);
+  const listRef = React.useRef<HTMLDivElement>(null);
+
+  const pubkeyIdentities = React.useMemo(
+    () =>
+      claims
+        .filter((c) => c.identity_type === "pubkey")
+        .map((c) => c.identity_value),
+    [claims]
+  );
+  const { profiles } = useNostrProfiles(pubkeyIdentities);
+  // Verifies each pubkey recipient's claimed nip05 actually resolves back to
+  // them (DNS .well-known lookup) before the pill trusts it over a short
+  // npub — an unverified nip05 string in a kind:0 event is just a claim.
+  const { verified: verifiedNip05 } = useNip05Verification(profiles);
+
+  // Backs the connection_key recipient rows' "pick an already-declared
+  // Identity Authority" dropdown, so minting a Web Identity slice doesn't
+  // require re-typing an IA pubkey the operator already registered in
+  // Settings. Mirrors Services.tsx's own fetch-on-mount usage.
+  const { authorities: identityAuthorities, fetchIdentityAuthorities } =
+    useIdentityAuthorities();
+  React.useEffect(() => {
+    fetchIdentityAuthorities();
+  }, [fetchIdentityAuthorities]);
+
+  // Each IA's own declared relay_urls are directive relay hints for its
+  // profile lookup (name/avatar/NIP-05, display only) — separate from
+  // attestation trust, which is never relay-dependent.
+  const { profiles: iaProfiles } = useNostrProfiles(
+    identityAuthorities.map((ia) => ia.pubkey),
+    identityAuthorities.flatMap((ia) => ia.relay_urls ?? [])
+  );
+  // Mirrors IAResolvedIdentity/pillIdentityLabel: an IA's nip05 is only ever
+  // shown once cryptographically confirmed, never as a bare kind:0 claim.
+  const iaNip05Profiles = React.useMemo(() => {
+    const withNip05 = identityAuthorities.filter(
+      (ia) => iaProfiles.get(ia.pubkey)?.nip05
+    );
+    if (withNip05.length === 0) {
+      return EMPTY_PROFILE_MAP;
+    }
+    return new Map(
+      withNip05.map((ia) => [ia.pubkey, iaProfiles.get(ia.pubkey)!])
+    );
+  }, [identityAuthorities, iaProfiles]);
+  const { verified: verifiedIaNip05 } = useNip05Verification(iaNip05Profiles);
+  const iaDisplayProfile = (pubkey: string): NostrProfile | undefined => {
+    const raw = iaProfiles.get(pubkey);
+    return raw?.nip05 && !verifiedIaNip05.has(pubkey)
+      ? { ...raw, nip05: undefined }
+      : raw;
+  };
+
+  // A Cash wallet's connection is deterministically re-derivable (see
+  // GetCashWalletConnection on the backend), so it can be revealed inline
+  // here without navigating away to the wallet's own AppDetails page. Keyed
+  // by wallet_app_id, not the claim id — several claim rows can share the
+  // same wallet/connection.
+  const [revealApp, setRevealApp] = React.useState<App | undefined>(undefined);
+  // The bill's cash_token, its only credential; cashSecret is populated only
+  // right after creating a cash-mode wallet, and only that once (NIP-CASH
+  // §Cash-Mode Slices: it is never retrievable again).
+  const [revealLokicashToken, setRevealLokicashToken] = React.useState<
+    string | undefined
+  >(undefined);
+  const [revealCashSecret, setRevealCashSecret] = React.useState<
+    string | undefined
+  >(undefined);
+  // The wallet's totals shown above the QR in the reveal dialog — the
+  // caller already has this (either from the just-created response, or from
+  // the claims already loaded into this list), so it's captured alongside
+  // the connection strings rather than re-fetched.
+  const [revealSummary, setRevealSummary] = React.useState<
+    | {
+        amountLoki: number;
+        recipientCount: number;
+        claimedCount: number;
+        expiresAtSecs?: number;
+        isCash?: boolean;
+      }
+    | undefined
+  >(undefined);
+  // "create" for a wallet just created (not yet connected — shows the
+  // waiting-for-connection UX); "reveal" for re-showing an existing wallet's
+  // secret.
+  const [revealMode, setRevealMode] = React.useState<"reveal" | "create">(
+    "reveal"
+  );
+  const [revealingWalletId, setRevealingWalletId] = React.useState<
+    number | null
+  >(null);
+
+  const handleRevealConnection = async (
+    walletAppId: number,
+    summary: {
+      amountLoki: number;
+      recipientCount: number;
+      claimedCount: number;
+      expiresAtSecs?: number;
+      isCash?: boolean;
+    }
+  ) => {
+    setRevealingWalletId(walletAppId);
+    try {
+      const [revealedApp, connection] = await Promise.all([
+        request<App>(`/api/apps/${walletAppId}`),
+        request<CashWalletConnectionResponse>(
+          `/api/apps/${walletAppId}/cash-connection`
+        ),
+      ]);
+      if (revealedApp && connection) {
+        setRevealApp(revealedApp);
+        setRevealLokicashToken(connection.cash_token);
+        setRevealCashSecret(undefined);
+        setRevealSummary(summary);
+        setRevealMode("reveal");
+      }
+    } catch (error) {
+      handleRequestError(t("cashHubAllocations.errors.loadConnection"), error);
+    }
+    setRevealingWalletId(null);
+  };
+
+  // Only unclaimed rows can be individually removed/bulk-selected (removing
+  // a claimed slice would mean money already paid out — there's nothing left
+  // to reclaim per-slice). A claimed row's only removal path is deleting its
+  // whole wallet, which may affect other still-unclaimed recipients sharing
+  // the same connection — offered as a separate, single-row action below,
+  // not through bulk-select.
+  // Archived rows are excluded as well as claimed ones. An archived slice is
+  // unclaimed by definition (expired/reclaimed/written-off), so the claimed
+  // check alone let every one of them offer a delete button and a bulk-select
+  // checkbox for a bill whose app row no longer exists — every such call can
+  // only 404. The six-status facets made this reachable a whole tab at a time.
+  const removableIds = React.useMemo(
+    () =>
+      new Set(
+        claims
+          .filter((c) => !c.claimed && !c.archived && !ownerLock(c))
+          .map((c) => c.id)
+      ),
+    [claims]
+  );
+  const [selected, setSelected] = React.useState<Set<number>>(new Set());
+  const [isRemovingSelected, setRemovingSelected] = React.useState(false);
+  const [confirmDeleteClaim, setConfirmDeleteClaim] =
+    React.useState<CashWalletClaim | null>(null);
+  // Whether that slice is the bill's only recipient. Removing the last one
+  // doesn't just drop a recipient: the backend then destroys the bill itself
+  // and its connection (api.DeleteCashClaim -> ReclaimAndDeleteSubWallet),
+  // which the old single "Remove this recipient?" copy never mentioned.
+  const [isSoleRecipient, setSoleRecipient] = React.useState(false);
+  const [confirmDeleteWallet, setConfirmDeleteWallet] =
+    React.useState<CashWalletClaim | null>(null);
+  const [isConfirmBulkDeleteOpen, setConfirmBulkDeleteOpen] =
+    React.useState(false);
+
+  React.useEffect(() => {
+    setSelected((current) => {
+      const next = new Set(
+        Array.from(current).filter((claimId) => removableIds.has(claimId))
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [removableIds]);
+
+  const toggleOne = (claimId: number) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(claimId)) {
+        next.delete(claimId);
+      } else {
+        next.add(claimId);
+      }
+      return next;
+    });
+  };
+
+  const allSelected =
+    removableIds.size > 0 && selected.size === removableIds.size;
+  const someSelected = selected.size > 0 && !allSelected;
+  const toggleSelectAll = () => {
+    setSelected(allSelected ? new Set() : new Set(removableIds));
+  };
+
+  // One Cash wallet (one NWC connection) is always exactly one row in the
+  // list below — a shared wallet's several beneficiaries never appear as
+  // separate top-level rows. For a single-recipient wallet that row already
+  // shows everything there is to manage. For a multi-recipient wallet it's a
+  // collapsed summary by default; expanding it (tracked here, per
+  // wallet_app_id) reveals the per-beneficiary breakdown underneath, which is
+  // where individual removal/selection happens.
+  const [expandedWallets, setExpandedWallets] = React.useState<Set<number>>(
+    new Set()
+  );
+  const toggleExpanded = (walletAppId: number) => {
+    setExpandedWallets((current) => {
+      const next = new Set(current);
+      if (next.has(walletAppId)) {
+        next.delete(walletAppId);
+      } else {
+        next.add(walletAppId);
+      }
+      return next;
+    });
+  };
+
+  const maxAmountLoki = hub?.cashPerWalletMaxMloki
+    ? hub.cashPerWalletMaxMloki / 1000
+    : undefined;
+  const cashMaxExpSecs = hub?.cashMaxExpSecs;
+
+  // Add-form state: one row per recipient, all sharing one identity-type
+  // default and one expiry field below. Mixing pubkey and connection_key
+  // recipients within the same wallet is allowed — each row picks its own.
+  const [isFormOpen, setFormOpen] = React.useState(false);
+  const [recipients, setRecipients] = React.useState<RecipientRow[]>([]);
+  const [isAdding, setAdding] = React.useState(false);
+
+  const { scaleInputAmount, parseInputAmount } = useUnit();
+  const [inputUnit, setInputUnit] = useInputUnit(maxAmountLoki);
+
+  // Duration (seconds) after creation within which every recipient must
+  // claim their slice — 0 means no deadline. hasDeadline toggles the input
+  // on/off. Shared by the whole wallet (all recipients), not per-row.
+  const [hasDeadline, setHasDeadline] = React.useState(false);
+  const [claimDeadlineSecs, setClaimDeadlineSecs] = React.useState(86400);
+
+  // Opts the issued Lokicash into mint provenance (NIP-CASH §Mint
+  // Provenance) — a node signature over the wallet's own pubkey and
+  // committed amount, verifiable offline.
+  // Mint provenance is no longer a choice and no longer shown: every bill is signed
+  // with the node's Lightning identity. The signature is the only thing a token
+  // carries that identifies its minting hub, and that identity is what a client
+  // verifies a transport announcement against — so an unsigned bill could not be
+  // spent at all (NIP-CASH §Mint Provenance).
+
+  const resetForm = React.useCallback(() => {
+    setRecipients([newRecipientRow(maxAmountLoki ?? 0)]);
+    setHasDeadline(false);
+    setClaimDeadlineSecs(86400);
+  }, [maxAmountLoki]);
+
+  React.useImperativeHandle(ref, () => ({
+    openAdd: () => {
+      resetForm();
+      setFormOpen(true);
+    },
+  }));
+
+  // The header's "Add Cash wallet" button should stay hidden whenever an add
+  // form is already visible — either the modal (isFormOpen) or the inline
+  // form that replaces the empty-state message when there's nothing to list
+  // yet. Gated on counts.all (the hub's true total, unaffected by the status
+  // filter) rather than claims.length, so filtering to e.g. "Expired" with no
+  // matches doesn't show the create form — that empty state is "nothing
+  // matches this filter", not "this hub has nothing yet".
+  const isInlineFormShown = !isLoading && counts.all === 0;
+  React.useEffect(() => {
+    onFormOpenChange?.(isFormOpen || isInlineFormShown);
+  }, [isFormOpen, isInlineFormShown, onFormOpenChange]);
+  React.useEffect(() => {
+    if (isInlineFormShown && recipients.length === 0) {
+      resetForm();
+    }
+  }, [isInlineFormShown, recipients.length, resetForm]);
+
+  // cashMaxExpSecs === 0 means the hub itself has no ceiling ("never") — an
+  // explicit per-wallet deadline is honored exactly in that case, so there's
+  // nothing to exceed.
+  const deadlineExceedsMax =
+    hasDeadline && !!cashMaxExpSecs && claimDeadlineSecs > cashMaxExpSecs;
+
+  const totalRequestedLoki = recipients.reduce(
+    (sum, r) => sum + r.amountLoki,
+    0
+  );
+  const totalExceedsMax =
+    maxAmountLoki !== undefined && totalRequestedLoki > maxAmountLoki;
+
+  const updateRow = (key: string, patch: Partial<RecipientRow>) => {
+    setRecipients((rows) =>
+      rows.map((r) => (r.key === key ? { ...r, ...patch } : r))
+    );
+  };
+  const removeRow = (key: string) => {
+    setRecipients((rows) => rows.filter((r) => r.key !== key));
+  };
+  const addRow = () => {
+    setRecipients((rows) => [...rows, newRecipientRow(0, "pubkey")]);
+  };
+
+  // A cash-mode recipient has no identity, and MUST be the wallet's only
+  // recipient (NIP-CASH §Cash-Mode Slices — a cash-mode slice never shares a wallet
+  // with another recipient, since redeeming one transmits its raw secret in
+  // the request body, decryptable by anyone still holding the shared
+  // connection). Switching a row to cash mode collapses the form down to just
+  // that row, rather than leaving now-invalid sibling rows for the admin to
+  // notice and remove manually.
+  const setRowIdentityType = (
+    key: string,
+    identityType: RecipientRow["identityType"]
+  ) => {
+    setRecipients((rows) => {
+      if (identityType === "cash") {
+        const row = rows.find((r) => r.key === key);
+        return row ? [{ ...row, identityType }] : rows;
+      }
+      return rows.map((r) => (r.key === key ? { ...r, identityType } : r));
+    });
+  };
+  const hasCashRow = recipients.some((r) => r.identityType === "cash");
+
+  const allRowsValid =
+    recipients.length > 0 &&
+    !(hasCashRow && recipients.length > 1) &&
+    recipients.every((r) => {
+      if (r.amountLoki <= 0) {
+        return false;
+      }
+      if (r.identityType === "cash") {
+        return true;
+      }
+      const identityValue = recipientIdentityValue(r);
+      if (!identityValue) {
+        return false;
+      }
+      if (r.identityType === "connection_key" && !r.resolvedIaPubkeyHex) {
+        return false;
+      }
+      return true;
+    });
+
+  // Caught client-side (mirroring the backend's own dedupe check in
+  // cashwallet.Resolve) so a copy-pasted identity across two rows fails fast
+  // with a message pointing at the exact row, instead of a generic toast
+  // referencing a "recipient N" the admin has no way to map back to a row —
+  // rows aren't otherwise numbered in this form.
+  const dedupeKeyCounts = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of recipients) {
+      const identityValue = recipientIdentityValue(r);
+      if (!identityValue) {
+        continue;
+      }
+      const dedupeKey = `${r.identityType}:${identityValue}`;
+      counts.set(dedupeKey, (counts.get(dedupeKey) ?? 0) + 1);
+    }
+    return counts;
+  }, [recipients]);
+  const hasDuplicateIdentities = Array.from(dedupeKeyCounts.values()).some(
+    (count) => count > 1
+  );
+  const isDuplicateRow = (row: RecipientRow) => {
+    const identityValue = recipientIdentityValue(row);
+    if (!identityValue) {
+      return false;
+    }
+    return (
+      (dedupeKeyCounts.get(`${row.identityType}:${identityValue}`) ?? 0) > 1
+    );
+  };
+
+  // `silent` skips the loading flag for background polling refreshes, so
+  // claim status updates (mirroring TransactionsList's poll) don't flash
+  // the list back to the "Loading…" state every few seconds.
+  const loadClaims = React.useCallback(
+    async (silent = false) => {
+      if (!id) {
+        return;
+      }
+      if (!silent) {
+        setLoading(true);
+      }
+      try {
+        const offset = (page - 1) * LIST_CASH_ALLOCATIONS_LIMIT;
+        const statusParam = status ? `&status=${status}` : "";
+        const data = await request<ListCashWalletClaimsResponse>(
+          `/api/apps/${id}/cash-wallets?limit=${LIST_CASH_ALLOCATIONS_LIMIT}&offset=${offset}${statusParam}`
+        );
+        setClaims(data?.claims ?? []);
+        setTotalCount(data?.totalCount ?? 0);
+        if (data?.counts) {
+          setCounts(data.counts);
+        }
+      } catch (error) {
+        handleRequestError(t("cashHubAllocations.errors.load"), error);
+      }
+      if (!silent) {
+        setLoading(false);
+      }
+    },
+    [id, page, status, t]
+  );
+
+  // Switching tabs changes the underlying filtered set, so the current page
+  // number (and any row selection, since rows on the old page may not exist
+  // in the new filter) no longer applies.
+  const handleStatusChange = (next: CashSliceStatus | "") => {
+    setStatus(next);
+    setPage(1);
+    setSelected(new Set());
+  };
+
+  React.useEffect(() => {
+    loadClaims();
+  }, [loadClaims]);
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  React.useEffect(() => {
+    const interval = setInterval(() => loadClaims(true), 3000);
+    return () => clearInterval(interval);
+  }, [loadClaims]);
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !allRowsValid) {
+      return;
+    }
+    setAdding(true);
+    try {
+      // Every field is a DIRECT property rather than a conditional spread, and
+      // that is the whole point of typing this body. TypeScript's
+      // excess-property check does not see through `...(cond ? {x} : {})` — a
+      // misspelled key inside a spread compiles clean even against an exact
+      // type, which is precisely the runtime failure this type exists to
+      // prevent. Written this way, a typo is a compile error (TS2561).
+      //
+      // `undefined` is equivalent to the old conditional spread on the wire:
+      // JSON.stringify omits undefined-valued properties entirely.
+      const body: CreateCashWalletRequest = {
+        recipients: recipients.map(
+          (r): CreateCashWalletRequestRecipient => ({
+            identity_type: r.identityType,
+            identity_value: recipientIdentityValue(r),
+            ia_pubkey:
+              r.identityType === "connection_key"
+                ? r.resolvedIaPubkeyHex
+                : undefined,
+            amount_mloki: r.amountLoki * 1000,
+          })
+        ),
+        expiry_secs: hasDeadline ? claimDeadlineSecs : undefined,
+      };
+      const result = await request<CreateCashWalletResponse>(
+        `/api/apps/${id}/cash-wallets`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+      toast(t("cashHubAllocations.createdToast", { count: recipients.length }));
+      if (result) {
+        const createdApp = await request<App>(`/api/apps/${result.app_id}`);
+        if (createdApp) {
+          setRevealApp(createdApp);
+          setRevealLokicashToken(result.cash_token);
+          setRevealCashSecret(result.recipients[0]?.cash_secret);
+          setRevealSummary({
+            amountLoki: totalRequestedLoki,
+            recipientCount: result.recipients.length,
+            claimedCount: 0,
+            expiresAtSecs: result.expires_at || undefined,
+            isCash: result.recipients[0]?.identity_type === "cash",
+          });
+          setRevealMode("create");
+        }
+      }
+      resetForm();
+      setFormOpen(false);
+      await loadClaims();
+    } catch (error) {
+      handleRequestError(t("cashHubAllocations.errors.create"), error);
+    }
+    setAdding(false);
+  };
+
+  const [isDeletingSingle, setDeletingSingle] = React.useState(false);
+
+  const handleDeleteClaim = async (c: CashWalletClaim) => {
+    if (!id) {
+      return;
+    }
+    setDeletingSingle(true);
+    try {
+      await request(
+        `/api/apps/${id}/cash-wallets/${c.wallet_app_id}/claims/${c.id}`,
+        {
+          method: "DELETE",
+        }
+      );
+      toast(t("cashHubAllocations.recipientRemovedToast"));
+      setConfirmDeleteClaim(null);
+      if (claims.length === 1 && page > 1) {
+        setPage(page - 1);
+      } else {
+        await loadClaims();
+      }
+    } catch (error) {
+      handleRequestError(t("cashHubAllocations.errors.removeRecipient"), error);
+    }
+    setDeletingSingle(false);
+  };
+
+  const handleDeleteWallet = async (c: CashWalletClaim) => {
+    if (!id) {
+      return;
+    }
+    setDeletingSingle(true);
+    try {
+      await request(`/api/apps/${id}/cash-wallets/${c.wallet_app_id}`, {
+        method: "DELETE",
+      });
+      toast(t("cashHubAllocations.walletRemovedToast"));
+      setConfirmDeleteWallet(null);
+      if (claims.length === 1 && page > 1) {
+        setPage(page - 1);
+      } else {
+        await loadClaims();
+      }
+    } catch (error) {
+      handleRequestError(t("cashHubAllocations.errors.removeWallet"), error);
+    }
+    setDeletingSingle(false);
+  };
+
+  const handleRemoveSelected = async () => {
+    if (!id || selected.size === 0) {
+      return;
+    }
+    setRemovingSelected(true);
+    try {
+      const rows = claims.filter((c) => selected.has(c.id));
+      await Promise.all(
+        rows.map((c) =>
+          request(
+            `/api/apps/${id}/cash-wallets/${c.wallet_app_id}/claims/${c.id}`,
+            {
+              method: "DELETE",
+            }
+          )
+        )
+      );
+      toast(
+        t("cashHubAllocations.recipientsRemovedToast", { count: rows.length })
+      );
+      setSelected(new Set());
+      setConfirmBulkDeleteOpen(false);
+      if (rows.length === claims.length && page > 1) {
+        setPage(page - 1);
+      } else {
+        await loadClaims();
+      }
+    } catch (error) {
+      handleRequestError(t("cashHubAllocations.errors.removeSelected"), error);
+    }
+    setRemovingSelected(false);
+  };
+
+  const totalAllocatedLoki = claims.reduce(
+    (sum, c) => sum + c.amount_mloki / 1000,
+    0
+  );
+
+  // One Cash wallet child (one NWC connection) can serve several
+  // beneficiaries sharing a single funded pool — grouping the flat claims
+  // page by wallet_app_id here shows one row per wallet (with its
+  // beneficiaries nested inside) instead of repeating the same "Reveal NWC
+  // connection" wallet-level action once per beneficiary. Order follows each
+  // wallet's first appearance in `claims` (already newest-first from the
+  // API); a wallet's beneficiaries can, in principle, straddle a page
+  // boundary — grouping only ever affects rows already present on this page.
+  //
+  // Keyed on archived+wallet_app_id, never wallet_app_id alone: a live claim
+  // id and an archive id come from different sequences and WILL collide (see
+  // CashWalletClaim.archived), so a bare id makes a duplicate React key and,
+  // worse, a delete URL pointing at someone else's row.
+  // Read once: whether an archived bill's retention window is still open only
+  // needs to be right when the list is shown.
+  const [renderedAt] = React.useState(() => Date.now());
+
+  const walletGroups = React.useMemo(() => {
+    const order: string[] = [];
+    const byWallet = new Map<string, CashWalletClaim[]>();
+    for (const c of claims) {
+      const key = `${c.archived ? 1 : 0}-${c.wallet_app_id}`;
+      if (!byWallet.has(key)) {
+        order.push(key);
+        byWallet.set(key, []);
+      }
+      byWallet.get(key)!.push(c);
+    }
+    return order.map((key) => {
+      const groupClaims = byWallet.get(key)!;
+      return {
+        key,
+        walletAppId: groupClaims[0].wallet_app_id,
+        archived: groupClaims[0].archived,
+        retainedUntil: groupClaims[0].retained_until,
+        claims: groupClaims,
+      };
+    });
+  }, [claims]);
+
+  // Grouped by bill on every tab, filtered ones included.
+  //
+  // A filter shows only the subset of a bill's recipients matching that
+  // status, so the one thing a filtered group cannot state honestly is a
+  // whole-bill aggregate — "0/1 redeemed" when the other, already-redeemed
+  // recipient was filtered out of view. That badge is suppressed while
+  // filtered (isFullMembership) rather than the grouping being thrown away:
+  // dropping the grouping costs the bill row itself — its token, its expand,
+  // its QR, and a delete that knows it is removing a bill and not just one
+  // recipient — which matters far more now that the default tab is filtered.
+  const displayGroups = walletGroups;
+  const isFullMembership = status === "";
+
+  const statusTabs: {
+    value: CashSliceStatus | "";
+    label: string;
+    count: number;
+  }[] = [
+    { value: "", label: t("cashHubAllocations.statusAll"), count: counts.all },
+    {
+      value: "unclaimed",
+      label: t("cashStatus.unclaimed.label"),
+      count: counts.unclaimed,
+    },
+    {
+      value: "redeemed",
+      label: t("cashStatus.redeemed.label"),
+      count: counts.redeemed,
+    },
+    {
+      value: "split",
+      label: t("cashStatus.split.label"),
+      count: counts.split,
+    },
+    {
+      value: "expired",
+      label: t("cashStatus.expired.label"),
+      count: counts.expired,
+    },
+    {
+      value: "reclaimed",
+      label: t("cashStatus.reclaimed.label"),
+      count: counts.reclaimed,
+    },
+  ];
+
+  const recipientRowFields = (row: RecipientRow) => (
+    <div key={row.key} className="grid gap-2 rounded-md border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <Tabs
+          value={row.identityType}
+          onValueChange={(v) =>
+            setRowIdentityType(
+              row.key,
+              v as "pubkey" | "connection_key" | "cash"
+            )
+          }
+        >
+          <TabsList>
+            <TabsTrigger
+              value="cash"
+              disabled={recipients.length > 1}
+              title={
+                recipients.length > 1
+                  ? t("cashHubAllocations.cashRequiresSoleRecipient")
+                  : undefined
+              }
+            >
+              {t("identityType.cash")}
+            </TabsTrigger>
+            <TabsTrigger value="pubkey">{t("identityType.pubkey")}</TabsTrigger>
+            <TabsTrigger value="connection_key">
+              {t("identityType.connectionKey")}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {recipients.length > 1 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            title={t("cashHubAllocations.removeRecipient")}
+            aria-label={t("cashHubAllocations.removeRecipient")}
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => removeRow(row.key)}
+          >
+            <Trash2Icon className="size-4" />
+          </Button>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {row.identityType === "pubkey"
+          ? t("cashHubAllocations.pubkeyModeHelper")
+          : row.identityType === "connection_key"
+            ? t("cashHubAllocations.connectionKeyModeHelper")
+            : t("cashHubAllocations.cashHelper")}
+      </p>
+      {row.identityType === "pubkey" ? (
+        <NostrPubkeyInput
+          id={`identityValue-${row.key}`}
+          value={row.pubkeyValue}
+          onChange={(v) => updateRow(row.key, { pubkeyValue: v })}
+          onResolved={(v) => updateRow(row.key, { resolvedPubkeyHex: v })}
+          label={t("cashHubAllocations.pubkeyLabel")}
+          helperText={t("cashHubAllocations.pubkeyHelper")}
+        />
+      ) : row.identityType === "connection_key" ? (
+        <>
+          <div className="grid gap-1.5">
+            <Label htmlFor={`identityValue-${row.key}`}>
+              {t("cashHubAllocations.connectionKeyLabel")}
+            </Label>
+            <Input
+              id={`identityValue-${row.key}`}
+              type="text"
+              placeholder={t("cashHubAllocations.connectionKeyPlaceholder")}
+              value={row.nconnectionValue}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const decoded = decodeNConnection(raw);
+                updateRow(row.key, {
+                  nconnectionValue: raw,
+                  resolvedConnectionKeyHex: decoded?.connectionKey,
+                  resolvedConnectionKeyPlatform: decoded?.platform,
+                });
+              }}
+              required
+              autoComplete="off"
+            />
+            <p
+              className={cn(
+                "text-sm",
+                !row.resolvedConnectionKeyHex && row.nconnectionValue.trim()
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+              )}
+            >
+              {row.resolvedConnectionKeyHex
+                ? t("cashHubAllocations.connectionKeyResolved", {
+                    platform:
+                      row.resolvedConnectionKeyPlatform ||
+                      t("cashHubAllocations.connectionKeyUnknownPlatform"),
+                  })
+                : row.nconnectionValue.trim()
+                  ? t("cashHubAllocations.connectionKeyInvalid")
+                  : t("cashHubAllocations.connectionKeyHelper")}
+            </p>
+          </div>
+          <div className="grid gap-1.5">
+            {identityAuthorities.length > 0 &&
+            iaModeFor(row, true) === "existing" ? (
+              <>
+                <Label htmlFor={`iaPubkey-${row.key}`}>
+                  {t("cashHubAllocations.iaPubkeyLabel")}
+                </Label>
+                <Select
+                  value={row.iaPubkeyValue || undefined}
+                  onValueChange={(v) => {
+                    if (v === MANUAL_IA_SENTINEL) {
+                      updateRow(row.key, {
+                        iaMode: "manual",
+                        iaPubkeyValue: "",
+                        resolvedIaPubkeyHex: undefined,
+                        resolvedIaRelayHints: undefined,
+                      });
+                    } else {
+                      updateRow(row.key, {
+                        iaMode: "existing",
+                        iaPubkeyValue: v,
+                        // Already a known-good hex pubkey (it's the IA's own
+                        // declared value from Settings) — no resolution step
+                        // needed, unlike the free-text branch below.
+                        resolvedIaPubkeyHex: v,
+                        resolvedIaRelayHints: undefined,
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger id={`iaPubkey-${row.key}`} className="w-full">
+                    <SelectValue
+                      placeholder={t("cashHubAllocations.selectIAPlaceholder")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>
+                        {t("cashHubAllocations.savedIAsLabel")}
+                      </SelectLabel>
+                      {identityAuthorities.map((ia) => (
+                        <SelectItem key={ia.pubkey} value={ia.pubkey}>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <NostrProfileRow
+                              pubkey={ia.pubkey}
+                              profile={iaDisplayProfile(ia.pubkey)}
+                              isVerified={verifiedIaNip05.has(ia.pubkey)}
+                              avatarClassName="h-6 w-6"
+                              showCopy={false}
+                            />
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectItem value={MANUAL_IA_SENTINEL}>
+                      {t("cashHubAllocations.enterIAManually")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  {t("cashHubAllocations.iaPubkeyHelper")}
+                </p>
+              </>
+            ) : (
+              <>
+                <NostrPubkeyInput
+                  id={`iaPubkey-${row.key}`}
+                  value={row.iaPubkeyValue}
+                  onChange={(v) => updateRow(row.key, { iaPubkeyValue: v })}
+                  onResolved={(hex, relayHints) =>
+                    updateRow(row.key, {
+                      resolvedIaPubkeyHex: hex,
+                      resolvedIaRelayHints: relayHints,
+                    })
+                  }
+                  label={t("cashHubAllocations.iaPubkeyLabel")}
+                  helperText={t("cashHubAllocations.iaPubkeyHelper")}
+                />
+                {row.resolvedIaPubkeyHex && (
+                  <IAResolvedIdentity
+                    hex={row.resolvedIaPubkeyHex}
+                    relayHints={row.resolvedIaRelayHints}
+                  />
+                )}
+                {identityAuthorities.length > 0 && (
+                  <button
+                    type="button"
+                    className="justify-self-start text-xs text-muted-foreground hover:text-foreground hover:underline"
+                    onClick={() =>
+                      updateRow(row.key, {
+                        iaMode: "existing",
+                        iaPubkeyValue: "",
+                        resolvedIaPubkeyHex: undefined,
+                        resolvedIaRelayHints: undefined,
+                      })
+                    }
+                  >
+                    {t("cashHubAllocations.chooseSavedIAInstead")}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      ) : // Cash mode: no identity to collect — the wallet mints its own secret,
+      // shown once right after creation (NIP-CASH §Cash-Mode Slices). The
+      // helper text above already covers this mode; nothing more to show.
+      null}
+      {isDuplicateRow(row) && (
+        <p className="text-sm text-destructive">
+          {t("cashHubAllocations.duplicateIdentity")}
+        </p>
+      )}
+      <div className="grid gap-1.5">
+        <Label htmlFor={`amount-${row.key}`}>
+          {t("cashHubAllocations.walletBudgetLabel")}
+        </Label>
+        <CurrencyInput
+          id={`amount-${row.key}`}
+          amount={
+            row.amountLoki
+              ? scaleInputAmount(row.amountLoki, inputUnit).toString()
+              : ""
+          }
+          onAmountChange={(val) =>
+            updateRow(row.key, {
+              amountLoki: parseInputAmount(parseFloat(val) || 0, inputUnit),
+            })
+          }
+          inputUnit={inputUnit}
+          onInputUnitChange={setInputUnit}
+          required
+          min={1}
+        />
+      </div>
+    </div>
+  );
+
+  const formFields = (
+    <>
+      <div className="grid gap-3">{recipients.map(recipientRowFields)}</div>
+      <p
+        className={cn(
+          "text-sm",
+          totalExceedsMax ? "text-destructive" : "text-muted-foreground"
+        )}
+      >
+        {maxAmountLoki !== undefined
+          ? t("cashHubAllocations.requestedSummaryWithMax", {
+              total: totalRequestedLoki.toLocaleString(),
+              max: maxAmountLoki.toLocaleString(),
+            })
+          : t("cashHubAllocations.requestedSummary", {
+              total: totalRequestedLoki.toLocaleString(),
+            })}
+      </p>
+      {hasDeadline && (
+        <div className="grid gap-1.5">
+          <div className="flex items-center justify-between">
+            <Label>{t("cashHubAllocations.claimDeadlineLabel")}</Label>
+            <XIcon
+              className="size-4 cursor-pointer text-muted-foreground"
+              onClick={() => setHasDeadline(false)}
+            />
+          </div>
+          <DurationInput
+            seconds={claimDeadlineSecs}
+            onChange={setClaimDeadlineSecs}
+            // 0 means the hub has no ceiling at all ("never") — pass
+            // undefined rather than 0, since DurationInput treats a 0 max as
+            // "nothing is allowed" instead of "no cap".
+            max={cashMaxExpSecs || undefined}
+            // allowNever: a 0 (never) request is never rejected regardless of
+            // the hub's own ceiling — it's sent as expiry_secs: 0, which the
+            // backend treats exactly like omitting it entirely, deferring to
+            // the hub's own default (itself "never" if the hub has no
+            // ceiling, or the hub's max otherwise) — never an error.
+            allowNever
+          />
+          <p
+            className={cn(
+              "text-sm",
+              deadlineExceedsMax ? "text-destructive" : "text-muted-foreground"
+            )}
+          >
+            {deadlineExceedsMax
+              ? t("cashHubAllocations.deadlineExceeds", {
+                  max: formatDurationLabel(cashMaxExpSecs, t),
+                })
+              : formatDurationLabel(cashMaxExpSecs, t)
+                ? t("cashHubAllocations.deadlineHelpWithMax", {
+                    max: formatDurationLabel(cashMaxExpSecs, t),
+                  })
+                : t("cashHubAllocations.deadlineHelp")}
+          </p>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {!hasCashRow && (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-fit"
+            onClick={addRow}
+          >
+            <PlusCircleIcon /> {t("cashHubAllocations.addRecipient")}
+          </Button>
+        )}
+        {!hasDeadline && (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-fit"
+            onClick={() => {
+              setClaimDeadlineSecs(cashMaxExpSecs || claimDeadlineSecs);
+              setHasDeadline(true);
+            }}
+          >
+            <PlusCircleIcon /> {t("cashHubAllocations.setClaimDeadline")}
+          </Button>
+        )}
+      </div>
+    </>
+  );
+
+  const submitDisabled =
+    !allRowsValid ||
+    totalExceedsMax ||
+    deadlineExceedsMax ||
+    hasDuplicateIdentities;
+
+  return (
+    <div ref={listRef} className="grid gap-4 min-w-0">
+      {!isInlineFormShown && (
+        // min-w-0 lets this shrink below the tabs' natural content width
+        // instead of forcing the whole page wider. TabsList itself (not
+        // this div) owns the actual horizontal scroll if it still doesn't
+        // fit — a second overflow-x-auto here would create two independent
+        // scroll positions for the same content, where scrolling one back
+        // to the start doesn't reset the other, leaving the first tab
+        // stuck partly offscreen.
+        <div className="flex min-w-0 items-center gap-2">
+          <Tabs
+            value={status}
+            onValueChange={(v) => handleStatusChange(v as CashSliceStatus | "")}
+          >
+            <TabsList>
+              {statusTabs.map((tab) => (
+                <TabsTrigger
+                  key={tab.value || "all"}
+                  value={tab.value}
+                  className="shrink-0 gap-1.5"
+                >
+                  {tab.label}
+                  <Badge
+                    variant={
+                      tab.value === "expired" && tab.count > 0
+                        ? "warning"
+                        : "secondary"
+                    }
+                    className="px-1.5 py-0 text-[11px] font-normal tabular-nums"
+                  >
+                    {tab.count}
+                  </Badge>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          {/* Once per view, never per row — see CashStatusLegend. */}
+          <CashStatusLegend />
+        </div>
+      )}
+
+      {claims.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {t("cashHubAllocations.allocatedSummary", {
+            allocated: totalAllocatedLoki.toLocaleString(),
+            total: totalCount.toLocaleString(),
+            status: status
+              ? (statusTabs.find((tab) => tab.value === status)?.label ??
+                status)
+              : t("common.total"),
+          })}
+        </p>
+      )}
+
+      {selected.size > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span>{t("common.selectedCount", { count: selected.size })}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelected(new Set())}
+            >
+              {t("common.clear")}
+            </Button>
+          </div>
+          <LoadingButton
+            variant="destructive"
+            size="sm"
+            loading={isRemovingSelected}
+            onClick={() => setConfirmBulkDeleteOpen(true)}
+          >
+            <Trash2Icon className="size-4" /> {t("common.removeSelected")}
+          </LoadingButton>
+        </div>
+      )}
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">{tc("loading")}</p>
+      ) : claims.length > 0 ? (
+        <div className="rounded-lg border min-w-0 overflow-x-auto">
+          <div className="flex items-center gap-3 px-3 py-2.5">
+            <Checkbox
+              checked={
+                allSelected ? true : someSelected ? "indeterminate" : false
+              }
+              onCheckedChange={toggleSelectAll}
+              disabled={removableIds.size === 0}
+              aria-label={t("common.selectAll")}
+            />
+            <span className="text-sm font-medium text-muted-foreground">
+              {t("cashHubAllocations.recipientColumn")}
+            </span>
+          </div>
+          <div className="grid gap-2 p-1 min-w-0">
+            {displayGroups.map((group) => {
+              const isMulti = group.claims.length > 1;
+              const totalCount = group.claims.length;
+              const claimedCount = group.claims.filter((c) => c.claimed).length;
+              const totalLoki = group.claims.reduce(
+                (sum, c) => sum + c.amount_mloki / 1000,
+                0
+              );
+              // Deadline/expiry and cash_token are both properties of the
+              // wallet App itself, shared by every beneficiary in the group —
+              // safe to read off the first claim.
+              const deadline = group.claims[0].expires_at
+                ? formatClaimDeadline(group.claims[0].expires_at)
+                : undefined;
+              const lokicashToken = group.claims[0].cash_token;
+              const groupRemovableIds = group.claims
+                .filter((c) => removableIds.has(c.id))
+                .map((c) => c.id);
+              const groupSelectedCount = groupRemovableIds.filter((rid) =>
+                selected.has(rid)
+              ).length;
+              const groupAllSelected =
+                groupRemovableIds.length > 0 &&
+                groupSelectedCount === groupRemovableIds.length;
+              const groupSomeSelected =
+                groupSelectedCount > 0 && !groupAllSelected;
+              const toggleGroupSelected = () => {
+                setSelected((current) => {
+                  const next = new Set(current);
+                  for (const rid of groupRemovableIds) {
+                    if (groupAllSelected) {
+                      next.delete(rid);
+                    } else {
+                      next.add(rid);
+                    }
+                  }
+                  return next;
+                });
+              };
+              const isExpanded = expandedWallets.has(group.walletAppId);
+              const canRemoveSingle =
+                !isMulti && removableIds.has(group.claims[0].id);
+
+              return (
+                <div key={group.key} className="rounded-md border min-w-0">
+                  {/* One row shape for every token, whether it has one
+                      recipient or several — see the "same UI regardless of
+                      recipient count" redesign note above displayGroups.
+                      Only what a pill/expand genuinely needs (selecting a
+                      GROUP of claims at once, having something to expand)
+                      branches on isMulti; everything else renders once. */}
+                  <div
+                    className={cn(
+                      "flex min-w-0 items-start gap-2 p-2 transition-colors sm:items-center sm:gap-3",
+                      // An archived bill's app row is deleted, so there is
+                      // nothing at /apps/:id to open.
+                      !group.archived && "cursor-pointer hover:bg-accent/50"
+                    )}
+                    onClick={
+                      group.archived
+                        ? undefined
+                        : () => navigate(`/apps/${group.walletAppId}`)
+                    }
+                  >
+                    <Checkbox
+                      checked={
+                        isMulti
+                          ? groupAllSelected
+                            ? true
+                            : groupSomeSelected
+                              ? "indeterminate"
+                              : false
+                          : selected.has(group.claims[0].id)
+                      }
+                      onCheckedChange={
+                        isMulti
+                          ? toggleGroupSelected
+                          : () => toggleOne(group.claims[0].id)
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                      disabled={
+                        isMulti
+                          ? groupRemovableIds.length === 0
+                          : !canRemoveSingle
+                      }
+                      aria-label={
+                        isMulti
+                          ? t("cashHubAllocations.selectAllInWallet")
+                          : t("cashHubAllocations.selectRecipient")
+                      }
+                      className="mt-1 shrink-0 sm:mt-0"
+                    />
+
+                    <div
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+                      title={t("cashHubAllocations.lokicashBadge")}
+                    >
+                      <CoinsIcon className="h-3.5 w-3.5" />
+                    </div>
+
+                    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                      <div className="min-w-0 flex-1">
+                        {/* The token's own string leads — this is a
+                            Lokicash first, a recipient list second. Click
+                            to copy directly; no separate copy button, which
+                            would just be the same action twice. */}
+                        {lokicashToken ? (
+                          // Shown for an archived bill too, muted rather than
+                          // withheld. The bill is destroyed, so the string
+                          // moves no money, and a caller who tries it over NWC
+                          // gets the "spent" tombstone inside the retention
+                          // window and silence after it (NIP-CASH §Cash
+                          // Status) — so within the window it is still a
+                          // credential, which the line below says, and only a
+                          // record after. Hiding it only cost the operator the
+                          // one identifier that matches this row against a
+                          // support ticket or an offline record — which is why
+                          // the archive keeps the string at all.
+                          <button
+                            type="button"
+                            className={`block max-w-full truncate rounded font-mono text-sm hover:underline ${
+                              group.archived
+                                ? "text-muted-foreground"
+                                : "font-medium"
+                            }`}
+                            title={
+                              group.archived
+                                ? t("cashHubAllocations.copyDestroyedLokicash")
+                                : t("cashHubAllocations.copyLokicash")
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(lokicashToken);
+                            }}
+                          >
+                            {shortenMiddle(lokicashToken, 14, 6)}
+                          </button>
+                        ) : (
+                          // Only a bill archived before the token was stored
+                          // reaches this fallback. Its pubkey is the single
+                          // identifier such a row still carries — shown as an
+                          // npub, never raw hex.
+                          <button
+                            type="button"
+                            className="block max-w-full truncate rounded font-mono text-sm text-muted-foreground hover:underline"
+                            title={t("cashHubAllocations.copyBillPubkey")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(
+                                group.claims[0].wallet_pubkey ?? ""
+                              );
+                            }}
+                          >
+                            {shortenMiddle(
+                              safeNpubEncode(
+                                group.claims[0].wallet_pubkey ?? ""
+                              ) ??
+                                group.claims[0].wallet_pubkey ??
+                                "",
+                              10,
+                              6
+                            )}
+                          </button>
+                        )}
+                        {/* Until its retention window ends, a destroyed
+                            bill's token still gets a "spent" answer to
+                            cash_status, so it is a live credential, not
+                            only a record (NIP-CASH §Archival on Deletion). */}
+                        {group.archived &&
+                          group.retainedUntil !== undefined &&
+                          group.retainedUntil * 1000 > renderedAt && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              {t("cashHubAllocations.archivedTokenStillLive", {
+                                date: new Date(
+                                  group.retainedUntil * 1000
+                                ).toLocaleDateString(),
+                              })}
+                            </p>
+                          )}
+                        {/* Identity pills — a small icon (or, for a pubkey
+                            with a set profile picture, the recipient's own
+                            avatar) plus a short identifier, deliberately no
+                            display name here (NIP-CASH: a recipient's real
+                            identity is proof-gated detail, not something
+                            this summary needs to resolve — a verified nip05
+                            or npub is a stable identifier, not a mutable
+                            display name). Expand (multi) or click through
+                            (single) for full detail. Same pill shape for one
+                            recipient or many — a single-recipient row just
+                            renders exactly one. */}
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {group.claims.slice(0, maxVisiblePills).map((c) => (
+                            <Badge
+                              key={c.id}
+                              variant="outline"
+                              className="max-w-[10rem] gap-1 px-1.5 py-0 font-mono text-[11px] font-normal text-muted-foreground"
+                            >
+                              {c.identity_type === "pubkey" ? (
+                                <PillIdentityGlyph
+                                  profile={profiles.get(c.identity_value)}
+                                />
+                              ) : c.identity_type === "cash" ? (
+                                <BanknoteIcon className="h-3 w-3 shrink-0" />
+                              ) : (
+                                <KeyRound className="h-3 w-3 shrink-0" />
+                              )}
+                              <span className="truncate">
+                                {c.identity_type === "cash"
+                                  ? t("identityType.cash")
+                                  : c.identity_type === "pubkey"
+                                    ? pillIdentityLabel(
+                                        c.identity_value,
+                                        profiles.get(c.identity_value),
+                                        verifiedNip05.has(c.identity_value)
+                                      )
+                                    : shortenMiddle(c.identity_value, 6, 4)}
+                              </span>
+                            </Badge>
+                          ))}
+                          {group.claims.length > maxVisiblePills && (
+                            <Badge
+                              variant="outline"
+                              className="px-1.5 py-0 text-[11px] font-normal text-muted-foreground"
+                            >
+                              +{group.claims.length - maxVisiblePills}
+                            </Badge>
+                          )}
+                          {groupLock(group.claims) && (
+                            <OwnerLockBadge lock={groupLock(group.claims)!} />
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:justify-end sm:gap-3">
+                        <div
+                          className="text-end tabular-nums"
+                          title={deadline?.title}
+                        >
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-sm font-medium">
+                              <FormattedFlokicoinAmount
+                                amount={totalLoki * 1000}
+                              />
+                            </span>
+                            {/* An archived bill no longer exists. Without
+                                this it is indistinguishable from a live one
+                                in a list that now has whole facets of them
+                                (Expired, Reclaimed). */}
+                            {group.archived && (
+                              <Badge variant="outline">
+                                {t("cashBills.archived")}
+                              </Badge>
+                            )}
+                            {/* Whole-bill aggregate, so only while the whole
+                                bill is on screen. Under a filter these counts
+                                describe the rows that survived it, not the
+                                bill. */}
+                            {isFullMembership &&
+                              (claimedCount === totalCount ? (
+                                <Badge variant="positive">
+                                  {t(
+                                    "cashHubAllocations.tokenStatusFullyRedeemed"
+                                  )}
+                                </Badge>
+                              ) : claimedCount === 0 ? (
+                                <Badge variant="secondary">
+                                  {t(
+                                    "cashHubAllocations.tokenStatusUnredeemed"
+                                  )}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">
+                                  {t(
+                                    "cashHubAllocations.tokenStatusPartiallyRedeemed",
+                                    {
+                                      claimed: claimedCount,
+                                      count: totalCount,
+                                    }
+                                  )}
+                                </Badge>
+                              ))}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {deadline?.label ?? t("claimDeadline.none")}
+                          </div>
+                        </div>
+
+                        {isMulti && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpanded(group.walletAppId);
+                            }}
+                            aria-expanded={isExpanded}
+                            aria-label={
+                              isExpanded
+                                ? t("cashHubAllocations.collapseRecipients")
+                                : t("cashHubAllocations.expandRecipients")
+                            }
+                          >
+                            {isExpanded ? (
+                              <ChevronDownIcon className="size-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRightIcon className="size-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        )}
+
+                        {/* Not rendered at all for an archived bill, rather
+                            than hidden in place: the wallet it names is
+                            deleted, so the call could only fail, and a
+                            lokicash1... for a destroyed bill would look
+                            spendable (NIP-CASH §Archival on Deletion). An
+                            invisible placeholder just left a gap that read
+                            as a missing button. */}
+                        {!group.archived && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={t("cashHubAllocations.revealConnection")}
+                            aria-label={t(
+                              "cashHubAllocations.revealConnection"
+                            )}
+                            disabled={revealingWalletId === group.walletAppId}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRevealConnection(group.walletAppId, {
+                                amountLoki: totalLoki,
+                                recipientCount: totalCount,
+                                claimedCount,
+                                expiresAtSecs: group.claims[0].expires_at,
+                                isCash:
+                                  group.claims[0].identity_type === "cash",
+                              });
+                            }}
+                          >
+                            <QrCodeIcon className="size-4" />
+                          </Button>
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={
+                            isMulti
+                              ? t("cashHubAllocations.removeWallet")
+                              : t("common.remove")
+                          }
+                          aria-label={
+                            isMulti
+                              ? t("cashHubAllocations.removeWallet")
+                              : t("common.remove")
+                          }
+                          className={cn(
+                            "text-muted-foreground hover:text-destructive",
+                            (group.archived ||
+                              (!isMulti && !canRemoveSingle)) &&
+                              "invisible"
+                          )}
+                          // group.archived is checked on its own, ahead of
+                          // the single-row rule: canRemoveSingle only ever
+                          // governs a one-claim group, so a MULTI archived
+                          // group fell through both halves of the old
+                          // expression and kept a live delete pointed at a
+                          // wallet row that no longer exists.
+                          disabled={
+                            group.archived ||
+                            !!groupLock(group.claims) ||
+                            (!isMulti && !canRemoveSingle)
+                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isMulti) {
+                              setConfirmDeleteWallet(group.claims[0]);
+                            } else {
+                              // Only the unfiltered tab groups by wallet, so
+                              // only there does a one-claim group really mean
+                              // a one-recipient bill. On a filtered tab every
+                              // group is a single claim by construction (see
+                              // displayGroups), and claiming "this destroys
+                              // the bill" would be wrong for any bill whose
+                              // other recipients the filter hid.
+                              setSoleRecipient(status === "");
+                              setConfirmDeleteClaim(group.claims[0]);
+                            }
+                          }}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isMulti && isExpanded && (
+                    <div className="grid max-h-96 gap-1 overflow-y-auto overscroll-contain border-t p-1 min-w-0">
+                      {group.claims.map((c) => {
+                        const canRemoveRow = removableIds.has(c.id);
+                        return (
+                          <div
+                            key={`${c.archived ? 1 : 0}-${c.id}`}
+                            className={cn(
+                              "group flex min-w-0 items-start gap-2 rounded-md p-2 transition-colors hover:bg-accent/50 sm:items-center sm:gap-3",
+                              selected.has(c.id) && "bg-accent/50"
+                            )}
+                          >
+                            <Checkbox
+                              checked={selected.has(c.id)}
+                              onCheckedChange={() => toggleOne(c.id)}
+                              disabled={!canRemoveRow}
+                              aria-label={t(
+                                "cashHubAllocations.selectRecipient"
+                              )}
+                              className="mt-1 shrink-0 sm:mt-0"
+                            />
+                            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                              <div
+                                className={cn(
+                                  "flex min-w-0 flex-1 items-center gap-3",
+                                  c.claimed &&
+                                    "cursor-pointer rounded-md hover:opacity-80"
+                                )}
+                                onClick={() =>
+                                  c.claimed &&
+                                  // A slice that was split off or consolidated
+                                  // away never got a Lightning payout on THIS
+                                  // wallet — its value lives on in the new
+                                  // wallet spun_off_to_wallet_app_id names, so
+                                  // that's the more useful place to land than
+                                  // this (now-drained) wallet's own page.
+                                  navigate(
+                                    `/apps/${c.spun_off_to_wallet_app_id ?? c.wallet_app_id}`
+                                  )
+                                }
+                              >
+                                {c.identity_type === "pubkey" ? (
+                                  <NostrProfileRow
+                                    pubkey={c.identity_value}
+                                    profile={profiles.get(c.identity_value)}
+                                    avatarClassName="h-9 w-9"
+                                    showCopy={false}
+                                  />
+                                ) : (
+                                  <>
+                                    <Avatar className="h-9 w-9 shrink-0">
+                                      <AvatarFallback>
+                                        <KeyRound className="h-4 w-4 text-muted-foreground" />
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate font-mono text-xs text-muted-foreground">
+                                        {shortenMiddle(c.identity_value)}
+                                      </span>
+                                      <Badge variant="outline" className="mt-1">
+                                        {t("identityType.connectionKey")}
+                                      </Badge>
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+
+                              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:justify-end sm:gap-3">
+                                <span className="text-sm font-medium tabular-nums">
+                                  <FormattedFlokicoinAmount
+                                    amount={c.amount_mloki}
+                                  />
+                                </span>
+                                <CashStatusBadge status={c.status} />
+                                {ownerLock(c) && (
+                                  <OwnerLockBadge lock={ownerLock(c)!} />
+                                )}
+
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title={t("common.remove")}
+                                  aria-label={t("common.remove")}
+                                  className={cn(
+                                    "text-muted-foreground hover:text-destructive",
+                                    !canRemoveRow && "invisible"
+                                  )}
+                                  disabled={!canRemoveRow}
+                                  onClick={() => {
+                                    setSoleRecipient(false);
+                                    setConfirmDeleteClaim(c);
+                                  }}
+                                >
+                                  <Trash2Icon className="size-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : !isInlineFormShown ? (
+        // The hub has claims overall, just none on this page — either this
+        // tab's filter has no matches, or (rarer) a stale page number after
+        // e.g. a delete. Either way, an empty-filter/page state, not an
+        // empty-hub one, so this shouldn't offer to create a wallet.
+        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          {status
+            ? t("cashHubAllocations.noneFiltered", {
+                status:
+                  statusTabs.find((tab) => tab.value === status)?.label ??
+                  status,
+              })
+            : t("cashHubAllocations.noneOnPage")}
+        </p>
+      ) : (
+        <div className="rounded-lg border p-4 max-w-lg">
+          <h3 className="mb-4 flex items-center gap-2 font-medium">
+            <PlusIcon className="size-4 text-muted-foreground" />
+            {t("cashHubAllocations.addHeading")}
+          </h3>
+          <form onSubmit={handleAdd} className="grid gap-3">
+            {formFields}
+            <LoadingButton
+              loading={isAdding}
+              disabled={submitDisabled}
+              type="submit"
+              className="w-fit"
+            >
+              {t("cashHubAllocations.mintAction")}
+            </LoadingButton>
+          </form>
+        </div>
+      )}
+
+      <CustomPagination
+        limit={LIST_CASH_ALLOCATIONS_LIMIT}
+        totalCount={totalCount}
+        page={page}
+        handlePageChange={handlePageChange}
+      />
+
+      <Dialog
+        open={isFormOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) {
+            resetForm();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {t("cashHubAllocations.createDialogTitle")}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAdd} className="grid gap-3">
+            {formFields}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setFormOpen(false);
+                  resetForm();
+                }}
+              >
+                {tc("actions.cancel")}
+              </Button>
+              <LoadingButton
+                loading={isAdding}
+                disabled={submitDisabled}
+                type="submit"
+              >
+                {t("cashHubAllocations.mintAction")}
+              </LoadingButton>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {revealApp && revealLokicashToken && (
+        <RevealConnectionDialog
+          app={revealApp}
+          lokicashToken={revealLokicashToken}
+          cashSecret={revealCashSecret}
+          walletSummary={revealSummary}
+          mode={revealMode}
+          primaryFormat="lokicash"
+          onClose={() => {
+            setRevealApp(undefined);
+            setRevealLokicashToken(undefined);
+            setRevealCashSecret(undefined);
+            setRevealSummary(undefined);
+          }}
+        />
+      )}
+
+      <AlertDialog
+        open={confirmDeleteClaim !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteClaim(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {isSoleRecipient
+                ? t("cashHubAllocations.removeWalletTitle")
+                : t("cashHubAllocations.removeRecipientTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <p>
+                {isSoleRecipient
+                  ? t("cashHubAllocations.removeBillDescription")
+                  : t("cashHubAllocations.removeRecipientDescription")}
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDeleteClaim(null)}
+              disabled={isDeletingSingle}
+            >
+              {tc("actions.cancel")}
+            </Button>
+            <LoadingButton
+              variant="destructive"
+              loading={isDeletingSingle}
+              onClick={() =>
+                confirmDeleteClaim && handleDeleteClaim(confirmDeleteClaim)
+              }
+            >
+              {t("common.remove")}
+            </LoadingButton>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmDeleteWallet !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteWallet(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("cashHubAllocations.removeWalletTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <p>{t("cashHubAllocations.removeWalletDescription")}</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDeleteWallet(null)}
+              disabled={isDeletingSingle}
+            >
+              {tc("actions.cancel")}
+            </Button>
+            <LoadingButton
+              variant="destructive"
+              loading={isDeletingSingle}
+              onClick={() =>
+                confirmDeleteWallet && handleDeleteWallet(confirmDeleteWallet)
+              }
+            >
+              {t("common.remove")}
+            </LoadingButton>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={isConfirmBulkDeleteOpen}
+        onOpenChange={setConfirmBulkDeleteOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("cashHubAllocations.removeSelectedTitle", {
+                count: selected.size,
+              })}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <p>{t("cashHubAllocations.removeSelectedDescription")}</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmBulkDeleteOpen(false)}
+              disabled={isRemovingSelected}
+            >
+              {tc("actions.cancel")}
+            </Button>
+            <LoadingButton
+              variant="destructive"
+              loading={isRemovingSelected}
+              onClick={handleRemoveSelected}
+            >
+              {t("common.remove")}
+            </LoadingButton>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+});

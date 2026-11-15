@@ -1,0 +1,820 @@
+import { useState } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router";
+
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import Loading from "src/components/Loading";
+import PasswordInput from "src/components/password/PasswordInput";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "src/components/ui/alert-dialog";
+import { Button } from "src/components/ui/button";
+import { LoadingButton } from "src/components/ui/custom/loading-button";
+import { Label } from "src/components/ui/label";
+import { useCapabilities } from "src/hooks/useCapabilities";
+import { createApp } from "src/requests/createApp";
+import {
+  AppPermissions,
+  BudgetRenewalType,
+  CreateAppRequest,
+  CreateAppResponse,
+  Nip47NotificationType,
+  Nip47RequestMethod,
+  Scope,
+  WalletCapabilities,
+  validBudgetRenewals,
+} from "src/types";
+
+import AppHeader from "src/components/AppHeader";
+import { IsolatedAppTopupDialog } from "src/components/IsolatedAppTopupDialog";
+import { InstallApp } from "src/components/connections/InstallApp";
+import {
+  DEFAULT_CASH_MAX_EXP_SECS,
+  DEFAULT_CASH_PER_WALLET_MAX_LOKI,
+} from "src/components/Scopes";
+import { defineStepper } from "src/components/stepper";
+import { Checkbox } from "src/components/ui/checkbox";
+import { Input } from "src/components/ui/input";
+import {
+  DEFAULT_APP_BUDGET_LOKI,
+  DEFAULT_APP_BUDGET_RENEWAL,
+} from "src/constants";
+import { useApp } from "src/hooks/useApp";
+import { useAppLogo } from "src/hooks/useAppLogo";
+import { useAppStore } from "src/hooks/useAppStore";
+import { useHubInfo } from "src/hooks/useHubInfo";
+import { useInfo } from "src/hooks/useInfo";
+import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
+import {
+  FLOKICOIN_NATIVE_ASSET,
+  formatNativeAmount,
+} from "src/utils/flokicoinFormatting";
+import { handleRequestError } from "src/utils/handleRequestError";
+import { returnUrlOrigin, safeReturnUrl } from "src/utils/safeReturnUrl";
+import Permissions from "../../components/Permissions";
+import { AppStoreApp } from "../../components/connections/SuggestedAppData";
+
+const NewApp = () => {
+  const { data: capabilities } = useCapabilities();
+  const { apps: appStoreApps, loading: loadingApps } = useAppStore();
+
+  if (!capabilities || loadingApps) {
+    return <Loading />;
+  }
+
+  return (
+    <NewAppInternal capabilities={capabilities} appStoreApps={appStoreApps} />
+  );
+};
+
+type NewAppInternalProps = {
+  capabilities: WalletCapabilities;
+  appStoreApps: AppStoreApp[];
+};
+
+const NewAppInternal = ({
+  capabilities,
+  appStoreApps,
+}: NewAppInternalProps) => {
+  const location = useLocation();
+  const { t } = useTranslation("apps");
+  const { t: tc } = useTranslation("common");
+
+  const [unsupportedError, setUnsupportedError] = useState<string>();
+  const [isLoading, setLoading] = React.useState(false);
+
+  const [createAppResponse, setCreateAppResponse] =
+    React.useState<CreateAppResponse>();
+
+  const queryParams = new URLSearchParams(location.search);
+
+  const appId = queryParams.get("app") ?? "";
+  const appStoreApp = appStoreApps.find((app) => app.id === appId);
+  const logoSrc = useAppLogo(appId);
+  const isInstallable =
+    appStoreApp?.appleLink ||
+    appStoreApp?.playLink ||
+    appStoreApp?.zapStoreLink ||
+    appStoreApp?.chromeLink ||
+    appStoreApp?.firefoxLink;
+
+  const pubkey = queryParams.get("pubkey") ?? "";
+  const returnTo = safeReturnUrl(queryParams.get("return_to")) ?? "";
+
+  const nameParam = (queryParams.get("name") || queryParams.get("c")) ?? "";
+  const [appName, setAppName] = useState(
+    appStoreApp ? appStoreApp.title : nameParam
+  );
+
+  React.useEffect(() => {
+    if (appStoreApp && !appName) {
+      setAppName(appStoreApp.title);
+    }
+  }, [appStoreApp, appName]);
+
+  const budgetRenewalParam = queryParams.get(
+    "budget_renewal"
+  ) as BudgetRenewalType;
+  const budgetMaxAmountMlokiParam = queryParams.get("max_amount") ?? "";
+  const isolatedParam = queryParams.get("isolated") ?? "";
+  const expiresAtParam = queryParams.get("expires_at") ?? "";
+
+  const reqMethodsParam = queryParams.get("request_methods") ?? "";
+  const notificationTypesParam = queryParams.get("notification_types") ?? "";
+
+  const initialScopes: Scope[] = React.useMemo(() => {
+    const methods = reqMethodsParam
+      ? reqMethodsParam.split(" ")
+      : capabilities.methods;
+
+    const requestMethodsSet = new Set<Nip47RequestMethod>(
+      methods as Nip47RequestMethod[]
+    );
+    const unsupportedMethods = Array.from(requestMethodsSet).filter(
+      (method) => capabilities.methods.indexOf(method) < 0
+    );
+    if (unsupportedMethods.length) {
+      setUnsupportedError(
+        t("newApp.unsupportedMethods", {
+          methods: unsupportedMethods.join(", "),
+        })
+      );
+    }
+
+    const notificationTypes = notificationTypesParam
+      ? notificationTypesParam.split(" ")
+      : reqMethodsParam
+        ? [] // do not set notifications if only request methods provided
+        : capabilities.notificationTypes;
+
+    const notificationTypesSet = new Set<Nip47NotificationType>(
+      notificationTypes as Nip47NotificationType[]
+    );
+    const unsupportedNotificationTypes = Array.from(
+      notificationTypesSet
+    ).filter(
+      (notificationType) =>
+        capabilities.notificationTypes.indexOf(notificationType) < 0
+    );
+    if (unsupportedNotificationTypes.length) {
+      setUnsupportedError(
+        t("newApp.unsupportedNotificationTypes", {
+          types: unsupportedNotificationTypes.join(", "),
+        })
+      );
+    }
+
+    const scopes: Scope[] = [];
+    if (
+      requestMethodsSet.has("pay_invoice") ||
+      requestMethodsSet.has("pay_keysend") ||
+      requestMethodsSet.has("multi_pay_invoice") ||
+      requestMethodsSet.has("multi_pay_keysend")
+    ) {
+      scopes.push("pay_invoice");
+    }
+
+    if (requestMethodsSet.has("get_info")) {
+      scopes.push("get_info");
+    }
+    if (requestMethodsSet.has("get_balance")) {
+      scopes.push("get_balance");
+    }
+    if (
+      requestMethodsSet.has("make_invoice") ||
+      requestMethodsSet.has("make_hold_invoice") ||
+      requestMethodsSet.has("settle_hold_invoice") ||
+      requestMethodsSet.has("cancel_hold_invoice")
+    ) {
+      scopes.push("make_invoice");
+    }
+    if (requestMethodsSet.has("lookup_invoice")) {
+      scopes.push("lookup_invoice");
+    }
+    if (requestMethodsSet.has("list_transactions")) {
+      scopes.push("list_transactions");
+    }
+    // Only include sign_message if explicitly requested via URL params or if
+    // isolated mode is explicitly disabled — by default we use isolated mode
+    // (which excludes sign_message), making "Isolated App" the default selection.
+    if (
+      requestMethodsSet.has("sign_message") &&
+      isolatedParam !== "true" &&
+      (reqMethodsParam !== "" || isolatedParam === "false")
+    ) {
+      scopes.push("sign_message");
+    }
+    if (notificationTypes.length) {
+      scopes.push("notifications");
+    }
+
+    return scopes;
+  }, [
+    capabilities.methods,
+    capabilities.notificationTypes,
+    isolatedParam,
+    notificationTypesParam,
+    reqMethodsParam,
+  ]);
+
+  const parseExpiresParam = (expiresParam: string): Date | undefined => {
+    const expiresParamTimestamp = parseInt(expiresParam);
+    if (!isNaN(expiresParamTimestamp)) {
+      const expiry = new Date(expiresParamTimestamp * 1000);
+      expiry.setHours(23, 59, 59);
+      return expiry;
+    }
+    return undefined;
+  };
+
+  const [superuser, setSuperuser] = useState(appStoreApp?.superuser || false);
+  const [showConfirmPasswordDialog, setShowConfirmPasswordDialog] =
+    useState(false);
+  const [unlockPassword, setUnlockPassword] = useState("");
+
+  const [permissions, setPermissions] = useState<AppPermissions>({
+    scopes: initialScopes,
+    maxAmount: budgetMaxAmountMlokiParam
+      ? Math.floor(parseInt(budgetMaxAmountMlokiParam) / 1000)
+      : DEFAULT_APP_BUDGET_LOKI,
+    budgetRenewal: validBudgetRenewals.includes(budgetRenewalParam)
+      ? budgetRenewalParam
+      : budgetMaxAmountMlokiParam
+        ? "never"
+        : DEFAULT_APP_BUDGET_RENEWAL,
+    expiresAt: parseExpiresParam(expiresAtParam),
+    // isolated is URL-drivable (deep links from third-party apps rely on
+    // this), but cashHub deliberately never reads from queryParams — it must
+    // always be an explicit in-page choice, never something a connect link
+    // can pre-select for the user.
+    isolated: isolatedParam === "" ? true : isolatedParam === "true",
+    cashHub: false,
+    cashPerWalletMaxLoki: DEFAULT_CASH_PER_WALLET_MAX_LOKI,
+    cashMaxExpSecs: DEFAULT_CASH_MAX_EXP_SECS,
+  });
+
+  const { Stepper } = React.useMemo(
+    () =>
+      defineStepper(
+        ...(appStoreApp
+          ? [
+              {
+                id: "install",
+                title: "",
+              },
+            ]
+          : []),
+        {
+          id: "configure",
+          title: t("newApp.configure", "Configure"),
+        },
+        ...(returnTo || pubkey
+          ? []
+          : [{ id: "finalize", title: t("newApp.finalize", "Finalize") }])
+      ),
+    [appStoreApp, returnTo, pubkey]
+  );
+
+  const handleCreateApp = async (nextFunc: () => void) => {
+    if (!permissions.scopes.length) {
+      toast(
+        t(
+          "newApp.specifyWalletPermissions",
+          "Please specify wallet permissions."
+        )
+      );
+      return;
+    }
+    if (
+      permissions.cashHub &&
+      (!permissions.cashPerWalletMaxLoki || !permissions.cashMaxExpSecs)
+    ) {
+      toast(
+        t(
+          "newApp.specifyCashHubLimits",
+          "Please specify cash bill budget and expiry limits."
+        )
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // cashHub always implies isolated server-side (kind "cash_hub" carries
+      // its own isolated balance unconditionally), so it takes priority here.
+      const kind = permissions.cashHub
+        ? "cash_hub"
+        : permissions.isolated
+          ? "isolated"
+          : "standard";
+
+      const createAppRequest: CreateAppRequest = {
+        name: appName,
+        pubkey,
+        budgetRenewal: permissions.budgetRenewal,
+        maxAmount: permissions.maxAmount || 0,
+        scopes: [
+          ...permissions.scopes,
+          ...(superuser ? ["superuser" satisfies Scope] : []),
+          ...(permissions.cashHub ? ["cash_hub" satisfies Scope] : []),
+        ] as Scope[],
+        expiresAt: permissions.expiresAt?.toISOString(),
+        returnTo: returnTo,
+        kind,
+        ...(permissions.cashHub && {
+          cashPerWalletMaxMloki: (permissions.cashPerWalletMaxLoki || 0) * 1000,
+          cashMaxExpSecs: permissions.cashMaxExpSecs || 0,
+        }),
+        metadata: {
+          app_store_app_id: appStoreApp?.id || (appId ? appId : undefined),
+        },
+        unlockPassword,
+      };
+
+      const createAppResponse = await createApp(createAppRequest);
+
+      // dispatch a success event which can be listened to by the opener or by the app that embedded the webview
+      // this gives those apps the chance to know the user has enabled the connection
+      const nwcEvent = new CustomEvent("nwc:success", {
+        detail: {
+          relayUrl: createAppResponse.relayUrls[0], // TODO: deprecate
+          relayUrls: createAppResponse.relayUrls, // TODO: add to spec
+          walletPubkey: createAppResponse.walletPubkey,
+          lud16: createAppResponse.lud16,
+        },
+      });
+      window.dispatchEvent(nwcEvent);
+
+      // notify the opener of the successful connection. The target origin is
+      // the explicit web origin of the validated return_to, never "*": a
+      // wildcard leaks the connection metadata (pubkey, relays, lud16) to
+      // whatever origin happens to hold the opener. With no http(s) return_to
+      // there is no trusted origin to post to, so nothing is broadcast
+      // (LOKIHUB-0041).
+      const openerOrigin = returnUrlOrigin(returnTo);
+      if (window.opener && openerOrigin) {
+        window.opener.postMessage(
+          {
+            type: "nwc:success",
+            relayUrl: createAppResponse.relayUrls[0], // TODO: deprecate
+            relayUrls: createAppResponse.relayUrls, // TODO: add to spec
+            walletPubkey: createAppResponse.walletPubkey,
+            lud16: createAppResponse.lud16,
+          },
+          openerOrigin
+        );
+      }
+
+      const responseReturnTo = safeReturnUrl(createAppResponse.returnTo);
+      if (responseReturnTo) {
+        // open connection URI directly in an app
+        // eslint-disable-next-line react-hooks/immutability
+        window.location.href = responseReturnTo;
+        return;
+      }
+      toast(t("newApp.appCreated", "App created"));
+      setCreateAppResponse(createAppResponse);
+      if (pubkey) {
+        return;
+      }
+
+      nextFunc();
+    } catch (error) {
+      handleRequestError(
+        t("newApp.failedToCreate", "Failed to create app"),
+        error
+      );
+    }
+    setLoading(false);
+  };
+
+  if (unsupportedError) {
+    return (
+      <>
+        <AppHeader
+          title={t("newApp.unsupportedApp", "Unsupported App")}
+          description={unsupportedError}
+        />
+        <p>
+          {t(
+            "newApp.tryLdkBackend",
+            "Try the Lokihub LDK backend for extra features."
+          )}
+        </p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <AppHeader
+        title={
+          appName
+            ? t("newApp.connectTo", { appName })
+            : t("newApp.connectNewApp", "Connect a new app")
+        }
+        icon={
+          appStoreApp?.logo && logoSrc ? (
+            <img
+              src={logoSrc}
+              alt="logo"
+              className="inline rounded-lg w-12 h-12"
+            />
+          ) : undefined
+        }
+        description={t(
+          "newApp.headerDescription",
+          "Configure wallet permissions for the app and follow instructions to finalize the connection"
+        )}
+      />
+
+      <Stepper.Provider className="space-y-4 max-w-lg" variant="vertical">
+        {({ methods }) => (
+          <>
+            <Stepper.Navigation>
+              {methods.all.map((step) => (
+                <Stepper.Step
+                  key={step.id}
+                  of={step.id}
+                  onClick={() =>
+                    methods.current.id === "configure" && step.id === "install"
+                      ? methods.goTo(step.id)
+                      : undefined
+                  }
+                >
+                  <Stepper.Title>
+                    {step.title ||
+                      (isInstallable
+                        ? t("newApp.install", "Install")
+                        : t("newApp.open", "Open")) +
+                        " " +
+                        appName}
+                  </Stepper.Title>
+                  {methods.when(step.id, () => (
+                    <>
+                      {methods.switch({
+                        install: () =>
+                          appStoreApp && (
+                            <InstallApp appStoreApp={appStoreApp} />
+                          ),
+                        configure: () => {
+                          if (pubkey && createAppResponse) {
+                            return (
+                              <div className="flex flex-col items-center justify-center p-8 gap-4">
+                                <div className="flex flex-row items-center gap-2 text-sm z-10">
+                                  <Loading className="size-4" />
+                                  <p className="text-muted-foreground font-medium">
+                                    {t(
+                                      "newApp.waitingForConnection",
+                                      "Waiting for app to connect..."
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="flex flex-col gap-4">
+                              <ConfirmPasswordDialog
+                                open={showConfirmPasswordDialog}
+                                setOpen={setShowConfirmPasswordDialog}
+                                onSubmit={() => {
+                                  handleCreateApp(methods.next);
+                                }}
+                                unlockPassword={unlockPassword}
+                                setUnlockPassword={setUnlockPassword}
+                                superuser={superuser}
+                                cashHub={!!permissions.cashHub}
+                              />
+                              {!appStoreApp && (
+                                <div className="w-full grid gap-1.5">
+                                  <Label htmlFor="name">
+                                    {t("newApp.name", "Name")}
+                                  </Label>
+                                  <Input
+                                    autoFocus
+                                    type="text"
+                                    name="name"
+                                    value={appName}
+                                    id="name"
+                                    onChange={(e) => setAppName(e.target.value)}
+                                    required
+                                    autoComplete="off"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    {t(
+                                      "newApp.nameDescription",
+                                      "Name of the app or purpose of the connection"
+                                    )}
+                                  </p>
+                                </div>
+                              )}
+                              <div className="flex flex-col gap-2 w-full">
+                                <Permissions
+                                  capabilities={capabilities}
+                                  permissions={permissions}
+                                  setPermissions={setPermissions}
+                                  isNewConnection
+                                  scopesReadOnly={
+                                    !!reqMethodsParam ||
+                                    !!notificationTypesParam ||
+                                    !!isolatedParam
+                                  }
+                                  budgetReadOnly={!!budgetMaxAmountMlokiParam}
+                                  expiresAtReadOnly={!!expiresAtParam}
+                                />
+                              </div>
+                              {appStoreApp?.superuser && (
+                                <div className="flex mt-2">
+                                  <Checkbox
+                                    id="superuser"
+                                    required
+                                    checked={superuser}
+                                    onCheckedChange={() =>
+                                      setSuperuser(!superuser)
+                                    }
+                                    className="mt-0.5"
+                                  />
+                                  <Label
+                                    htmlFor="superuser"
+                                    className="ms-2 text-sm text-foreground flex flex-col items-start justify-center"
+                                  >
+                                    <div>
+                                      {t(
+                                        "newApp.enableAcceptingConnections",
+                                        "Enable accepting connections to other apps"
+                                      )}
+                                    </div>
+                                    <div className="text-muted-foreground font-normal">
+                                      {t(
+                                        "newApp.allowAuthorizeNew",
+                                        "Allow this app to let you authorize new connections to your Lokihub."
+                                      )}
+                                    </div>
+                                  </Label>
+                                </div>
+                              )}
+
+                              {returnTo && (
+                                <p className="text-xs text-muted-foreground">
+                                  {t("newApp.returnTo", { url: returnTo })}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        },
+                        finalize: () =>
+                          createAppResponse && (
+                            <div className="ps-8 max-w-md">
+                              <FinalizeConnection
+                                createAppResponse={createAppResponse}
+                                appStoreApp={appStoreApp}
+                              />
+                            </div>
+                          ),
+                      })}
+                      {(!methods.isLast || returnTo || pubkey) && (
+                        <Stepper.Controls className="mt-6">
+                          {!methods.isFirst && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              onClick={methods.prev}
+                            >
+                              {tc("actions.back", "Back")}
+                            </Button>
+                          )}
+                          <LoadingButton
+                            loading={isLoading}
+                            onClick={
+                              step.id === "configure"
+                                ? () =>
+                                    superuser || permissions.cashHub
+                                      ? setShowConfirmPasswordDialog(true)
+                                      : handleCreateApp(methods.next)
+                                : methods.next
+                            }
+                          >
+                            {step.id === "configure" && pubkey
+                              ? tc("actions.connect", "Connect")
+                              : tc("actions.next", "Next")}
+                          </LoadingButton>
+                        </Stepper.Controls>
+                      )}
+                    </>
+                  ))}
+                </Stepper.Step>
+              ))}
+            </Stepper.Navigation>
+          </>
+        )}
+      </Stepper.Provider>
+    </>
+  );
+};
+
+export default NewApp;
+
+function FinalizeConnection({
+  createAppResponse,
+  appStoreApp,
+}: {
+  createAppResponse: CreateAppResponse;
+  appStoreApp: AppStoreApp | undefined;
+}) {
+  const navigate = useNavigate();
+  const { t } = useTranslation("apps");
+  const { data: info } = useInfo();
+  const { data: hubInfo } = useHubInfo();
+
+  const pairingUri = createAppResponse.pairingUri;
+  const { data: app } = useApp(createAppResponse.id, true);
+
+  React.useEffect(() => {
+    if (app?.lastUsedAt) {
+      toast(t("newApp.connectionEstablished", "Connection established!"), {
+        description: t(
+          "newApp.canUseApp",
+          "You can now use the app with your Lokihub."
+        ),
+      });
+      // Land on the app that was just connected, not on the Connections
+      // list — same rule the sub-wallet/hub flows follow in
+      // SubwalletCreated.tsx.
+      navigate(`/apps/${createAppResponse.id}`);
+    }
+  }, [app?.lastUsedAt, createAppResponse.id, navigate, t]);
+
+  if (!createAppResponse) {
+    return <Navigate to="/apps/new" />;
+  }
+
+  return (
+    <>
+      <div className="flex flex-col gap-3 sensitive">
+        {appStoreApp ? (
+          <>{appStoreApp.finalizeGuide}</>
+        ) : (
+          <ol className="list-decimal list-inside">
+            <li>
+              {t("newApp.openApp", "Open the app you wish to connect to")}
+            </li>
+            <li>
+              {t(
+                "newApp.findSettings",
+                "Find settings to connect your wallet (may be under Nostr Wallet Connect or NWC)."
+              )}
+            </li>
+            <li>
+              {t("newApp.scanOrPaste", "Scan or paste the connection secret")}
+            </li>
+          </ol>
+        )}
+
+        {app?.isolated && info && (
+          <li>
+            {t("newApp.optionalTopUp", {
+              amount: formatNativeAmount(
+                app.balance,
+                info.flokicoinDisplayFormat,
+                hubInfo?.nativeAsset ?? FLOKICOIN_NATIVE_ASSET
+              ),
+            })}{" "}
+            <IsolatedAppTopupDialog appId={app.id}>
+              <Button size="sm" variant="secondary">
+                {t("newApp.topUp", "Top Up")}
+              </Button>
+            </IsolatedAppTopupDialog>
+          </li>
+        )}
+        {app && (
+          <ConnectAppCard
+            app={app}
+            pairingUri={pairingUri}
+            appStoreApp={appStoreApp}
+            // A hub created here is shown as cashhub1/circlehub1 first, as in
+            // SubwalletCreated; the card's toggle still offers the NWC URI.
+            cashHubToken={createAppResponse.cashHubToken}
+            circleHubToken={createAppResponse.circleHubToken}
+            primaryFormat={
+              createAppResponse.cashHubToken
+                ? "cashhub"
+                : createAppResponse.circleHubToken
+                  ? "circlehub"
+                  : "nwc"
+            }
+          />
+        )}
+      </div>
+    </>
+  );
+}
+
+type ConfirmPasswordDialogProps = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  onSubmit: () => void;
+  unlockPassword: string;
+  setUnlockPassword: (password: string) => void;
+  superuser: boolean;
+  cashHub: boolean;
+};
+
+// Extra unlock-password confirmation gating any connection whose capability
+// goes beyond "spend within its own configured budget" — currently
+// superuser (can create further connections against your balance) and
+// cashHub (can move funds to third parties outside pay_invoice/budget
+// accounting entirely, see Cash Hub security discussion). Both render their
+// own warning paragraph; either (or both) can be true at once.
+function ConfirmPasswordDialog({
+  open,
+  setOpen,
+  onSubmit,
+  unlockPassword,
+  setUnlockPassword,
+  superuser,
+  cashHub,
+}: ConfirmPasswordDialogProps) {
+  const { t } = useTranslation("apps");
+  const { t: tc } = useTranslation("common");
+  return (
+    <AlertDialog open={open}>
+      <AlertDialogContent>
+        <form
+          onSubmit={(e: React.FormEvent) => {
+            e.preventDefault();
+            onSubmit();
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("newApp.confirmNewConnection", "Confirm New Connection")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <div className="flex flex-col">
+                {superuser && (
+                  <>
+                    <p>
+                      {t(
+                        "newApp.lokiGoPermission",
+                        "Loki Go will be given permission to create other app connections which can spend your balance."
+                      )}
+                    </p>
+
+                    <p className="mt-4">
+                      {t(
+                        "newApp.warningLokiGo",
+                        "Warning: Loki Go can create connections with a larger budget than the one set for Loki Go. Make sure to always set a budget."
+                      )}
+                    </p>
+                  </>
+                )}
+
+                {cashHub && (
+                  <p className="mt-4">
+                    {t(
+                      "newApp.warningCashHub",
+                      "Warning: this app will be able to create new wallets and pay third parties directly from its balance, without asking you again each time. It can spend up to the balance you top up into this connection."
+                    )}
+                  </p>
+                )}
+
+                <p className="mt-4">
+                  {t(
+                    "newApp.enterUnlockPassword",
+                    "Please enter your unlock password to continue."
+                  )}
+                </p>
+                <div className="grid gap-1.5 mt-4">
+                  <Label htmlFor="password">
+                    {t("newApp.unlockPassword", "Unlock Password")}
+                  </Label>
+                  <PasswordInput
+                    id="password"
+                    onChange={setUnlockPassword}
+                    autoFocus
+                    value={unlockPassword}
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-3">
+            <AlertDialogCancel onClick={() => setOpen(false)}>
+              {tc("actions.cancel", "Cancel")}
+            </AlertDialogCancel>
+            <Button type="submit">{tc("actions.confirm", "Confirm")}</Button>
+          </AlertDialogFooter>
+        </form>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}

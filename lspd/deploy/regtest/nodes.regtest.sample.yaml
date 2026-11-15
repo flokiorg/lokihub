@@ -1,0 +1,58 @@
+# flspd's node config for lokihub's regtest stack (LP-13): one LSP node,
+# LSPS1, LSPS2 (JIT) and LSPS5, announced on Nostr (NIP-LSP, kind 10735).
+# Copied once to NODES_CONFIG_PATH by flspd-init, where the dashboard edits
+# it. Regtest only; see README.md.
+- name: "lokihub-regtest-lsp"
+  # Generate once with `flspd genkey` and pass it as FLSPD_PRIVATE_KEY.
+  flspdPrivateKey: {from_env: FLSPD_PRIVATE_KEY}
+  # LSPS2 fee menus are kept per token: at least one is needed, or LSPS2
+  # has no menu and the announcement is refused (protocol 2 without a fee
+  # row). Clients may pass it as the LSPS2 token; any value works here.
+  tokens:
+    - "regtest"
+  # The address the legacy ChannelInformation API returns; the same as the
+  # announced addr below.
+  host: "172.29.40.40:9735"
+  flnd:
+    address: "flnd-lsp:10007"
+    # Both prepared by the compose's flspd-init service. The macaroon may
+    # call signrpc SignMessage, which signing the announcement with the node
+    # key needs, but has no signer:generate (admin.macaroon's also allows
+    # SignOutputRaw, ComputeInputScript and MuSig2); flspd refuses to start
+    # announcing without SignMessage.
+    cert: {from_file: /flnd-creds/tls.cert}
+    macaroon: {from_file: /flnd-creds/flspd.macaroon}
+
+  profile: aggressive # 0-conf friendly, short delays: regtest
+  notificationTimeout: "1m"
+  opening_fee:
+    rate_percent: 0.4
+    min_loki: 1
+  channel_size:
+    min_loki: 20_000
+    max_loki: 100_000_000
+    padding_loki: 21_000
+  routing_fee:
+    ppm: 1
+    base_loki: 1
+  minHtlcMloki: 600
+  jitEnabled: true
+  minPaymentSizeMloki: 1_000
+  jitMaxPaymentSizeMloki: 50_000_000_000
+  jitMaxClientToSelfDelay: 2_016
+  lsps1MinRequiredChannelConfirmations: 0
+  lsps1MinFundingConfirmsWithinBlocks: 1
+  lsps1SupportsZeroChannelReserve: true
+  lsps1MaxChannelExpiryBlocks: 4_320
+
+  announce:
+    enabled: true
+    title: "lokihub regtest LSP"
+    content: "flspd on regtest: LSPS1, LSPS2 (JIT) and LSPS5."
+    languages: [en]
+    # NIP-LSP addr hosts are IPv4, bracketed IPv6 or onion, never a DNS
+    # name, so flnd-lsp needs a fixed IP on the stack network (see
+    # compose.lokihub.sample.yml). Add the host-published port too if a
+    # host-run client must reach it, e.g. "127.0.0.1:9737".
+    addrs:
+      - "172.29.40.40:9735"

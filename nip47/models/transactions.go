@@ -1,0 +1,62 @@
+package models
+
+import (
+	"encoding/json"
+	"strings"
+	"time"
+
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/transactions"
+)
+
+func ToNip47Transaction(transaction *transactions.Transaction) *Transaction {
+	var expiresAt *int64
+	if transaction.ExpiresAt != nil {
+		expiresAtUnix := transaction.ExpiresAt.Unix()
+		expiresAt = &expiresAtUnix
+	}
+
+	var settledAt *int64
+	preimage := ""
+	if transaction.SettledAt != nil {
+		settledAtUnix := transaction.SettledAt.Unix()
+		settledAt = &settledAtUnix
+		if transaction.Preimage != nil {
+			preimage = *transaction.Preimage
+		}
+	}
+
+	state := strings.ToLower(transaction.State)
+	if transaction.SettledAt == nil && transaction.ExpiresAt != nil && time.Now().After(*transaction.ExpiresAt) {
+		state = "expired"
+	}
+
+	var metadata map[string]interface{}
+	if transaction.Metadata != nil {
+		jsonErr := json.Unmarshal(transaction.Metadata, &metadata)
+		if jsonErr != nil {
+			logger.Logger.Error().Err(jsonErr).
+				Str("payment_hash", transaction.PaymentHash).
+				Interface("metadata", transaction.Metadata).
+				Msg("Failed to deserialize transaction metadata")
+		}
+	}
+
+	return &Transaction{
+		Type:            transaction.Type,
+		State:           state,
+		Invoice:         transaction.PaymentRequest,
+		Description:     transaction.Description,
+		DescriptionHash: transaction.DescriptionHash,
+		Preimage:        preimage,
+		PaymentHash:     transaction.PaymentHash,
+		Amount:          int64(transaction.AmountMloki), //nolint:gosec // mloki amounts are always far below int64 range
+		FeesPaid:        int64(transaction.FeeMloki),    //nolint:gosec // mloki amounts are always far below int64 range
+		FeeSkimMloki:    transaction.FeeSkimMloki,
+		CreatedAt:       transaction.CreatedAt.Unix(),
+		ExpiresAt:       expiresAt,
+		SettledAt:       settledAt,
+		Metadata:        metadata,
+		SettleDeadline:  transaction.SettleDeadline,
+	}
+}

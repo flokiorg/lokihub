@@ -1,0 +1,112 @@
+{
+  "nav": "Anuncios",
+  "page": {
+    "title": "Anuncios",
+    "description": "Ofertas que este Hub anuncia en relays para que quien no tiene un enlace las encuentre",
+    "empty": "Aún no hay nada anunciado",
+    "emptyHint": "Anuncia un círculo abajo. Una conexión de Cash Hub nunca se anuncia.",
+    "listCircle": "Anunciar un círculo"
+  },
+  "card": {
+    "untitled": "Oferta sin título",
+    "typeOrder": "Pedido de efectivo",
+    "typeCircle": "Círculo"
+  },
+  "status": {
+    "open": "Abierto",
+    "paused": "En pausa",
+    "closed": "Cerrado"
+  },
+  "health": {
+    "listed": "Anunciado",
+    "paused": "Anunciado, en pausa",
+    "closing": "Cerrado, se mantiene hasta que caduque su última versión",
+    "deleted": "Retirado",
+    "refreshed": "actualizado hace {{count}} días",
+    "refreshed_one": "actualizado hace {{count}} día",
+    "relays": "en {{ok}} de {{total}} relays",
+    "operatorVerified": "operador verificado",
+    "operatorNotNamed": "el operador aún no lo ha nombrado",
+    "failing": "ningún relay aceptó la última versión, reintentando"
+  },
+  "dialog": {
+    "title": "Anunciar esta oferta",
+    "editTitle": "Editar anuncio",
+    "description": "El anuncio solo publicita; las condiciones siempre vienen de la propia oferta cuando alguien la toca.",
+    "list": "Anunciar",
+    "save": "Guardar"
+  },
+  "warnings": {
+    "public": "Anunciar hace pública esta oferta y permite que cualquiera encuentre este nodo.",
+    "pow": "La prueba de trabajo en la bandeja está desactivada mientras no haya relays de prueba de trabajo; cualquiera puede enviar solicitudes.",
+    "circleTerms": "En un círculo, su política de acceso y cuánto puede recibir todavía pasan a ser legibles por cualquiera.",
+    "followSet": "El conjunto de seguidos de este círculo es público. Considera entradas ocultas para miembros que no deban nombrarse. El título del anuncio no se toma del conjunto.",
+    "operator": "Nombrar a un operador vincula públicamente su cuenta con este nodo."
+  },
+  "form": {
+    "title": "Título",
+    "content": "Descripción",
+    "image": "Imagen (https)",
+    "location": "Lugar (p. ej. Lisboa, Baixa)",
+    "regions": "Regiones",
+    "regionsHint": "Prefijos geohash de 3 o 4 caracteres",
+    "languages": "Idiomas (ISO-639-1)",
+    "operator": "Operador (npub o hex, opcional)",
+    "operatorRelay": "Relay del operador",
+    "followSetA": "Añadir la dirección del conjunto de seguidos",
+    "followSetConfirm": "Entiendo que el conjunto de seguidos es público",
+    "preview": "Vista previa"
+  },
+  "problems": {
+    "title": "El título debe ser una línea de 40 caracteres como máximo.",
+    "content": "La descripción debe tener 280 caracteres como máximo.",
+    "image": "La imagen debe ser una URL https.",
+    "location": "El lugar debe ser una línea de 40 caracteres como máximo, sin enlaces.",
+    "languages": "Los idiomas son códigos ISO-639-1 de dos letras.",
+    "regions": "Las regiones son prefijos geohash de 3 o 4 caracteres.",
+    "operator": "El operador debe ser un npub o una clave pública hex de 64 caracteres.",
+    "operatorRelay": "El relay del operador debe ser una URL websocket."
+  },
+  "toast": {
+    "listed": "Anunciado",
+    "updated": "Anuncio actualizado"
+  },
+  "errors": {
+    "save": "No se pudo guardar el anuncio",
+    "action": "No se pudo actualizar el anuncio",
+    "relays": "No se pudieron guardar los relays de anuncios",
+    "regenerate": "No se pudo regenerar la conexión"
+  },
+  "address": {
+    "label": "Dirección del anuncio",
+    "copied": "Copiado",
+    "copyTag": "Copiar la etiqueta a",
+    "copyCommand": "Copiar el comando del operador",
+    "hint": "El operador nombra esta oferta desde su propio cliente Nostr o con cashctl; esta app nunca pide su clave."
+  },
+  "connection": {
+    "label": "Conexión del anuncio (pública)"
+  },
+  "actions": {
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "edit": "Editar",
+    "unlist": "Retirar",
+    "checkOperator": "Comprobar operador",
+    "revokeConnection": "Revocar la conexión del anuncio"
+  },
+  "relays": {
+    "title": "Relays de anuncios",
+    "description": "Los anuncios y la lista de relays de este nodo van a: {{relays}}. Déjalo vacío para usar los relays generales.",
+    "save": "Guardar",
+    "saved": "Relays de anuncios guardados"
+  },
+  "regenerate": {
+    "button": "Revocar y reemitir la conexión del Cash Hub",
+    "title": "¿Revocar esta conexión del Cash Hub?",
+    "description": "Hazlo si la cadena de conexión llegó a publicarse. La cadena antigua deja de funcionar al instante y se muestra una nueva una sola vez. Los billetes y registros no cambian; vuelve a conectar tu cliente de emisión con la nueva cadena.",
+    "cancel": "Cancelar",
+    "confirm": "Revocar y reemitir",
+    "shownOnce": "Nueva conexión, se muestra una sola vez:"
+  }
+}

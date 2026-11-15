@@ -1,0 +1,319 @@
+package permissions
+
+import (
+	"fmt"
+	"slices"
+	"time"
+
+	"github.com/flokiorg/lokihub/clock"
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nip47/models"
+	"gorm.io/gorm"
+)
+
+type permissionsService struct {
+	db             *gorm.DB
+	eventPublisher events.EventPublisher
+}
+
+// TODO: does this need to be a service?
+type PermissionsService interface {
+	HasPermission(app *db.App, requestMethod string) (result bool, code string, message string)
+	GetPermittedMethods(app *db.App, lnClient lnclient.LNClient) []string
+	// GetPrivateMethods is GetPermittedMethods' complement: the granted methods this
+	// connection does NOT serve, because they travel over the private transport.
+	GetPrivateMethods(app *db.App) []string
+	PermitsNotifications(app *db.App) bool
+}
+
+func NewPermissionsService(db *gorm.DB, eventPublisher events.EventPublisher) *permissionsService {
+	return &permissionsService{
+		db:             db,
+		eventPublisher: eventPublisher,
+	}
+}
+
+func (svc *permissionsService) HasPermission(app *db.App, scope string) (result bool, code string, message string) {
+	appPermission := db.AppPermission{}
+	findPermissionResult := svc.db.Limit(1).Find(&appPermission, &db.AppPermission{
+		AppId: app.ID,
+		Scope: scope,
+	})
+	if findPermissionResult.RowsAffected == 0 {
+		// No permission for this request method
+		return false, constants.ERROR_RESTRICTED, fmt.Sprintf("This app does not have the %s scope", scope)
+	}
+	expiresAt := appPermission.ExpiresAt
+	if db.ExpiredAt(expiresAt, clock.Now()) {
+		logger.Logger.Info().
+			Str("scope", scope).
+			Int64("expiresAt", expiresAt.Unix()).
+			Uint("appId", app.ID).
+			Str("pubkey", app.AppPubkey).
+			Msg("This pubkey is expired")
+
+		// A cash_wallet holder — someone who received a lokicash1... token,
+		// per NIP-CASH's own design intent, likely never "connected an app"
+		// to anything — gets a cash-specific message naming the actual
+		// deadline that passed, rather than NIP-47 connection-management
+		// jargon that names no mechanism they can act on. Every other app
+		// kind keeps the original generic message.
+		// The code is RESTRICTED: NIP-CASH refuses a slice past its expiry with
+		// it and has no EXPIRED code.
+		if app.Kind == db.AppKindCashWallet {
+			return false, constants.ERROR_RESTRICTED, fmt.Sprintf(
+				"this cash wallet's redemption deadline (%s) has passed; contact the wallet operator",
+				expiresAt.UTC().Format(time.RFC3339))
+		}
+
+		return false, constants.ERROR_EXPIRED, "This app has expired"
+	}
+
+	return true, "", ""
+}
+
+func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclient.LNClient) []string {
+	appPermissions := []db.AppPermission{}
+	svc.db.Where("app_id = ?", app.ID).Find(&appPermissions)
+	scopes := make([]string, 0, len(appPermissions))
+	for _, appPermission := range appPermissions {
+		scopes = append(scopes, appPermission.Scope)
+	}
+
+	requestMethods := scopesToRequestMethods(scopes)
+
+	for _, method := range GetAlwaysGrantedMethods() {
+		// A cash_wallet refuses get_budget (nip47/event_handler.go), so it must not
+		// advertise it either.
+		if method == models.GET_BUDGET_METHOD && app.Kind == db.AppKindCashWallet {
+			continue
+		}
+		if !slices.Contains(requestMethods, method) {
+			requestMethods = append(requestMethods, method)
+		}
+	}
+
+	// The four BILL methods are dropped from the advertised set, and the scopes that
+	// grant them are deliberately left alone.
+	//
+	// get_info answers "what may I call on THIS connection", and a connection is kind
+	// 23194. These four are served over the private transport only (NIP-CASH §It is the
+	// ONLY transport for the bill methods), so advertising them here promised a caller
+	// something this transport refuses — every client following get_info was sent down a
+	// path that cannot work.
+	//
+	// Nothing is lost by dropping them: the bill-method set is FIXED by the spec, not
+	// discovered, so a client that has a bill already knows what it may call. Discovery
+	// of the transport itself is the kind-11190 announcement's job.
+	//
+	// Authorization is untouched. The scopes still exist and still gate these methods on
+	// the private transport (RequestMethodToScope + HasPermission per item) — this filter
+	// changes what a bill ADVERTISES, never what it permits. Removing the scopes instead
+	// would have refused every real call.
+	//
+	// Then keep only the methods supported by the lnClient. The result stays nil
+	// when nothing is left (callers serialise it), not an empty slice.
+	lnClientSupportedMethods := lnClient.GetSupportedNIP47Methods()
+	var advertised []string
+	for _, requestMethod := range requestMethods {
+		if privateOnlyMethods[requestMethod] {
+			continue
+		}
+		// TODO: better way to exclude methods unrelated to the lnclient
+		if requestMethod == models.CREATE_CONNECTION_METHOD ||
+			requestMethod == constants.NIP47MethodMintCash ||
+			requestMethod == constants.NIP47MethodCreateCircleWallet ||
+			slices.Contains(lnClientSupportedMethods, requestMethod) {
+			advertised = append(advertised, requestMethod)
+		}
+	}
+
+	return advertised
+}
+
+// privateOnlyMethods are served over the private transport only, so get_info — which
+// describes one kind-23194 connection — MUST NOT advertise them (NIP-CASH §Scope Surface).
+//
+// Exactly the set in NIP-CASH §Which Methods a Hub Serves, minus create_circle_wallet,
+// which is servable on either transport and so remains advertisable here.
+// GetPrivateMethods returns the private-transport-only methods this app's scopes actually
+// grant, for get_info's `private_methods` field.
+//
+// Derived from the app's GRANTS rather than returned as a fixed list, so the field cannot
+// claim a method this particular bill was never given. It is the same intersection
+// GetPermittedMethods filters OUT of the advertised set — the two are deliberately
+// complementary halves of one answer.
+//
+// Informational. The hub still checks these scopes per item on the private transport; this
+// only tells a client where to look.
+func (svc *permissionsService) GetPrivateMethods(app *db.App) []string {
+	appPermissions := []db.AppPermission{}
+	svc.db.Where("app_id = ?", app.ID).Find(&appPermissions)
+	scopes := make([]string, 0, len(appPermissions))
+	for _, p := range appPermissions {
+		scopes = append(scopes, p.Scope)
+	}
+
+	var out []string
+	for _, method := range scopesToRequestMethods(scopes) {
+		if privateOnlyMethods[method] {
+			out = append(out, method)
+		}
+	}
+	// cash_lookup recovers a lost reply of a bill method or of mint_cash, so every
+	// connection serving either lists it (NIP-CASH §Support).
+	out = append(out, withdrawPrivateMethods(app, scopes)...)
+	if len(out) > 0 || slices.Contains(scopes, constants.CASH_HUB_SCOPE) {
+		out = append(out, constants.NIP47MethodCashLookup)
+	}
+	slices.Sort(out)
+	return out
+}
+
+var privateOnlyMethods = map[string]bool{
+	constants.NIP47MethodCashStatus:      true,
+	constants.NIP47MethodCashRedeem:      true,
+	constants.NIP47MethodCashTransfer:    true,
+	constants.NIP47MethodCashConsolidate: true,
+	// NIP-CW joins are private-only: a Circle Wallet Hub lists create_circle_wallet
+	// in private_methods, never in methods (NIP-CW §Private Join).
+	constants.NIP47MethodCreateCircleWallet: true,
+}
+
+func (svc *permissionsService) PermitsNotifications(app *db.App) bool {
+	notificationPermission := db.AppPermission{}
+	result := svc.db.Limit(1).Find(&notificationPermission, &db.AppPermission{
+		AppId: app.ID,
+		Scope: constants.NOTIFICATIONS_SCOPE,
+	})
+
+	return result.Error == nil && result.RowsAffected > 0
+}
+
+func scopesToRequestMethods(scopes []string) []string {
+	requestMethods := []string{}
+
+	for _, scope := range scopes {
+		scopeRequestMethods := scopeToRequestMethods(scope)
+		requestMethods = append(requestMethods, scopeRequestMethods...)
+	}
+	return requestMethods
+}
+
+func scopeToRequestMethods(scope string) []string {
+	switch scope {
+	case constants.PAY_INVOICE_SCOPE:
+		return []string{models.PAY_INVOICE_METHOD, models.PAY_KEYSEND_METHOD, models.MULTI_PAY_INVOICE_METHOD, models.MULTI_PAY_KEYSEND_METHOD}
+	case constants.GET_BALANCE_SCOPE:
+		return []string{models.GET_BALANCE_METHOD}
+	case constants.GET_INFO_SCOPE:
+		return []string{models.GET_INFO_METHOD}
+	case constants.MAKE_INVOICE_SCOPE:
+		return []string{models.MAKE_INVOICE_METHOD, models.MAKE_HOLD_INVOICE_METHOD, models.SETTLE_HOLD_INVOICE_METHOD, models.CANCEL_HOLD_INVOICE_METHOD}
+	case constants.LOOKUP_INVOICE_SCOPE:
+		return []string{models.LOOKUP_INVOICE_METHOD}
+	case constants.LIST_TRANSACTIONS_SCOPE:
+		return []string{models.LIST_TRANSACTIONS_METHOD}
+	case constants.SIGN_MESSAGE_SCOPE:
+		return []string{models.SIGN_MESSAGE_METHOD}
+	case constants.SUPERUSER_SCOPE:
+		return []string{models.CREATE_CONNECTION_METHOD}
+	case constants.CASH_HUB_SCOPE:
+		return []string{constants.NIP47MethodMintCash}
+	case constants.CIRCLE_WALLET_SCOPE:
+		return []string{constants.NIP47MethodCreateCircleWallet}
+	case constants.CASH_REDEEM_SCOPE:
+		// Both names are advertised for the deprecation window: the wire
+		// still accepts cash_status, so a client that looks for it in
+		// get_info must keep finding it. Drop the old one when the alias goes.
+		return []string{
+			constants.NIP47MethodCashRedeem,
+			constants.NIP47MethodCashStatus,
+		}
+	case constants.CASH_TRANSFER_SCOPE:
+		return []string{constants.NIP47MethodCashTransfer}
+	case constants.CASH_CONSOLIDATE_SCOPE:
+		return []string{constants.NIP47MethodCashConsolidate}
+	}
+	return []string{}
+}
+
+func RequestMethodsToScopes(requestMethods []string) ([]string, error) {
+	scopes := []string{}
+
+	for _, requestMethod := range requestMethods {
+		scope, err := RequestMethodToScope(requestMethod)
+		if err != nil {
+			return nil, err
+		}
+		if scope != "" && !slices.Contains(scopes, scope) {
+			scopes = append(scopes, scope)
+		}
+	}
+	return scopes, nil
+}
+
+func RequestMethodToScope(requestMethod string) (string, error) {
+	switch requestMethod {
+	case models.PAY_INVOICE_METHOD, models.PAY_KEYSEND_METHOD, models.MULTI_PAY_INVOICE_METHOD, models.MULTI_PAY_KEYSEND_METHOD:
+		return constants.PAY_INVOICE_SCOPE, nil
+	case models.GET_BALANCE_METHOD:
+		return constants.GET_BALANCE_SCOPE, nil
+	case models.GET_BUDGET_METHOD:
+		return "", nil
+	case models.GET_INFO_METHOD:
+		return constants.GET_INFO_SCOPE, nil
+	case models.MAKE_INVOICE_METHOD:
+		return constants.MAKE_INVOICE_SCOPE, nil
+	case models.LOOKUP_INVOICE_METHOD:
+		return constants.LOOKUP_INVOICE_SCOPE, nil
+	case models.LIST_TRANSACTIONS_METHOD:
+		return constants.LIST_TRANSACTIONS_SCOPE, nil
+	case models.SIGN_MESSAGE_METHOD:
+		return constants.SIGN_MESSAGE_SCOPE, nil
+	case models.MAKE_HOLD_INVOICE_METHOD, models.SETTLE_HOLD_INVOICE_METHOD, models.CANCEL_HOLD_INVOICE_METHOD:
+		return constants.MAKE_INVOICE_SCOPE, nil
+	case models.CREATE_CONNECTION_METHOD:
+		return constants.SUPERUSER_SCOPE, nil
+	case constants.NIP47MethodMintCash:
+		return constants.CASH_HUB_SCOPE, nil
+	case constants.NIP47MethodCreateCircleWallet:
+		return constants.CIRCLE_WALLET_SCOPE, nil
+	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashStatus,
+		constants.NIP47MethodCashWithdrawQuote, constants.NIP47MethodCashWithdraw:
+		return constants.CASH_REDEEM_SCOPE, nil
+	case constants.NIP47MethodCashTransfer:
+		return constants.CASH_TRANSFER_SCOPE, nil
+	case constants.NIP47MethodCashConsolidate:
+		return constants.CASH_CONSOLIDATE_SCOPE, nil
+	}
+	logger.Logger.Error().Str("request_method", requestMethod).Msg("Unsupported request method")
+	return "", fmt.Errorf("unsupported request method: %s", requestMethod)
+}
+
+func AllScopes() []string {
+	return []string{
+		constants.PAY_INVOICE_SCOPE,
+		constants.GET_BALANCE_SCOPE,
+		constants.GET_INFO_SCOPE,
+		constants.MAKE_INVOICE_SCOPE,
+		constants.LOOKUP_INVOICE_SCOPE,
+		constants.LIST_TRANSACTIONS_SCOPE,
+		constants.SIGN_MESSAGE_SCOPE,
+		constants.NOTIFICATIONS_SCOPE,
+		constants.SUPERUSER_SCOPE,
+		constants.CASH_HUB_SCOPE,
+		constants.CIRCLE_WALLET_SCOPE,
+		constants.CASH_REDEEM_SCOPE,
+		constants.CASH_TRANSFER_SCOPE,
+		constants.CASH_CONSOLIDATE_SCOPE,
+	}
+}
+
+func GetAlwaysGrantedMethods() []string {
+	return []string{models.GET_INFO_METHOD, models.GET_BUDGET_METHOD}
+}

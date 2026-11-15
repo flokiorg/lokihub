@@ -1,0 +1,75 @@
+import { Suspense } from "react";
+import { createBrowserRouter, createHashRouter } from "react-router";
+import { RouterProvider } from "react-router/dom";
+import { ErrorBoundary } from "src/components/ErrorBoundary";
+import { GlobalError } from "src/components/GlobalError";
+import Loading from "src/components/Loading";
+import { TitleBar } from "src/components/TitleBar";
+import { Toaster } from "src/components/ui/sonner";
+import { ThemeProvider } from "src/components/ui/theme-provider";
+import { TouchProvider } from "src/components/ui/tooltip";
+import { useInfo } from "src/hooks/useInfo";
+import { useNativeAssetI18n } from "src/hooks/useNativeAssetI18n";
+import routes from "src/routes.tsx";
+import { StartupError } from "src/screens/StartupError";
+import { isHttpMode } from "src/utils/isHttpMode";
+import { AppError } from "src/utils/request";
+
+const createRouterFunc = isHttpMode() ? createBrowserRouter : createHashRouter;
+const router = createRouterFunc(routes, {
+  // if running on a subpath, use the subpath as the router basename
+  // BASE_URL is set via process.env.BASE_PATH, see https://vite.dev/guide/build#public-base-path
+  basename:
+    import.meta.env.BASE_URL !== "/" ? import.meta.env.BASE_URL : undefined,
+});
+
+import { LSPEventProvider } from "src/context/LSPEventContext";
+
+function App() {
+  const { data: info, error, isLoading } = useInfo();
+  useNativeAssetI18n();
+
+  return (
+    <>
+      <TitleBar />
+      <Suspense fallback={<Loading />}>
+        <TouchProvider>
+          <ThemeProvider
+            defaultTheme="default"
+            defaultDarkMode="system"
+            storageKey="vite-ui-theme"
+          >
+            {isLoading && (
+              <div className="flex items-center justify-center min-h-screen">
+                <Loading />
+              </div>
+            )}
+            {error &&
+              (error instanceof AppError && error.isStartupError ? (
+                <StartupError error={error} />
+              ) : (
+                <GlobalError error={error} />
+              ))}
+            {/* !error, not just info: SWR keeps the last successful /api/info
+                response around after a later fetch fails, so info alone
+                stays truthy once the backend goes down post-load. Without
+                this, the router (and AppLayout's own health-check-driven
+                GlobalError) mounted alongside this error branch rather than
+                in its place — two "Critical Error" cards stacked on one
+                page for the same failure. */}
+            {info && !error && (
+              <LSPEventProvider>
+                <ErrorBoundary>
+                  <RouterProvider router={router} />
+                </ErrorBoundary>
+              </LSPEventProvider>
+            )}
+            <Toaster position="bottom-right" richColors={true} />
+          </ThemeProvider>
+        </TouchProvider>
+      </Suspense>
+    </>
+  );
+}
+
+export default App;

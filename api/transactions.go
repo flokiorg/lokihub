@@ -1,0 +1,243 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/transactions"
+)
+
+func (api *api) CreateInvoice(ctx context.Context, req *MakeInvoiceRequest) (*MakeInvoiceResponse, error) {
+	if api.svc.GetLNClient() == nil {
+		return nil, errors.New("LNClient not started")
+	}
+
+	var lspPubkey *string
+	if req.LSPPubkey != "" {
+		lspPubkey = &req.LSPPubkey
+	}
+	var lspScid *string
+	if req.LSPJitChannelSCID != "" {
+		lspScid = &req.LSPJitChannelSCID
+	}
+	var lspCltv *uint16
+	if req.LSPCltvExpiryDelta != 0 {
+		lspCltv = &req.LSPCltvExpiryDelta
+	}
+	var lspFeeBase *uint64
+	var lspFeeProp *uint32
+	if req.LSPJitChannelSCID != "" {
+		fb := req.LSPFeeBaseMloki
+		lspFeeBase = &fb
+		fp := req.LSPFeeProportionalMillionths
+		lspFeeProp = &fp
+	}
+
+	// A Circle Wallet's invoice is always the Hub-settled one, checked against
+	// its receive room, its circle's holdings and its state (NIP-CW §Own Funds
+	// and Caps), whoever asks for it.
+	if req.AppId != nil {
+		var app db.App
+		if err := api.db.Limit(1).Find(&app, *req.AppId).Error; err != nil {
+			return nil, err
+		}
+		if app.Kind == db.AppKindCircleWallet {
+			if req.LSPJitChannelSCID != "" || req.LSPPubkey != "" {
+				return nil, fmt.Errorf("%w: a circle wallet's invoice takes no LSP channel", constants.ErrInvalidParams)
+			}
+			transaction, err := api.svc.GetTransactionsService().MakeCircleInvoice(ctx, &app, req.Amount, req.Description, req.DescriptionHash, 0, nil, api.svc.GetLNClient(), nil)
+			if err != nil {
+				return nil, err
+			}
+			return toApiTransaction(transaction), nil
+		}
+	}
+	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, req.Amount, req.Description, req.DescriptionHash, 0, nil, api.svc.GetLNClient(), req.AppId, nil, lspPubkey, lspScid, lspCltv, lspFeeBase, lspFeeProp, nil)
+	if err != nil {
+		return nil, err
+	}
+	return toApiTransaction(transaction), nil
+}
+
+func (api *api) LookupInvoice(ctx context.Context, paymentHash string) (*LookupInvoiceResponse, error) {
+	if api.svc.GetLNClient() == nil {
+		return nil, errors.New("LNClient not started")
+	}
+	transaction, err := api.svc.GetTransactionsService().LookupTransaction(ctx, paymentHash, nil, api.svc.GetLNClient(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return toApiTransaction(transaction), nil
+}
+
+func (api *api) ListTransactions(ctx context.Context, appId *uint, limit uint64, offset uint64) (*ListTransactionsResponse, error) {
+	if api.svc.GetLNClient() == nil {
+		return nil, errors.New("LNClient not started")
+	}
+
+	forceFilterByAppId := appId != nil
+
+	transactions, totalCount, err := api.svc.GetTransactionsService().ListTransactions(ctx, 0, 0, limit, offset, true, false, nil, api.svc.GetLNClient(), appId, forceFilterByAppId)
+	if err != nil {
+		return nil, err
+	}
+
+	apiTransactions := []Transaction{}
+	for _, transaction := range transactions {
+		apiTransactions = append(apiTransactions, *toApiTransaction(&transaction))
+	}
+
+	return &ListTransactionsResponse{
+		Transactions: apiTransactions,
+		TotalCount:   totalCount,
+	}, nil
+}
+
+func (api *api) SendPayment(ctx context.Context, invoice string, amountMloki *uint64, appID *uint, metadata map[string]interface{}) (*SendPaymentResponse, error) {
+	if api.svc.GetLNClient() == nil {
+		return nil, errors.New("LNClient not started")
+	}
+	// See nip47/controllers/pay_invoice_controller.go's pay() for why all
+	// three of these are stripped here too — this is the other general-
+	// purpose payment entry point capable of reaching SendPaymentSync with
+	// caller-supplied metadata.
+	if metadata != nil {
+		delete(metadata, "internal_transfer")
+		delete(metadata, "cash_claim_slice")
+		delete(metadata, "cash_redeem_fee_mloki")
+		delete(metadata, transactions.CashRedeemRouteCapKey)
+	}
+	transaction, err := api.svc.GetTransactionsService().SendPaymentSync(invoice, amountMloki, metadata, api.svc.GetLNClient(), appID, nil)
+	if err != nil {
+		return nil, err
+	}
+	if transaction == nil {
+		return nil, errors.New("payment settled but transaction record unavailable")
+	}
+	return toApiTransaction(transaction), nil
+}
+
+func toApiTransaction(transaction *transactions.Transaction) *Transaction {
+
+	updatedAt := transaction.UpdatedAt.Format(time.RFC3339)
+	createdAt := transaction.CreatedAt.Format(time.RFC3339)
+	var settledAt *string
+	var preimage *string
+	if transaction.SettledAt != nil {
+		settledAtValue := transaction.SettledAt.Format(time.RFC3339)
+		settledAt = &settledAtValue
+		preimage = transaction.Preimage
+	}
+
+	var metadata Metadata
+	if transaction.Metadata != nil {
+		jsonErr := json.Unmarshal(transaction.Metadata, &metadata)
+		if jsonErr != nil {
+			logger.Logger.Error().Err(jsonErr).
+				Str("payment_hash", transaction.PaymentHash).
+				Interface("metadata", transaction.Metadata).
+				Msg("Failed to deserialize transaction metadata")
+		}
+	}
+
+	var boostagram *Boostagram
+	if transaction.Boostagram != nil {
+		var txBoostagram transactions.Boostagram
+		jsonErr := json.Unmarshal(transaction.Boostagram, &txBoostagram)
+		if jsonErr != nil {
+			logger.Logger.Error().Err(jsonErr).
+				Str("payment_hash", transaction.PaymentHash).
+				Interface("boostagram", transaction.Boostagram).
+				Msg("Failed to deserialize transaction boostagram info")
+		}
+		boostagram = toApiBoostagram(&txBoostagram)
+	}
+
+	return &Transaction{
+		Type:            transaction.Type,
+		State:           strings.ToLower(transaction.State),
+		Invoice:         transaction.PaymentRequest,
+		Description:     transaction.Description,
+		DescriptionHash: transaction.DescriptionHash,
+		Preimage:        preimage,
+		PaymentHash:     transaction.PaymentHash,
+		Amount:          transaction.AmountMloki,
+		AppId:           transaction.AppId,
+		FeesPaid:        transaction.FeeMloki,
+		FeeSkim:         transaction.FeeSkimMloki,
+		UpdatedAt:       updatedAt,
+		CreatedAt:       createdAt,
+		SettledAt:       settledAt,
+		Metadata:        metadata,
+		Boostagram:      boostagram,
+		FailureReason:   transaction.FailureReason,
+	}
+}
+
+func (api *api) Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, amountMloki uint64) error {
+	if api.svc.GetLNClient() == nil {
+		return errors.New("LNClient not started")
+	}
+
+	for _, appId := range []*uint{fromAppId, toAppId} {
+		if appId != nil {
+			dbApp := api.appsSvc.GetAppById(*appId)
+			if dbApp == nil {
+				return errors.New("app does not exist")
+			}
+			if !dbApp.IsIsolated() {
+				return errors.New("app is not isolated")
+			}
+			// cash_wallet/circle_wallet balances only move via their hub's own
+			// allocation transfer (cashwallet.Create) and the wallet's own spend —
+			// a manual transfer here would desync that accounting.
+			if dbApp.Kind == db.AppKindCashWallet || dbApp.Kind == db.AppKindCircleWallet {
+				return fmt.Errorf("%w: manual transfers are not allowed for %s apps", constants.ErrInvalidParams, dbApp.Kind)
+			}
+		}
+	}
+
+	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amountMloki, "transfer", "", 0, nil, api.svc.GetLNClient(), toAppId, nil, nil, nil, nil, nil, nil, &transactions.InternalMakeInvoiceMeta{InternalTransfer: true})
+
+	if err != nil {
+		return err
+	}
+
+	// The amount only applies when the invoice has none of its own.
+	_, err = api.svc.GetTransactionsService().SendPaymentSync(transaction.PaymentRequest, &amountMloki,
+		map[string]interface{}{"internal_transfer": true},
+		api.svc.GetLNClient(), fromAppId, nil)
+	return err
+}
+
+func toApiBoostagram(boostagram *transactions.Boostagram) *Boostagram {
+	return &Boostagram{
+		AppName:         boostagram.AppName,
+		Name:            boostagram.Name,
+		Podcast:         boostagram.Podcast,
+		URL:             boostagram.URL,
+		Episode:         boostagram.Episode.String(),
+		FeedId:          boostagram.FeedId.String(),
+		ItemId:          boostagram.ItemId.String(),
+		Timestamp:       boostagram.Timestamp,
+		Message:         boostagram.Message,
+		SenderId:        boostagram.SenderId.String(),
+		SenderName:      boostagram.SenderName,
+		Time:            boostagram.Time,
+		Action:          boostagram.Action,
+		ValueMlokiTotal: boostagram.ValueMlokiTotal,
+	}
+}
+func (api *api) EstimateInvoiceFee(ctx context.Context, invoice string) (uint64, error) {
+	if api.svc.GetLNClient() == nil {
+		return 0, errors.New("LNClient not started")
+	}
+	return api.svc.GetTransactionsService().EstimateFee(invoice)
+}

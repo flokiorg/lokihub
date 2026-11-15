@@ -1,0 +1,176 @@
+import React from "react";
+import { Label } from "src/components/ui/label";
+
+import type { Invoice } from "@lightz/lightning-tools/bolt11";
+import { XIcon } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { toast } from "sonner";
+import AppHeader from "src/components/AppHeader";
+import FormattedFiatAmount from "src/components/FormattedFiatAmount";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
+import Loading from "src/components/Loading";
+import { PaymentFailedAlert } from "src/components/PaymentFailedAlert";
+import { PendingPaymentAlert } from "src/components/PendingPaymentAlert";
+import { SpendingAlert } from "src/components/SpendingAlert";
+import { CurrencyInput } from "src/components/CurrencyInput";
+import { LinkButton } from "src/components/ui/custom/link-button";
+import { LoadingButton } from "src/components/ui/custom/loading-button";
+import { useBalances } from "src/hooks/useBalances";
+import { useInputUnit, useUnit, type InputUnit } from "src/hooks/useUnit";
+import { PayInvoiceResponse } from "src/types";
+import { request } from "src/utils/request";
+
+export default function ZeroAmount() {
+  const { state } = useLocation();
+  const navigate = useNavigate();
+  const { data: balances } = useBalances();
+  const { scaleInputAmount, parseInputAmount } = useUnit();
+
+  const invoice = state?.args?.paymentRequest as Invoice;
+  const [amountDisplay, setAmountDisplay] = React.useState("");
+  const [isLoading, setLoading] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState("");
+
+  const [inputUnit, setInputUnit] = useInputUnit(
+    balances?.lightning.totalSpendable
+  );
+
+  const handleInputUnitChange = (newUnit: InputUnit) => {
+    if (amountDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setAmountDisplay(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
+
+  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setErrorMessage("");
+    try {
+      if (!invoice) {
+        throw new Error("no invoice set");
+      }
+      setLoading(true);
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
+      const payInvoiceResponse = await request<PayInvoiceResponse>(
+        `/api/payments/${invoice.paymentRequest}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            amount: amountLoki * 1000,
+          }),
+        }
+      );
+      if (!payInvoiceResponse?.preimage) {
+        throw new Error("No preimage in response");
+      }
+      navigate(`/wallet/send/success`, {
+        state: {
+          preimage: payInvoiceResponse.preimage,
+          pageTitle: "Pay Invoice",
+          invoice,
+          amount: amountDisplay,
+        },
+      });
+      toast("Successfully paid invoice");
+    } catch (e) {
+      console.error(e);
+      setErrorMessage("" + e);
+      toast.error("Failed to send payment", {
+        description: "" + e,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!invoice) {
+      navigate("/wallet/send");
+    }
+  }, [navigate, invoice]);
+
+  if (!balances || !invoice) {
+    return <Loading />;
+  }
+
+  return (
+    <div className="grid gap-4">
+      <AppHeader title="Pay Invoice" />
+      <div className="max-w-lg grid gap-4">
+        <PendingPaymentAlert />
+        {errorMessage && (
+          <PaymentFailedAlert
+            errorMessage={errorMessage}
+            invoice={invoice.paymentRequest}
+          />
+        )}
+      </div>
+      <form onSubmit={onSubmit} className="grid gap-6 md:max-w-lg">
+        <div className="grid gap-2">
+          <div className="text-sm font-medium">Recipient</div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm break-all line-clamp-1">
+              {invoice.paymentRequest}
+            </p>
+            <Link to="/wallet/send">
+              <XIcon className="w-4 h-4 cursor-pointer text-muted-foreground" />
+            </Link>
+          </div>
+        </div>
+        {invoice.description && (
+          <div className="grid gap-2">
+            <Label>Description</Label>
+            <p className="text-muted-foreground text-sm truncate max-w-full">
+              {invoice.description}
+            </p>
+          </div>
+        )}
+        <div className="grid gap-2">
+          <Label htmlFor="amount">Amount</Label>
+          <CurrencyInput
+            id="amount"
+            amount={amountDisplay}
+            onAmountChange={(val) => setAmountDisplay(val)}
+            inputUnit={inputUnit}
+            onInputUnitChange={handleInputUnitChange}
+            min={scaleInputAmount(1, inputUnit)}
+            required
+            autoFocus
+          />
+          <div className="grid gap-2">
+            <div className="flex justify-between text-xs text-muted-foreground sensitive slashed-zero">
+              <div>
+                Spending Balance:{" "}
+                <FormattedFlokicoinAmount
+                  amount={balances.lightning.totalSpendable}
+                />
+              </div>
+              <FormattedFiatAmount
+                className="text-xs"
+                amount={balances.lightning.totalSpendable / 1000}
+              />
+            </div>
+          </div>
+        </div>
+        <SpendingAlert
+          amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)}
+        />
+        <div className="flex gap-2">
+          <LinkButton to="/wallet/send" variant="outline">
+            Back
+          </LinkButton>
+          <LoadingButton loading={isLoading} type="submit" className="flex-1">
+            Send
+          </LoadingButton>
+        </div>
+      </form>
+    </div>
+  );
+}

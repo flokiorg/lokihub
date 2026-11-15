@@ -1,0 +1,97 @@
+{
+  "nav": {
+    "home": "Home",
+    "wallet": "Wallet",
+    "subWallets": "Sub-wallets",
+    "cashHub": "Cash Hubs",
+    "connections": "Connections",
+    "node": "Node",
+    "lsp": "LSP",
+    "settings": "Settings",
+    "help": "Help",
+    "logout": "Log out"
+  },
+  "actions": {
+    "show": "Show",
+    "hide": "Hide",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "close": "Close",
+    "continue": "Continue",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "share": "Share",
+    "disconnect": "Disconnect",
+    "connect": "Connect",
+    "next": "Next",
+    "back": "Back",
+    "done": "Done",
+    "loading": "Loading...",
+    "reload": "Reload App",
+    "saving": "Saving...",
+    "create": "Create",
+    "update": "Update",
+    "login": "Login",
+    "logout": "Log out",
+    "getStarted": "Get Started",
+    "goHome": "Go to Dashboard",
+    "viewAll": "View all",
+    "retry": "Retry",
+    "payAndOpen": "Pay and open channel",
+    "payExternally": "Pay with another wallet"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "opening": "Opening",
+    "pending": "Pending",
+    "active": "Active",
+    "inactive": "Inactive",
+    "closing": "Closing",
+    "failed": "Failed",
+    "success": "Success",
+    "loading": "Loading...",
+    "running": "Running"
+  },
+  "boolean": {
+    "yes": "Yes",
+    "no": "No"
+  },
+  "labels": {
+    "password": "Password",
+    "amount": "Amount",
+    "description": "Description",
+    "address": "Address",
+    "message": "Message",
+    "nodeAlias": "Node Alias",
+    "pubkey": "Public Key",
+    "alias": "Alias",
+    "appName": "App Name"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "failedToConnect": "Failed to connect",
+    "failedToSave": "Failed to save",
+    "tryAgain": "Please try again"
+  },
+  "relayHint": {
+    "none": "No Nostr relay is selected. Choose a relay under Settings → Services to load profiles, notes and circles."
+  },
+  "loading": "Loading...",
+  "appName": "Lokihub",
+  "criticalError": {
+    "title": "Critical Error",
+    "description": "Something went wrong and Lokihub cannot continue.",
+    "reloadApp": "Reload App",
+    "openDataFolder": "Open data folder"
+  },
+  "startupError": {
+    "title": "Lokihub couldn't start",
+    "description": "Something went wrong while starting up. Close Lokihub and try again. If this keeps happening, share the error below with support.",
+    "close": "Close",
+    "openDataFolder": "Open data folder"
+  }
+}

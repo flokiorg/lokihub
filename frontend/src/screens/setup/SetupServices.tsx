@@ -1,0 +1,177 @@
+import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
+import {
+  ServiceConfigForm,
+  ServiceConfigState,
+  validateServiceConfig,
+} from "src/components/ServiceConfigForm";
+import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
+import { Button } from "src/components/ui/button";
+import { Skeleton } from "src/components/ui/skeleton";
+import useSetupStore from "src/state/SetupStore";
+import { request } from "src/utils/request";
+import { SetupLayout } from "./SetupLayout";
+
+export function SetupServices() {
+  const navigate = useNavigate();
+  const store = useSetupStore();
+  const { t } = useTranslation("setup");
+
+  const [loading, setLoading] = useState(true);
+
+  const [config, setConfig] = useState<ServiceConfigState>({
+    mempoolApi: store.nodeInfo.mempoolApi || "",
+    relay: store.nodeInfo.relay || "",
+    trustedNwcRelay: true,
+    generalRelay: "",
+    searchRelay: "",
+    // App store is configured later under Settings → Services, not during setup.
+    lokihubStoreUrl: "",
+  });
+
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
+  // Fetch default values and community options
+  useEffect(() => {
+    async function fetchServices() {
+      try {
+        setLoading(true);
+        // Also fetch current info to prepopulate defaults if store is empty
+        const info = await request<any>("/api/info", { method: "GET" });
+        if (info) {
+          // We need to construct the new state based on info + store
+
+          // Helper to pick value: store > info > default
+          // Actually, store is initialized from empty/previous steps.
+          // If store values are empty, use info.
+
+          setConfig((prev) => {
+            const newConfig = { ...prev };
+            if (!newConfig.relay && info.relay) newConfig.relay = info.relay;
+            if (!newConfig.mempoolApi && info.mempoolUrl)
+              newConfig.mempoolApi = info.mempoolUrl;
+
+            return newConfig;
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch services or info", err);
+        toast.error(t("services.fetchError"));
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchServices();
+  }, []); // Run once on mount
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    const errors = validateServiceConfig(config, t);
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      // Scroll to error container
+      setTimeout(() => {
+        document
+          .getElementById("service-config-errors")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+      return;
+    }
+
+    store.updateNodeInfo({
+      relay: config.relay,
+      mempoolApi: config.mempoolApi,
+    });
+    navigate("/setup/node");
+  }
+
+  return (
+    <SetupLayout backTo="/setup/password">
+      <TwoColumnLayoutHeader
+        title={t("services.title")}
+        description={t("services.description")}
+      />
+
+      <form
+        onSubmit={onSubmit}
+        className="flex flex-col items-center w-full max-w-4xl mx-auto pb-10"
+      >
+        <div className="w-full space-y-6 mt-6">
+          {loading ? (
+            <ServicesSkeleton />
+          ) : (
+            <ServiceConfigForm
+              state={config}
+              onChange={setConfig}
+              validationErrors={validationErrors}
+              showGeneralRelay={false}
+              showSearchRelay={false}
+              showAppStore={false}
+            />
+          )}
+        </div>
+
+        <div className="flex justify-end w-full mt-8">
+          <Button type="submit" size="lg" disabled={loading}>
+            {loading ? t("services.loading") : t("services.continue")}
+          </Button>
+        </div>
+      </form>
+    </SetupLayout>
+  );
+}
+
+function ServicesSkeleton() {
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      {/* Esplora/Relay Section */}
+      <div className="space-y-4">
+        <Skeleton className="h-4 w-32" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+
+      {/* Toggle Sections */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between p-4 border rounded-lg">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+          <Skeleton className="h-6 w-10 rounded-full" />
+        </div>
+        <div className="flex items-center justify-between p-4 border rounded-lg">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+          <Skeleton className="h-6 w-10 rounded-full" />
+        </div>
+      </div>
+
+      {/* LSPs Section */}
+      <div className="space-y-4">
+        <Skeleton className="h-4 w-40" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="p-4 border rounded-lg flex items-center gap-4"
+            >
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="space-y-2 flex-1">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,663 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/internal/buildinfo"
+	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/flokiorg/lokihub/transactions"
+	nostrlsps5 "github.com/ohstr/nostr-lsps5"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip19"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lnclient/flnd"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/manager"
+	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
+	"github.com/flokiorg/lokihub/nodesign"
+)
+
+func (svc *service) ReloadNostr() error {
+	logger.Logger.Info().Msg("Reloading Nostr service...")
+	// Stop existing Nostr service
+	if svc.nostrCancelFn != nil {
+		svc.nostrCancelFn()
+	}
+
+	if svc.lnClient == nil {
+		logger.Logger.Info().Msg("LNClient not started, skipping Nostr reload")
+		return nil
+	}
+
+	ctx, cancelFn := context.WithCancel(svc.ctx)
+	svc.nostrCancelFn = cancelFn
+
+	return svc.startNostr(ctx)
+}
+
+func (svc *service) startNostr(ctx context.Context) error {
+	relayUrls := svc.cfg.GetRelayUrls()
+	if len(relayUrls) == 0 {
+		return errors.New("no relay URLs found")
+	}
+
+	// A fresh group per startNostr call (not the service-lifetime svc.shutdownGroup):
+	// ReloadNostr can re-invoke startNostr independently while the app is already
+	// running, and reusing a single long-lived errgroup across calls could race
+	// Go() against an in-flight StopApp Wait() on the same group instance.
+	group := new(errgroup.Group)
+	svc.nostrGroup = group
+
+	npub, err := nip19.EncodePublicKey(svc.keys.GetNostrPublicKey())
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Error converting nostr privkey to pubkey")
+		return err
+	}
+
+	logger.Logger.Info().
+		Str("npub", npub).
+		Str("hex", svc.keys.GetNostrPublicKey()).
+		Str("version", buildinfo.Tag).
+		Interface("relay_urls", relayUrls).
+		Msg("Starting Lokihub")
+
+	// To debug go-nostr, run with -tags "debug dev" (dev tag so FLND build doesn't break with debug tag set)
+	// go run -tags "debug dev" -ldflags="-X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=v1.20.0'" cmd/http/main.go
+	if logger.Logger.GetLevel() >= 4 {
+		nostr.InfoLogger.SetOutput(logger.Writer)
+		nostr.DebugLogger.SetOutput(logger.Writer)
+	}
+
+	// Start infinite loop which will be only broken by canceling ctx (SIGINT)
+	pool := nostr.NewSimplePool(ctx, nostr.WithRelayOptions(
+		nostr.WithNoticeHandler(svc.noticeHandler),
+		nostr.WithRequestHeader(http.Header{
+			"User-Agent": {"Lokihub/" + buildinfo.Tag},
+		}),
+	))
+
+	// Initially try to connect to relays (if hub has no apps, pool won't
+	// connect to relays by default). Warms General relays here too, not just
+	// NWC's — this pool is also handed to StartNostrSocialCacheRefresher
+	// below, whose first sweep needs General relays for kind:3 fetches.
+	// UpdateSettings' GeneralRelay branch re-warms this at runtime too.
+	warmRelays(pool, mergeRelayUrls(svc.cfg.GetRelayUrls(), svc.cfg.GetGeneralRelayUrls()))
+	group.Go(func() error {
+		for {
+			// Re-applied every pass: the pool builds a fresh Relay on
+			// reconnect, which would otherwise lose the trusted flag.
+			svc.applyTrustedRelayOptions(pool)
+
+			svc.relayStatuses = nil
+			for _, relayUrl := range svc.cfg.GetRelayUrls() {
+				normalizedUrl := nostr.NormalizeURL(relayUrl)
+				relay, ok := pool.Relays.Load(normalizedUrl)
+				online := ok && relay != nil && relay.IsConnected()
+
+				// Force reconnection if offline
+				if !online {
+					go func(relayUrl string) {
+						if _, err := pool.EnsureRelay(relayUrl); err != nil {
+							logger.Logger.Warn().Err(err).Str("relay", relayUrl).Msg("Failed to reconnect to relay")
+						}
+					}(relayUrl)
+				}
+
+				svc.relayStatuses = append(svc.relayStatuses, RelayStatus{
+					Url:    relayUrl,
+					Online: online,
+				})
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(10 * time.Second):
+			}
+		}
+	})
+
+	svc.nip47Service.StartNotifier(ctx, pool)
+	svc.nip47Service.StartNip47InfoPublisher(ctx, pool, svc.lnClient)
+	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher,
+		time.Duration(svc.cfg.GetEnv().CashSplitLinkRetentionDays)*24*time.Hour)
+	StartOrphanRedeemSweep(ctx, svc.db, apps.NewAppsService(svc.db, svc.eventPublisher, svc.keys, svc.cfg), svc.GetLNClient, svc.eventPublisher)
+	StartCircleLifecycleService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher)
+	svc.startOrderJobs(ctx, pool)
+	StartNostrSocialCacheRefresher(ctx, svc.db, svc.socialCache, pool)
+
+	// Start LSPS5 listener
+	svc.lsps5Listener = lspsnostr.NewListener(svc.keys, svc.cfg, svc.eventPublisher, func() []string {
+		if svc.liquidityManager == nil {
+			return nil
+		}
+		lsps, err := svc.liquidityManager.GetSelectedLSPs()
+		if err != nil {
+			logger.Logger.Warn().Err(err).Msg("Failed to get trusted LSPs for Nostr listener")
+			return nil
+		}
+		var keys []string
+		for _, l := range lsps {
+			if l.NostrPubkey != "" {
+				keys = append(keys, l.NostrPubkey)
+			}
+		}
+		return keys
+	})
+	if err := svc.lsps5Listener.Start(ctx, pool); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to start LSPS5 Nostr listener")
+	}
+	// Register LSPS5 event consumer
+	lspsConsumer := &lspsEventConsumer{svc: svc}
+	svc.eventPublisher.RegisterSubscriber(lspsConsumer)
+
+	// register a subscriber for events of "nwc_app_created" which handles creation of nostr subscription for new app
+	createAppEventListener := &createAppConsumer{svc: svc, pool: pool}
+	svc.eventPublisher.RegisterSubscriber(createAppEventListener)
+
+	// register a subscriber for events of "nwc_app_updated" which handles re-publishing of nip47 event info
+	updateAppEventListener := &updateAppConsumer{svc: svc}
+	svc.eventPublisher.RegisterSubscriber(updateAppEventListener)
+
+	// Keeps the relay gate in step when a Cash Hub's spent-bill retention
+	// changes: raising it brings wallets back into range that the sweep has
+	// already dropped.
+
+	// Fresh per startNostr call, like nostrGroup above: ReloadNostr can
+	// re-invoke this while the app runs, and the set must be rebuilt from the
+	// apps that exist now.
+	svc.walletRegistry = newWalletRegistry()
+
+	if svc.cfg.TrustedNwcRelay() {
+		logger.Logger.Warn().
+			Strs("relays", svc.cfg.GetRelayUrls()).
+			Msg("Treating NWC relays as this hub's own: subscribing to every NIP-47 request on them and skipping signature verification for events they deliver. Turn TrustedNwcRelay off if any of these relays is not operated by this hub.")
+	}
+
+	// start each app wallet subscription which have a child derived wallet key
+	svc.startAllExistingAppsWalletSubscriptions(ctx, pool)
+
+	// The private transport runs alongside the standard one rather than replacing
+	// it: bills and circle joins move here, while sub-wallets, ordinary apps and
+	// the legacy path keep speaking kind 23194.
+	//
+	// Always started. The four bill methods are served over this transport ONLY
+	// (NIP-CASH §The Private Transport), so a hub that did not start it would accept
+	// bills it could never let anyone spend. There is deliberately no switch: one
+	// that turned this off would not degrade the hub, it would strand every bill on
+	// it.
+	if err := svc.startPrivateTransport(ctx, pool, group); err != nil {
+		// Deliberately not fatal, and now the reasoning is narrower than it was: the
+		// rest of the NWC surface (mint_cash, get_balance, pay_invoice) is unaffected
+		// and should keep serving, so refusing to boot would take down more than it
+		// fixes. Loud, though — bills on this hub are unspendable until it recovers.
+		logger.Logger.Error().Err(err).Msg("Failed to start the private transport; bill methods are unavailable until it recovers")
+	}
+
+	// check if there are still legacy apps in DB
+	var legacyAppCount int64
+	result := svc.db.Model(&db.App{}).Where("wallet_pubkey IS NULL").Count(&legacyAppCount)
+	if result.Error != nil {
+		logger.Logger.Error().Err(result.Error).Msg("Failed to count Legacy Apps")
+	}
+	if legacyAppCount > 0 {
+		group.Go(func() error {
+			logger.Logger.Info().Interface("legacy_app_count", legacyAppCount).Msg("Starting legacy app subscription")
+			// legacy single wallet subscription - only subscribe once for all legacy apps
+			// to ensure we do not get duplicate events
+			return svc.startAppWalletSubscription(ctx, pool, svc.keys.GetNostrPublicKey(), group)
+		})
+	}
+
+	group.Go(func() error {
+		<-ctx.Done()
+		logger.Logger.Info().Msg("Main context cancelled, exiting...")
+
+		pool.Close("exiting")
+		logger.Logger.Info().Msg("Relay subroutine ended")
+
+		svc.eventPublisher.RemoveSubscriber(createAppEventListener)
+		svc.eventPublisher.RemoveSubscriber(updateAppEventListener)
+		return nil
+	})
+
+	return nil
+}
+
+// In case the relay somehow loses events or the hub updates with
+// new capabilities, we re-publish info events for all apps on startup
+// to ensure that they are retrievable for all connections
+func (svc *service) publishAllAppInfoEvents() {
+	func() {
+		var legacyAppCount int64
+		result := svc.db.Model(&db.App{}).Where("wallet_pubkey IS NULL").Count(&legacyAppCount)
+		if result.Error != nil {
+			logger.Logger.Error().Err(result.Error).Msg("Failed to fetch App records with empty WalletPubkey")
+			return
+		}
+		if legacyAppCount > 0 {
+			logger.Logger.Debug().Interface("legacy_app_count", legacyAppCount).Msg("Enqueuing publish of legacy info event")
+			for _, relayUrl := range svc.cfg.GetRelayUrls() {
+				svc.nip47Service.EnqueueNip47InfoPublishRequest(0 /* unused */, svc.keys.GetNostrPublicKey(), svc.keys.GetNostrSecretKey(), relayUrl)
+			}
+		}
+	}()
+
+	if err := svc.forEachAppWithWallet(walletSeedPageSize, func(apps []db.App) {
+		for _, app := range apps {
+			func(app db.App) {
+				// Skipped for cash bills — see db.PublishesNip47InfoEvent. Without
+				// this, every restart would re-advertise every live bill, undoing
+				// the suppression at creation time.
+				if !db.PublishesNip47InfoEvent(app.Kind) {
+					return
+				}
+				// queue info event publish request for all existing apps
+				walletPrivKey, err := svc.keys.GetAppWalletKey(app.ID)
+				if err != nil {
+					logger.Logger.Error().Err(err).
+						Uint("app_id", app.ID).
+						Msg("Could not get app wallet key")
+					return
+				}
+				logger.Logger.Debug().Interface("app_id", app.ID).Msg("Enqueuing publish of app info event")
+				for _, relayUrl := range svc.cfg.GetRelayUrls() {
+					svc.nip47Service.EnqueueNip47InfoPublishRequest(app.ID, *app.WalletPubkey, walletPrivKey, relayUrl)
+				}
+			}(app)
+		}
+	}); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch App records with non-empty WalletPubkey")
+		return
+	}
+}
+
+// walletSeedPageSize bounds how many App rows the startup wallet seeders hold
+// at once (keyset-paged by id), so neither the registry seed nor the per-wallet
+// subscription loop materialises the whole apps table at startup at any scale.
+const walletSeedPageSize = 10000
+
+// forEachAppWithWallet calls fn for each id-keyset page of Apps that have a
+// wallet_pubkey, in ascending id order. pageSize is a parameter so tests can
+// exercise the paging with a small value.
+func (svc *service) forEachAppWithWallet(pageSize int, fn func(apps []db.App)) error {
+	var lastID uint
+	for {
+		var page []db.App
+		if err := svc.db.Where("wallet_pubkey IS NOT NULL AND id > ?", lastID).
+			Order("id").Limit(pageSize).Find(&page).Error; err != nil {
+			return err
+		}
+		if len(page) == 0 {
+			return nil
+		}
+		fn(page)
+		lastID = page[len(page)-1].ID
+		if len(page) < pageSize {
+			return nil
+		}
+	}
+}
+
+func (svc *service) startAllExistingAppsWalletSubscriptions(ctx context.Context, pool *nostr.SimplePool) {
+	// Captured once here (svc.nostrGroup was set synchronously at the top of
+	// the startNostr call that led here) and threaded through explicitly from
+	// this point on, rather than re-read from svc.nostrGroup inside a spawned
+	// goroutine — a concurrent ReloadNostr can swap that field to a new group
+	// at any time, and a stale read would register work on the wrong group.
+	group := svc.nostrGroup
+
+	if svc.cfg.TrustedNwcRelay() {
+		total := 0
+		if err := svc.forEachAppWithWallet(walletSeedPageSize, func(apps []db.App) {
+			pubkeys := make([]string, 0, len(apps))
+			for _, app := range apps {
+				pubkeys = append(pubkeys, *app.WalletPubkey)
+			}
+			svc.walletRegistry.Add(pubkeys...)
+			total += len(apps)
+		}); err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to seed the wallet registry")
+			return
+		}
+
+		// One consumer for every wallet: with a shared subscription there is
+		// no per-wallet subscription left to cancel on deletion, so the
+		// wallet is dropped from the registry instead.
+		svc.eventPublisher.RegisterSubscriber(&deleteAppConsumer{
+			pool: pool,
+			svc:  svc,
+		})
+
+		logger.Logger.Info().Int("app_count", total).Msg("Subscribing to all NIP-47 requests (one subscription for every app wallet)")
+		group.Go(func() error {
+			return svc.startTrustedRelaySubscription(ctx, pool, group)
+		})
+		return
+	}
+
+	total := 0
+	if err := svc.forEachAppWithWallet(walletSeedPageSize, func(apps []db.App) {
+		for _, app := range apps {
+			group.Go(func() error {
+				return svc.startAppWalletSubscription(ctx, pool, *app.WalletPubkey, group)
+			})
+		}
+		total += len(apps)
+	}); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to read app wallets for subscription")
+		return
+	}
+	logger.Logger.Info().Int("app_count", total).Msg("Subscribing to events for app wallets")
+}
+
+func (svc *service) startAppWalletSubscription(ctx context.Context, pool *nostr.SimplePool, appWalletPubKey string, group *errgroup.Group) error {
+
+	logger.Logger.Debug().Str("wallet", appWalletPubKey).Msg("Subscribing to events")
+
+	filter := nostr.Filter{
+		Tags:  nostr.TagMap{"p": []string{appWalletPubKey}},
+		Kinds: []int{models.REQUEST_KIND},
+	}
+
+	for {
+		subCtx, cancelSubscription := context.WithCancel(ctx)
+		eventsChannel := pool.SubscribeMany(subCtx, svc.cfg.GetRelayUrls(), filter)
+
+		// register a subscriber for "nwc_app_deleted" events, which handles
+		// cancelling the nostr subscription and nip47 info event deletion
+		deleteAppSubscriber := deleteAppConsumer{
+			cancelSubscription: cancelSubscription,
+			walletPubkey:       appWalletPubKey,
+			svc:                svc,
+			pool:               pool,
+		}
+
+		svc.eventPublisher.RegisterSubscriber(&deleteAppSubscriber)
+
+		err := svc.watchSubscription(subCtx, pool, eventsChannel, appWalletPubKey, group)
+
+		svc.eventPublisher.RemoveSubscriber(&deleteAppSubscriber)
+		if err != nil {
+			logger.Logger.Error().Err(err).Str("wallet", appWalletPubKey).Msg("got an error from the relay while listening to subscription, resubscribing")
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		break
+	}
+	return nil
+}
+
+func (svc *service) watchSubscription(ctx context.Context, pool *nostr.SimplePool, eventsChannel chan nostr.RelayEvent, appWalletPubKey string, group *errgroup.Group) error {
+	// Buffered so the inner goroutine can send without blocking when the outer
+	// select has already returned via ctx.Done() — prevents a goroutine leak.
+	eventsChannelClosed := make(chan struct{}, 1)
+	go func() {
+		// loop through incoming events
+		for event := range eventsChannel {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// Tracked on group (not a bare `go`) so that StopApp/Shutdown's
+				// nostrGroup.Wait() genuinely blocks until any in-flight NIP-47
+				// request — including a mint_cash call mid fund-transfer —
+				// finishes, before the LN client or DB pool is torn down. Safe to
+				// call concurrently with group.Wait(): the goroutine running this
+				// loop already holds a slot in group for as long as it's dispatching
+				// events, so group's internal counter can't have already hit zero.
+				group.Go(func() error {
+					defer func() {
+						if r := recover(); r != nil {
+							logger.Logger.Error().Interface("panic", r).Msg("recovered panic in NIP-47 event handling")
+						}
+					}()
+					svc.nip47Service.HandleEvent(ctx, pool, event.Event, svc.lnClient)
+					return nil
+				})
+			}
+		}
+		logger.Logger.Debug().Str("wallet", appWalletPubKey).Msg("Relay subscription events channel ended")
+		eventsChannelClosed <- struct{}{}
+	}()
+
+	select {
+	case <-ctx.Done():
+		logger.Logger.Trace().Str("wallet", appWalletPubKey).Msg("Exiting subscription due to context exit...")
+		return nil
+	case <-eventsChannelClosed:
+		// in go-nostr pool, currently if the relay sends a close that is not "auth-required:"
+		// this will trigger closing the subscription channel. We return an error to trigger a resubscribe.
+		logger.Logger.Info().Str("wallet", appWalletPubKey).Msg("Subscription was exited abnormally")
+		return errors.New("subscription exited abnormally")
+	}
+}
+
+func (svc *service) StartApp(encryptionKey string) error {
+	defer func() {
+		svc.startupState = ""
+	}()
+
+	svc.startupState = "Initializing"
+
+	if svc.lnClient != nil {
+		return errors.New("app already started")
+	}
+	if !svc.cfg.CheckUnlockPassword(encryptionKey) {
+		logger.Logger.Error().Msg("Invalid password")
+		return errors.New("invalid password")
+	}
+
+	err := svc.cfg.Unlock(encryptionKey)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to unlock config")
+		return err
+	}
+
+	err = svc.keys.Init(svc.cfg, encryptionKey)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to init nostr keys")
+		return err
+	}
+	// The at-rest key is loaded now: seal any hold preimage stored plain.
+	if n, err := transactions.SealHoldPreimages(svc.db); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to seal stored hold invoice preimages")
+		return err
+	} else if n > 0 {
+		logger.Logger.Info().Int("count", n).Msg("Sealed stored hold invoice preimages at rest")
+	}
+
+	ctx, cancelFn := context.WithCancel(svc.ctx)
+	svc.shutdownGroup = new(errgroup.Group)
+
+	svc.startupState = "Connecting to Node"
+	err = svc.launchLNBackend(ctx, encryptionKey)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to connect to FLN backend")
+		svc.eventPublisher.Publish(&events.Event{
+			Event: "nwc_node_start_failed",
+		})
+		cancelFn()
+		return err
+	}
+
+	// Initialize and start LiquidityManager (LSPS)
+	// Initialize and start LiquidityManager (LSPS)
+	lspManager := manager.NewLSPManager(svc.db)
+	lmCfg := manager.NewManagerConfig(svc.lnClient, lspManager, svc.eventPublisher)
+
+	// Inject webhook configuration logic to allow LiquidityManager to auto-register
+	lmCfg.GetWebhookConfig = func() (string, string) {
+		// Try Nostr transport first
+		if constants.DEFAULT_ENABLE_NOSTR_NOTIFICATIONS {
+			if svc.GetKeys() != nil {
+				privKey := svc.GetKeys().GetNostrSecretKey()
+				if privKey == "" {
+					return "", ""
+				}
+
+				lsps5 := nostrlsps5.New(privKey)
+				uri, err := lsps5.URI(svc.cfg.GetRelayUrls())
+				if err == nil {
+					return uri, "nostr"
+				}
+				logger.Logger.Warn().Err(err).Msg("Failed to generate LSPS5 URI via library")
+			}
+		}
+		// Possible HTTP fallback in the future
+		return "", ""
+	}
+
+	lm, err := manager.NewLiquidityManager(lmCfg)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to initialize LiquidityManager")
+		// We don't fail startup for this yet, but we should log it
+	} else {
+		svc.liquidityManager = lm
+		svc.transactionsService.SetLiquidityManager(lm)
+		if err := lm.Start(ctx); err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to start LiquidityManager")
+		} else {
+			logger.Logger.Info().Msg("LiquidityManager started")
+		}
+	}
+
+	// Fiat-rate oracle: subscribe to the NIP-78 price event and keep the cached
+	// rate fresh (replaces the former services.json rates sync).
+	svc.shutdownGroup.Go(func() error {
+		svc.rateOracle.Start(ctx)
+		return nil
+	})
+
+	svc.startLSPCatalogue(ctx, lspManager)
+	svc.publishAllAppInfoEvents()
+	svc.startListings(ctx)
+
+	svc.startupState = "Connecting To Relay"
+	err = svc.startNostr(ctx)
+	if err != nil {
+		cancelFn()
+		return err
+	}
+
+	svc.appCancelFn = cancelFn
+
+	return nil
+}
+
+func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) error {
+	if svc.lnClient != nil {
+		logger.Logger.Error().Msg("LNClient already started")
+		return errors.New("LNClient already started")
+	}
+
+	svc.shutdownGroup.Go(func() error {
+		// ensure the LNClient is stopped properly before exiting
+		<-ctx.Done()
+		svc.stopLNClient()
+		return nil
+	})
+
+	logger.Logger.Info().Str("backend_type", config.FLNDBackendType).Msg("Connecting to FLN Backend")
+
+	FLNDAddress, _ := svc.cfg.Get("LNDAddress", encryptionKey)
+	FLNDCertHex, _ := svc.cfg.Get("LNDCertHex", encryptionKey)
+	FLNDMacaroonHex, _ := svc.cfg.Get("LNDMacaroonHex", encryptionKey)
+
+	lnClient, err := flnd.NewFLNDService(ctx, svc.cfg, svc.eventPublisher, FLNDAddress, FLNDCertHex, FLNDMacaroonHex)
+
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to connect to FLN backend")
+		return err
+	}
+
+	if err := enforceDevStackNetwork(ctx, lnClient, config.IsDevStack()); err != nil {
+		_ = lnClient.Shutdown()
+		return err
+	}
+
+	// TODO: call a method on the LNClient here to check the LNClient is actually connectable,
+	// (e.g. lnClient.CheckConnection()) Rather than it being a side-effect
+	// in the LNClient init function
+
+	// Write NodeLastStartTime before exposing lnClient to the API so that
+	// GetInfo never returns {running:true, setupCompleted:false}, which would
+	// send the frontend to the onboarding page instead of the start/home page.
+	err = svc.cfg.SetUpdate("NodeLastStartTime", strconv.FormatInt(time.Now().Unix(), 10), "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to set last node start time")
+	}
+
+	svc.lnClient = lnClient
+	info, err := lnClient.GetInfo(ctx)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
+	}
+	if refusal := testBuildNetworkRefusal(buildHasTestHooks, info, err); refusal != nil {
+		svc.lnClient = nil
+		_ = lnClient.Shutdown()
+		return refusal
+	}
+	if info != nil {
+		if refusal := config.CheckNodeNetwork(svc.cfg.GetEnv().Network, info.Network); refusal != nil {
+			logger.Logger.Error().Err(refusal).Msg("Refusing to start beside a node on another network")
+			svc.lnClient = nil
+			_ = lnClient.Shutdown()
+			return refusal
+		}
+	}
+	// Every cash signature by the node identity waits on this check.
+	nodesign.Guard.Set(svc.checkCashIdentityNetwork)
+	if info != nil {
+		svc.eventPublisher.SetGlobalProperty("node_id", info.Pubkey)
+		svc.eventPublisher.SetGlobalProperty("network", info.Network)
+	}
+
+	svc.eventPublisher.Publish(&events.Event{
+		Event: "nwc_node_started",
+		Properties: map[string]interface{}{
+			"node_type": config.FLNDBackendType,
+		},
+	})
+
+	return nil
+}
+
+type nodeInfoGetter interface {
+	GetInfo(ctx context.Context) (*lnclient.NodeInfo, error)
+}
+
+// exitProcess is os.Exit, behind a variable so a test can observe the dev-stack refusal.
+var exitProcess = os.Exit
+
+// enforceDevStackNetwork stops the backend (exit 1) when it runs in the regtest dev
+// stack and its node is on any other network, so the dev stack and its test hooks
+// can never drive a mainnet node.
+func enforceDevStackNetwork(ctx context.Context, lnClient nodeInfoGetter, devStack bool) error {
+	if !devStack {
+		return nil
+	}
+	info, err := lnClient.GetInfo(ctx)
+	network := ""
+	if err == nil && info != nil {
+		network = info.Network
+	}
+	if err := config.CheckDevStackNode(true, network); err != nil {
+		logger.Logger.Error().Err(err).Msg("Refusing to start")
+		exitProcess(1)
+		return err
+	}
+	return nil
+}
