@@ -1,5 +1,7 @@
 {
   "nav": {
+    "groupMoney": "Money",
+    "groupNetwork": "Network",
     "home": "Home",
     "wallet": "Wallet",
     "subWallets": "Sub-wallets",

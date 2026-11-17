@@ -25,6 +25,7 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -81,7 +82,8 @@ export function AppSidebar() {
   }, [_isHttpMode, navigate, refetchInfo]);
 
   const data = {
-    navMain: [
+    // Money: everything about this hub's own funds.
+    navMoney: [
       {
         title: t("nav.home"),
         url: "/home",
@@ -102,6 +104,9 @@ export function AppSidebar() {
         url: "/cash-hub",
         icon: BanknoteIcon,
       },
+    ],
+    // Network: how this hub is discovered and connected to others.
+    navNetwork: [
       {
         title: t("nav", { ns: "listings" }),
         url: "/listings",
@@ -144,6 +149,32 @@ export function AppSidebar() {
     ],
   };
 
+  const renderNavGroup = (
+    label: string,
+    items: { title: string; url: string; icon: LucideIcon }[]
+  ) => (
+    <SidebarGroup>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => (
+            <SidebarMenuItem key={item.title}>
+              <SidebarMenuButton
+                asChild
+                isActive={location.pathname === item.url}
+              >
+                <Link to={item.url} onClick={() => setOpenMobile(false)}>
+                  <item.icon />
+                  <span>{item.title}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+
   return (
     <Sidebar
       side={isRTL ? "right" : "left"}
@@ -161,30 +192,8 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {data.navMain.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location.pathname === item.url}
-                  >
-                    <Link
-                      to={item.url}
-                      onClick={() => {
-                        setOpenMobile(false);
-                      }}
-                    >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {renderNavGroup(t("nav.groupMoney"), data.navMoney)}
+        {renderNavGroup(t("nav.groupNetwork"), data.navNetwork)}
         <div className="mt-auto">
           <SidebarGroup>
             <SidebarGroupContent>
