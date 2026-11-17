@@ -333,6 +333,8 @@
   },
   "newCashHub": {
     "title": "New Cash Hub",
+    "essentialsTitle": "The essentials",
+    "essentialsDesc": "A Cash Hub mints bills backed by a wallet you choose. Open Advanced for fees, expiry and payouts.",
     "description": "The wallet you'll mint Lokicash from. Limits you set here apply to every token it issues.",
     "maxWalletBudgetHelper": "Maximum budget that can be allocated to each cash bill issued from this hub",
     "maxExpiryHelper": "Maximum lifetime for issued cash bills",

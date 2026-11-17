@@ -215,7 +215,7 @@
       "dependOnBalanceDesc": "Sub-wallets are using your Hubs node liquidity. They can receive funds as long as you have enough receive limit in your channels.",
       "waryOfSpendingTitle": "Be wary of spending sub-wallets funds",
       "waryOfSpendingDesc": "Make sure you always maintain enough funds in your spending balance to prevent sub-wallets becoming unspendable. Sub-wallet payments might fail if the amount isn't available in your spending balance.",
-      "walletTypesTitle": "Three ways to create a sub-wallet"
+      "walletTypesTitle": "Choose a sub-wallet type"
     },
     "increaseBalance": {
       "title": "Increase Balance",

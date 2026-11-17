@@ -9,6 +9,13 @@ import {
   DEFAULT_CASH_SPENT_RETENTION_SECS,
 } from "src/constants";
 import { Button } from "src/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
@@ -83,34 +90,42 @@ export function NewCashHub() {
         onSubmit={handleSubmit}
         className="flex w-full max-w-2xl flex-col items-start gap-4"
       >
-        <div className="w-full grid gap-1.5">
-          <Label htmlFor="name">{t("common.nameLabel")}</Label>
-          <Input
-            autoFocus
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            autoComplete="off"
-          />
-        </div>
-        <CashHubConfigCard
-          budgetLabel={t("common.cashMaxBudgetLabel")}
-          budgetHelper={t("newCashHub.maxWalletBudgetHelper")}
-          expiryLabel={t("common.cashMaxExpiryLabel")}
-          expiryHelper={t("newCashHub.maxExpiryHelper")}
-          perWalletMaxLoki={perWalletMaxLoki}
-          onPerWalletMaxLokiChange={setPerWalletMaxLoki}
-          maxExpSecs={maxExpSecs}
-          onMaxExpSecsChange={setMaxExpSecs}
-          minTransferLoki={minTransferLoki}
-          onMinTransferLokiChange={setMinTransferLoki}
-          redeemFeePpm={redeemFeePpm}
-          onRedeemFeePpmChange={setRedeemFeePpm}
-          spentRetentionSecs={spentRetentionSecs}
-          onSpentRetentionSecsChange={setSpentRetentionSecs}
-        />
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>{t("newCashHub.essentialsTitle")}</CardTitle>
+            <CardDescription>{t("newCashHub.essentialsDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="w-full grid gap-1.5">
+              <Label htmlFor="name">{t("common.nameLabel")}</Label>
+              <Input
+                autoFocus
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="off"
+              />
+            </div>
+            <CashHubConfigCard
+              budgetLabel={t("common.cashMaxBudgetLabel")}
+              budgetHelper={t("newCashHub.maxWalletBudgetHelper")}
+              expiryLabel={t("common.cashMaxExpiryLabel")}
+              expiryHelper={t("newCashHub.maxExpiryHelper")}
+              perWalletMaxLoki={perWalletMaxLoki}
+              onPerWalletMaxLokiChange={setPerWalletMaxLoki}
+              maxExpSecs={maxExpSecs}
+              onMaxExpSecsChange={setMaxExpSecs}
+              minTransferLoki={minTransferLoki}
+              onMinTransferLokiChange={setMinTransferLoki}
+              redeemFeePpm={redeemFeePpm}
+              onRedeemFeePpmChange={setRedeemFeePpm}
+              spentRetentionSecs={spentRetentionSecs}
+              onSpentRetentionSecsChange={setSpentRetentionSecs}
+            />
+          </CardContent>
+        </Card>
         <div className="grid gap-2">
           <div className="flex gap-3">
             <Button
