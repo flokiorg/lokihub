@@ -98,7 +98,9 @@
     "fullAccess": "Full Access",
     "fullAccessDesc": "Complete control over your hub - can read data and perform all operations (send payments, manage apps, etc.)",
     "readonlyAccess": "Read-Only Access",
-    "readonlyAccessDesc": "View-only access - can read balances, transactions, and other data but cannot perform operations"
+    "readonlyAccessDesc": "View-only access - can read balances, transactions, and other data but cannot perform operations",
+    "payoutEngineTitle": "Payout engine",
+    "payoutEngineDesc": "Low-level diagnostics for the on-chain payout engine. For debugging — safe to ignore."
   },
   "about": {
     "title": "About",

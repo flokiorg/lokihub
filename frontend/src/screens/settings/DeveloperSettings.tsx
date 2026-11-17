@@ -11,6 +11,7 @@ import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "src/components/ui/radio-group";
 import { Separator } from "src/components/ui/separator";
+import { WithdrawEngineStatus } from "src/components/withdraw/WithdrawNodeSettings";
 import { copyToClipboard } from "src/lib/clipboard";
 import { AuthTokenResponse } from "src/types";
 import { request } from "src/utils/request";
@@ -231,6 +232,16 @@ export default function DeveloperSettings() {
             </p>
           </>
         )}
+      </div>
+      <Separator />
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1 text-sm">
+          <h3 className="font-semibold">{t("developer.payoutEngineTitle")}</h3>
+          <div className="text-muted-foreground">
+            {t("developer.payoutEngineDesc")}
+          </div>
+        </div>
+        <WithdrawEngineStatus />
       </div>
     </>
   );
