@@ -1,6 +1,8 @@
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { cn } from "src/lib/utils";
 import { LanguageSwitcher } from "src/components/LanguageSwitcher";
 import { WithdrawNodeSettings } from "src/components/withdraw/WithdrawNodeSettings";
 import Loading from "src/components/Loading";
@@ -113,27 +115,43 @@ function Settings() {
           <h3 className="text-xl font-medium">{t("sections.appearance")}</h3>
           <div className="space-y-4">
             <div className="grid gap-2">
-              <Label htmlFor="theme">{t("appearance.theme")}</Label>
-              <Select
-                value={theme}
-                onValueChange={(value) => {
-                  setTheme(value as Theme);
-                  toast(t("toasts.themeUpdated"));
-                }}
-              >
-                <SelectTrigger className="w-full md:w-60">
-                  <SelectValue placeholder={t("appearance.theme")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {Themes.map((th) => (
-                    <SelectItem key={th} value={th}>
-                      <span className="capitalize">
+              <Label>{t("appearance.theme")}</Label>
+              <div className="grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-3">
+                {Themes.map((th) => (
+                  <button
+                    key={th}
+                    type="button"
+                    onClick={() => {
+                      setTheme(th as Theme);
+                      toast(t("toasts.themeUpdated"));
+                    }}
+                    className={cn(
+                      "rounded-lg border bg-card p-2 text-left transition-colors hover:border-primary/50",
+                      theme === th && "border-primary ring-2 ring-primary/30"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-10 overflow-hidden rounded-md border",
+                        th !== "default" && `theme-${th}`
+                      )}
+                    >
+                      <div className="flex-1 bg-background" />
+                      <div className="flex-1 bg-primary" />
+                      <div className="flex-1 bg-secondary" />
+                      <div className="flex-1 bg-muted" />
+                    </div>
+                    <div className="mt-1.5 flex items-center justify-between px-0.5">
+                      <span className="text-sm font-medium capitalize">
                         {th === "default" ? t("appearance.themes.default") : th}
                       </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      {theme === th && (
+                        <Check className="size-4 text-primary" />
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="appearance">{t("appearance.darkMode")}</Label>
