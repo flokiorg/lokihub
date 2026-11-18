@@ -11,11 +11,11 @@
     "selectMember": "Select member",
     "nameLabel": "Name",
     "maxWalletBudgetLabel": "Max Wallet Budget",
-    "cashMaxBudgetLabel": "Max Cash Bill Budget",
+    "cashMaxBudgetLabel": "Max value per bill",
     "minRenewalLabel": "Min Renewal",
     "minRenewalHelper": "Shortest renewal period a member may request for their circle wallet's budget",
     "maxWalletExpiryLabel": "Max Wallet Expiry",
-    "cashMaxExpiryLabel": "Max Cash Bill Expiry",
+    "cashMaxExpiryLabel": "How long bills stay valid",
     "feePpmLabel": "Fee (ppm)",
     "feePpmHelper": "Per-million fee charged on payments made by circle wallets (0 = free)",
     "advancedSettings": "Advanced settings",
@@ -338,16 +338,16 @@
   "newCashHub": {
     "title": "New Cash Hub",
     "essentialsTitle": "The essentials",
-    "essentialsDesc": "A Cash Hub mints bills backed by a wallet you choose. Open Advanced for fees, expiry and payouts.",
+    "essentialsDesc": "A Cash Hub mints bills backed by a wallet you choose. Set the value limit and how long bills stay valid; open Advanced for fees and payout cleanup.",
     "description": "The wallet you'll mint Lokicash from. Limits you set here apply to every token it issues.",
-    "maxWalletBudgetHelper": "Maximum budget that can be allocated to each cash bill issued from this hub",
-    "maxExpiryHelper": "Maximum lifetime for issued cash bills",
+    "maxWalletBudgetHelper": "The most a single bill minted from this hub can be worth.",
+    "maxExpiryHelper": "How long a minted bill can still be redeemed before it expires.",
     "submit": "Create Cash Hub",
     "createdToast": "Cash Hub \"{{name}}\" created",
     "errors": {
       "create": "Failed to create Cash Hub"
     },
-    "submitHint": "Enter a name and a maximum Cash Bill budget to continue."
+    "submitHint": "Enter a name and a max value per bill to continue."
   },
   "disconnectCircleHub": {
     "title": "Close this circle?",
