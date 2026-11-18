@@ -334,8 +334,8 @@ function Home() {
           </Card>
         </div>
 
-        {/* metric tiles */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        {/* metric tiles — 2-up on phones so they don't stack three tall */}
+        <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
           <StatTile label={t("dashboard.canReceive")}>
             <FormattedFlokicoinAmount
               amount={balances.lightning.totalReceivable}
