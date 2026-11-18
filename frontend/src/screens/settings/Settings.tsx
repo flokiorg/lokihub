@@ -8,6 +8,12 @@ import { WithdrawNodeSettings } from "src/components/withdraw/WithdrawNodeSettin
 import Loading from "src/components/Loading";
 import SettingsHeader from "src/components/SettingsHeader";
 
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "src/components/ui/card";
 import { Label } from "src/components/ui/label";
 import {
   Select,
@@ -109,11 +115,15 @@ function Settings() {
   return (
     <>
       <SettingsHeader title={t("title")} description={t("description")} />
-      <form className="w-full flex flex-col gap-8">
-        {/* Theme & Appearance Section */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-medium">{t("sections.appearance")}</h3>
-          <div className="space-y-4">
+      <form className="w-full flex flex-col gap-6">
+        {/* Each preference group is its own card pane rather than an h3 in one
+            long scroll, so Appearance / Units / Language / Payouts read as
+            distinct, scannable sections. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("sections.appearance")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="grid gap-2">
               <Label>{t("appearance.theme")}</Label>
               <div className="grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-3">
@@ -178,15 +188,14 @@ function Settings() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        {/* Units & Currency Section */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-medium">
-            {t("sections.unitsAndCurrency")}
-          </h3>
-          <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("sections.unitsAndCurrency")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="grid gap-1.5">
               <Label htmlFor="flokicoinDisplayFormat">
                 {t("units.displayUnit")}
@@ -226,20 +235,26 @@ function Settings() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        {/* Language Section */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-medium">{t("sections.language")}</h3>
-          <LanguageSwitcher />
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("sections.language")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LanguageSwitcher />
+          </CardContent>
+        </Card>
 
-        {/* Advanced Section */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-medium">{t("sections.advanced")}</h3>
-          <WithdrawNodeSettings />
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("sections.payouts")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WithdrawNodeSettings />
+          </CardContent>
+        </Card>
       </form>
     </>
   );

@@ -5,7 +5,8 @@
     "appearance": "Appearance",
     "unitsAndCurrency": "Units & Currency",
     "language": "Language",
-    "advanced": "Advanced"
+    "advanced": "Advanced",
+    "payouts": "Payouts"
   },
   "appearance": {
     "theme": "Theme",
