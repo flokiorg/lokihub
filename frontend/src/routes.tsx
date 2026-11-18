@@ -53,6 +53,7 @@ import { SetupSecurity } from "src/screens/setup/SetupSecurity";
 import { SetupServices } from "src/screens/setup/SetupServices";
 import { FLNDForm } from "src/screens/setup/node/FLNDForm";
 import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
+import { ListingDetail } from "src/screens/listings/ListingDetail";
 import { Listings } from "src/screens/listings/Listings";
 import { ListOfferPage } from "src/screens/listings/ListOfferPage";
 import { LspAnalytics } from "src/screens/lsp/LspAnalytics";
@@ -347,6 +348,13 @@ const routes: RouteObject[] = [
                 path: "edit/:id",
                 element: <ListOfferPage />,
                 handle: { crumb: () => "Edit listing" },
+              },
+              {
+                // Read-only detail. Ranks below the static "new" / "edit/:id"
+                // segments, so it only matches a bare listing id.
+                path: ":id",
+                element: <ListingDetail />,
+                handle: { crumb: () => "Listing" },
               },
             ],
           },

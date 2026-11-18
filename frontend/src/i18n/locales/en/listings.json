@@ -109,12 +109,14 @@
     "hint": "The operator names this offer from their own Nostr client or with cashctl; this app never asks for their key."
   },
   "connection": {
-    "label": "Listing connection (public)"
+    "label": "Listing connection (public)",
+    "copy": "Copy link"
   },
   "actions": {
     "pause": "Pause",
     "resume": "Resume",
     "edit": "Edit",
+    "manage": "Manage",
     "unlist": "Unlist",
     "checkOperator": "Check operator",
     "revokeConnection": "Revoke listing connection"

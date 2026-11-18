@@ -36,9 +36,9 @@ export function CircleListingPanel({ appId }: { appId: number }) {
               </div>
             )}
             <Button asChild size="sm" variant="outline">
-              <Link to={`/listings/edit/${listing.id}`}>
-                {t("actions.edit")}
-              </Link>
+              {/* Opens the read-only detail (which has its own Edit), rather
+                  than dropping straight into the editable form. */}
+              <Link to={`/listings/${listing.id}`}>{t("actions.manage")}</Link>
             </Button>
           </>
         ) : (
