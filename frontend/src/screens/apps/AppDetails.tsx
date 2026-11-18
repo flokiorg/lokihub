@@ -36,6 +36,7 @@ import {
   CircleAllowlistHandle,
 } from "src/screens/subwallets/CircleAllowlist";
 import { CircleWallets } from "src/screens/subwallets/CircleWallets";
+import { CircleHubDashboard } from "src/screens/subwallets/CircleHubDashboard";
 import { CircleAnalytics } from "src/components/circles/CircleAnalytics";
 import {
   CircleAcceptingCard,
@@ -131,6 +132,19 @@ function AppDetails() {
 
   if (!app || !capabilities) {
     return <Loading />;
+  }
+
+  // A circle hub has its own dedicated dashboard (same split cash_hub got),
+  // so it reads cleanly — overview + controls on top, then tabs — instead of
+  // the generic connection layout. Reached via the existing /apps/:id route.
+  if (app.kind === "circle_hub") {
+    return (
+      <CircleHubDashboard
+        app={app}
+        refetchApp={refetchApp}
+        capabilities={capabilities}
+      />
+    );
   }
 
   return (
