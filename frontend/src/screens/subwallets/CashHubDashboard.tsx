@@ -545,62 +545,67 @@ function CashHubDashboardInternal({
       )}
 
       {isEditing && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{tc("labels.appName", "App Name")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-row gap-2 items-center max-w-lg">
-              <Input
-                autoFocus
-                type="text"
-                name="name"
-                value={name}
-                id="name"
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoComplete="off"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        // The hub settings form is a single column of fields; cap it so inputs
+        // don't sprawl the full width of a desktop. Left-aligned to sit under
+        // the page header rather than floating centre.
+        <div className="grid w-full max-w-2xl gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>{tc("labels.appName", "App Name")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-row gap-2 items-center max-w-lg">
+                <Input
+                  autoFocus
+                  type="text"
+                  name="name"
+                  value={name}
+                  id="name"
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  autoComplete="off"
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-      {isEditing && permissionsCard}
+          {permissionsCard}
 
-      {/* The hub's own expiry and its bill-expiry ceiling are set on the same
+          {/* The hub's own expiry and its bill-expiry ceiling are set on the same
           screen but never checked against each other. Nothing is lost when
           they disagree — bills redeem against their own deadline on their own
           connection, and the sweep is a background job — but minting stops,
           which is worth knowing before saving. */}
-      {isEditing && hubExpiresBeforeBills && (
-        <Alert variant="warning">
-          <TriangleAlertIcon className="h-4 w-4" />
-          <AlertDescription>
-            {t("circleHub.hubExpiryBeforeBillsWarning", { kind: kindLabel })}
-          </AlertDescription>
-        </Alert>
-      )}
+          {hubExpiresBeforeBills && (
+            <Alert variant="warning">
+              <TriangleAlertIcon className="h-4 w-4" />
+              <AlertDescription>
+                {t("circleHub.hubExpiryBeforeBillsWarning", {
+                  kind: kindLabel,
+                })}
+              </AlertDescription>
+            </Alert>
+          )}
 
-      {isEditing && (
-        <CashHubConfigCard
-          title={t("circleHub.hubSettingsTitle")}
-          description={t("circleHub.cashHubSettingsDescription")}
-          budgetLabel={t("circleHub.cashMaxBudgetLabel")}
-          budgetHelper={t("circleHub.cashMaxWalletBudgetHelper")}
-          expiryLabel={t("circleHub.cashMaxExpiryLabel")}
-          expiryHelper={t("circleHub.cashMaxExpiryHelper")}
-          perWalletMaxLoki={cashPerWalletMaxLoki}
-          onPerWalletMaxLokiChange={setCashPerWalletMaxLoki}
-          maxExpSecs={cashMaxExpSecs}
-          onMaxExpSecsChange={setCashMaxExpSecs}
-          minTransferLoki={cashMinTransferLoki}
-          onMinTransferLokiChange={setCashMinTransferLoki}
-          redeemFeePpm={cashRedeemFeePpm}
-          onRedeemFeePpmChange={setCashRedeemFeePpm}
-          spentRetentionSecs={cashSpentRetentionSecs}
-          onSpentRetentionSecsChange={setCashSpentRetentionSecs}
-        />
+          <CashHubConfigCard
+            title={t("circleHub.hubSettingsTitle")}
+            description={t("circleHub.cashHubSettingsDescription")}
+            budgetLabel={t("circleHub.cashMaxBudgetLabel")}
+            budgetHelper={t("circleHub.cashMaxWalletBudgetHelper")}
+            expiryLabel={t("circleHub.cashMaxExpiryLabel")}
+            expiryHelper={t("circleHub.cashMaxExpiryHelper")}
+            perWalletMaxLoki={cashPerWalletMaxLoki}
+            onPerWalletMaxLokiChange={setCashPerWalletMaxLoki}
+            maxExpSecs={cashMaxExpSecs}
+            onMaxExpSecsChange={setCashMaxExpSecs}
+            minTransferLoki={cashMinTransferLoki}
+            onMinTransferLokiChange={setCashMinTransferLoki}
+            redeemFeePpm={cashRedeemFeePpm}
+            onRedeemFeePpmChange={setCashRedeemFeePpm}
+            spentRetentionSecs={cashSpentRetentionSecs}
+            onSpentRetentionSecsChange={setCashSpentRetentionSecs}
+          />
+        </div>
       )}
 
       {!isEditing && (

@@ -284,7 +284,7 @@ function ListOfferForm({
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
+      <div className="grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
         {/* ---- the form ---- */}
         <div className="grid gap-6">
           <section className="grid gap-3">

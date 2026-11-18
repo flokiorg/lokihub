@@ -498,7 +498,12 @@ export function NewCircleHub() {
         onSubmit={handleSubmit}
         className={cn(
           "grid w-full gap-6 lg:items-start",
-          isNewIdentity && "lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+          // New identity → a two-column form with a sticky preview aside, so it
+          // uses a wide (capped) measure. Existing identity → a single column
+          // of fields, capped tighter so inputs don't sprawl the desktop width.
+          isNewIdentity
+            ? "max-w-6xl lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+            : "max-w-2xl"
         )}
       >
         <div className="grid gap-6">

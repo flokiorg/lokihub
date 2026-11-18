@@ -573,7 +573,9 @@ function CircleHubDashboardInternal({
       )}
 
       {isEditing && (
-        <>
+        // Single-column settings form — capped so inputs don't sprawl the
+        // full desktop width, left-aligned under the page header.
+        <div className="grid w-full max-w-2xl gap-5">
           {app.name !== LOKI_ACCOUNT_APP_NAME && (
             <Card>
               <CardHeader>
@@ -683,7 +685,7 @@ function CircleHubDashboardInternal({
               />
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );
