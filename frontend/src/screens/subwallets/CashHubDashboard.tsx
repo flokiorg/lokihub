@@ -307,9 +307,13 @@ function CashHubDashboardInternal({
 
   const permissionsCard = (
     <Card>
-      <CardHeader>
-        <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
-      </CardHeader>
+      {/* Title only in edit mode — in the Permissions tab it would just repeat
+          the active tab's label. */}
+      {isEditing && (
+        <CardHeader>
+          <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
+        </CardHeader>
+      )}
       <CardContent>
         {isEditing && (
           <p className="text-sm text-muted-foreground mb-4">
@@ -565,19 +569,17 @@ function CashHubDashboardInternal({
               </TabsTrigger>
             </TabsList>
             <TabsContent value="wallets">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-lg font-semibold">
-                  {t("circleHub.cashWalletsTitle")}
-                </h3>
-                {!isCashFormOpen && (
+              {/* No heading here — the active tab already reads "Cash Bills". */}
+              {!isCashFormOpen && (
+                <div className="mb-3 flex justify-end">
                   <ResponsiveButton
                     size="sm"
                     onClick={() => allocationsRef.current?.openAdd()}
                     icon={PlusIcon}
                     text={t("circleHub.addCashWallet")}
                   />
-                )}
-              </div>
+                </div>
+              )}
               <CashHubAllocations
                 appId={hub.id}
                 ref={allocationsRef}

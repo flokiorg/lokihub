@@ -234,9 +234,13 @@ function CircleHubDashboardInternal({
 
   const permissionsCard = (
     <Card>
-      <CardHeader>
-        <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
-      </CardHeader>
+      {/* Title only in edit mode — in the Permissions tab it would just repeat
+          the active tab's label. */}
+      {isEditing && (
+        <CardHeader>
+          <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
+        </CardHeader>
+      )}
       <CardContent>
         {isEditing && (
           <p className="text-sm text-muted-foreground mb-4">
@@ -430,19 +434,17 @@ function CircleHubDashboardInternal({
 
             {isAllowlistPolicy && (
               <TabsContent value="allowlist">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-semibold">
-                    {t("circleHub.allowlistTitle")}
-                  </h3>
-                  {!isAllowlistFormOpen && (
+                {/* No heading — the active tab already reads "Allowlist". */}
+                {!isAllowlistFormOpen && (
+                  <div className="mb-3 flex justify-end">
                     <ResponsiveButton
                       size="sm"
                       onClick={() => circleAllowlistRef.current?.openAdd()}
                       icon={PlusIcon}
                       text={t("circleHub.addMember")}
                     />
-                  )}
-                </div>
+                  </div>
+                )}
                 <CircleAllowlist
                   appId={app.id}
                   ref={circleAllowlistRef}
@@ -452,9 +454,7 @@ function CircleHubDashboardInternal({
             )}
 
             <TabsContent value="wallets">
-              <h3 className="mb-3 text-lg font-semibold">
-                {t("circleHub.circleWalletsTitle")}
-              </h3>
+              {/* No heading — the active tab already reads "Circle Wallets". */}
               <CircleWallets appId={app.id} />
             </TabsContent>
 
