@@ -451,7 +451,11 @@
     "medianTimeToRedeemInfo": "How long a bill typically sits before it is redeemed, measured over the most recent 1,000 redemptions.",
     "writtenOffInfo": "Value that could not be returned to this hub at all — a loss, not a recovery.",
     "leftInBudgetInfo": "How much of this hub's own payment budget is left before it renews. It caps ordinary payments made over the hub's connection — it does NOT limit how much cash the hub can mint.",
-    "budgetRenewalInfo": "This hub's full payment budget and how often it resets. Minting is not drawn from it; a bill's size is capped by the per-bill maximum in Hub Settings."
+    "budgetRenewalInfo": "This hub's full payment budget and how often it resets. Minting is not drawn from it; a bill's size is capped by the per-bill maximum in Hub Settings.",
+    "coverageNone": "Nothing outstanding",
+    "coverageCovered": "Fully covered",
+    "coverageUnderfunded": "Underfunded",
+    "noActivityYet": "No bills minted yet — issue a bill and its totals and timing appear here."
   },
   "cashCharts": {
     "outstandingTitle": "Outstanding over time",

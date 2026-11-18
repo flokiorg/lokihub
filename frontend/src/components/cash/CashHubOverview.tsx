@@ -1,4 +1,10 @@
-import { CircleMinusIcon, CirclePlusIcon, InfoIcon } from "lucide-react";
+import {
+  CircleMinusIcon,
+  CirclePlusIcon,
+  InfoIcon,
+  ShieldCheckIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
@@ -115,49 +121,94 @@ export function Stat({
   );
 }
 
-// Everything an operator checks before they do anything else, in one card.
+// A glanceable health read for the coverage panel: can this hub honour the
+// bills it has already issued? Outstanding is what it owes; shortfall is how
+// much of that its bills do not currently hold. One coloured word is the first
+// thing an operator should be able to read without doing arithmetic.
+function CoverageBadge({
+  outstandingMloki,
+  shortfallMloki,
+}: {
+  outstandingMloki: number;
+  shortfallMloki: number;
+}) {
+  const { t } = useTranslation("circles");
+  const base =
+    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium";
+  if (outstandingMloki === 0) {
+    return (
+      <span className={cn(base, "bg-muted text-muted-foreground")}>
+        {t("cashKpis.coverageNone")}
+      </span>
+    );
+  }
+  if (shortfallMloki > 0) {
+    return (
+      <span
+        className={cn(
+          base,
+          "border border-warning-foreground/30 bg-warning-foreground/10 text-warning-foreground"
+        )}
+      >
+        <TriangleAlertIcon className="size-3" />
+        {t("cashKpis.coverageUnderfunded")}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        base,
+        "border border-positive-foreground/30 bg-positive-foreground/10 text-positive-foreground"
+      )}
+    >
+      <ShieldCheckIcon className="size-3" />
+      {t("cashKpis.coverageCovered")}
+    </span>
+  );
+}
+
+// Everything an operator checks before they do anything else, in one card:
+// what the hub holds (and can still issue against), whether it can honour what
+// it already owes, and — once it has issued anything — the flow of value
+// through it. A brand-new hub shows a calm empty state rather than a wall of
+// zeroes.
 //
-// This replaces two stacked blocks that used to run down half the page: the
-// old two-card KPI row, and AppUsage's three-to-four generic cards. AppUsage
-// is deliberately *not* reused here — its "Total Spent"/"Total Received"
-// restate Issued/Redeemed for a Cash Hub, and it computes them by walking
-// every transaction the hub ever had, a page at a time, purely to render two
-// numbers this card already gets from /cash-stats in one request.
+// AppUsage is deliberately *not* reused here — its "Total Spent"/"Total
+// Received" restate Issued/Redeemed for a Cash Hub, and it computes them by
+// walking every transaction the hub ever had, a page at a time, purely to
+// render two numbers this card already gets from /cash-stats in one request.
 export function CashHubOverview({
   hub,
   stats,
-  analytics,
 }: {
   hub: App;
   stats: CashHubStats;
-  // Rendered as the card's last section, same border-t pt-4 separator as
-  // every other block here. Analytics used to be its own section elsewhere
-  // on the page — disconnected from the figures it explains — which is the
-  // "between other sections" complaint this prop exists to fix. It stays a
-  // slot rather than something this card builds itself, since the accordion
-  // and its "keep open" state are the caller's (per-hub vs. all-hubs keep
-  // their own localStorage key).
-  analytics?: React.ReactNode;
 }) {
   const { t } = useTranslation("circles");
   const { t: ta } = useTranslation("apps");
 
+  // A hub that has never minted a bill has no flow to show — four zero tiles
+  // and a "nothing redeemed yet" line read as broken, not new.
+  const hasActivity = stats.minted_mloki > 0;
+
   return (
     <Card className="slashed-zero">
-      <CardContent className="grid gap-4">
-        {/* Balance and Outstanding lead, and are the only two figures at
-            full size: one is what the hub can still issue against, the
-            other is what it already owes. Everything below is history. */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Stat
-            label={ta("usage.isolatedBalance")}
-            info={t("cashKpis.balanceInfo")}
-            amountMloki={hub.balance}
-            size="lg"
-          >
-            {/* The two controls that change this number sit with it rather
-                than in a card of their own. */}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+      <CardContent className="grid gap-5">
+        {/* Hero: what the hub holds, with the top-up / draw-down controls that
+            change it, beside a coverage panel that answers "can it honour what
+            it owes?" at a glance. */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+              <MetricInfo text={t("cashKpis.balanceInfo")} />
+              {ta("usage.isolatedBalance")}
+            </p>
+            <p className="balance sensitive mt-0.5 text-3xl font-semibold">
+              <FormattedFlokicoinAmount amount={hub.balance} />
+            </p>
+            <FormattedFiatAmount amount={Math.floor(hub.balance / 1000)} />
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {hub.balance > 0 && (
                 <IsolatedAppDrawDownDialog appId={hub.id}>
                   <Button size="sm" variant="outline">
@@ -173,69 +224,92 @@ export function CashHubOverview({
                 </Button>
               </IsolatedAppTopupDialog>
             </div>
-          </Stat>
-          <Stat
-            label={t("cashKpis.outstanding")}
-            info={t("cashKpis.outstandingInfo")}
-            amountMloki={stats.outstanding_mloki}
-            size="lg"
-          >
-            <p className="text-muted-foreground mt-1 text-xs">
-              {t("cashKpis.outstandingHint", {
-                count: stats.outstanding_count,
-              })}
-            </p>
-          </Stat>
+          </div>
+
+          {/* The coverage panel: what the hub owes, and whether its bills can
+              cover it. Set apart with a tint + border so health reads as a
+              distinct object, not a twin of the balance beside it. */}
+          <div className="bg-muted/40 flex flex-col justify-between gap-2 rounded-lg border p-3 sm:min-w-[12rem] sm:text-right">
+            <div>
+              <p className="text-muted-foreground flex items-center gap-1.5 text-xs sm:justify-end">
+                <MetricInfo text={t("cashKpis.outstandingInfo")} />
+                {t("cashKpis.outstanding")}
+              </p>
+              <p className="balance sensitive mt-0.5 text-2xl font-semibold">
+                <FormattedFlokicoinAmount amount={stats.outstanding_mloki} />
+              </p>
+              <p className="text-muted-foreground text-xs">
+                {t("cashKpis.outstandingHint", {
+                  count: stats.outstanding_count,
+                })}
+              </p>
+            </div>
+            <div className="sm:flex sm:justify-end">
+              <CoverageBadge
+                outstandingMloki={stats.outstanding_mloki}
+                shortfallMloki={stats.shortfall_mloki}
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-4">
-          <Stat
-            label={t("cashKpis.issued")}
-            info={t("cashKpis.issuedInfo")}
-            amountMloki={stats.minted_mloki}
-          />
-          <Stat
-            label={t("cashKpis.redeemed")}
-            info={t("cashKpis.redeemedInfo")}
-            amountMloki={stats.redeemed_mloki}
-          />
-          <Stat
-            label={t("cashKpis.returned")}
-            info={t("cashKpis.returnedInfo")}
-            amountMloki={stats.returned_mloki}
-          />
-          <Stat
-            label={t("cashKpis.feesEarned")}
-            info={t("cashKpis.feesEarnedInfo")}
-            amountMloki={stats.fees_earned_mloki}
-          />
-        </div>
+        {/* Flow of value through the hub — only once there is any. */}
+        {hasActivity ? (
+          <>
+            <div className="grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-4">
+              <Stat
+                label={t("cashKpis.issued")}
+                info={t("cashKpis.issuedInfo")}
+                amountMloki={stats.minted_mloki}
+              />
+              <Stat
+                label={t("cashKpis.redeemed")}
+                info={t("cashKpis.redeemedInfo")}
+                amountMloki={stats.redeemed_mloki}
+              />
+              <Stat
+                label={t("cashKpis.returned")}
+                info={t("cashKpis.returnedInfo")}
+                amountMloki={stats.returned_mloki}
+              />
+              <Stat
+                label={t("cashKpis.feesEarned")}
+                info={t("cashKpis.feesEarnedInfo")}
+                amountMloki={stats.fees_earned_mloki}
+              />
+            </div>
 
-        <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
-          <span className="flex items-center gap-1.5">
-            <MetricInfo text={t("cashKpis.medianTimeToRedeemInfo")} />
-            {t("cashKpis.medianTimeToRedeem")}:{" "}
-            <span className="text-foreground font-medium">
-              {stats.median_time_to_redeem_secs === null ? (
-                t("cashKpis.noRedemptionsYet")
-              ) : (
-                <MedianDuration secs={stats.median_time_to_redeem_secs} />
+            <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+              <span className="flex items-center gap-1.5">
+                <MetricInfo text={t("cashKpis.medianTimeToRedeemInfo")} />
+                {t("cashKpis.medianTimeToRedeem")}:{" "}
+                <span className="text-foreground font-medium">
+                  {stats.median_time_to_redeem_secs === null ? (
+                    t("cashKpis.noRedemptionsYet")
+                  ) : (
+                    <MedianDuration secs={stats.median_time_to_redeem_secs} />
+                  )}
+                </span>
+              </span>
+              {/*
+                Only shown when non-zero: a write-off means value that could
+                not be returned to the hub at all, so it should stand out when
+                it happens rather than sit at zero as permanent furniture.
+              */}
+              {stats.written_off_mloki > 0 && (
+                <span className="text-destructive flex items-center gap-1.5">
+                  <MetricInfo text={t("cashKpis.writtenOffInfo")} />
+                  {t("cashKpis.writtenOff")}:{" "}
+                  <FormattedFlokicoinAmount amount={stats.written_off_mloki} />
+                </span>
               )}
-            </span>
-          </span>
-          {/*
-            Only shown when non-zero: a write-off means value that could not
-            be returned to the hub at all, so it should stand out when it
-            happens rather than sit at zero as permanent furniture.
-          */}
-          {stats.written_off_mloki > 0 && (
-            <span className="text-destructive flex items-center gap-1.5">
-              <MetricInfo text={t("cashKpis.writtenOffInfo")} />
-              {t("cashKpis.writtenOff")}:{" "}
-              <FormattedFlokicoinAmount amount={stats.written_off_mloki} />
-            </span>
-          )}
-        </div>
+            </div>
+          </>
+        ) : (
+          <p className="text-muted-foreground border-t pt-4 text-sm">
+            {t("cashKpis.noActivityYet")}
+          </p>
+        )}
 
         {/* A hub need not have a budget at all — the row appears only once
             one is set, the same condition AppUsage's Budget card used. */}
@@ -272,8 +346,6 @@ export function CashHubOverview({
             />
           </div>
         )}
-
-        {analytics && <div className="border-t pt-4">{analytics}</div>}
       </CardContent>
     </Card>
   );
