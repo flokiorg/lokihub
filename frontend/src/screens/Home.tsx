@@ -1,4 +1,5 @@
 import {
+  Activity,
   ArrowDownLeft,
   ArrowUpRight,
   Banknote,
@@ -19,6 +20,12 @@ import { NodeStatusWidget } from "src/components/home/widgets/NodeStatusWidget";
 import { OnchainFeesWidget } from "src/components/home/widgets/OnchainFeesWidget";
 import Loading from "src/components/Loading";
 import { Button } from "src/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "src/components/ui/sheet";
 import { useAllCashHubStats } from "src/hooks/useCashHub";
 import { useApps } from "src/hooks/useApps";
 import { useBalances } from "src/hooks/useBalances";
@@ -211,14 +218,22 @@ function Home() {
 
   return (
     <>
-      <AppHeader title={getGreeting(undefined, t)} />
+      <AppHeader
+        title={getGreeting(undefined, t)}
+        contentRight={
+          <Button variant="outline" size="sm" onClick={() => setNerd(true)}>
+            <Activity className="size-4" />
+            {t("widgets.statsForNerds")}
+          </Button>
+        }
+      />
       <div className="grid gap-5">
         <DashboardAlerts />
         <OnboardingChecklist />
 
         {/* Hero: the total, how it splits across wallet/cash/circles, and the
-            two primary actions — a borderless lead, not a boxed card. */}
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            two primary actions. */}
+        <div className="flex flex-col gap-5 rounded-xl border bg-card p-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("dashboard.totalLabel")}
@@ -295,9 +310,8 @@ function Home() {
           </div>
         </div>
 
-        {/* Quick actions — a full-width shortcut row. Was a short card beside
-            the taller balance, which left a dead gap under it. */}
-        <div className="grid gap-3 border-t pt-5">
+        {/* Quick actions — a full-width shortcut row. */}
+        <div className="grid gap-3 rounded-xl border bg-card p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("dashboard.quickActions")}
           </div>
@@ -331,8 +345,8 @@ function Home() {
           </div>
         </div>
 
-        {/* Key figures — a borderless strip, not three boxed tiles. */}
-        <div className="grid grid-cols-2 gap-5 border-t pt-5 sm:grid-cols-3">
+        {/* Key figures. */}
+        <div className="grid grid-cols-2 gap-5 rounded-xl border bg-card p-4 sm:grid-cols-3">
           <StatTile label={t("dashboard.canReceive")}>
             <FormattedFlokicoinAmount
               amount={balances.lightning.totalReceivable}
@@ -473,27 +487,22 @@ function Home() {
           </section>
         </div>
 
-        {/* Stats for nerds — borderless collapsible. */}
-        <div className="border-t pt-5">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold">{t("widgets.statsForNerds")}</h3>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setNerd(!isNerd)}
-            >
-              {isNerd ? tc("actions.hide") : tc("actions.show")}
-            </Button>
-          </div>
-          {isNerd && (
-            <div className="mt-4 grid gap-5">
+        {/* Chain / node metrics live in a right-hand drawer (opened from the
+            header) rather than an inline section — the page is width-limited,
+            and this keeps the dashboard focused. */}
+        <Sheet open={isNerd} onOpenChange={setNerd}>
+          <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-md">
+            <SheetHeader>
+              <SheetTitle>{t("widgets.statsForNerds")}</SheetTitle>
+            </SheetHeader>
+            <div className="grid gap-5 px-4 pb-6">
               <NodeStatusWidget />
               <BlockHeightWidget />
               <OnchainFeesWidget />
               <ForwardsWidget />
             </div>
-          )}
-        </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </>
   );
