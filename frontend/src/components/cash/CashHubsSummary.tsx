@@ -46,7 +46,7 @@ export function CashHubsSummary({
           size="lg"
         >
           <p className="text-muted-foreground mt-1 text-xs">
-            {stats.hubs_count} {t("cashKpis.allHubsCountHint")}
+            {t("cashKpis.allHubsCountHint", { count: stats.hubs_count })}
           </p>
         </Stat>
         <Stat
