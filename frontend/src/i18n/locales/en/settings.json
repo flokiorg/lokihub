@@ -75,7 +75,7 @@
   },
   "autoUnlock": {
     "title": "Auto Unlock",
-    "description": "Configure Lokihub will automatically unlock on start (e.g. after machine reboot)",
+    "description": "Let Lokihub unlock itself on start (e.g. after a machine reboot)",
     "bodyText": "In some situations it can be impractical to manually unlock the wallet every time Lokihub is started. In those cases you can save the unlock password in plaintext so that Lokihub can auto-unlock itself.",
     "attention": "Attention",
     "attentionDesc": "Everyone who has access to the machine running this hub could read that password and take your funds. Use this only in a secure environment.",

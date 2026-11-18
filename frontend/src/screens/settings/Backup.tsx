@@ -129,7 +129,7 @@ export default function Backup() {
         </div>
       )}
       <>
-        <Separator className="my-2" />
+        {hasMnemonic && <Separator className="my-2" />}
         <div className="flex flex-col gap-8">
           <div>
             <h3 className="text-lg font-medium">Channels Backup</h3>
@@ -152,8 +152,9 @@ export default function Backup() {
       </>
 
       {!hasMnemonic && (
-        <p className="text-sm text-muted-foreground">
-          No recovery phrase or channel state backup present.
+        <p className="mt-4 text-sm text-muted-foreground">
+          This node does not expose a recovery phrase — back up your channel
+          states above.
         </p>
       )}
     </>
