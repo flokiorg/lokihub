@@ -8,7 +8,9 @@
     "listCircle": "List a circle",
     "listAction": "List an offer",
     "notListed": "Not listed — people need an invite link to join",
-    "discoverability": "Discoverability"
+    "discoverability": "Discoverability",
+    "pausedHint": "Paused — hidden from discovery but still reachable by its link. Resume to make it discoverable again.",
+    "closingHint": "No longer discoverable. People who already have the link keep access until this listing expires — after that you can list the circle again."
   },
   "card": {
     "untitled": "Untitled offer",
@@ -63,6 +65,7 @@
     "operator": "Naming an operator publicly links their account to this node."
   },
   "form": {
+    "listingCircle": "Listing this circle",
     "title": "Title",
     "titleRequired": "A title is required to list",
     "content": "Description",

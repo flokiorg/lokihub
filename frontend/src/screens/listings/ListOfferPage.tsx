@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import Loading from "src/components/Loading";
+import { NostrAvatar } from "src/components/NostrAvatar";
 import { ListingCard } from "src/components/listings/ListingCard";
 import {
   MAX_CONTENT,
@@ -34,10 +35,15 @@ import {
   updateListing,
   useListings,
 } from "src/hooks/useListings";
+import { useNostrProfile } from "src/hooks/useNostrProfile";
 import { cn } from "src/lib/utils";
 import { App } from "src/types";
 import { handleRequestError } from "src/utils/handleRequestError";
-import { safeDecodeToHex } from "src/utils/nostr";
+import {
+  safeDecodeToHex,
+  safeNpubEncode,
+  shortenMiddle,
+} from "src/utils/nostr";
 
 // A friendly, non-code label for the common ISO-639-1 codes the form stores.
 const COMMON_LANGS: [string, string][] = [
@@ -162,9 +168,14 @@ export function ListOfferPage() {
     );
   }
 
+  // Resolve the circle being listed for both flows: a new listing carries it
+  // in ?circle=, an edit derives it from the listing's own hubAppId — either
+  // way the form shows which circle this offer is for.
   const circle = circleId
     ? circleData?.apps.find((a) => a.id === circleId)
-    : undefined;
+    : listing
+      ? circleData?.apps.find((a) => a.id === listing.hubAppId)
+      : undefined;
 
   // key remounts the form once its data is in, so its useState initialisers
   // see the real values rather than an empty first render.
@@ -192,6 +203,16 @@ function ListOfferForm({
 
   const circlePolicy = l ? undefined : circle?.circleIdentity?.policy;
   const isFollowSet = circlePolicy === "follow_set" || (l?.followSetA ?? false);
+
+  // The circle this offer is for — shown as a locked identity banner so it's
+  // always clear which circle you're listing (you arrived here from it).
+  const providerPubkey = circle?.circleIdentity?.providerPubkey ?? "";
+  const { profile, isLoading: isProfileLoading } = useNostrProfile(
+    providerPubkey || undefined
+  );
+  const npub = safeNpubEncode(providerPubkey);
+  const circleSubtitle =
+    profile?.nip05 || (npub ? shortenMiddle(npub) : undefined);
 
   const [title, setTitle] = React.useState(l?.title ?? "");
   const [content, setContent] = React.useState(l?.content ?? "");
@@ -283,6 +304,28 @@ function ListOfferForm({
           </Button>
         }
       />
+
+      {circle?.circleIdentity && (
+        <div className="flex max-w-6xl items-center gap-3 rounded-xl border bg-card p-3">
+          <NostrAvatar
+            pubkey={providerPubkey}
+            profile={profile}
+            isLoading={isProfileLoading}
+            className="size-9 shrink-0"
+          />
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t("form.listingCircle")}
+            </p>
+            <p className="truncate font-semibold">{circle.name}</p>
+            {circleSubtitle && (
+              <p className="truncate font-mono text-xs text-muted-foreground">
+                {circleSubtitle}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
         {/* ---- the form ---- */}
