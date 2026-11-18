@@ -355,9 +355,10 @@ function Home() {
           </StatTile>
         </div>
 
-        {/* What's listed + recent activity — borderless sections. */}
-        <div className="grid grid-cols-1 gap-6 border-t pt-5 lg:grid-cols-2 lg:items-start">
-          <section className="grid gap-3">
+        {/* What's listed + recent activity — each in its own bordered panel so
+            the two columns read as distinct blocks, not one blurred row. */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-start">
+          <section className="grid gap-3 rounded-xl border bg-card p-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">{t("dashboard.whatsListed")}</h3>
               <Link
@@ -412,7 +413,7 @@ function Home() {
             )}
           </section>
 
-          <section className="grid gap-3">
+          <section className="grid gap-3 rounded-xl border bg-card p-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">{t("dashboard.recentActivity")}</h3>
               <Link
