@@ -108,9 +108,18 @@
     "back": "Back to orders",
     "paymentBadge": "payment: {{state}}",
     "announced": "announced",
+    "copy": "Copy",
+    "viewNode": "node ↗",
+    "notFound": {
+      "title": "Order not found",
+      "body": "No order has this id. It may have been pruned, or the link is stale."
+    },
     "readOnlyNote": "The LSP dashboard API exposes order state read-only. Settlement and stuck-order recovery run automatically inside the LSP daemon, so there are no manual refund/reopen/recovery actions here.",
     "timeline": {
-      "title": "Timeline"
+      "title": "Timeline",
+      "failed": "Order failed",
+      "expired": "Order expired",
+      "failedHint": "Payment {{state}} — no channel was opened."
     },
     "payment": {
       "title": "Payment",
