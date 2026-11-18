@@ -1,128 +1,76 @@
-import dayjs from "dayjs";
-import relativeTime from "dayjs/plugin/relativeTime";
-import { Loader2 } from "lucide-react";
+import { ChevronRightIcon, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { Link } from "react-router";
 
-import { Card, CardContent, CardHeader } from "src/components/ui/card";
-import { Skeleton } from "src/components/ui/skeleton";
-import { AvatarStack } from "src/components/circles/AvatarStack";
-import { AppCardConnectionInfo } from "src/components/connections/AppCardConnectionInfo";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { NostrAvatar } from "src/components/NostrAvatar";
+import { Skeleton } from "src/components/ui/skeleton";
 import { useCircleAllowlist } from "src/hooks/useCircleAllowlist";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
-import { useNostrProfiles } from "src/hooks/useNostrProfiles";
 import { App } from "src/types";
 import { safeNpubEncode, shortenMiddle } from "src/utils/nostr";
 
-dayjs.extend(relativeTime);
-
+// Card-light: a circle is a borderless row in the Sub-wallets list, matching
+// the Cash Hub list — name + identity, a member count, its balance — rather
+// than a bordered card each. The circle's own detail page carries the full
+// membership roster and connection detail.
 export function CircleCard({ app }: { app: App }) {
-  const navigate = useNavigate();
   const { t } = useTranslation("circles");
   const identity = app.circleIdentity;
 
-  // Every hook below must run unconditionally (rules of hooks) — identity is
-  // only undefined for a non-circle_hub app, which SubwalletList.tsx
-  // never renders as a CircleCard, but we guard the body defensively anyway.
+  // Hooks run unconditionally (rules of hooks); identity is only undefined for
+  // a non-circle_hub app, which SubwalletList never renders here.
   const providerPubkey = identity?.providerPubkey ?? "";
   const { profile, isLoading: isProfileLoading } = useNostrProfile(
     providerPubkey || undefined
   );
-
   const isAllowlist = identity?.policy === "allowlist";
-  const { data: allowlistData, isLoading: isAllowlistLoading } =
-    useCircleAllowlist(app.id, isAllowlist);
-  const memberPubkeys = allowlistData?.pubkeys ?? [];
-  const { profiles: memberProfiles, isLoading: isMembersLoading } =
-    useNostrProfiles(isAllowlist ? memberPubkeys : []);
+  const { data: allowlistData } = useCircleAllowlist(app.id, isAllowlist);
 
   if (!identity) {
     return null;
   }
 
   const npub = safeNpubEncode(providerPubkey);
-  const shortNpub = npub ? shortenMiddle(npub) : undefined;
+  const subtitle = profile?.nip05 || (npub ? shortenMiddle(npub) : undefined);
+  const memberCount = isAllowlist
+    ? (allowlistData?.pubkeys.length ?? identity.allowlistCount)
+    : identity.memberCount;
 
   return (
-    <Card
-      className="flex flex-col cursor-pointer"
-      onClick={() => navigate(`/apps/${app.id}`)}
+    <Link
+      to={`/apps/${app.id}`}
+      className="flex min-w-0 items-center gap-3 border-b px-1 py-3 transition-colors last:border-b-0 hover:bg-accent/40 slashed-zero"
     >
-      <CardHeader>
-        <div className="flex flex-row items-center gap-3">
-          <NostrAvatar
-            pubkey={providerPubkey}
-            profile={profile}
-            isLoading={isProfileLoading}
-            className="h-10 w-10"
-          />
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-lg truncate">{app.name}</div>
-            {isProfileLoading ? (
-              <Skeleton className="h-4 w-32 mt-1" />
-            ) : (
-              <>
-                {profile?.nip05 && (
-                  <div className="text-sm text-muted-foreground truncate">
-                    {profile.nip05}
-                  </div>
-                )}
-                {shortNpub && (
-                  <div className="text-xs text-muted-foreground/70 font-mono truncate">
-                    {shortNpub}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          {isAllowlist && (
-            <AvatarStack
-              pubkeys={memberPubkeys}
-              profiles={memberProfiles}
-              isLoading={isAllowlistLoading || isMembersLoading}
-              max={5}
-            />
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-3 slashed-zero">
-        {identity.policy === "follow_set" &&
-          (identity.memberCount === undefined ? (
-            <span className="text-sm text-muted-foreground flex items-center gap-1.5">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("common.readingFollowSet")}
-            </span>
-          ) : (
-            <span className="text-sm">
-              {t("circleCard.member", { count: identity.memberCount })}
-              {identity.policySyncedAt && (
-                <>
-                  {" "}
-                  ·{" "}
-                  {t("common.synced", {
-                    time: dayjs(identity.policySyncedAt).fromNow(),
-                  })}
-                </>
-              )}
-            </span>
-          ))}
-        {isAllowlist && (
-          <span className="text-sm">
-            {t("circleCard.member", { count: identity.allowlistCount })}
-            {identity.policySyncedAt && (
-              <>
-                {" "}
-                ·{" "}
-                {t("common.updated", {
-                  time: dayjs(identity.policySyncedAt).fromNow(),
-                })}
-              </>
-            )}
-          </span>
+      <NostrAvatar
+        pubkey={providerPubkey}
+        profile={profile}
+        isLoading={isProfileLoading}
+        className="size-8 shrink-0"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium">{app.name}</p>
+        {isProfileLoading ? (
+          <Skeleton className="mt-1 h-3 w-28" />
+        ) : (
+          subtitle && (
+            <p className="truncate font-mono text-xs text-muted-foreground">
+              {subtitle}
+            </p>
+          )
         )}
-        <AppCardConnectionInfo connection={app} />
-      </CardContent>
-    </Card>
+      </div>
+      <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
+        {memberCount === undefined ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          t("circleCard.member", { count: memberCount })
+        )}
+      </span>
+      <span className="sensitive shrink-0 text-sm font-medium">
+        <FormattedFlokicoinAmount amount={app.balance} />
+      </span>
+      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+    </Link>
   );
 }

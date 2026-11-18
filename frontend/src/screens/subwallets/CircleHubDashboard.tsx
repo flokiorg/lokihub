@@ -38,7 +38,6 @@ import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -397,11 +396,13 @@ function CircleHubDashboardInternal({
               listing) used to stack as four cards above the tabs, pushing
               the figures down the page; they now live together in a
               Settings tab. */}
-          {stats ? (
-            <CircleHubOverview hub={app} stats={stats} />
-          ) : (
-            <OverviewCardSkeleton />
-          )}
+          <div className="border-b pb-5">
+            {stats ? (
+              <CircleHubOverview hub={app} stats={stats} />
+            ) : (
+              <OverviewCardSkeleton />
+            )}
+          </div>
 
           <Tabs defaultValue="wallets" className="w-full">
             <TabsList>
@@ -429,40 +430,32 @@ function CircleHubDashboardInternal({
 
             {isAllowlistPolicy && (
               <TabsContent value="allowlist">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{t("circleHub.allowlistTitle")}</CardTitle>
-                    {!isAllowlistFormOpen && (
-                      <CardAction>
-                        <ResponsiveButton
-                          size="sm"
-                          onClick={() => circleAllowlistRef.current?.openAdd()}
-                          icon={PlusIcon}
-                          text={t("circleHub.addMember")}
-                        />
-                      </CardAction>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    <CircleAllowlist
-                      appId={app.id}
-                      ref={circleAllowlistRef}
-                      onFormOpenChange={setAllowlistFormOpen}
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold">
+                    {t("circleHub.allowlistTitle")}
+                  </h3>
+                  {!isAllowlistFormOpen && (
+                    <ResponsiveButton
+                      size="sm"
+                      onClick={() => circleAllowlistRef.current?.openAdd()}
+                      icon={PlusIcon}
+                      text={t("circleHub.addMember")}
                     />
-                  </CardContent>
-                </Card>
+                  )}
+                </div>
+                <CircleAllowlist
+                  appId={app.id}
+                  ref={circleAllowlistRef}
+                  onFormOpenChange={setAllowlistFormOpen}
+                />
               </TabsContent>
             )}
 
             <TabsContent value="wallets">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("circleHub.circleWalletsTitle")}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CircleWallets appId={app.id} />
-                </CardContent>
-              </Card>
+              <h3 className="mb-3 text-lg font-semibold">
+                {t("circleHub.circleWalletsTitle")}
+              </h3>
+              <CircleWallets appId={app.id} />
             </TabsContent>
 
             <TabsContent value="analytics">

@@ -17,7 +17,6 @@ import ResponsiveLinkButton from "src/components/ResponsiveLinkButton";
 import { SubWalletInfoDialog } from "src/components/SubWalletInfoDialog";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
-import { Card } from "src/components/ui/card";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LIST_APPS_LIMIT, SUBWALLET_APPSTORE_APP_ID } from "src/constants";
 import { useApps } from "src/hooks/useApps";
@@ -127,7 +126,7 @@ export function SubwalletList() {
         </Alert>
       )}
 
-      <Card className="slashed-zero p-5">
+      <div className="slashed-zero border-b pb-5">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -167,13 +166,12 @@ export function SubwalletList() {
             </div>
           </div>
         </div>
-      </Card>
-      <div className="mt-8">
-        <h3 className="font-semibold text-2xl mb-4">Managed Sub-wallets</h3>
-        <div
-          ref={appsListRef}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch app-list"
-        >
+      </div>
+      <div className="mt-6">
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Managed Sub-wallets
+        </h3>
+        <div ref={appsListRef} className="flex flex-col app-list">
           {subwalletApps.map((app, index) =>
             app.kind === "circle_hub" ? (
               <CircleCard key={app.id} app={app} />

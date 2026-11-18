@@ -37,7 +37,6 @@ import {
 } from "src/screens/subwallets/CircleAllowlist";
 import { CircleWallets } from "src/screens/subwallets/CircleWallets";
 import { CircleHubDashboard } from "src/screens/subwallets/CircleHubDashboard";
-import { CircleAnalytics } from "src/components/circles/CircleAnalytics";
 import {
   CircleAcceptingCard,
   CircleMemberRequestCard,
@@ -720,13 +719,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                   flashing in first. */}
               {app.kind === "circle_hub" ? (
                 circleStats ? (
-                  <CircleHubOverview
-                    hub={app}
-                    stats={circleStats}
-                    analytics={
-                      <CircleAnalytics hub={app} stats={circleStats} />
-                    }
-                  />
+                  <CircleHubOverview hub={app} stats={circleStats} />
                 ) : (
                   <OverviewCardSkeleton />
                 )

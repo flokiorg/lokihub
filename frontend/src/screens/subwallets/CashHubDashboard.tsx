@@ -35,7 +35,6 @@ import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -146,8 +145,7 @@ function CashHubDashboardInternal({
   const [showConnectionDetails, setShowConnectionDetails] =
     React.useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
-  const [showRegenerateDialog, setShowRegenerateDialog] =
-    React.useState(false);
+  const [showRegenerateDialog, setShowRegenerateDialog] = React.useState(false);
 
   const [name, setName] = React.useState(hub.name);
   const [permissions, setPermissions] = React.useState<AppPermissions>({
@@ -484,7 +482,11 @@ function CashHubDashboardInternal({
           holds and owes (Overview), then the bills, payments and charts as
           tabs. Analytics is its own tab rather than a collapsible buried at
           the foot of the Overview card. */}
-      {!isEditing && <CashHubOverview hub={hub} stats={stats} />}
+      {!isEditing && (
+        <div className="border-b pb-5">
+          <CashHubOverview hub={hub} stats={stats} />
+        </div>
+      )}
 
       {isEditing && (
         <Card>
@@ -563,28 +565,24 @@ function CashHubDashboardInternal({
               </TabsTrigger>
             </TabsList>
             <TabsContent value="wallets">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("circleHub.cashWalletsTitle")}</CardTitle>
-                  {!isCashFormOpen && (
-                    <CardAction>
-                      <ResponsiveButton
-                        size="sm"
-                        onClick={() => allocationsRef.current?.openAdd()}
-                        icon={PlusIcon}
-                        text={t("circleHub.addCashWallet")}
-                      />
-                    </CardAction>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <CashHubAllocations
-                    appId={hub.id}
-                    ref={allocationsRef}
-                    onFormOpenChange={setCashFormOpen}
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold">
+                  {t("circleHub.cashWalletsTitle")}
+                </h3>
+                {!isCashFormOpen && (
+                  <ResponsiveButton
+                    size="sm"
+                    onClick={() => allocationsRef.current?.openAdd()}
+                    icon={PlusIcon}
+                    text={t("circleHub.addCashWallet")}
                   />
-                </CardContent>
-              </Card>
+                )}
+              </div>
+              <CashHubAllocations
+                appId={hub.id}
+                ref={allocationsRef}
+                onFormOpenChange={setCashFormOpen}
+              />
             </TabsContent>
             <TabsContent value="analytics">{analyticsPanel}</TabsContent>
             <TabsContent value="activity">

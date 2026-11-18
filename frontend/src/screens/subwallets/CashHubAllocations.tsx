@@ -1415,8 +1415,8 @@ export const CashHubAllocations = React.forwardRef<
       {isLoading ? (
         <p className="text-sm text-muted-foreground">{tc("loading")}</p>
       ) : claims.length > 0 ? (
-        <div className="rounded-lg border min-w-0 overflow-x-auto">
-          <div className="flex items-center gap-3 px-3 py-2.5">
+        <div className="min-w-0 overflow-x-auto">
+          <div className="flex items-center gap-3 border-b px-1 py-2.5">
             <Checkbox
               checked={
                 allSelected ? true : someSelected ? "indeterminate" : false
@@ -1429,7 +1429,7 @@ export const CashHubAllocations = React.forwardRef<
               {t("cashHubAllocations.recipientColumn")}
             </span>
           </div>
-          <div className="grid gap-2 p-1 min-w-0">
+          <div className="flex flex-col min-w-0">
             {displayGroups.map((group) => {
               const isMulti = group.claims.length > 1;
               const totalCount = group.claims.length;
@@ -1474,7 +1474,10 @@ export const CashHubAllocations = React.forwardRef<
                 !isMulti && removableIds.has(group.claims[0].id);
 
               return (
-                <div key={group.key} className="rounded-md border min-w-0">
+                <div
+                  key={group.key}
+                  className="border-b last:border-b-0 min-w-0"
+                >
                   {/* One row shape for every token, whether it has one
                       recipient or several — see the "same UI regardless of
                       recipient count" redesign note above displayGroups.

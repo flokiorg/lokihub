@@ -13,13 +13,6 @@ import {
   AccordionTrigger,
 } from "src/components/ui/accordion";
 import { Button } from "src/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { useApps } from "src/hooks/useApps";
 import {
@@ -73,25 +66,29 @@ export function Listings() {
     <div className="space-y-4">
       <AppHeader title={t("page.title")} description={t("page.description")} />
       {listings.length === 0 && (
-        <Card className="flex flex-col items-center gap-3 p-10 text-center">
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
           <div className="flex size-14 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
             <MegaphoneIcon className="size-7" />
           </div>
-          <CardTitle className="text-lg">{t("page.empty")}</CardTitle>
-          <CardDescription className="max-w-sm">
+          <h2 className="text-lg font-semibold">{t("page.empty")}</h2>
+          <p className="max-w-sm text-sm text-muted-foreground">
             {t("page.emptyHint")}
-          </CardDescription>
-        </Card>
+          </p>
+        </div>
       )}
       {listings.map((l) => (
-        <Card key={l.id} data-testid="listing-row">
-          <CardHeader>
-            <CardTitle className="text-base">
+        <div
+          key={l.id}
+          data-testid="listing-row"
+          className="border-b pb-4 last:border-b-0"
+        >
+          <div className="mb-2 space-y-1">
+            <p className="text-base font-semibold">
               {l.title || t("card.untitled")}
-            </CardTitle>
+            </p>
             <ListingHealth listing={l} />
-          </CardHeader>
-          <CardContent className="space-y-3">
+          </div>
+          <div className="space-y-3">
             <ListingCard
               type={l.type}
               title={l.title}
@@ -187,15 +184,15 @@ export function Listings() {
                 </Button>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ))}
       {unlistedCircles.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("page.listCircle")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <div className="border-t pt-4">
+          <h3 className="mb-2 text-base font-semibold">
+            {t("page.listCircle")}
+          </h3>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {unlistedCircles.map((c) => (
               <button
                 key={c.id}
@@ -217,8 +214,8 @@ export function Listings() {
                 <MegaphoneIcon className="size-4 flex-none text-muted-foreground" />
               </button>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
       <ListingRelaysCard />
       {editing && (

@@ -12,7 +12,6 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import { IsolatedAppDrawDownDialog } from "src/components/IsolatedAppDrawDownDialog";
 import { IsolatedAppTopupDialog } from "src/components/IsolatedAppTopupDialog";
 import { Button } from "src/components/ui/button";
-import { Card, CardContent } from "src/components/ui/card";
 import { Progress } from "src/components/ui/progress";
 import {
   Tooltip,
@@ -193,160 +192,162 @@ export function CashHubOverview({
   const hasActivity = stats.minted_mloki > 0;
 
   return (
-    <Card className="slashed-zero">
-      <CardContent className="grid gap-5">
-        {/* Hero: what the hub holds, with the top-up / draw-down controls that
+    // Card-light: the overview is the page's lead, rendered borderless (the
+    // detail separates it from the tabs with a hairline) rather than inside an
+    // elevated box. Only the coverage panel keeps a quiet tint, since health
+    // is the one thing here that reads apart from the rest.
+    <div className="slashed-zero grid gap-5">
+      {/* Hero: what the hub holds, with the top-up / draw-down controls that
             change it, beside a coverage panel that answers "can it honour what
             it owes?" at a glance. */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              <MetricInfo text={t("cashKpis.balanceInfo")} />
-              {ta("usage.isolatedBalance")}
-            </p>
-            <p className="balance sensitive mt-0.5 text-3xl font-semibold">
-              <FormattedFlokicoinAmount amount={hub.balance} />
-            </p>
-            <FormattedFiatAmount amount={Math.floor(hub.balance / 1000)} />
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {hub.balance > 0 && (
-                <IsolatedAppDrawDownDialog appId={hub.id}>
-                  <Button size="sm" variant="outline">
-                    <CircleMinusIcon />
-                    {ta("usage.decrease")}
-                  </Button>
-                </IsolatedAppDrawDownDialog>
-              )}
-              <IsolatedAppTopupDialog appId={hub.id}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <MetricInfo text={t("cashKpis.balanceInfo")} />
+            {ta("usage.isolatedBalance")}
+          </p>
+          <p className="balance sensitive mt-0.5 text-3xl font-semibold">
+            <FormattedFlokicoinAmount amount={hub.balance} />
+          </p>
+          <FormattedFiatAmount amount={Math.floor(hub.balance / 1000)} />
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {hub.balance > 0 && (
+              <IsolatedAppDrawDownDialog appId={hub.id}>
                 <Button size="sm" variant="outline">
-                  <CirclePlusIcon />
-                  {ta("usage.increase")}
+                  <CircleMinusIcon />
+                  {ta("usage.decrease")}
                 </Button>
-              </IsolatedAppTopupDialog>
-            </div>
-          </div>
-
-          {/* The coverage panel: what the hub owes, and whether its bills can
-              cover it. Set apart with a tint + border so health reads as a
-              distinct object, not a twin of the balance beside it. */}
-          <div className="bg-muted/40 flex flex-col justify-between gap-2 rounded-lg border p-3 sm:min-w-[12rem] sm:text-right">
-            <div>
-              <p className="text-muted-foreground flex items-center gap-1.5 text-xs sm:justify-end">
-                <MetricInfo text={t("cashKpis.outstandingInfo")} />
-                {t("cashKpis.outstanding")}
-              </p>
-              <p className="balance sensitive mt-0.5 text-2xl font-semibold">
-                <FormattedFlokicoinAmount amount={stats.outstanding_mloki} />
-              </p>
-              <p className="text-muted-foreground text-xs">
-                {t("cashKpis.outstandingHint", {
-                  count: stats.outstanding_count,
-                })}
-              </p>
-            </div>
-            <div className="sm:flex sm:justify-end">
-              <CoverageBadge
-                outstandingMloki={stats.outstanding_mloki}
-                shortfallMloki={stats.shortfall_mloki}
-              />
-            </div>
+              </IsolatedAppDrawDownDialog>
+            )}
+            <IsolatedAppTopupDialog appId={hub.id}>
+              <Button size="sm" variant="outline">
+                <CirclePlusIcon />
+                {ta("usage.increase")}
+              </Button>
+            </IsolatedAppTopupDialog>
           </div>
         </div>
 
-        {/* Flow of value through the hub — only once there is any. */}
-        {hasActivity ? (
-          <>
-            <div className="grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-4">
-              <Stat
-                label={t("cashKpis.issued")}
-                info={t("cashKpis.issuedInfo")}
-                amountMloki={stats.minted_mloki}
-              />
-              <Stat
-                label={t("cashKpis.redeemed")}
-                info={t("cashKpis.redeemedInfo")}
-                amountMloki={stats.redeemed_mloki}
-              />
-              <Stat
-                label={t("cashKpis.returned")}
-                info={t("cashKpis.returnedInfo")}
-                amountMloki={stats.returned_mloki}
-              />
-              <Stat
-                label={t("cashKpis.feesEarned")}
-                info={t("cashKpis.feesEarnedInfo")}
-                amountMloki={stats.fees_earned_mloki}
-              />
-            </div>
+        {/* The coverage panel: what the hub owes, and whether its bills can
+              cover it. Set apart with a tint + border so health reads as a
+              distinct object, not a twin of the balance beside it. */}
+        <div className="bg-muted/40 flex flex-col justify-between gap-2 rounded-lg border p-3 sm:min-w-[12rem] sm:text-right">
+          <div>
+            <p className="text-muted-foreground flex items-center gap-1.5 text-xs sm:justify-end">
+              <MetricInfo text={t("cashKpis.outstandingInfo")} />
+              {t("cashKpis.outstanding")}
+            </p>
+            <p className="balance sensitive mt-0.5 text-2xl font-semibold">
+              <FormattedFlokicoinAmount amount={stats.outstanding_mloki} />
+            </p>
+            <p className="text-muted-foreground text-xs">
+              {t("cashKpis.outstandingHint", {
+                count: stats.outstanding_count,
+              })}
+            </p>
+          </div>
+          <div className="sm:flex sm:justify-end">
+            <CoverageBadge
+              outstandingMloki={stats.outstanding_mloki}
+              shortfallMloki={stats.shortfall_mloki}
+            />
+          </div>
+        </div>
+      </div>
 
-            <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
-              <span className="flex items-center gap-1.5">
-                <MetricInfo text={t("cashKpis.medianTimeToRedeemInfo")} />
-                {t("cashKpis.medianTimeToRedeem")}:{" "}
-                <span className="text-foreground font-medium">
-                  {stats.median_time_to_redeem_secs === null ? (
-                    t("cashKpis.noRedemptionsYet")
-                  ) : (
-                    <MedianDuration secs={stats.median_time_to_redeem_secs} />
-                  )}
-                </span>
+      {/* Flow of value through the hub — only once there is any. */}
+      {hasActivity ? (
+        <>
+          <div className="grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-4">
+            <Stat
+              label={t("cashKpis.issued")}
+              info={t("cashKpis.issuedInfo")}
+              amountMloki={stats.minted_mloki}
+            />
+            <Stat
+              label={t("cashKpis.redeemed")}
+              info={t("cashKpis.redeemedInfo")}
+              amountMloki={stats.redeemed_mloki}
+            />
+            <Stat
+              label={t("cashKpis.returned")}
+              info={t("cashKpis.returnedInfo")}
+              amountMloki={stats.returned_mloki}
+            />
+            <Stat
+              label={t("cashKpis.feesEarned")}
+              info={t("cashKpis.feesEarnedInfo")}
+              amountMloki={stats.fees_earned_mloki}
+            />
+          </div>
+
+          <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+            <span className="flex items-center gap-1.5">
+              <MetricInfo text={t("cashKpis.medianTimeToRedeemInfo")} />
+              {t("cashKpis.medianTimeToRedeem")}:{" "}
+              <span className="text-foreground font-medium">
+                {stats.median_time_to_redeem_secs === null ? (
+                  t("cashKpis.noRedemptionsYet")
+                ) : (
+                  <MedianDuration secs={stats.median_time_to_redeem_secs} />
+                )}
               </span>
-              {/*
+            </span>
+            {/*
                 Only shown when non-zero: a write-off means value that could
                 not be returned to the hub at all, so it should stand out when
                 it happens rather than sit at zero as permanent furniture.
               */}
-              {stats.written_off_mloki > 0 && (
-                <span className="text-destructive flex items-center gap-1.5">
-                  <MetricInfo text={t("cashKpis.writtenOffInfo")} />
-                  {t("cashKpis.writtenOff")}:{" "}
-                  <FormattedFlokicoinAmount amount={stats.written_off_mloki} />
-                </span>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="text-muted-foreground border-t pt-4 text-sm">
-            {t("cashKpis.noActivityYet")}
-          </p>
-        )}
-
-        {/* A hub need not have a budget at all — the row appears only once
-            one is set, the same condition AppUsage's Budget card used. */}
-        {hub.maxAmount > 0 && (
-          <div className="border-t pt-4">
-            <div className="mb-2 flex flex-row justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                  <MetricInfo text={t("cashKpis.leftInBudgetInfo")} />
-                  {ta("usage.leftInBudget")}
-                </p>
-                <p className="balance sensitive text-xl font-semibold">
-                  <FormattedFlokicoinAmount
-                    amount={(hub.maxAmount - hub.budgetUsage) * 1000}
-                  />
-                </p>
-              </div>
-              <div className="min-w-0 text-end">
-                <p className="text-muted-foreground flex items-center justify-end gap-1.5 text-xs">
-                  <MetricInfo text={t("cashKpis.budgetRenewalInfo")} />
-                  {ta("usage.budgetRenewal")}
-                </p>
-                <p className="balance sensitive text-xl font-semibold">
-                  <FormattedFlokicoinAmount amount={hub.maxAmount * 1000} />
-                  {hub.budgetRenewal !== "never" && (
-                    <> / {getBudgetRenewalLabel(hub.budgetRenewal)}</>
-                  )}
-                </p>
-              </div>
-            </div>
-            <Progress
-              className="h-2"
-              value={100 - (hub.budgetUsage * 100) / hub.maxAmount}
-            />
+            {stats.written_off_mloki > 0 && (
+              <span className="text-destructive flex items-center gap-1.5">
+                <MetricInfo text={t("cashKpis.writtenOffInfo")} />
+                {t("cashKpis.writtenOff")}:{" "}
+                <FormattedFlokicoinAmount amount={stats.written_off_mloki} />
+              </span>
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </>
+      ) : (
+        <p className="text-muted-foreground border-t pt-4 text-sm">
+          {t("cashKpis.noActivityYet")}
+        </p>
+      )}
+
+      {/* A hub need not have a budget at all — the row appears only once
+            one is set, the same condition AppUsage's Budget card used. */}
+      {hub.maxAmount > 0 && (
+        <div className="border-t pt-4">
+          <div className="mb-2 flex flex-row justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                <MetricInfo text={t("cashKpis.leftInBudgetInfo")} />
+                {ta("usage.leftInBudget")}
+              </p>
+              <p className="balance sensitive text-xl font-semibold">
+                <FormattedFlokicoinAmount
+                  amount={(hub.maxAmount - hub.budgetUsage) * 1000}
+                />
+              </p>
+            </div>
+            <div className="min-w-0 text-end">
+              <p className="text-muted-foreground flex items-center justify-end gap-1.5 text-xs">
+                <MetricInfo text={t("cashKpis.budgetRenewalInfo")} />
+                {ta("usage.budgetRenewal")}
+              </p>
+              <p className="balance sensitive text-xl font-semibold">
+                <FormattedFlokicoinAmount amount={hub.maxAmount * 1000} />
+                {hub.budgetRenewal !== "never" && (
+                  <> / {getBudgetRenewalLabel(hub.budgetRenewal)}</>
+                )}
+              </p>
+            </div>
+          </div>
+          <Progress
+            className="h-2"
+            value={100 - (hub.budgetUsage * 100) / hub.maxAmount}
+          />
+        </div>
+      )}
+    </div>
   );
 }
