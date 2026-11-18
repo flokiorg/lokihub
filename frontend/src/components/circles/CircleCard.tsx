@@ -10,10 +10,9 @@ import { useNostrProfile } from "src/hooks/useNostrProfile";
 import { App } from "src/types";
 import { safeNpubEncode, shortenMiddle } from "src/utils/nostr";
 
-// Card-light: a circle is a borderless row in the Sub-wallets list, matching
-// the Cash Hub list — name + identity, a member count, its balance — rather
-// than a bordered card each. The circle's own detail page carries the full
-// membership roster and connection detail.
+// A circle in the Sub-wallets list — name + identity, a member count, its
+// balance — as its own card, matching the Cash Hub list. The circle's own
+// detail page carries the full membership roster and connection detail.
 export function CircleCard({ app }: { app: App }) {
   const { t } = useTranslation("circles");
   const identity = app.circleIdentity;
@@ -40,7 +39,7 @@ export function CircleCard({ app }: { app: App }) {
   return (
     <Link
       to={`/apps/${app.id}`}
-      className="flex min-w-0 items-center gap-3 border-b px-1 py-3 transition-colors last:border-b-0 hover:bg-accent/40 slashed-zero"
+      className="slashed-zero flex min-w-0 items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-primary/50"
     >
       <NostrAvatar
         pubkey={providerPubkey}

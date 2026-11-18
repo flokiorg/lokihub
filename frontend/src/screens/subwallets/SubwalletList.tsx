@@ -126,7 +126,7 @@ export function SubwalletList() {
         </Alert>
       )}
 
-      <div className="slashed-zero border-b pb-5">
+      <div className="slashed-zero rounded-xl border bg-card p-5">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -171,15 +171,14 @@ export function SubwalletList() {
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Managed Sub-wallets
         </h3>
-        <div ref={appsListRef} className="flex flex-col app-list">
+        <div ref={appsListRef} className="app-list flex flex-col gap-3">
           {subwalletApps.map((app, index) =>
             app.kind === "circle_hub" ? (
               <CircleCard key={app.id} app={app} />
             ) : (
-              // Non-circle sub-wallets still render as a bordered AppCard — wrap
-              // it so it gets spacing in this borderless (gap-less) row list
-              // instead of butting against its neighbours.
-              <div key={index} className="py-2 first:pt-0">
+              // Non-circle sub-wallets render as a bordered AppCard; the
+              // list's own gap gives them spacing from their neighbours.
+              <div key={index}>
                 <AppCard app={app} />
               </div>
             )

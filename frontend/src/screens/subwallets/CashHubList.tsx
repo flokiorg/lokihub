@@ -144,7 +144,7 @@ export function CashHubList() {
           its own block below it. While stats are still loading, a skeleton
           takes this card's place instead of rendering nothing. */}
       {stats ? (
-        <div className="border-b pb-5">
+        <div className="rounded-xl border bg-card p-5">
           <CashHubsSummary
             stats={stats}
             analytics={
@@ -212,18 +212,14 @@ export function CashHubList() {
         <OverviewCardSkeleton />
       )}
 
-      {/*
-        Borderless rows rather than a bordered table, matching TransactionsList:
-        no Card or Table wrapper, just mapped rows with a hairline between
-        them. Each row is the whole link target, so the chevron is decoration
-        rather than the only clickable thing.
-      */}
-      <div ref={appsListRef} className="flex flex-col flex-1">
+      {/* Each hub is its own card; the whole card is the link target, so the
+          chevron is decoration rather than the only clickable thing. */}
+      <div ref={appsListRef} className="flex flex-col gap-3">
         {cashHubApps.map((app) => (
           <Link
             key={app.id}
             to={`/cash-hub/${app.id}`}
-            className="flex items-center gap-3 border-b last:border-b-0 py-3 hover:bg-accent/40 transition-colors px-1 min-w-0"
+            className="flex min-w-0 items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-primary/50"
           >
             <AppAvatar app={app} className="size-8 shrink-0" />
             <div className="min-w-0 flex-1">
