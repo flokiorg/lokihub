@@ -1416,7 +1416,7 @@ export const CashHubAllocations = React.forwardRef<
         <p className="text-sm text-muted-foreground">{tc("loading")}</p>
       ) : claims.length > 0 ? (
         <div className="min-w-0 overflow-x-auto">
-          <div className="flex items-center gap-3 border-b px-1 py-2.5">
+          <div className="flex items-center gap-3 border-b px-2 py-2.5">
             <Checkbox
               checked={
                 allSelected ? true : someSelected ? "indeterminate" : false

@@ -176,7 +176,12 @@ export function SubwalletList() {
             app.kind === "circle_hub" ? (
               <CircleCard key={app.id} app={app} />
             ) : (
-              <AppCard key={index} app={app} />
+              // Non-circle sub-wallets still render as a bordered AppCard — wrap
+              // it so it gets spacing in this borderless (gap-less) row list
+              // instead of butting against its neighbours.
+              <div key={index} className="py-2 first:pt-0">
+                <AppCard app={app} />
+              </div>
             )
           )}
         </div>

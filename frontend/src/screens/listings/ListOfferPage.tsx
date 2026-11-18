@@ -91,6 +91,27 @@ export function ListOfferPage() {
     ? listings.find((x) => x.id === Number(id))
     : undefined;
 
+  // A stale/invalid edit id must not fall through to a blank "create" form
+  // (which would submit with no circle). Show a clear not-found instead.
+  if (editing && !listing) {
+    return (
+      <div className="grid gap-5">
+        <AppHeader
+          title={t("dialog.editTitle")}
+          description={t("dialog.description")}
+          contentRight={
+            <Button variant="outline" onClick={() => navigate("/listings")}>
+              {t("dialog.cancel")}
+            </Button>
+          }
+        />
+        <p className="text-sm text-muted-foreground">
+          {t("pick.notFound", "That listing no longer exists.")}
+        </p>
+      </div>
+    );
+  }
+
   // New listing with no circle chosen yet → pick one.
   if (!editing && !circleId) {
     const listed = new Set(
@@ -214,8 +235,10 @@ function ListOfferForm({
       follow_set_a: followSetA,
       confirm_follow_set_public: followSetA && confirmFollowSet,
       operator_pubkey: operator ? (safeDecodeToHex(operator) ?? "") : "",
-      // Discovered from the operator's own relay list by the Hub.
-      operator_relay: "",
+      // New listings carry no manual relay — the Hub discovers it from the
+      // operator's own published relay list. An existing manual override is
+      // preserved on edit rather than silently wiped.
+      operator_relay: l?.operatorRelay ?? "",
     };
     setLoading(true);
     try {
@@ -336,6 +359,7 @@ function ListOfferForm({
                 maxLength={3}
                 className="max-w-56"
                 onChange={(e) => setNewLang(e.target.value)}
+                onBlur={() => newLang && addLang(newLang)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();

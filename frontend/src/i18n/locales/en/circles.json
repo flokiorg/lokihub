@@ -342,6 +342,9 @@
     "description": "The wallet you'll mint Lokicash from. Limits you set here apply to every token it issues.",
     "maxWalletBudgetHelper": "The most a single bill minted from this hub can be worth.",
     "maxExpiryHelper": "How long a minted bill can still be redeemed before it expires.",
+    "summaryTitle": "Summary",
+    "summaryName": "Untitled Cash Hub",
+    "summaryNoExpiry": "Never expires",
     "submit": "Create Cash Hub",
     "createdToast": "Cash Hub \"{{name}}\" created",
     "errors": {

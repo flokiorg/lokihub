@@ -171,27 +171,34 @@ export function Listings() {
                   </DropdownMenuTrigger>
                 </Button>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                    <div
-                      className="flex items-center gap-2"
-                      onClick={() => navigate(`/listings/edit/${l.id}`)}
-                    >
-                      <PencilIcon className="size-4" /> {t("actions.edit")}
-                    </div>
-                  </DropdownMenuItem>
-                  {l.status === "paused" ? (
+                  {/* Edit / pause / resume / check / unlist are only valid
+                      while actually listed — a 'closing' listing is tearing
+                      down, so those are hidden (matching the old inline
+                      buttons' phase === "listed" gate). */}
+                  {l.phase === "listed" && (
                     <DropdownMenuItem asChild>
-                      <div onClick={() => act(l, "resume")}>
-                        {t("actions.resume")}
-                      </div>
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem asChild>
-                      <div onClick={() => act(l, "pause")}>
-                        {t("actions.pause")}
+                      <div
+                        className="flex items-center gap-2"
+                        onClick={() => navigate(`/listings/edit/${l.id}`)}
+                      >
+                        <PencilIcon className="size-4" /> {t("actions.edit")}
                       </div>
                     </DropdownMenuItem>
                   )}
+                  {l.phase === "listed" &&
+                    (l.status === "paused" ? (
+                      <DropdownMenuItem asChild>
+                        <div onClick={() => act(l, "resume")}>
+                          {t("actions.resume")}
+                        </div>
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem asChild>
+                        <div onClick={() => act(l, "pause")}>
+                          {t("actions.pause")}
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
                   {l.address && (
                     <DropdownMenuItem asChild>
                       <div
@@ -206,6 +213,19 @@ export function Listings() {
                   )}
                   {l.operatorPubkey && (
                     <DropdownMenuItem asChild>
+                      <div
+                        className="flex items-center gap-2"
+                        onClick={() =>
+                          copy(l.operatorCommand, t("address.copied"))
+                        }
+                      >
+                        <CopyIcon className="size-4" />{" "}
+                        {t("address.copyCommand")}
+                      </div>
+                    </DropdownMenuItem>
+                  )}
+                  {l.operatorPubkey && l.phase === "listed" && (
+                    <DropdownMenuItem asChild>
                       <div onClick={() => act(l, "check-operator")}>
                         {t("actions.checkOperator")}
                       </div>
@@ -218,12 +238,16 @@ export function Listings() {
                       </div>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" asChild>
-                    <div onClick={() => act(l, "unlist")}>
-                      {t("actions.unlist")}
-                    </div>
-                  </DropdownMenuItem>
+                  {l.phase === "listed" && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" asChild>
+                        <div onClick={() => act(l, "unlist")}>
+                          {t("actions.unlist")}
+                        </div>
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </li>

@@ -43,7 +43,8 @@
   },
   "pick": {
     "prompt": "Which circle do you want to list?",
-    "none": "All your circles are already listed."
+    "none": "All your circles are already listed.",
+    "notFound": "That listing no longer exists."
   },
   "groups": {
     "offer": "The offer",
