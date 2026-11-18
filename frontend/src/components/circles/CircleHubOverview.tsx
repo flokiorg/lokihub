@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
-import { cn } from "src/lib/utils";
 import { App, CircleHubStats } from "src/types";
 
 function Stat({
@@ -54,13 +53,10 @@ export function CircleHubOverview({
   const { t } = useTranslation("circles");
   const showHero = section !== "details";
   const showDetails = section !== "hero";
-  // As the first thing in a Summary tab the details grid shouldn't carry the
-  // hairline that separates it from the hero on desktop.
-  const detailsFirst = section === "details";
 
   return (
-    // Card-light: borderless lead, same as the Cash Hub detail.
-    // grid-cols-1 clamps the column — see CashHubDashboard.
+    // grid-cols-1 clamps the column — see CashHubDashboard. The dashboard wraps
+    // this in a card, so sections are separated by spacing, not a hairline.
     <div className="slashed-zero grid grid-cols-1 gap-4">
       {/* Balance and allocated lead: what the hub can still hand out, and
             what members are already holding. */}
@@ -84,12 +80,7 @@ export function CircleHubOverview({
       )}
 
       {showDetails && (
-        <div
-          className={cn(
-            "grid grid-cols-2 gap-4 pt-4 sm:grid-cols-4",
-            !detailsFirst && "border-t"
-          )}
-        >
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label={t("circleKpis.spent")} amountMloki={stats.spent_mloki} />
           <Stat
             label={t("circleKpis.received")}

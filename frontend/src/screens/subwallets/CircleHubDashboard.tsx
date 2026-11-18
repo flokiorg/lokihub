@@ -438,7 +438,12 @@ function CircleHubDashboardInternal({
               listing) used to stack as four cards above the tabs, pushing
               the figures down the page; they now live together in a
               Settings tab. */}
-          <div className={isMobile ? "pb-1" : "border-b pb-5"}>
+          <div
+            className={cn(
+              "rounded-xl border bg-card",
+              isMobile ? "p-4" : "p-5"
+            )}
+          >
             {/* Phone: only the balance/allocated lead stays here; the rest of
                 the overview lives in the Summary tab below. */}
             {stats ? (
@@ -498,7 +503,13 @@ function CircleHubDashboardInternal({
               <TabsContent value="summary">
                 {/* The spent/received/fees/members grid, split out of the hero
                     above so the other tabs aren't buried under it. */}
-                <CircleHubOverview hub={app} stats={stats} section="details" />
+                <div className="rounded-xl border bg-card p-4">
+                  <CircleHubOverview
+                    hub={app}
+                    stats={stats}
+                    section="details"
+                  />
+                </div>
               </TabsContent>
             )}
 
