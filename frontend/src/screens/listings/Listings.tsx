@@ -67,10 +67,14 @@ export function Listings() {
     <div className="space-y-4">
       <AppHeader title={t("page.title")} description={t("page.description")} />
       {listings.length === 0 && (
-        <Card className="flex flex-col items-center gap-2 p-8 text-center">
-          <MegaphoneIcon className="size-10 text-muted-foreground" />
+        <Card className="flex flex-col items-center gap-3 p-10 text-center">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+            <MegaphoneIcon className="size-7" />
+          </div>
           <CardTitle className="text-lg">{t("page.empty")}</CardTitle>
-          <CardDescription>{t("page.emptyHint")}</CardDescription>
+          <CardDescription className="max-w-sm">
+            {t("page.emptyHint")}
+          </CardDescription>
         </Card>
       )}
       {listings.map((l) => (
