@@ -60,6 +60,7 @@ import {
 } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { useSiblingHubs } from "src/hooks/useApps";
+import { useIsNarrow } from "src/hooks/useIsNarrow";
 import { useCapabilities } from "src/hooks/useCapabilities";
 import { useCashHubStats } from "src/hooks/useCashHub";
 import {
@@ -138,16 +139,35 @@ function CashHubDashboardInternal({
   const { t: tc } = useTranslation("common");
   const { t: tcircles } = useTranslation("circles");
   const { t: tlistings } = useTranslation("listings");
+  // On a phone the overview's flow stats move into a Summary tab and the tab
+  // bar sticks, so the page reads as focused screens rather than one long
+  // scroll re-shown under every tab. Desktop keeps the single-card layout.
+  const isMobile = useIsNarrow();
 
   const allocationsRef = React.useRef<CashHubAllocationsHandle>(null);
   // Only the setter is used now (synced to CashHubAllocations via
   // onFormOpenChange); the Mint button lives inside the list's header row.
   const [, setCashFormOpen] = React.useState(false);
+  // Controlled so a phone can open on the Summary tab (the approved mobile
+  // layout) while desktop still opens on the bills list. Lazy-initialised from
+  // the real viewport width so the choice is right on first paint, not after
+  // the media-query hook resolves a tick later.
+  const [activeTab, setActiveTab] = React.useState<string>(() =>
+    typeof window !== "undefined" && window.innerWidth < 768
+      ? "summary"
+      : "wallets"
+  );
   const [isEditing, setIsEditing] = React.useState(false);
   const [showConnectionDetails, setShowConnectionDetails] =
     React.useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
   const [showRegenerateDialog, setShowRegenerateDialog] = React.useState(false);
+  // The Summary tab exists only on a phone. If this is desktop (or the viewport
+  // grows to it while Summary is active), fall back to the bills tab at render
+  // time — deriving rather than resetting state avoids a first-paint race with
+  // the viewport hook.
+  const effectiveTab =
+    !isMobile && activeTab === "summary" ? "wallets" : activeTab;
 
   const [name, setName] = React.useState(hub.name);
   const [permissions, setPermissions] = React.useState<AppPermissions>({
@@ -427,6 +447,22 @@ function CashHubDashboardInternal({
                 </Button>
                 <DropdownMenuContent align="end">
                   <DropdownMenuGroup>
+                    {/* Phone: the header keeps a single action button, so Edit
+                        lives in this menu instead of beside it. */}
+                    {isMobile && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <div
+                            className="flex items-center gap-2"
+                            onClick={() => setIsEditing(true)}
+                          >
+                            <SquarePenIcon className="size-4" />{" "}
+                            {t("connections.editConnection")}
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem asChild>
                       {/* AppDetails' "Add Another Connection" points at the
                           generic /apps/new flow; for a Cash Hub the
@@ -473,12 +509,14 @@ function CashHubDashboardInternal({
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <ResponsiveButton
-                variant="secondary"
-                onClick={() => setIsEditing(true)}
-                icon={SquarePenIcon}
-                text={t("connections.editConnection")}
-              />
+              {!isMobile && (
+                <ResponsiveButton
+                  variant="secondary"
+                  onClick={() => setIsEditing(true)}
+                  icon={SquarePenIcon}
+                  text={t("connections.editConnection")}
+                />
+              )}
             </>
           )
         }
@@ -494,8 +532,15 @@ function CashHubDashboardInternal({
           tabs. Analytics is its own tab rather than a collapsible buried at
           the foot of the Overview card. */}
       {!isEditing && (
-        <div className="border-b pb-5">
-          <CashHubOverview hub={hub} stats={stats} />
+        <div className={isMobile ? "pb-1" : "border-b pb-5"}>
+          {/* Phone: only the hero (balance + controls + coverage) stays here;
+              the flow stats live in the Summary tab below. Desktop keeps the
+              whole overview above the tabs. */}
+          <CashHubOverview
+            hub={hub}
+            stats={stats}
+            section={isMobile ? "hero" : "full"}
+          />
         </div>
       )}
 
@@ -560,21 +605,47 @@ function CashHubDashboardInternal({
 
       {!isEditing && (
         <>
-          <Tabs defaultValue="wallets" className="w-full">
-            <TabsList>
-              <TabsTrigger value="wallets">
-                {t("circleHub.cashWalletsTitle")}
-              </TabsTrigger>
-              <TabsTrigger value="analytics">
-                {t("circleHub.analyticsTitle")}
-              </TabsTrigger>
-              <TabsTrigger value="activity">
-                {t("tabs.activity", "Activity")}
-              </TabsTrigger>
-              <TabsTrigger value="permissions">
-                {t("permissions.title", "Permissions")}
-              </TabsTrigger>
-            </TabsList>
+          <Tabs
+            value={effectiveTab}
+            onValueChange={setActiveTab}
+            className="w-full"
+          >
+            {/* On a phone the tab bar sticks to the top (full-bleed via -mx-4)
+                so switching tabs never scrolls the hero back into view; on
+                desktop it's an ordinary inline row. */}
+            <div
+              className={cn(
+                "bg-background",
+                isMobile && "sticky top-0 z-20 -mx-4 border-b px-4 pb-2"
+              )}
+            >
+              <TabsList>
+                {isMobile && (
+                  <TabsTrigger value="summary">
+                    {t("tabs.summary", "Summary")}
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="wallets">
+                  {t("circleHub.cashWalletsTitle")}
+                </TabsTrigger>
+                <TabsTrigger value="analytics">
+                  {t("circleHub.analyticsTitle")}
+                </TabsTrigger>
+                <TabsTrigger value="activity">
+                  {t("tabs.activity", "Activity")}
+                </TabsTrigger>
+                <TabsTrigger value="permissions">
+                  {t("permissions.title", "Permissions")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            {isMobile && (
+              <TabsContent value="summary">
+                {/* The flow stats + median + budget, split out of the hero
+                    above so the other tabs aren't buried under them. */}
+                <CashHubOverview hub={hub} stats={stats} section="details" />
+              </TabsContent>
+            )}
             <TabsContent value="wallets">
               {/* No heading — the active tab already reads "Cash Bills". The
                   Mint button rides on the list's filter-tabs row (headerAction)

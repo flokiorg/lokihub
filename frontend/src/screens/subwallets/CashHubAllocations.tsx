@@ -63,6 +63,7 @@ import {
 } from "src/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "src/components/ui/tabs";
 import { LIST_CASH_ALLOCATIONS_LIMIT } from "src/constants";
+import { useIsNarrow } from "src/hooks/useIsNarrow";
 import { useApp } from "src/hooks/useApp";
 import { useAvatarSrc } from "src/hooks/useAvatarSrc";
 import { useIdentityAuthorities } from "src/hooks/useIdentityAuthorities";
@@ -345,6 +346,7 @@ export const CashHubAllocations = React.forwardRef<
   // Unclaimed by default, not "All". The unredeemed bills are the ones an
   // operator can still act on; "All" buried them under every bill the hub
   // ever issued, archived ones included.
+  const isMobile = useIsNarrow();
   const [status, setStatus] = React.useState<CashSliceStatus | "">("unclaimed");
   const [page, setPage] = React.useState(1);
   const [isLoading, setLoading] = React.useState(false);
@@ -1353,40 +1355,82 @@ export const CashHubAllocations = React.forwardRef<
         // same content and leave the first tab stuck partly offscreen, so the
         // horizontal scroll lives in exactly one place.)
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="min-w-0">
-              <Tabs
-                value={status}
+          {isMobile ? (
+            // Phone: six tabs scroll horizontally and clip their own active
+            // label to just a count, so collapse them into one dropdown that
+            // shows the current status + count and lists them all in a sheet.
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <Select
+                value={status || "all"}
                 onValueChange={(v) =>
-                  handleStatusChange(v as CashSliceStatus | "")
+                  handleStatusChange(v === "all" ? "" : (v as CashSliceStatus))
                 }
               >
-                <TabsList>
+                <SelectTrigger className="h-9 min-w-0 flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                   {statusTabs.map((tab) => (
-                    <TabsTrigger
+                    <SelectItem
                       key={tab.value || "all"}
-                      value={tab.value}
-                      className="shrink-0 gap-1.5"
+                      value={tab.value || "all"}
                     >
-                      {tab.label}
-                      <Badge
-                        variant={
-                          tab.value === "expired" && tab.count > 0
-                            ? "warning"
-                            : "secondary"
-                        }
-                        className="px-1.5 py-0 text-[11px] font-normal tabular-nums"
-                      >
-                        {tab.count}
-                      </Badge>
-                    </TabsTrigger>
+                      <span className="flex items-center gap-2">
+                        {tab.label}
+                        <Badge
+                          variant={
+                            tab.value === "expired" && tab.count > 0
+                              ? "warning"
+                              : "secondary"
+                          }
+                          className="px-1.5 py-0 text-[11px] font-normal tabular-nums"
+                        >
+                          {tab.count}
+                        </Badge>
+                      </span>
+                    </SelectItem>
                   ))}
-                </TabsList>
-              </Tabs>
+                </SelectContent>
+              </Select>
+              {/* Once per view, never per row — see CashStatusLegend. */}
+              <CashStatusLegend />
             </div>
-            {/* Once per view, never per row — see CashStatusLegend. */}
-            <CashStatusLegend />
-          </div>
+          ) : (
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="min-w-0">
+                <Tabs
+                  value={status}
+                  onValueChange={(v) =>
+                    handleStatusChange(v as CashSliceStatus | "")
+                  }
+                >
+                  <TabsList>
+                    {statusTabs.map((tab) => (
+                      <TabsTrigger
+                        key={tab.value || "all"}
+                        value={tab.value}
+                        className="shrink-0 gap-1.5"
+                      >
+                        {tab.label}
+                        <Badge
+                          variant={
+                            tab.value === "expired" && tab.count > 0
+                              ? "warning"
+                              : "secondary"
+                          }
+                          className="px-1.5 py-0 text-[11px] font-normal tabular-nums"
+                        >
+                          {tab.count}
+                        </Badge>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
+              {/* Once per view, never per row — see CashStatusLegend. */}
+              <CashStatusLegend />
+            </div>
+          )}
           {headerAction && (
             <div className="ml-auto shrink-0">{headerAction}</div>
           )}

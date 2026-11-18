@@ -67,6 +67,7 @@ import {
 } from "src/constants";
 import { useSiblingHubs } from "src/hooks/useApps";
 import { useCircleHubStats } from "src/hooks/useCircleHubStats";
+import { useIsNarrow } from "src/hooks/useIsNarrow";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import {
@@ -120,9 +121,25 @@ function CircleHubDashboardInternal({
   const { t: tCircles } = useTranslation("circles");
   const { data: stats } = useCircleHubStats(app.id);
   const { scaleInputAmount, parseInputAmount } = useUnit();
+  // Phone layout: the balance/allocated lead stays pinned, the rest of the
+  // overview moves into a Summary tab, and the tab bar sticks. Desktop keeps
+  // the single-card layout. See CashHubDashboard.
+  const isMobile = useIsNarrow();
 
   const circleAllowlistRef = React.useRef<CircleAllowlistHandle>(null);
   const [isAllowlistFormOpen, setAllowlistFormOpen] = React.useState(false);
+  // Controlled so a phone opens on the Summary tab while desktop opens on the
+  // wallets list. Lazy-initialised from the real viewport width so it's right
+  // on first paint.
+  const [activeTab, setActiveTab] = React.useState<string>(() =>
+    typeof window !== "undefined" && window.innerWidth < 768
+      ? "summary"
+      : "wallets"
+  );
+  // The Summary tab exists only on a phone; derive a safe tab at render time so
+  // desktop (or a resize to it) never lands on a tab that isn't there.
+  const effectiveTab =
+    !isMobile && activeTab === "summary" ? "wallets" : activeTab;
   const [isEditing, setIsEditing] = React.useState(false);
   const [showConnectionDetails, setShowConnectionDetails] =
     React.useState(false);
@@ -350,6 +367,22 @@ function CircleHubDashboardInternal({
                 </Button>
                 <DropdownMenuContent align="end">
                   <DropdownMenuGroup>
+                    {/* Phone: the header keeps a single action button, so Edit
+                        lives in this menu instead of beside it. */}
+                    {isMobile && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <div
+                            className="flex items-center gap-2"
+                            onClick={() => setIsEditing(true)}
+                          >
+                            <SquarePenIcon className="size-4" />{" "}
+                            {t("connections.editConnection")}
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem asChild>
                       <Link
                         to="/sub-wallets/new/circle"
@@ -384,12 +417,14 @@ function CircleHubDashboardInternal({
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <ResponsiveButton
-                variant="secondary"
-                onClick={() => setIsEditing(true)}
-                icon={SquarePenIcon}
-                text={t("connections.editConnection")}
-              />
+              {!isMobile && (
+                <ResponsiveButton
+                  variant="secondary"
+                  onClick={() => setIsEditing(true)}
+                  icon={SquarePenIcon}
+                  text={t("connections.editConnection")}
+                />
+              )}
             </>
           )
         }
@@ -403,37 +438,69 @@ function CircleHubDashboardInternal({
               listing) used to stack as four cards above the tabs, pushing
               the figures down the page; they now live together in a
               Settings tab. */}
-          <div className="border-b pb-5">
+          <div className={isMobile ? "pb-1" : "border-b pb-5"}>
+            {/* Phone: only the balance/allocated lead stays here; the rest of
+                the overview lives in the Summary tab below. */}
             {stats ? (
-              <CircleHubOverview hub={app} stats={stats} />
+              <CircleHubOverview
+                hub={app}
+                stats={stats}
+                section={isMobile ? "hero" : "full"}
+              />
             ) : (
               <OverviewCardSkeleton />
             )}
           </div>
 
-          <Tabs defaultValue="wallets" className="w-full">
-            <TabsList>
-              {isAllowlistPolicy && (
-                <TabsTrigger value="allowlist">
-                  {t("circleHub.allowlistTitle")}
-                </TabsTrigger>
+          <Tabs
+            value={effectiveTab}
+            onValueChange={setActiveTab}
+            className="w-full"
+          >
+            {/* Phone: the tab bar sticks (full-bleed via -mx-4) so switching
+                tabs never scrolls the hero back; desktop is an inline row. */}
+            <div
+              className={cn(
+                "bg-background",
+                isMobile && "sticky top-0 z-20 -mx-4 border-b px-4 pb-2"
               )}
-              <TabsTrigger value="wallets">
-                {t("circleHub.circleWalletsTitle")}
-              </TabsTrigger>
-              <TabsTrigger value="analytics">
-                {t("circleHub.analyticsTitle")}
-              </TabsTrigger>
-              <TabsTrigger value="activity">
-                {t("tabs.activity", "Activity")}
-              </TabsTrigger>
-              <TabsTrigger value="permissions">
-                {t("permissions.title", "Permissions")}
-              </TabsTrigger>
-              <TabsTrigger value="settings">
-                {t("circleHub.settingsTab")}
-              </TabsTrigger>
-            </TabsList>
+            >
+              <TabsList>
+                {isMobile && (
+                  <TabsTrigger value="summary">
+                    {t("tabs.summary", "Summary")}
+                  </TabsTrigger>
+                )}
+                {isAllowlistPolicy && (
+                  <TabsTrigger value="allowlist">
+                    {t("circleHub.allowlistTitle")}
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="wallets">
+                  {t("circleHub.circleWalletsTitle")}
+                </TabsTrigger>
+                <TabsTrigger value="analytics">
+                  {t("circleHub.analyticsTitle")}
+                </TabsTrigger>
+                <TabsTrigger value="activity">
+                  {t("tabs.activity", "Activity")}
+                </TabsTrigger>
+                <TabsTrigger value="permissions">
+                  {t("permissions.title", "Permissions")}
+                </TabsTrigger>
+                <TabsTrigger value="settings">
+                  {t("circleHub.settingsTab")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            {isMobile && stats && (
+              <TabsContent value="summary">
+                {/* The spent/received/fees/members grid, split out of the hero
+                    above so the other tabs aren't buried under it. */}
+                <CircleHubOverview hub={app} stats={stats} section="details" />
+              </TabsContent>
+            )}
 
             {isAllowlistPolicy && (
               <TabsContent value="allowlist">
