@@ -81,8 +81,12 @@ export function AppSidebar() {
   }, [_isHttpMode, navigate, refetchInfo]);
 
   const data = {
-    // Money: everything about this hub's own funds.
-    navMoney: [
+    // One flat primary nav — every top-level destination at level 0, with no
+    // Money/Network grouping. Funds first (home, wallet, sub-wallets, cash
+    // hubs), then how the hub reaches out (connections, and the LSP backoffice
+    // once attached). Listings are no longer here: a listing belongs to one
+    // circle and is managed from that circle's own page.
+    navPrimary: [
       {
         title: t("nav.home"),
         url: "/home",
@@ -103,12 +107,6 @@ export function AppSidebar() {
         url: "/cash-hub",
         icon: BanknoteIcon,
       },
-    ],
-    // Network: how this hub is discovered and connected to others. Listings
-    // are no longer a top-level nav item — a listing always belongs to one
-    // circle, so it's created and managed from that circle's own page; the
-    // cross-circle "all listings" view stays reachable from the Home dashboard.
-    navNetwork: [
       {
         title: t("nav.connections"),
         url: "/apps",
@@ -147,11 +145,11 @@ export function AppSidebar() {
   };
 
   const renderNavGroup = (
-    label: string,
+    label: string | undefined,
     items: { title: string; url: string; icon: LucideIcon }[]
   ) => (
     <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (
@@ -189,8 +187,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {renderNavGroup(t("nav.groupMoney"), data.navMoney)}
-        {renderNavGroup(t("nav.groupNetwork"), data.navNetwork)}
+        {renderNavGroup(undefined, data.navPrimary)}
         <div className="mt-auto">
           <SidebarGroup>
             <SidebarGroupContent>
