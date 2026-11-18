@@ -201,6 +201,10 @@ export function CashHubOverview({
 
   const showHero = section !== "details";
   const showDetails = section !== "hero";
+  // The flow stats open the "details" slice; on desktop (one card) they sit
+  // under the hero behind a hairline, but as the first thing in a Summary tab
+  // that leading border would float with nothing above it.
+  const detailsFirst = section === "details";
 
   return (
     // Card-light: the overview is the page's lead, rendered borderless (the
@@ -286,7 +290,12 @@ export function CashHubOverview({
         <>
           {hasActivity ? (
             <>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div
+                className={cn(
+                  "grid grid-cols-2 gap-4 pt-4 sm:grid-cols-4",
+                  !detailsFirst && "border-t"
+                )}
+              >
                 <Stat
                   label={t("cashKpis.issued")}
                   info={t("cashKpis.issuedInfo")}
@@ -338,7 +347,12 @@ export function CashHubOverview({
               </div>
             </>
           ) : (
-            <p className="text-muted-foreground text-sm">
+            <p
+              className={cn(
+                "text-muted-foreground pt-4 text-sm",
+                !detailsFirst && "border-t"
+              )}
+            >
               {t("cashKpis.noActivityYet")}
             </p>
           )}
@@ -346,7 +360,7 @@ export function CashHubOverview({
           {/* A hub need not have a budget at all — the row appears only once
             one is set, the same condition AppUsage's Budget card used. */}
           {hub.maxAmount > 0 && (
-            <div>
+            <div className="border-t pt-4">
               <div className="mb-2 flex flex-row justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-muted-foreground flex items-center gap-1.5 text-xs">

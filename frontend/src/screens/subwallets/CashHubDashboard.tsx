@@ -532,9 +532,7 @@ function CashHubDashboardInternal({
           tabs. Analytics is its own tab rather than a collapsible buried at
           the foot of the Overview card. */}
       {!isEditing && (
-        <div
-          className={cn("rounded-xl border bg-card", isMobile ? "p-4" : "p-5")}
-        >
+        <div className={isMobile ? "pb-1" : "border-b pb-5"}>
           {/* Phone: only the hero (balance + controls + coverage) stays here;
               the flow stats live in the Summary tab below. Desktop keeps the
               whole overview above the tabs. */}
@@ -650,9 +648,7 @@ function CashHubDashboardInternal({
               <TabsContent value="summary">
                 {/* The flow stats + median + budget, split out of the hero
                     above so the other tabs aren't buried under them. */}
-                <div className="rounded-xl border bg-card p-4">
-                  <CashHubOverview hub={hub} stats={stats} section="details" />
-                </div>
+                <CashHubOverview hub={hub} stats={stats} section="details" />
               </TabsContent>
             )}
             <TabsContent value="wallets">
