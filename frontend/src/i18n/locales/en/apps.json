@@ -185,6 +185,7 @@
     "circleWalletsTitle": "Circle Wallets",
     "cashWalletsTitle": "Cash Bills",
     "analyticsTitle": "Analytics",
+    "settingsTab": "Settings",
     "keepAnalyticsOpen": "Keep open",
     "addCashWallet": "Mint Lokicash",
     "hubExpiryBeforeBillsWarning": "This {{kind}}'s connection expires before the longest bill it can mint. Bills already issued keep their own deadline, but you won't be able to mint new ones once the connection expires.",

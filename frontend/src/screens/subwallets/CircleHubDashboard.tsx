@@ -391,15 +391,12 @@ function CircleHubDashboardInternal({
 
       {!isEditing && (
         <>
-          {app.circleIdentity && (
-            <CircleIdentityCard appId={app.id} identity={app.circleIdentity} />
-          )}
-          <CircleAcceptingCard app={app} onChanged={refetchApp} />
-          <CircleMemberRequestCard app={app} />
-          <CircleListingPanel
-            appId={app.id}
-            policy={app.circleIdentity?.policy}
-          />
+          {/* Lead with the Overview (the money), then everything else as
+              tabs — matching the Cash Hub detail. The circle's operator
+              controls (identity, accepting new members, member requests,
+              listing) used to stack as four cards above the tabs, pushing
+              the figures down the page; they now live together in a
+              Settings tab. */}
           {stats ? (
             <CircleHubOverview hub={app} stats={stats} />
           ) : (
@@ -424,6 +421,9 @@ function CircleHubDashboardInternal({
               </TabsTrigger>
               <TabsTrigger value="permissions">
                 {t("permissions.title", "Permissions")}
+              </TabsTrigger>
+              <TabsTrigger value="settings">
+                {t("circleHub.settingsTab")}
               </TabsTrigger>
             </TabsList>
 
@@ -478,6 +478,23 @@ function CircleHubDashboardInternal({
             </TabsContent>
 
             <TabsContent value="permissions">{permissionsCard}</TabsContent>
+
+            <TabsContent value="settings">
+              <div className="grid gap-4">
+                {app.circleIdentity && (
+                  <CircleIdentityCard
+                    appId={app.id}
+                    identity={app.circleIdentity}
+                  />
+                )}
+                <CircleAcceptingCard app={app} onChanged={refetchApp} />
+                <CircleMemberRequestCard app={app} />
+                <CircleListingPanel
+                  appId={app.id}
+                  policy={app.circleIdentity?.policy}
+                />
+              </div>
+            </TabsContent>
           </Tabs>
 
           {showConnectionDetails && (
