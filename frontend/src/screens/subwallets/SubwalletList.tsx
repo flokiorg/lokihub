@@ -17,12 +17,7 @@ import ResponsiveLinkButton from "src/components/ResponsiveLinkButton";
 import { SubWalletInfoDialog } from "src/components/SubWalletInfoDialog";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "src/components/ui/card";
+import { Card } from "src/components/ui/card";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LIST_APPS_LIMIT, SUBWALLET_APPSTORE_APP_ID } from "src/constants";
 import { useApps } from "src/hooks/useApps";
@@ -107,10 +102,10 @@ export function SubwalletList() {
           </AlertTitle>
           <AlertDescription className="flex flex-col gap-3">
             <div className="flex flex-row flex-wrap items-center gap-x-2">
-              There's not enough {chainNameLower} in your spending balance to honor all
-              balances of sub-wallets under your management. Increase spending
-              capacity by opening a channel or review your channel statuses to
-              back them up again.
+              There's not enough {chainNameLower} in your spending balance to
+              honor all balances of sub-wallets under your management. Increase
+              spending capacity by opening a channel or review your channel
+              statuses to back them up again.
               <LinkButton to="/wallet/receive" variant="secondary">
                 Deposit {chainName}
               </LinkButton>
@@ -132,48 +127,47 @@ export function SubwalletList() {
         </Alert>
       )}
 
-      <div className="flex flex-col sm:flex-row flex-wrap gap-4 slashed-zero">
-        <Card className="flex flex-1 flex-col">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">
-              Total Balance of Sub-wallets
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grow">
-            <div className="mb-1">
-              <span className="text-2xl font-medium balance sensitive">
-                <FormattedFlokicoinAmount amount={subwalletTotalAmount} />
-              </span>
+      <Card className="slashed-zero p-5">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Total balance
+            </div>
+            <div className="balance sensitive mt-1 text-2xl font-bold">
+              <FormattedFlokicoinAmount amount={subwalletTotalAmount} />
             </div>
             <FormattedFiatAmount amount={subwalletTotalAmount / 1000} />
-          </CardContent>
-        </Card>
-        <Card className="flex flex-1 flex-col">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Number of Sub-wallets</CardTitle>
-          </CardHeader>
-          <CardContent className="grow flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <span className="text-2xl font-medium">
-                {subwalletApps.length}
-              </span>
+          </div>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Sub-wallets
+            </div>
+            <div className="mt-1 text-2xl font-bold">
+              {subwalletApps.length}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Backing
+            </div>
+            <div className="mt-1 flex items-center gap-1.5 text-sm font-medium">
               {isSufficientlyBacked ? (
-                <div className="flex items-center text-positive-foreground text-sm">
-                  <ShieldCheckIcon className="size-4 me-2" />
-                  <span className="text-sm font-medium">Fully backed</span>
-                </div>
+                <>
+                  <ShieldCheckIcon className="size-4 text-positive-foreground" />
+                  <span className="text-positive-foreground">Fully backed</span>
+                </>
               ) : (
-                <div className="flex items-center text-warning-foreground text-sm">
-                  <TriangleAlertIcon className="size-4 me-2" />
-                  <span className="text-sm font-medium">
+                <>
+                  <TriangleAlertIcon className="size-4 text-warning-foreground" />
+                  <span className="text-warning-foreground">
                     Insufficiently backed
                   </span>
-                </div>
+                </>
               )}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </div>
+      </Card>
       <div className="mt-8">
         <h3 className="font-semibold text-2xl mb-4">Managed Sub-wallets</h3>
         <div
