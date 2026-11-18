@@ -51,7 +51,7 @@
     "find": "Help people find it",
     "optional": "optional",
     "advanced": "Advanced",
-    "advancedHint": "operator · map regions · visibility"
+    "advancedHint": "operator · visibility"
   },
   "warnings": {
     "public": "Listing makes this offer public and lets anyone find this node.",
@@ -80,6 +80,13 @@
     "followSetConfirm": "I understand the follow set is public",
     "canUnlist": "You can pause or unlist it anytime.",
     "preview": "Preview"
+  },
+  "map": {
+    "label": "Where",
+    "hint": "Tap the map to add where people should find this.",
+    "precisionRegion": "Region",
+    "precisionArea": "Area",
+    "none": "No area set — it can be found from anywhere."
   },
   "problems": {
     "title": "Give the offer a title — one line, up to 40 characters.",

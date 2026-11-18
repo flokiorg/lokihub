@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import Loading from "src/components/Loading";
+import { GeoRegionPicker } from "src/components/listings/GeoRegionPicker";
 import { ListingCard } from "src/components/listings/ListingCard";
 import {
   MAX_CONTENT,
@@ -325,10 +326,22 @@ function ListOfferForm({
                 {t("groups.optional")}
               </span>
             </h3>
+            <div className="grid gap-1.5">
+              <Label>{t("map.label")}</Label>
+              {/* Pick the region on an offline map instead of typing geohash
+                  codes — a tap becomes the coarse 3–4 char prefix NIP-CASH
+                  uses. The free-text place name below is just an optional
+                  human label. */}
+              <GeoRegionPicker
+                value={splitList(regions)}
+                onChange={(next) => setRegions(next.join(", "))}
+              />
+            </div>
             <div className="grid gap-1">
               <Label htmlFor="listing-location">{t("form.location")}</Label>
               <Input
                 id="listing-location"
+                placeholder="Lisbon, Baixa"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
               />
@@ -399,20 +412,6 @@ function ListOfferForm({
                   />
                   <p className="text-xs text-muted-foreground">
                     {operator ? t("warnings.operator") : t("form.operatorHint")}
-                  </p>
-                </div>
-                <div className="grid gap-1">
-                  <Label htmlFor="listing-regions">
-                    {t("form.regionsLabel")}
-                  </Label>
-                  <Input
-                    id="listing-regions"
-                    placeholder="eyc, eycd"
-                    value={regions}
-                    onChange={(e) => setRegions(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t("form.regionsHint")}
                   </p>
                 </div>
                 {isFollowSet && (
