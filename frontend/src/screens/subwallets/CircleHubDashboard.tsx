@@ -452,6 +452,10 @@ function CircleHubDashboardInternal({
             )}
           </div>
 
+          {/* The circle's public-listing control, right under the circle —
+              list / unlist / manage without leaving this page. */}
+          <CircleListingPanel appId={app.id} />
+
           <Tabs
             value={effectiveTab}
             onValueChange={setActiveTab}
@@ -552,7 +556,6 @@ function CircleHubDashboardInternal({
                 )}
                 <CircleAcceptingCard app={app} onChanged={refetchApp} />
                 <CircleMemberRequestCard app={app} />
-                <CircleListingPanel appId={app.id} />
               </div>
             </TabsContent>
           </Tabs>

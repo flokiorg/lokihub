@@ -7,7 +7,8 @@
     "emptyHint": "List one of your circles so people without a link can find it. A Cash Hub connection is never listed.",
     "listCircle": "List a circle",
     "listAction": "List an offer",
-    "notListed": "Not listed yet — one tap to list"
+    "notListed": "Not listed — people need an invite link to join",
+    "discoverability": "Discoverability"
   },
   "card": {
     "untitled": "Untitled offer",
