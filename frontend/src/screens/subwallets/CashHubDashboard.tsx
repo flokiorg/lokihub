@@ -5,6 +5,7 @@ import {
   EllipsisIcon,
   InfoIcon,
   PlusIcon,
+  RefreshCwIcon,
   SquarePenIcon,
   Trash2Icon,
   TriangleAlertIcon,
@@ -137,6 +138,7 @@ function CashHubDashboardInternal({
   const { t } = useTranslation("apps");
   const { t: tc } = useTranslation("common");
   const { t: tcircles } = useTranslation("circles");
+  const { t: tlistings } = useTranslation("listings");
 
   const allocationsRef = React.useRef<CashHubAllocationsHandle>(null);
   const [isCashFormOpen, setCashFormOpen] = React.useState(false);
@@ -144,6 +146,8 @@ function CashHubDashboardInternal({
   const [showConnectionDetails, setShowConnectionDetails] =
     React.useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
+  const [showRegenerateDialog, setShowRegenerateDialog] =
+    React.useState(false);
 
   const [name, setName] = React.useState(hub.name);
   const [permissions, setPermissions] = React.useState<AppPermissions>({
@@ -438,6 +442,15 @@ function CashHubDashboardInternal({
                         )}
                       </div>
                     </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <div
+                        className="flex items-center gap-2"
+                        onClick={() => setShowRegenerateDialog(true)}
+                      >
+                        <RefreshCwIcon className="size-4" />{" "}
+                        {tlistings("regenerate.menuItem")}
+                      </div>
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" asChild>
                       <div
@@ -461,7 +474,11 @@ function CashHubDashboardInternal({
           )
         }
       />
-      <RegenerateCashHubConnection hubId={hub.id} />
+      <RegenerateCashHubConnection
+        hubId={hub.id}
+        open={showRegenerateDialog}
+        onOpenChange={setShowRegenerateDialog}
+      />
 
       {/* Page order is what an operator reaches for, in order: what the hub
           holds and owes (Overview), then the bills, payments and charts as

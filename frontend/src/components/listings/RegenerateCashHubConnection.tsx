@@ -9,16 +9,27 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "src/components/ui/alert-dialog";
-import { Button } from "src/components/ui/button";
 import { regenerateCashHubConnection } from "src/hooks/useListings";
 import { handleRequestError } from "src/utils/handleRequestError";
 
 // RegenerateCashHubConnection revokes a Cash Hub's connection at once and shows
 // the new one once (WP-25 item 7): for when its string was ever published. A
 // Cash Hub is never listed.
-export function RegenerateCashHubConnection({ hubId }: { hubId: number }) {
+//
+// Controlled, trigger-less: revoke is a rare, semi-destructive action, so it
+// lives in the detail page's "…" menu rather than as a standing full-width
+// button. The host opens the dialog from there; this renders only the
+// confirm dialog and the shown-once new connection.
+export function RegenerateCashHubConnection({
+  hubId,
+  open,
+  onOpenChange,
+}: {
+  hubId: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useTranslation("listings");
   const [token, setToken] = React.useState<string | undefined>();
   const regenerate = async () => {
@@ -30,13 +41,8 @@ export function RegenerateCashHubConnection({ hubId }: { hubId: number }) {
     }
   };
   return (
-    <div className="space-y-2">
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button variant="outline" size="sm">
-            {t("regenerate.button")}
-          </Button>
-        </AlertDialogTrigger>
+    <>
+      <AlertDialog open={open} onOpenChange={onOpenChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("regenerate.title")}</AlertDialogTitle>
@@ -60,6 +66,6 @@ export function RegenerateCashHubConnection({ hubId }: { hubId: number }) {
           </p>
         </div>
       )}
-    </div>
+    </>
   );
 }

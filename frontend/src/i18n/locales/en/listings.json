@@ -103,6 +103,7 @@
   },
   "regenerate": {
     "button": "Revoke and reissue the Cash Hub connection",
+    "menuItem": "Revoke & reissue connection",
     "title": "Revoke this Cash Hub connection?",
     "description": "Do this if the connection string was ever published. The old string stops working at once and a new one is shown once. Bills and records are untouched; reconnect your minting client with the new string.",
     "cancel": "Cancel",
