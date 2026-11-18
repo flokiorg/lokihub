@@ -1,4 +1,4 @@
-import { CopyIcon, MegaphoneIcon } from "lucide-react";
+import { CopyIcon, MegaphoneIcon, UsersIcon } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -189,21 +189,27 @@ export function Listings() {
           <CardHeader>
             <CardTitle className="text-base">{t("page.listCircle")}</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
+          <CardContent className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {unlistedCircles.map((c) => (
-              <Button
+              <button
                 key={c.id}
-                variant="outline"
-                size="sm"
+                type="button"
                 onClick={() =>
                   setListingCircle({
                     id: c.id,
                     policy: c.circleIdentity?.policy,
                   })
                 }
+                className="flex items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/50"
               >
-                {c.name}
-              </Button>
+                <span className="flex size-9 flex-none items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                  <UsersIcon className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                  {c.name}
+                </span>
+                <MegaphoneIcon className="size-4 flex-none text-muted-foreground" />
+              </button>
             ))}
           </CardContent>
         </Card>
