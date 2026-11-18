@@ -26,6 +26,8 @@ export function ChartCard({
   description,
   action,
   className,
+  empty,
+  emptyLabel,
   children,
 }: {
   title: React.ReactNode;
@@ -38,6 +40,11 @@ export function ChartCard({
   // with one: a 200px plot beside a short summary leaves the summary sitting
   // in a half-empty box, which is the ragged look this grid had.
   className?: string;
+  // Zero-state: when a hub has no data yet, a plot renders as a bare set of
+  // axes that reads as "broken" rather than "nothing here yet". `empty` swaps
+  // the plot for one short centred line the reader can parse at a glance.
+  empty?: boolean;
+  emptyLabel?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -63,7 +70,13 @@ export function ChartCard({
           sits in the middle of that space rather than pinned to the top with
           a void beneath it. */}
       <CardContent className="flex flex-1 flex-col justify-center">
-        {children}
+        {empty ? (
+          <div className="text-muted-foreground flex h-[200px] items-center justify-center px-4 text-center text-sm text-balance">
+            {emptyLabel}
+          </div>
+        ) : (
+          children
+        )}
       </CardContent>
     </Card>
   );

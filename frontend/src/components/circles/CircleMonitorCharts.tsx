@@ -162,6 +162,8 @@ export function CircleMemberBreakdown({
       className={className}
       title={t("circleCharts.membersTitle")}
       description={t("circleCharts.membersHint")}
+      empty={stats.per_member.length === 0}
+      emptyLabel={t("circleCharts.membersEmpty")}
     >
       <ChartPlot>
         <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
@@ -273,6 +275,8 @@ export function CircleDailyFlow({
       className={className}
       title={t("circleCharts.flowTitle")}
       description={t("circleCharts.flowHint")}
+      empty={stats.daily.every((d) => !d.received_mloki && !d.spent_mloki)}
+      emptyLabel={t("circleCharts.flowEmpty")}
     >
       <ChartPlot>
         <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>

@@ -487,7 +487,10 @@
     "othersBar_other": "+{{count}} others",
     "coverageBacking": "Held by bills",
     "coverageCapacity": "Left to mint",
-    "coverageShortDetail": "At least one bill holds less than its unclaimed slices owe. Aggregate figures cannot show this, so it is measured per bill."
+    "coverageShortDetail": "At least one bill holds less than its unclaimed slices owe. Aggregate figures cannot show this, so it is measured per bill.",
+    "expiryEmpty": "Nothing outstanding yet — this fills in once bills are issued and waiting to be redeemed.",
+    "flowEmpty": "No activity yet — daily issued and redeemed totals appear once this hub mints its first bill.",
+    "outstandingEmpty": "Nothing outstanding yet — the running total appears once bills are issued."
   },
   "cashBills": {
     "dashboardSubtitle": "Cash bills issued from this hub, and where their value went",
@@ -527,7 +530,9 @@
     "flowTitle": "Daily flow",
     "flowHint": "Received above the line, spent below it.",
     "othersBar_one": "+{{count}} other",
-    "othersBar_other": "+{{count}} others"
+    "othersBar_other": "+{{count}} others",
+    "membersEmpty": "No member wallets yet — balances and spending appear here once members start using the circle.",
+    "flowEmpty": "No activity yet — daily received and spent totals appear once members use their wallets."
   },
   "circleControls": {
     "acceptingTitle": "New members",

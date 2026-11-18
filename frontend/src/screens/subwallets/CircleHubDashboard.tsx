@@ -401,11 +401,7 @@ function CircleHubDashboardInternal({
             policy={app.circleIdentity?.policy}
           />
           {stats ? (
-            <CircleHubOverview
-              hub={app}
-              stats={stats}
-              analytics={<CircleAnalytics hub={app} stats={stats} />}
-            />
+            <CircleHubOverview hub={app} stats={stats} />
           ) : (
             <OverviewCardSkeleton />
           )}
@@ -419,6 +415,9 @@ function CircleHubDashboardInternal({
               )}
               <TabsTrigger value="wallets">
                 {t("circleHub.circleWalletsTitle")}
+              </TabsTrigger>
+              <TabsTrigger value="analytics">
+                {t("circleHub.analyticsTitle")}
               </TabsTrigger>
               <TabsTrigger value="activity">
                 {t("tabs.activity", "Activity")}
@@ -464,6 +463,14 @@ function CircleHubDashboardInternal({
                   <CircleWallets appId={app.id} />
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="analytics">
+              {stats ? (
+                <CircleAnalytics hub={app} stats={stats} />
+              ) : (
+                <OverviewCardSkeleton />
+              )}
             </TabsContent>
 
             <TabsContent value="activity">

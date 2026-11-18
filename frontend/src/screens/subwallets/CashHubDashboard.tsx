@@ -30,14 +30,7 @@ import Loading from "src/components/Loading";
 import Permissions from "src/components/Permissions";
 import ResponsiveButton from "src/components/ResponsiveButton";
 import { Alert, AlertDescription } from "src/components/ui/alert";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "src/components/ui/accordion";
 import { Badge } from "src/components/ui/badge";
-import { Checkbox } from "src/components/ui/checkbox";
 import { Button } from "src/components/ui/button";
 import {
   Card,
@@ -63,7 +56,6 @@ import {
 } from "src/components/ui/tabs";
 import {
   DEFAULT_CASH_SPENT_RETENTION_SECS,
-  localStorageKeys,
   SUBWALLET_APPSTORE_APP_ID,
 } from "src/constants";
 import { useApp } from "src/hooks/useApp";
@@ -152,24 +144,6 @@ function CashHubDashboardInternal({
   const [showConnectionDetails, setShowConnectionDetails] =
     React.useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
-
-  // "Keep open" is the stored default for the Analytics section, shared by
-  // every Cash Hub. Expanding or collapsing it by hand is just this visit
-  // and does not touch the preference — otherwise the checkbox would fight
-  // the disclosure it sits next to.
-  const [keepAnalyticsOpen, setKeepAnalyticsOpen] = React.useState(
-    () =>
-      localStorage.getItem(localStorageKeys.cashAnalyticsKeepOpen) === "true"
-  );
-  const [isAnalyticsOpen, setAnalyticsOpen] = React.useState(keepAnalyticsOpen);
-
-  const toggleKeepAnalyticsOpen = (checked: boolean) => {
-    setKeepAnalyticsOpen(checked);
-    localStorage.setItem(
-      localStorageKeys.cashAnalyticsKeepOpen,
-      String(checked)
-    );
-  };
 
   const [name, setName] = React.useState(hub.name);
   const [permissions, setPermissions] = React.useState<AppPermissions>({
@@ -302,67 +276,31 @@ function CashHubDashboardInternal({
   // of the three things being edited, so it sits with them near the top;
   // while reading it is settled configuration, so it sits below the bills,
   // the trends and the payments an operator actually came here for.
-  // Not a card: each chart brings its own, and a card inside a card just
-  // draws a second border around the same content. The trigger row carries
-  // the heading instead. Rendered inside CashHubOverview's own card (its
-  // last section) rather than as a separate block elsewhere on the page.
-  const analyticsSection = (
-    <Accordion
-      type="single"
-      collapsible
-      value={isAnalyticsOpen ? "analytics" : ""}
-      onValueChange={(v) => setAnalyticsOpen(v === "analytics")}
-    >
-      <AccordionItem value="analytics" className="border-b-0">
-        {/* The checkbox is a sibling of the trigger, not a child: the
-            trigger is a <button>, and a second control nested inside it
-            could not be clicked without also toggling the section. Shown
-            only while open, since "keep open" is a decision you make
-            looking at the thing. */}
-        <div className="flex items-center gap-3 px-1">
-          <AccordionTrigger className="flex-1 py-0 text-base font-semibold">
-            {t("circleHub.analyticsTitle")}
-          </AccordionTrigger>
-          {isAnalyticsOpen && (
-            <label className="text-muted-foreground flex shrink-0 cursor-pointer items-center gap-2 text-sm font-normal">
-              <Checkbox
-                checked={keepAnalyticsOpen}
-                onCheckedChange={(checked) =>
-                  toggleKeepAnalyticsOpen(checked === true)
-                }
-              />
-              {t("circleHub.keepAnalyticsOpen")}
-            </label>
-          )}
-        </div>
-        <AccordionContent className="pt-4 pb-0">
-          {/* Same four questions as the Cash Hubs list, scoped to this hub —
-              can it honour what it owes, what happens to that next, how it
-              got here, and what moved each day. The balance comes off the
-              hub's own App row; a single hub's stats response does not
-              carry one. */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Same rule as the Cash Hubs list: a card that is a few figures
-                rather than a plot takes the whole row instead of sitting
-                half-empty beside one, and the two time series go wide,
-                where a 30-day axis is readable. */}
-            <CashCoverage
-              className="lg:col-span-2"
-              backingMloki={stats.backing_mloki}
-              outstandingMloki={stats.outstanding_mloki}
-              shortfallMloki={stats.shortfall_mloki}
-              capacityMloki={hub.balance}
-            />
-            <CashExpiryRunway className="lg:col-span-2" stats={stats} />
-            <CashOutstandingChart
-              daily={stats.daily}
-              outstandingMloki={stats.outstanding_mloki}
-            />
-            <CashDailyFlow daily={stats.daily} />
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+  // The Analytics tab's content: the same four readings as the Cash Hubs
+  // list, scoped to this hub — can it honour what it owes, what happens to
+  // that next, how it got here, and what moved each day. Lives in its own
+  // tab now (discoverable, full-width) rather than buried in a collapsible
+  // at the foot of the Overview card. The balance comes off the hub's own
+  // App row; a single hub's stats response does not carry one.
+  const analyticsPanel = (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* A card that is a few figures rather than a plot takes the whole row
+          instead of sitting half-empty beside one, and the two time series
+          go wide, where a 30-day axis is readable. */}
+      <CashCoverage
+        className="lg:col-span-2"
+        backingMloki={stats.backing_mloki}
+        outstandingMloki={stats.outstanding_mloki}
+        shortfallMloki={stats.shortfall_mloki}
+        capacityMloki={hub.balance}
+      />
+      <CashExpiryRunway className="lg:col-span-2" stats={stats} />
+      <CashOutstandingChart
+        daily={stats.daily}
+        outstandingMloki={stats.outstanding_mloki}
+      />
+      <CashDailyFlow daily={stats.daily} />
+    </div>
   );
 
   const permissionsCard = (
@@ -526,14 +464,10 @@ function CashHubDashboardInternal({
       <RegenerateCashHubConnection hubId={hub.id} />
 
       {/* Page order is what an operator reaches for, in order: what the hub
-          holds and owes, then the bills themselves plus the mint action,
-          then raw payments. Analytics lives inside the Overview card itself
-          (its last section) rather than as its own block further down the
-          page — it used to sit between the Cash Wallets card and the
-          transaction list, disconnected from the figures it explains. */}
-      {!isEditing && (
-        <CashHubOverview hub={hub} stats={stats} analytics={analyticsSection} />
-      )}
+          holds and owes (Overview), then the bills, payments and charts as
+          tabs. Analytics is its own tab rather than a collapsible buried at
+          the foot of the Overview card. */}
+      {!isEditing && <CashHubOverview hub={hub} stats={stats} />}
 
       {isEditing && (
         <Card>
@@ -601,6 +535,9 @@ function CashHubDashboardInternal({
               <TabsTrigger value="wallets">
                 {t("circleHub.cashWalletsTitle")}
               </TabsTrigger>
+              <TabsTrigger value="analytics">
+                {t("circleHub.analyticsTitle")}
+              </TabsTrigger>
               <TabsTrigger value="activity">
                 {t("tabs.activity", "Activity")}
               </TabsTrigger>
@@ -632,6 +569,7 @@ function CashHubDashboardInternal({
                 </CardContent>
               </Card>
             </TabsContent>
+            <TabsContent value="analytics">{analyticsPanel}</TabsContent>
             <TabsContent value="activity">
               <AppTransactionList appId={hub.id} />
             </TabsContent>
