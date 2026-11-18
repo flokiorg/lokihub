@@ -54,6 +54,7 @@ import { SetupServices } from "src/screens/setup/SetupServices";
 import { FLNDForm } from "src/screens/setup/node/FLNDForm";
 import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
 import { Listings } from "src/screens/listings/Listings";
+import { ListOfferPage } from "src/screens/listings/ListOfferPage";
 import { LspAnalytics } from "src/screens/lsp/LspAnalytics";
 import { LspClients } from "src/screens/lsp/LspClients";
 import { LspConfig } from "src/screens/lsp/LspConfig";
@@ -335,7 +336,19 @@ const routes: RouteObject[] = [
             path: "listings",
             element: <DefaultRedirect />,
             handle: { crumb: () => "Listings" },
-            children: [{ index: true, element: <Listings /> }],
+            children: [
+              { index: true, element: <Listings /> },
+              {
+                path: "new",
+                element: <ListOfferPage />,
+                handle: { crumb: () => "List an offer" },
+              },
+              {
+                path: "edit/:id",
+                element: <ListOfferPage />,
+                handle: { crumb: () => "Edit listing" },
+              },
+            ],
           },
           {
             path: "lsp",

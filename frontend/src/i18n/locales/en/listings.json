@@ -2,10 +2,12 @@
   "nav": "Listings",
   "page": {
     "title": "Listings",
-    "description": "Offers this Hub lists on relays so people without a link can find them",
+    "description": "Offers people can find without a link",
     "empty": "Nothing listed yet",
-    "emptyHint": "List a circle below. A Cash Hub connection is never listed.",
-    "listCircle": "List a circle"
+    "emptyHint": "List one of your circles so people without a link can find it. A Cash Hub connection is never listed.",
+    "listCircle": "List a circle",
+    "listAction": "List an offer",
+    "notListed": "Not listed yet — one tap to list"
   },
   "card": {
     "untitled": "Untitled offer",
@@ -14,7 +16,9 @@
   },
   "status": {
     "open": "Open",
+    "listed": "Listed",
     "paused": "Paused",
+    "closing": "Closing",
     "closed": "Closed"
   },
   "health": {
@@ -30,11 +34,23 @@
     "failing": "no relay accepted the last version, retrying"
   },
   "dialog": {
-    "title": "List this offer",
+    "title": "List an offer",
     "editTitle": "Edit listing",
-    "description": "The listing advertises; the terms always come from the offer itself when someone taps it.",
-    "list": "List",
-    "save": "Save"
+    "description": "People without a link can find it. The terms always come from the offer itself when someone taps it.",
+    "list": "List offer",
+    "save": "Save changes",
+    "cancel": "Cancel"
+  },
+  "pick": {
+    "prompt": "Which circle do you want to list?",
+    "none": "All your circles are already listed."
+  },
+  "groups": {
+    "offer": "The offer",
+    "find": "Help people find it",
+    "optional": "optional",
+    "advanced": "Advanced",
+    "advancedHint": "operator · map regions · visibility"
   },
   "warnings": {
     "public": "Listing makes this offer public and lets anyone find this node.",
@@ -50,11 +66,15 @@
     "location": "Place (e.g. Lisbon, Baixa)",
     "regions": "Regions",
     "regionsHint": "Geohash prefixes of 3 or 4 characters",
-    "languages": "Languages (ISO-639-1)",
-    "operator": "Operator (npub or hex, optional)",
+    "languages": "Languages",
+    "languageAdd": "Other (ISO code, e.g. ja)",
+    "operator": "Name an operator",
+    "operatorHint": "Publicly credit who runs this. Their relay is found automatically — nothing to paste.",
     "operatorRelay": "Operator's relay",
+    "regionsLabel": "Map regions",
     "followSetA": "Add the follow set's address",
     "followSetConfirm": "I understand the follow set is public",
+    "canUnlist": "You can pause or unlist it anytime.",
     "preview": "Preview"
   },
   "problems": {

@@ -10,6 +10,7 @@ import {
 } from "src/components/ServiceConfigForm";
 import { IdentityAuthorityManagementCard } from "src/components/settings/IdentityAuthorityManagementCard";
 import { ImageProxyCard } from "src/components/settings/ImageProxyCard";
+import { ListingRelaysCard } from "src/components/settings/ListingRelaysCard";
 import { PrivateTransportStatusCard } from "src/components/settings/PrivateTransportStatusCard";
 import SettingsHeader from "src/components/SettingsHeader";
 import {
@@ -235,6 +236,8 @@ export function Services() {
           />
 
           <ImageProxyCard className="border-border shadow-sm" />
+
+          <ListingRelaysCard className="border-border shadow-sm" />
 
           <PrivateTransportStatusCard
             privateTransport={info.privateTransport}

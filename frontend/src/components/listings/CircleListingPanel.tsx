@@ -1,4 +1,3 @@
-import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { ListingHealth } from "src/components/listings/ListingHealth";
@@ -10,21 +9,14 @@ import {
   CardTitle,
 } from "src/components/ui/card";
 import { useListings } from "src/hooks/useListings";
-import { ListOfferDialog } from "src/screens/subwallets/ListOfferDialog";
 
 // CircleListingPanel is the circle hub page's listing panel (WP-19 items 12 and
 // 13): "List this offer", or the listing's health and its own public
-// connection, separate from the members' invite.
-export function CircleListingPanel({
-  appId,
-  policy,
-}: {
-  appId: number;
-  policy?: string;
-}) {
+// connection, separate from the members' invite. Creating/editing happens on
+// the dedicated List-offer page.
+export function CircleListingPanel({ appId }: { appId: number }) {
   const { t } = useTranslation("listings");
-  const { data: listings, mutate } = useListings();
-  const [open, setOpen] = React.useState(false);
+  const { data: listings } = useListings();
   const listing = listings?.find(
     (l) => l.hubAppId === appId && l.phase !== "deleted"
   );
@@ -44,24 +36,19 @@ export function CircleListingPanel({
               </div>
             )}
             <Button asChild size="sm" variant="outline">
-              <Link to="/listings">{t("actions.edit")}</Link>
+              <Link to={`/listings/edit/${listing.id}`}>
+                {t("actions.edit")}
+              </Link>
             </Button>
           </>
         ) : (
-          <Button size="sm" onClick={() => setOpen(true)}>
-            {t("dialog.title")}
+          <Button asChild size="sm">
+            <Link to={`/listings/new?circle=${appId}`}>
+              {t("dialog.title")}
+            </Link>
           </Button>
         )}
       </CardContent>
-      {open && (
-        <ListOfferDialog
-          open
-          onOpenChange={setOpen}
-          circleHubAppId={appId}
-          circlePolicy={policy}
-          onDone={() => mutate()}
-        />
-      )}
     </Card>
   );
 }

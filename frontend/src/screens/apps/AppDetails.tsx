@@ -689,10 +689,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                 <>
                   <CircleAcceptingCard app={app} onChanged={refetchApp} />
                   <CircleMemberRequestCard app={app} />
-                  <CircleListingPanel
-                    appId={app.id}
-                    policy={app.circleIdentity?.policy}
-                  />
+                  <CircleListingPanel appId={app.id} />
                 </>
               )}
               {(app.kind === "cash_wallet" || app.kind === "circle_wallet") && (

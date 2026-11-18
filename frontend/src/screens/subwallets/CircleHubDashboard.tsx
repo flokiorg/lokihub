@@ -482,10 +482,7 @@ function CircleHubDashboardInternal({
                 )}
                 <CircleAcceptingCard app={app} onChanged={refetchApp} />
                 <CircleMemberRequestCard app={app} />
-                <CircleListingPanel
-                  appId={app.id}
-                  policy={app.circleIdentity?.policy}
-                />
+                <CircleListingPanel appId={app.id} />
               </div>
             </TabsContent>
           </Tabs>

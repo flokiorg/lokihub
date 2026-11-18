@@ -1,57 +1,93 @@
-import { CopyIcon, MegaphoneIcon, UsersIcon } from "lucide-react";
-import React from "react";
+import {
+  CopyIcon,
+  EllipsisIcon,
+  MegaphoneIcon,
+  PencilIcon,
+  UsersIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import Loading from "src/components/Loading";
-import { ListingCard } from "src/components/listings/ListingCard";
 import { ListingHealth } from "src/components/listings/ListingHealth";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "src/components/ui/accordion";
 import { Button } from "src/components/ui/button";
-import { Input } from "src/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "src/components/ui/dropdown-menu";
 import { useApps } from "src/hooks/useApps";
 import {
   type Listing,
   type ListingAction,
   listingAction,
-  setListingRelays,
-  useListingRelays,
   useListings,
 } from "src/hooks/useListings";
-import { ListOfferDialog } from "src/screens/subwallets/ListOfferDialog";
+import { cn } from "src/lib/utils";
 import { handleRequestError } from "src/utils/handleRequestError";
 
 function copy(text: string, done: string) {
   navigator.clipboard.writeText(text).then(() => toast(done));
 }
 
-// Listings is the operator's page for listed offers (WP-25, WP-19 item 13):
-// each listing's health, Pause/Resume, Edit, Unlist, the listing address to
-// give the operator, and the listing relays. lokihub never asks for or holds
-// the operator's key.
+// One glanceable word for a listing's state. Health detail (relay counts,
+// retrying, operator) is carried by ListingHealth on the row beside it.
+function StatusPill({ listing }: { listing: Listing }) {
+  const { t } = useTranslation("listings");
+  const base = "flex-none rounded-full px-2.5 py-1 text-xs font-medium";
+  if (listing.phase === "closing") {
+    return (
+      <span className={cn(base, "bg-muted text-muted-foreground")}>
+        {t("status.closing", "Closing")}
+      </span>
+    );
+  }
+  if (listing.status === "paused") {
+    return (
+      <span
+        className={cn(
+          base,
+          "border border-warning-foreground/30 bg-warning-foreground/10 text-warning-foreground"
+        )}
+      >
+        {t("status.paused")}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        base,
+        "border border-positive-foreground/30 bg-positive-foreground/10 text-positive-foreground"
+      )}
+    >
+      {t("status.listed")}
+    </span>
+  );
+}
+
+// Listings is the operator's page for listed offers: each listing's state and
+// health, its actions in a "…" menu, and one-tap shortcuts to list a circle
+// that isn't listed yet. Creating/editing a listing happens on its own page
+// (/listings/new, /listings/edit/:id). Where offers are relayed is a node
+// setting under Settings → Services, not a concern of this page. lokihub never
+// asks for or holds the operator's key.
 export function Listings() {
   const { t } = useTranslation("listings");
+  const navigate = useNavigate();
   const { data: listings, mutate } = useListings();
   const { data: circles } = useApps(100, 1, { kind: "circle_hub" });
-  const [editing, setEditing] = React.useState<Listing | undefined>();
-  const [listingCircle, setListingCircle] = React.useState<
-    { id: number; policy?: string } | undefined
-  >();
 
   if (!listings) {
     return <Loading />;
   }
-  const listed = new Set(
-    listings.filter((l) => l.phase !== "deleted").map((l) => l.hubAppId)
-  );
-  const unlistedCircles = (circles?.apps ?? []).filter(
-    (a) => !listed.has(a.id)
-  );
+
+  const active = listings.filter((l) => l.phase !== "deleted");
+  const listedHubs = new Set(active.map((l) => l.hubAppId));
+  const unlisted = (circles?.apps ?? []).filter((a) => !listedHubs.has(a.id));
 
   const act = async (l: Listing, action: ListingAction) => {
     try {
@@ -62,11 +98,32 @@ export function Listings() {
     }
   };
 
+  const listCircle = (circleId: number) =>
+    navigate(`/listings/new?circle=${circleId}`);
+
   return (
-    <div className="space-y-4">
-      <AppHeader title={t("page.title")} description={t("page.description")} />
-      {listings.length === 0 && (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
+    <div className="grid gap-4">
+      <AppHeader
+        title={t("page.title")}
+        description={t("page.description")}
+        contentRight={
+          unlisted.length > 0 && (
+            <Button
+              onClick={() =>
+                unlisted.length === 1
+                  ? listCircle(unlisted[0].id)
+                  : navigate("/listings/new")
+              }
+            >
+              <MegaphoneIcon className="size-4" />
+              {t("page.listAction", "List an offer")}
+            </Button>
+          )
+        }
+      />
+
+      {active.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-14 text-center">
           <div className="flex size-14 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
             <MegaphoneIcon className="size-7" />
           </div>
@@ -74,220 +131,126 @@ export function Listings() {
           <p className="max-w-sm text-sm text-muted-foreground">
             {t("page.emptyHint")}
           </p>
-        </div>
-      )}
-      {listings.map((l) => (
-        <div
-          key={l.id}
-          data-testid="listing-row"
-          className="border-b pb-4 last:border-b-0"
-        >
-          <div className="mb-2 space-y-1">
-            <p className="text-base font-semibold">
-              {l.title || t("card.untitled")}
-            </p>
-            <ListingHealth listing={l} />
-          </div>
-          <div className="space-y-3">
-            <ListingCard
-              type={l.type}
-              title={l.title}
-              content={l.content}
-              location={l.location}
-              languages={l.languages ?? []}
-              geohashes={l.geohashes ?? []}
-              status={l.status}
-            />
-            {l.address && (
-              <div className="space-y-1 text-xs">
-                <p className="font-medium">{t("address.label")}</p>
-                <p className="break-all font-mono">{l.address}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      copy(JSON.stringify(l.aTag), t("address.copied"))
-                    }
-                  >
-                    <CopyIcon className="size-3" /> {t("address.copyTag")}
-                  </Button>
-                  {l.operatorPubkey && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        copy(l.operatorCommand, t("address.copied"))
-                      }
-                    >
-                      <CopyIcon className="size-3" /> {t("address.copyCommand")}
-                    </Button>
-                  )}
-                </div>
-                <p className="text-muted-foreground">{t("address.hint")}</p>
-              </div>
-            )}
-            {l.type === "circle_wallet" && l.connection && l.connAppId > 0 && (
-              <div className="space-y-1 text-xs">
-                <p className="font-medium">{t("connection.label")}</p>
-                <p className="break-all font-mono">{l.connection}</p>
-              </div>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {l.phase === "listed" && (
-                <>
-                  {l.status === "paused" ? (
-                    <Button size="sm" onClick={() => act(l, "resume")}>
-                      {t("actions.resume")}
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => act(l, "pause")}
-                    >
-                      {t("actions.pause")}
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setEditing(l)}
-                  >
-                    {t("actions.edit")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => act(l, "unlist")}
-                  >
-                    {t("actions.unlist")}
-                  </Button>
-                </>
-              )}
-              {l.operatorPubkey && l.phase === "listed" && (
+          {unlisted.length > 0 && (
+            <div className="mt-1 flex flex-wrap justify-center gap-2">
+              {unlisted.slice(0, 4).map((c, i) => (
                 <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => act(l, "check-operator")}
+                  key={c.id}
+                  variant={i === 0 ? "default" : "outline"}
+                  onClick={() => listCircle(c.id)}
                 >
-                  {t("actions.checkOperator")}
+                  <UsersIcon className="size-4" />
+                  {c.name}
                 </Button>
-              )}
-              {l.type === "circle_wallet" && l.connAppId > 0 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => act(l, "revoke-connection")}
-                >
-                  {t("actions.revokeConnection")}
-                </Button>
-              )}
+              ))}
             </div>
-          </div>
+          )}
         </div>
-      ))}
-      {unlistedCircles.length > 0 && (
+      ) : (
+        <ul className="flex flex-col">
+          {active.map((l) => (
+            <li
+              key={l.id}
+              data-testid="listing-row"
+              className="flex min-w-0 items-center gap-3 border-b px-1 py-3 last:border-b-0"
+            >
+              <span className="flex size-9 flex-none items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                <MegaphoneIcon className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">
+                  {l.title || t("card.untitled")}
+                </p>
+                <ListingHealth listing={l} />
+              </div>
+              <StatusPill listing={l} />
+              <DropdownMenu modal={false}>
+                <Button variant="ghost" size="icon" asChild>
+                  <DropdownMenuTrigger aria-label={t("card.untitled")}>
+                    <EllipsisIcon className="size-4" />
+                  </DropdownMenuTrigger>
+                </Button>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <div
+                      className="flex items-center gap-2"
+                      onClick={() => navigate(`/listings/edit/${l.id}`)}
+                    >
+                      <PencilIcon className="size-4" /> {t("actions.edit")}
+                    </div>
+                  </DropdownMenuItem>
+                  {l.status === "paused" ? (
+                    <DropdownMenuItem asChild>
+                      <div onClick={() => act(l, "resume")}>
+                        {t("actions.resume")}
+                      </div>
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem asChild>
+                      <div onClick={() => act(l, "pause")}>
+                        {t("actions.pause")}
+                      </div>
+                    </DropdownMenuItem>
+                  )}
+                  {l.address && (
+                    <DropdownMenuItem asChild>
+                      <div
+                        className="flex items-center gap-2"
+                        onClick={() =>
+                          copy(JSON.stringify(l.aTag), t("address.copied"))
+                        }
+                      >
+                        <CopyIcon className="size-4" /> {t("address.copyTag")}
+                      </div>
+                    </DropdownMenuItem>
+                  )}
+                  {l.operatorPubkey && (
+                    <DropdownMenuItem asChild>
+                      <div onClick={() => act(l, "check-operator")}>
+                        {t("actions.checkOperator")}
+                      </div>
+                    </DropdownMenuItem>
+                  )}
+                  {l.type === "circle_wallet" && l.connAppId > 0 && (
+                    <DropdownMenuItem asChild>
+                      <div onClick={() => act(l, "revoke-connection")}>
+                        {t("actions.revokeConnection")}
+                      </div>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" asChild>
+                    <div onClick={() => act(l, "unlist")}>
+                      {t("actions.unlist")}
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {active.length > 0 && unlisted.length > 0 && (
         <div className="border-t pt-4">
-          <h3 className="mb-2 text-base font-semibold">
-            {t("page.listCircle")}
-          </h3>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {unlistedCircles.map((c) => (
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("page.notListed", "Not listed yet — one tap to list")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {unlisted.map((c) => (
               <button
                 key={c.id}
                 type="button"
-                onClick={() =>
-                  setListingCircle({
-                    id: c.id,
-                    policy: c.circleIdentity?.policy,
-                  })
-                }
-                className="flex items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/50"
+                onClick={() => listCircle(c.id)}
+                className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-medium transition-colors hover:border-primary/50"
               >
-                <span className="flex size-9 flex-none items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                  <UsersIcon className="size-4" />
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                  {c.name}
-                </span>
-                <MegaphoneIcon className="size-4 flex-none text-muted-foreground" />
+                <UsersIcon className="size-4 text-muted-foreground" />
+                {c.name}
               </button>
             ))}
           </div>
         </div>
       )}
-      <ListingRelaysCard />
-      {editing && (
-        <ListOfferDialog
-          open
-          onOpenChange={(o) => !o && setEditing(undefined)}
-          listing={editing}
-          onDone={() => mutate()}
-        />
-      )}
-      {listingCircle && (
-        <ListOfferDialog
-          open
-          onOpenChange={(o) => !o && setListingCircle(undefined)}
-          circleHubAppId={listingCircle.id}
-          circlePolicy={listingCircle.policy}
-          onDone={() => mutate()}
-        />
-      )}
     </div>
-  );
-}
-
-// ListingRelaysCard edits the listing relays (OQ-44): where listings go and
-// what the node's relay list names as write relays.
-function ListingRelaysCard() {
-  const { t } = useTranslation("listings");
-  const { data, mutate } = useListingRelays();
-  const [value, setValue] = React.useState<string | undefined>();
-  if (!data) {
-    return null;
-  }
-  const current = value ?? data.configured.join(", ");
-  const save = async () => {
-    try {
-      await setListingRelays(
-        current
-          .split(/[\s,]+/)
-          .map((r) => r.trim())
-          .filter((r) => r)
-      );
-      await mutate();
-      setValue(undefined);
-      toast(t("relays.saved"));
-    } catch (error) {
-      handleRequestError(t("errors.relays"), error);
-    }
-  };
-  // Relays just work out of the box (data.effective has sensible defaults), so
-  // this is opt-in and collapsed by default — a normal operator never has to
-  // think about relay URLs. Only someone running their own relays expands it.
-  return (
-    <Accordion type="single" collapsible className="w-full">
-      <AccordionItem value="relays" className="border-b-0">
-        <AccordionTrigger className="text-sm text-muted-foreground">
-          {t("relays.title")}
-        </AccordionTrigger>
-        <AccordionContent className="grid gap-3">
-          <p className="text-sm text-muted-foreground">
-            {t("relays.description", { relays: data.effective.join(", ") })}
-          </p>
-          <div className="flex gap-2">
-            <Input
-              aria-label={t("relays.title")}
-              placeholder="wss://"
-              value={current}
-              onChange={(e) => setValue(e.target.value)}
-            />
-            <Button onClick={save}>{t("relays.save")}</Button>
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
   );
 }
