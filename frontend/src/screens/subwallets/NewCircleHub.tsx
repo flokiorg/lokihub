@@ -12,7 +12,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "src/components/ui/accordion";
-import { FieldSet, FieldLegend } from "src/components/ui/field";
 import { Button } from "src/components/ui/button";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { DurationInput } from "src/components/DurationInput";
@@ -581,18 +580,59 @@ export function NewCircleHub() {
               </div>
             )}
 
-            {isNewIdentity ? (
-              <div className="grid w-full gap-4 md:grid-cols-[minmax(0,1fr)_15rem] md:items-start">
-                <div className="w-full grid gap-4 rounded-lg border p-4 min-w-0">
-                  <div className="w-full grid gap-1.5">
-                    <Label>{t("newCircleHub.memberModeLabel")}</Label>
-                    <OptionCards
-                      options={memberModeOptions}
-                      value={memberMode}
-                      onChange={setMemberMode}
-                    />
-                  </div>
+            {isNewIdentity && (
+              <div className="w-full grid gap-1.5">
+                <Label>{t("newCircleHub.memberModeLabel")}</Label>
+                <OptionCards
+                  options={memberModeOptions}
+                  value={memberMode}
+                  onChange={setMemberMode}
+                />
+              </div>
+            )}
 
+            <div className="w-full grid gap-1.5">
+              <Label htmlFor="perWalletMax">
+                {t("common.maxWalletBudgetLabel")}
+              </Label>
+              <CurrencyInput
+                id="perWalletMax"
+                amount={
+                  perWalletMaxLoki
+                    ? scaleInputAmount(perWalletMaxLoki, inputUnit).toString()
+                    : ""
+                }
+                onAmountChange={(val) =>
+                  setPerWalletMaxLoki(
+                    parseInputAmount(parseFloat(val) || 0, inputUnit)
+                  )
+                }
+                inputUnit={inputUnit}
+                onInputUnitChange={setInputUnit}
+                required
+                min={scaleInputAmount(MIN_CIRCLE_WALLET_MAX_LOKI, inputUnit)}
+              />
+              <p className="text-muted-foreground text-sm">
+                {t("newCircleHub.maxWalletBudgetHelper")}{" "}
+                {t("newCircleHub.minWalletBudgetHint", {
+                  min: MIN_CIRCLE_WALLET_MAX_LOKI,
+                })}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {isNewIdentity && (
+          <Card className="w-full">
+            <CardHeader>
+              <CardTitle>{t("newCircleHub.membershipDetailsTitle")}</CardTitle>
+              <CardDescription>
+                {t("newCircleHub.membershipDetailsDesc")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid w-full gap-4 md:grid-cols-[minmax(0,1fr)_15rem] md:items-start">
+                <div className="w-full grid gap-4 min-w-0">
                   {memberMode === "followSet" && (
                     <div className="w-full grid gap-1.5">
                       <Label>{t("followSet.sourceLabel")}</Label>
@@ -708,40 +748,16 @@ export function NewCircleHub() {
                   isManagedFollowSet={isManagedFollowSet}
                 />
               </div>
-            ) : null}
+            </CardContent>
+          </Card>
+        )}
 
-            <FieldSet className="w-full gap-4">
-              <FieldLegend variant="label">
-                {t("newCircleHub.walletLimitsLegend")}
-              </FieldLegend>
-              <div className="w-full grid gap-1.5">
-                <Label htmlFor="perWalletMax">
-                  {t("common.maxWalletBudgetLabel")}
-                </Label>
-                <CurrencyInput
-                  id="perWalletMax"
-                  amount={
-                    perWalletMaxLoki
-                      ? scaleInputAmount(perWalletMaxLoki, inputUnit).toString()
-                      : ""
-                  }
-                  onAmountChange={(val) =>
-                    setPerWalletMaxLoki(
-                      parseInputAmount(parseFloat(val) || 0, inputUnit)
-                    )
-                  }
-                  inputUnit={inputUnit}
-                  onInputUnitChange={setInputUnit}
-                  required
-                  min={scaleInputAmount(MIN_CIRCLE_WALLET_MAX_LOKI, inputUnit)}
-                />
-                <p className="text-muted-foreground text-sm">
-                  {t("newCircleHub.maxWalletBudgetHelper")}{" "}
-                  {t("newCircleHub.minWalletBudgetHint", {
-                    min: MIN_CIRCLE_WALLET_MAX_LOKI,
-                  })}
-                </p>
-              </div>
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="advanced">
+            <AccordionTrigger className="text-sm">
+              {t("common.advancedSettings")}
+            </AccordionTrigger>
+            <AccordionContent className="grid gap-4">
               <div className="w-full grid gap-1.5">
                 <BudgetRenewalSelect
                   label={t("common.minRenewalLabel")}
@@ -780,16 +796,6 @@ export function NewCircleHub() {
                   {t("common.feePpmHelper")}
                 </p>
               </div>
-            </FieldSet>
-          </CardContent>
-        </Card>
-
-        <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value="advanced">
-            <AccordionTrigger className="text-sm">
-              {t("common.advancedSettings")}
-            </AccordionTrigger>
-            <AccordionContent className="grid gap-4">
               <div className="w-full grid gap-1.5">
                 <Label htmlFor="hubMaxAmount">
                   {t("newCircleHub.hubBudgetLabel")}
