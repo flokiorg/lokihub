@@ -269,8 +269,11 @@ function CircleHubDashboardInternal({
 
   const isAllowlistPolicy = app.circleIdentity?.policy === "allowlist";
 
+  // grid-cols-1 (= minmax(0,1fr)) clamps the single column to the page width
+  // so a wide child (filter tabs, long rows) scrolls inside its own box
+  // instead of widening the page — see CashHubDashboard.
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5">
       <AppHeader
         title={
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">

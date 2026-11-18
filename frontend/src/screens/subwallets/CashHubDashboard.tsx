@@ -140,7 +140,9 @@ function CashHubDashboardInternal({
   const { t: tlistings } = useTranslation("listings");
 
   const allocationsRef = React.useRef<CashHubAllocationsHandle>(null);
-  const [isCashFormOpen, setCashFormOpen] = React.useState(false);
+  // Only the setter is used now (synced to CashHubAllocations via
+  // onFormOpenChange); the Mint button lives inside the list's header row.
+  const [, setCashFormOpen] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(false);
   const [showConnectionDetails, setShowConnectionDetails] =
     React.useState(false);
@@ -345,8 +347,13 @@ function CashHubDashboardInternal({
     </Card>
   );
 
+  // grid-cols-1 (= minmax(0,1fr)) clamps this single column to the available
+  // width. A bare `grid` is an auto track that instead grows to its widest
+  // child's min-content — here the 6-tab bill filter — which would widen the
+  // page and give it a horizontal scrollbar on narrow screens instead of
+  // letting the tab strip scroll inside its own box.
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5">
       <AppHeader
         title={
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
@@ -569,21 +576,21 @@ function CashHubDashboardInternal({
               </TabsTrigger>
             </TabsList>
             <TabsContent value="wallets">
-              {/* No heading here — the active tab already reads "Cash Bills". */}
-              {!isCashFormOpen && (
-                <div className="mb-3 flex justify-end">
+              {/* No heading — the active tab already reads "Cash Bills". The
+                  Mint button rides on the list's filter-tabs row (headerAction)
+                  so it lines up with the filters instead of floating above. */}
+              <CashHubAllocations
+                appId={hub.id}
+                ref={allocationsRef}
+                onFormOpenChange={setCashFormOpen}
+                headerAction={
                   <ResponsiveButton
                     size="sm"
                     onClick={() => allocationsRef.current?.openAdd()}
                     icon={PlusIcon}
                     text={t("circleHub.addCashWallet")}
                   />
-                </div>
-              )}
-              <CashHubAllocations
-                appId={hub.id}
-                ref={allocationsRef}
-                onFormOpenChange={setCashFormOpen}
+                }
               />
             </TabsContent>
             <TabsContent value="analytics">{analyticsPanel}</TabsContent>
