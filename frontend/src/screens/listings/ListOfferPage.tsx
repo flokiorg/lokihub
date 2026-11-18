@@ -198,6 +198,10 @@ function ListOfferForm({
   const [confirmFollowSet, setConfirmFollowSet] = React.useState(
     l?.followSetA ?? false
   );
+  // Publishing a listing makes the circle publicly discoverable on relays. A
+  // new listing requires an explicit acknowledgment before it can go out; an
+  // edit doesn't, since it's already live.
+  const [confirmPublic, setConfirmPublic] = React.useState(false);
   const [isLoading, setLoading] = React.useState(false);
   const [newLang, setNewLang] = React.useState("");
 
@@ -221,7 +225,7 @@ function ListOfferForm({
   });
 
   const submit = async () => {
-    if (problem) {
+    if (problem || (!l && !confirmPublic)) {
       return;
     }
     const fields: ListingFields = {
@@ -282,9 +286,12 @@ function ListOfferForm({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
-              <p className="text-end text-xs text-muted-foreground">
-                {graphemes(title)}/{MAX_TITLE}
-              </p>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{!title.trim() ? t("form.titleRequired") : ""}</span>
+                <span>
+                  {graphemes(title)}/{MAX_TITLE}
+                </span>
+              </div>
             </div>
             <div className="grid gap-1">
               <Label htmlFor="listing-content">{t("form.content")}</Label>
@@ -293,9 +300,12 @@ function ListOfferForm({
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
-              <p className="text-end text-xs text-muted-foreground">
-                {graphemes(content)}/{MAX_CONTENT}
-              </p>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{t("form.contentHint")}</span>
+                <span>
+                  {graphemes(content)}/{MAX_CONTENT}
+                </span>
+              </div>
             </div>
             <div className="grid gap-1">
               <Label htmlFor="listing-image">{t("form.image")}</Label>
@@ -432,7 +442,7 @@ function ListOfferForm({
             </AccordionItem>
           </Accordion>
 
-          {problem && (
+          {problem && !(problem === "title" && title.trim() === "") && (
             <p
               className="text-sm text-destructive"
               data-testid="listing-problem"
@@ -461,11 +471,26 @@ function ListOfferForm({
             geohashes={splitList(regions)}
             status={l?.status}
           />
+          {/* A new listing must acknowledge the public exposure before it goes
+              out; an edit is already live, so it doesn't re-ask. */}
+          {!l && (
+            <label className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Checkbox
+                className="mt-0.5"
+                checked={confirmPublic}
+                onCheckedChange={(v) => setConfirmPublic(v === true)}
+              />
+              {t("warnings.publicConfirm")}
+            </label>
+          )}
           <LoadingButton
             className="w-full"
             loading={isLoading}
             disabled={
-              !!problem || (followSetA && !confirmFollowSet) || isLoading
+              !!problem ||
+              (followSetA && !confirmFollowSet) ||
+              (!l && !confirmPublic) ||
+              isLoading
             }
             onClick={submit}
           >

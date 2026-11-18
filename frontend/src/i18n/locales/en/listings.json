@@ -57,12 +57,15 @@
     "public": "Listing makes this offer public and lets anyone find this node.",
     "pow": "Proof of work on the inbox is off while no proof-of-work relays are set; anyone can send requests.",
     "circleTerms": "For a circle, its access policy and how much it can still take in become readable by anyone.",
+    "publicConfirm": "I understand this makes the circle publicly discoverable — its access policy and remaining capacity become readable by anyone.",
     "followSet": "This circle's follow set is public. Consider hidden entries for members who should not be named. The listing's title is not taken from the set.",
     "operator": "Naming an operator publicly links their account to this node."
   },
   "form": {
     "title": "Title",
+    "titleRequired": "A title is required to list",
     "content": "Description",
+    "contentHint": "A sentence or two helps people decide.",
     "image": "Image (https)",
     "location": "Place (e.g. Lisbon, Baixa)",
     "regions": "Regions",
@@ -79,7 +82,7 @@
     "preview": "Preview"
   },
   "problems": {
-    "title": "The title must be one line of at most 40 characters.",
+    "title": "Give the offer a title — one line, up to 40 characters.",
     "content": "The description must be at most 280 characters.",
     "image": "The image must be an https URL.",
     "location": "The place must be one line of at most 40 characters, with no link.",

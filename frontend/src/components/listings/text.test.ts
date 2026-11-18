@@ -27,6 +27,9 @@ describe("listing form (WP-19 item 13, U-25.RC3)", () => {
     ).toBeUndefined();
     expect(validateListingForm({ ...ok, title: "a".repeat(41) })).toBe("title");
     expect(validateListingForm({ ...ok, title: "a\nb" })).toBe("title");
+    // A title is required: a blank advert publishes as "Untitled offer".
+    expect(validateListingForm({ ...ok, title: "" })).toBe("title");
+    expect(validateListingForm({ ...ok, title: "   " })).toBe("title");
     // A family emoji is one character.
     expect(graphemes("👨‍👩‍👧")).toBe(1);
     expect(capText("abc", 2)).toBe("ab");
