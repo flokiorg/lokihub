@@ -296,6 +296,8 @@
   "newCircleHub": {
     "title": "New Circle Wallet Hub",
     "description": "The people you approve request their own wallet on your node, whenever they need one — payments between them are instant and free.",
+    "essentialsTitle": "The essentials",
+    "essentialsDesc": "Name your circle, pick its identity and who can join, and set the per-member limits. Open Advanced for the rest.",
     "identityModeLabel": "Membership Identity",
     "selectIdentityPlaceholder": "Select an identity",
     "createNewIdentity": "Create new identity",

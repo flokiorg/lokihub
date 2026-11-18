@@ -49,6 +49,7 @@ import { NostrProfileRow } from "src/components/circles/NostrProfileRow";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "src/components/ui/card";
@@ -221,7 +222,9 @@ function MembershipPreview({
                   </span>
                 )}
                 {isManagedFollowSet && followSet.title && (
-                  <span className="truncate font-medium">{followSet.title}</span>
+                  <span className="truncate font-medium">
+                    {followSet.title}
+                  </span>
                 )}
               </div>
             )}
@@ -496,273 +499,290 @@ export function NewCircleHub() {
         onSubmit={handleSubmit}
         className="flex w-full flex-col items-start gap-6 max-w-2xl"
       >
-        <div className="w-full grid gap-1.5">
-          <Label htmlFor="name">{t("common.nameLabel")}</Label>
-          <Input
-            autoFocus
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            autoComplete="off"
-          />
-        </div>
-
-        {hasSavedIdentities && (
-          <div className="w-full grid gap-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="identity">
-                {t("newCircleHub.identityModeLabel")}
-              </Label>
-              <ManageIdentitiesDialog />
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>{t("newCircleHub.essentialsTitle")}</CardTitle>
+            <CardDescription>
+              {t("newCircleHub.essentialsDesc")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-6">
+            <div className="w-full grid gap-1.5">
+              <Label htmlFor="name">{t("common.nameLabel")}</Label>
+              <Input
+                autoFocus
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="off"
+              />
             </div>
-            <Select
-              value={isNewIdentity ? "new" : selectedIdentityId}
-              onValueChange={(v) => {
-                if (v === "new") {
-                  setIdentityMode("new");
-                  setSelectedIdentityId(undefined);
-                } else {
-                  setIdentityMode("existing");
-                  setSelectedIdentityId(v);
-                }
-              }}
-            >
-              <SelectTrigger id="identity" className="w-full">
-                <SelectValue
-                  placeholder={t("newCircleHub.selectIdentityPlaceholder")}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new">
-                  {t("newCircleHub.createNewIdentity")}
-                </SelectItem>
-                <SelectSeparator />
-                <SelectGroup>
-                  <SelectLabel>
-                    {t("newCircleHub.existingIdentities")}
-                  </SelectLabel>
-                  {identities.map((identity) => (
-                    <SelectItem key={identity.id} value={String(identity.id)}>
-                      <span className="flex w-full items-center justify-between gap-2">
-                        <span>
-                          {identity.name} ({t(`policyLabel.${identity.policy}`)}
-                          )
-                        </span>
-                        {identity.usedByCount > 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            {t("common.inUse")}
-                          </span>
-                        )}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-sm">
-              {t("newCircleHub.identityReuseHelper")}
-            </p>
-          </div>
-        )}
 
-        {isNewIdentity ? (
-          <div className="grid w-full gap-4 md:grid-cols-[minmax(0,1fr)_15rem] md:items-start">
-            <div className="w-full grid gap-4 rounded-lg border p-4 min-w-0">
+            {hasSavedIdentities && (
               <div className="w-full grid gap-1.5">
-                <Label>{t("newCircleHub.memberModeLabel")}</Label>
-                <OptionCards
-                  options={memberModeOptions}
-                  value={memberMode}
-                  onChange={setMemberMode}
-                />
-              </div>
-
-              {memberMode === "followSet" && (
-                <div className="w-full grid gap-1.5">
-                  <Label>{t("followSet.sourceLabel")}</Label>
-                  <OptionCards
-                    options={followSetSourceOptions}
-                    value={followSetSource}
-                    onChange={setFollowSetSource}
-                  />
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="identity">
+                    {t("newCircleHub.identityModeLabel")}
+                  </Label>
+                  <ManageIdentitiesDialog />
                 </div>
-              )}
+                <Select
+                  value={isNewIdentity ? "new" : selectedIdentityId}
+                  onValueChange={(v) => {
+                    if (v === "new") {
+                      setIdentityMode("new");
+                      setSelectedIdentityId(undefined);
+                    } else {
+                      setIdentityMode("existing");
+                      setSelectedIdentityId(v);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="identity" className="w-full">
+                    <SelectValue
+                      placeholder={t("newCircleHub.selectIdentityPlaceholder")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">
+                      {t("newCircleHub.createNewIdentity")}
+                    </SelectItem>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel>
+                        {t("newCircleHub.existingIdentities")}
+                      </SelectLabel>
+                      {identities.map((identity) => (
+                        <SelectItem
+                          key={identity.id}
+                          value={String(identity.id)}
+                        >
+                          <span className="flex w-full items-center justify-between gap-2">
+                            <span>
+                              {identity.name} (
+                              {t(`policyLabel.${identity.policy}`)})
+                            </span>
+                            {identity.usedByCount > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                {t("common.inUse")}
+                              </span>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <p className="text-muted-foreground text-sm">
+                  {t("newCircleHub.identityReuseHelper")}
+                </p>
+              </div>
+            )}
 
-              {needsProviderInput && (
-                <NostrPubkeyInput
-                  id="providerPubkey"
-                  value={providerPubkeyInput}
-                  onChange={setProviderPubkeyInput}
-                  onResolved={setResolvedPubkeyHex}
-                  {...(memberMode === "followSet" && {
-                    label: t("followSet.externalProviderLabel"),
-                    helperText: t("followSet.externalProviderHelper"),
-                  })}
-                />
-              )}
-
-              <div
-                className={cn(
-                  "w-full grid gap-4",
-                  isFormLocked && "opacity-50 pointer-events-none"
-                )}
-              >
-                {isFormLocked && (
-                  <p className="text-sm text-muted-foreground -mt-2">
-                    {t("newCircleHub.enterIdentityHelper")}
-                  </p>
-                )}
-
-                {memberMode === "followSet" && (
+            {isNewIdentity ? (
+              <div className="grid w-full gap-4 md:grid-cols-[minmax(0,1fr)_15rem] md:items-start">
+                <div className="w-full grid gap-4 rounded-lg border p-4 min-w-0">
                   <div className="w-full grid gap-1.5">
-                    <Label htmlFor="followSetD">{t("followSet.dLabel")}</Label>
-                    <Input
-                      id="followSetD"
-                      value={followSetD}
-                      maxLength={64}
-                      onChange={(e) => setFollowSetD(e.target.value)}
-                      placeholder={t("followSet.dPlaceholder")}
-                      autoComplete="off"
+                    <Label>{t("newCircleHub.memberModeLabel")}</Label>
+                    <OptionCards
+                      options={memberModeOptions}
+                      value={memberMode}
+                      onChange={setMemberMode}
                     />
-                    <p className="text-sm text-muted-foreground">
-                      {isManagedFollowSet
-                        ? t("followSet.dHelper")
-                        : t("followSet.dExternalHelper")}
-                    </p>
                   </div>
-                )}
 
-                {isManagedFollowSet && (
-                  <FollowSetFields
-                    value={followSet}
-                    onChange={setFollowSet}
-                    authorPubkeyHex={nodePubkeyHex}
-                    hiddenMembersAvailable={hiddenMembersAvailable}
-                  />
-                )}
+                  {memberMode === "followSet" && (
+                    <div className="w-full grid gap-1.5">
+                      <Label>{t("followSet.sourceLabel")}</Label>
+                      <OptionCards
+                        options={followSetSourceOptions}
+                        value={followSetSource}
+                        onChange={setFollowSetSource}
+                      />
+                    </div>
+                  )}
 
-                {memberMode === "followSet" && !isManagedFollowSet && (
-                  <WarningAlert>{t("followSet.externalWarning")}</WarningAlert>
-                )}
-
-                {memberMode === "pinned" && (
-                  <>
-                    <MemberPicker
-                      ownerPubkeyHex={resolvedPubkeyHex}
-                      selected={selectedMemberPubkeys}
-                      onChange={setSelectedMemberPubkeys}
+                  {needsProviderInput && (
+                    <NostrPubkeyInput
+                      id="providerPubkey"
+                      value={providerPubkeyInput}
+                      onChange={setProviderPubkeyInput}
+                      onResolved={setResolvedPubkeyHex}
+                      {...(memberMode === "followSet" && {
+                        label: t("followSet.externalProviderLabel"),
+                        helperText: t("followSet.externalProviderHelper"),
+                      })}
                     />
-                    {selectedMemberPubkeys.length === 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        {t("newCircleHub.pinMemberHelper")}
+                  )}
+
+                  <div
+                    className={cn(
+                      "w-full grid gap-4",
+                      isFormLocked && "opacity-50 pointer-events-none"
+                    )}
+                  >
+                    {isFormLocked && (
+                      <p className="text-sm text-muted-foreground -mt-2">
+                        {t("newCircleHub.enterIdentityHelper")}
                       </p>
                     )}
-                  </>
-                )}
 
-                <div className="w-full grid gap-1.5">
-                  <Label htmlFor="identityName">
-                    {t("newCircleHub.identityNameLabel")}
-                  </Label>
-                  <Input
-                    id="identityName"
-                    type="text"
-                    value={identityName}
-                    onChange={(e) => setIdentityName(e.target.value)}
-                    placeholder={identityNamePlaceholder}
-                    autoComplete="off"
-                  />
-                  <p className="text-muted-foreground text-sm">
-                    {t("newCircleHub.identityNameHelper")}
-                  </p>
+                    {memberMode === "followSet" && (
+                      <div className="w-full grid gap-1.5">
+                        <Label htmlFor="followSetD">
+                          {t("followSet.dLabel")}
+                        </Label>
+                        <Input
+                          id="followSetD"
+                          value={followSetD}
+                          maxLength={64}
+                          onChange={(e) => setFollowSetD(e.target.value)}
+                          placeholder={t("followSet.dPlaceholder")}
+                          autoComplete="off"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          {isManagedFollowSet
+                            ? t("followSet.dHelper")
+                            : t("followSet.dExternalHelper")}
+                        </p>
+                      </div>
+                    )}
+
+                    {isManagedFollowSet && (
+                      <FollowSetFields
+                        value={followSet}
+                        onChange={setFollowSet}
+                        authorPubkeyHex={nodePubkeyHex}
+                        hiddenMembersAvailable={hiddenMembersAvailable}
+                      />
+                    )}
+
+                    {memberMode === "followSet" && !isManagedFollowSet && (
+                      <WarningAlert>
+                        {t("followSet.externalWarning")}
+                      </WarningAlert>
+                    )}
+
+                    {memberMode === "pinned" && (
+                      <>
+                        <MemberPicker
+                          ownerPubkeyHex={resolvedPubkeyHex}
+                          selected={selectedMemberPubkeys}
+                          onChange={setSelectedMemberPubkeys}
+                        />
+                        {selectedMemberPubkeys.length === 0 && (
+                          <p className="text-sm text-muted-foreground">
+                            {t("newCircleHub.pinMemberHelper")}
+                          </p>
+                        )}
+                      </>
+                    )}
+
+                    <div className="w-full grid gap-1.5">
+                      <Label htmlFor="identityName">
+                        {t("newCircleHub.identityNameLabel")}
+                      </Label>
+                      <Input
+                        id="identityName"
+                        type="text"
+                        value={identityName}
+                        onChange={(e) => setIdentityName(e.target.value)}
+                        placeholder={identityNamePlaceholder}
+                        autoComplete="off"
+                      />
+                      <p className="text-muted-foreground text-sm">
+                        {t("newCircleHub.identityNameHelper")}
+                      </p>
+                    </div>
+                  </div>
                 </div>
+                <MembershipPreview
+                  memberMode={memberMode}
+                  followSetD={followSetD}
+                  followSet={followSet}
+                  selectedMemberPubkeys={selectedMemberPubkeys}
+                  nodePubkeyHex={nodePubkeyHex}
+                  providerPubkeyHex={resolvedPubkeyHex}
+                  isManagedFollowSet={isManagedFollowSet}
+                />
               </div>
-            </div>
-            <MembershipPreview
-              memberMode={memberMode}
-              followSetD={followSetD}
-              followSet={followSet}
-              selectedMemberPubkeys={selectedMemberPubkeys}
-              nodePubkeyHex={nodePubkeyHex}
-              providerPubkeyHex={resolvedPubkeyHex}
-              isManagedFollowSet={isManagedFollowSet}
-            />
-          </div>
-        ) : null}
+            ) : null}
 
-        <FieldSet className="w-full gap-4">
-          <FieldLegend variant="label">
-            {t("newCircleHub.walletLimitsLegend")}
-          </FieldLegend>
-          <div className="w-full grid gap-1.5">
-            <Label htmlFor="perWalletMax">
-              {t("common.maxWalletBudgetLabel")}
-            </Label>
-            <CurrencyInput
-              id="perWalletMax"
-              amount={
-                perWalletMaxLoki
-                  ? scaleInputAmount(perWalletMaxLoki, inputUnit).toString()
-                  : ""
-              }
-              onAmountChange={(val) =>
-                setPerWalletMaxLoki(
-                  parseInputAmount(parseFloat(val) || 0, inputUnit)
-                )
-              }
-              inputUnit={inputUnit}
-              onInputUnitChange={setInputUnit}
-              required
-              min={scaleInputAmount(MIN_CIRCLE_WALLET_MAX_LOKI, inputUnit)}
-            />
-            <p className="text-muted-foreground text-sm">
-              {t("newCircleHub.maxWalletBudgetHelper")}{" "}
-              {t("newCircleHub.minWalletBudgetHint", {
-                min: MIN_CIRCLE_WALLET_MAX_LOKI,
-              })}
-            </p>
-          </div>
-          <div className="w-full grid gap-1.5">
-            <BudgetRenewalSelect
-              label={t("common.minRenewalLabel")}
-              value={minBudgetRenewal}
-              onChange={setMinBudgetRenewal}
-            />
-            <p className="-mt-2 text-sm text-muted-foreground">
-              {t("common.minRenewalHelper")}
-            </p>
-          </div>
-          <div className="w-full grid gap-1.5">
-            <Label htmlFor="maxExpSecs">
-              {t("common.maxWalletExpiryLabel")}
-            </Label>
-            <DurationInput
-              id="maxExpSecs"
-              seconds={maxExpSecs}
-              onChange={setMaxExpSecs}
-              min={60}
-              presets={WEEK_SCALE_PRESETS}
-            />
-            <p className="text-muted-foreground text-sm">
-              {t("newCircleHub.maxExpiryHelper")}
-            </p>
-          </div>
-          <div className="w-full grid gap-1.5">
-            <Label htmlFor="feesPpm">{t("common.feePpmLabel")}</Label>
-            <Input
-              id="feesPpm"
-              type="number"
-              min={0}
-              value={feesPpm}
-              onChange={(e) => setFeesPpm(Number(e.target.value))}
-            />
-            <p className="text-muted-foreground text-sm">
-              {t("common.feePpmHelper")}
-            </p>
-          </div>
-        </FieldSet>
+            <FieldSet className="w-full gap-4">
+              <FieldLegend variant="label">
+                {t("newCircleHub.walletLimitsLegend")}
+              </FieldLegend>
+              <div className="w-full grid gap-1.5">
+                <Label htmlFor="perWalletMax">
+                  {t("common.maxWalletBudgetLabel")}
+                </Label>
+                <CurrencyInput
+                  id="perWalletMax"
+                  amount={
+                    perWalletMaxLoki
+                      ? scaleInputAmount(perWalletMaxLoki, inputUnit).toString()
+                      : ""
+                  }
+                  onAmountChange={(val) =>
+                    setPerWalletMaxLoki(
+                      parseInputAmount(parseFloat(val) || 0, inputUnit)
+                    )
+                  }
+                  inputUnit={inputUnit}
+                  onInputUnitChange={setInputUnit}
+                  required
+                  min={scaleInputAmount(MIN_CIRCLE_WALLET_MAX_LOKI, inputUnit)}
+                />
+                <p className="text-muted-foreground text-sm">
+                  {t("newCircleHub.maxWalletBudgetHelper")}{" "}
+                  {t("newCircleHub.minWalletBudgetHint", {
+                    min: MIN_CIRCLE_WALLET_MAX_LOKI,
+                  })}
+                </p>
+              </div>
+              <div className="w-full grid gap-1.5">
+                <BudgetRenewalSelect
+                  label={t("common.minRenewalLabel")}
+                  value={minBudgetRenewal}
+                  onChange={setMinBudgetRenewal}
+                />
+                <p className="-mt-2 text-sm text-muted-foreground">
+                  {t("common.minRenewalHelper")}
+                </p>
+              </div>
+              <div className="w-full grid gap-1.5">
+                <Label htmlFor="maxExpSecs">
+                  {t("common.maxWalletExpiryLabel")}
+                </Label>
+                <DurationInput
+                  id="maxExpSecs"
+                  seconds={maxExpSecs}
+                  onChange={setMaxExpSecs}
+                  min={60}
+                  presets={WEEK_SCALE_PRESETS}
+                />
+                <p className="text-muted-foreground text-sm">
+                  {t("newCircleHub.maxExpiryHelper")}
+                </p>
+              </div>
+              <div className="w-full grid gap-1.5">
+                <Label htmlFor="feesPpm">{t("common.feePpmLabel")}</Label>
+                <Input
+                  id="feesPpm"
+                  type="number"
+                  min={0}
+                  value={feesPpm}
+                  onChange={(e) => setFeesPpm(Number(e.target.value))}
+                />
+                <p className="text-muted-foreground text-sm">
+                  {t("common.feePpmHelper")}
+                </p>
+              </div>
+            </FieldSet>
+          </CardContent>
+        </Card>
 
         <Accordion type="single" collapsible className="w-full">
           <AccordionItem value="advanced">
