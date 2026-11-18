@@ -6,6 +6,12 @@ import AppHeader from "src/components/AppHeader";
 import Loading from "src/components/Loading";
 import { ListingCard } from "src/components/listings/ListingCard";
 import { ListingHealth } from "src/components/listings/ListingHealth";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "src/components/ui/accordion";
 import { Button } from "src/components/ui/button";
 import {
   Card,
@@ -261,23 +267,30 @@ function ListingRelaysCard() {
       handleRequestError(t("errors.relays"), error);
     }
   };
+  // Relays just work out of the box (data.effective has sensible defaults), so
+  // this is opt-in and collapsed by default — a normal operator never has to
+  // think about relay URLs. Only someone running their own relays expands it.
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t("relays.title")}</CardTitle>
-        <CardDescription>
-          {t("relays.description", { relays: data.effective.join(", ") })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex gap-2">
-        <Input
-          aria-label={t("relays.title")}
-          placeholder="wss://"
-          value={current}
-          onChange={(e) => setValue(e.target.value)}
-        />
-        <Button onClick={save}>{t("relays.save")}</Button>
-      </CardContent>
-    </Card>
+    <Accordion type="single" collapsible className="w-full">
+      <AccordionItem value="relays" className="border-b-0">
+        <AccordionTrigger className="text-sm text-muted-foreground">
+          {t("relays.title")}
+        </AccordionTrigger>
+        <AccordionContent className="grid gap-3">
+          <p className="text-sm text-muted-foreground">
+            {t("relays.description", { relays: data.effective.join(", ") })}
+          </p>
+          <div className="flex gap-2">
+            <Input
+              aria-label={t("relays.title")}
+              placeholder="wss://"
+              value={current}
+              onChange={(e) => setValue(e.target.value)}
+            />
+            <Button onClick={save}>{t("relays.save")}</Button>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }
