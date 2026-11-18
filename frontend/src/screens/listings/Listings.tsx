@@ -88,8 +88,17 @@ export function Listings() {
             <li
               key={l.id}
               data-testid="listing-row"
+              role="button"
+              tabIndex={0}
+              aria-label={l.title || t("card.untitled")}
               onClick={() => navigate(`/listings/${l.id}`)}
-              className="flex min-w-0 cursor-pointer items-center gap-3 rounded-md border-b px-1 py-3 transition-colors last:border-b-0 hover:bg-accent/40"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  navigate(`/listings/${l.id}`);
+                }
+              }}
+              className="flex min-w-0 cursor-pointer items-center gap-3 rounded-md border-b px-1 py-3 transition-colors last:border-b-0 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="flex size-9 flex-none items-center justify-center rounded-lg bg-accent text-accent-foreground">
                 <MegaphoneIcon className="size-4" />

@@ -124,6 +124,7 @@
     "resume": "Resume",
     "edit": "Edit",
     "manage": "Manage",
+    "back": "Back",
     "unlist": "Unlist",
     "checkOperator": "Check operator",
     "revokeConnection": "Revoke listing connection"

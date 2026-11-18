@@ -54,10 +54,27 @@ export function GeoRegionPicker({
       return;
     }
     const gh = encodeGeohash(lat, lng, precision);
-    if (!value.includes(gh)) {
-      onChange([...value, gh]);
-    }
+    // Drop any existing region that overlaps this one (either is a prefix of
+    // the other), so the same place isn't stored twice at two precisions — and
+    // so re-tapping an exact cell is a no-op rather than a duplicate.
+    const next = value.filter((v) => !v.startsWith(gh) && !gh.startsWith(v));
+    onChange([...next, gh]);
   };
+
+  // The land silhouette never changes; build its ~395 <path> vnodes once per
+  // mount rather than on every parent keystroke that re-renders this picker.
+  const land = React.useMemo(
+    () =>
+      LAND_PATHS.map((d, i) => (
+        <path
+          key={i}
+          d={d}
+          className="fill-foreground/15 stroke-foreground/25"
+          strokeWidth="0.15"
+        />
+      )),
+    []
+  );
 
   return (
     <div className="grid gap-2">
@@ -110,29 +127,33 @@ export function GeoRegionPicker({
             className="stroke-foreground/10"
             strokeWidth="0.3"
           />
-          {LAND_PATHS.map((d, i) => (
-            <path
-              key={i}
-              d={d}
-              className="fill-foreground/15 stroke-foreground/25"
-              strokeWidth="0.15"
-            />
-          ))}
+          {land}
           {value.map((gh) => {
             const b = geohashBounds(gh);
             if (!b) {
               return null;
             }
+            // The cell rect shows the real coverage, but a 4-char cell is
+            // sub-pixel on a world map — a fixed-size dot at its centre keeps
+            // every pick visible regardless of precision.
             return (
-              <rect
-                key={gh}
-                x={projX(b.lngMin)}
-                y={projY(b.latMax)}
-                width={b.lngMax - b.lngMin}
-                height={b.latMax - b.latMin}
-                className="fill-primary/40 stroke-primary"
-                strokeWidth="0.5"
-              />
+              <g key={gh}>
+                <rect
+                  x={projX(b.lngMin)}
+                  y={projY(b.latMax)}
+                  width={b.lngMax - b.lngMin}
+                  height={b.latMax - b.latMin}
+                  className="fill-primary/40 stroke-primary"
+                  strokeWidth="0.4"
+                />
+                <circle
+                  cx={projX((b.lngMin + b.lngMax) / 2)}
+                  cy={projY((b.latMin + b.latMax) / 2)}
+                  r="2"
+                  className="fill-primary stroke-background"
+                  strokeWidth="0.6"
+                />
+              </g>
             );
           })}
         </svg>

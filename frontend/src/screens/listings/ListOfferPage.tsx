@@ -5,7 +5,6 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import Loading from "src/components/Loading";
-import { GeoRegionPicker } from "src/components/listings/GeoRegionPicker";
 import { ListingCard } from "src/components/listings/ListingCard";
 import {
   MAX_CONTENT,
@@ -64,6 +63,14 @@ const problemKeys = {
   operator: "problems.operator",
   operatorRelay: "problems.operatorRelay",
 } as const;
+
+// Lazy so the ~224 KB bundled world outline the picker imports only loads when
+// the listing form is actually open, not in the initial app bundle.
+const GeoRegionPicker = React.lazy(() =>
+  import("src/components/listings/GeoRegionPicker").then((m) => ({
+    default: m.GeoRegionPicker,
+  }))
+);
 
 // ListOfferPage lists an offer, or edits a listed one — a full page (not a
 // modal) so the fields have room and the preview rides along as you type. The
@@ -226,7 +233,11 @@ function ListOfferForm({
   });
 
   const submit = async () => {
-    if (problem || (!l && !confirmPublic)) {
+    if (
+      problem ||
+      (followSetA && !confirmFollowSet) ||
+      (!l && !confirmPublic)
+    ) {
       return;
     }
     const fields: ListingFields = {
@@ -332,10 +343,16 @@ function ListOfferForm({
                   codes — a tap becomes the coarse 3–4 char prefix NIP-CASH
                   uses. The free-text place name below is just an optional
                   human label. */}
-              <GeoRegionPicker
-                value={splitList(regions)}
-                onChange={(next) => setRegions(next.join(", "))}
-              />
+              <React.Suspense
+                fallback={
+                  <div className="aspect-[2/1] w-full animate-pulse rounded-lg border bg-muted/30" />
+                }
+              >
+                <GeoRegionPicker
+                  value={splitList(regions)}
+                  onChange={(next) => setRegions(next.join(", "))}
+                />
+              </React.Suspense>
             </div>
             <div className="grid gap-1">
               <Label htmlFor="listing-location">{t("form.location")}</Label>

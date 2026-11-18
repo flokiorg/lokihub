@@ -52,7 +52,7 @@ export function ListingDetail() {
           description={t("page.description")}
           contentRight={
             <Button variant="outline" onClick={() => navigate("/listings")}>
-              {t("dialog.cancel")}
+              {t("actions.back")}
             </Button>
           }
         />
@@ -74,7 +74,7 @@ export function ListingDetail() {
         contentRight={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => navigate("/listings")}>
-              {t("dialog.cancel")}
+              {t("actions.back")}
             </Button>
             {l.phase === "listed" && (
               <Button onClick={() => navigate(`/listings/edit/${l.id}`)}>
