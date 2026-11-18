@@ -73,11 +73,12 @@ const ExpirySelect: React.FC<ExpiryProps> = ({
                 setExpiryDays(expiryOptions[expiry]);
               }}
               className={cn(
-                "cursor-pointer rounded text-nowrap border-2 text-center p-4",
-                exceedsMax && "cursor-not-allowed opacity-40",
-                !customExpiry && expiryDays == expiryOptions[expiry]
-                  ? "border-primary"
-                  : "border-muted"
+                "rounded-md border px-3 py-1.5 text-center font-medium text-nowrap transition-colors",
+                exceedsMax
+                  ? "cursor-not-allowed border-input text-muted-foreground opacity-40"
+                  : !customExpiry && expiryDays == expiryOptions[expiry]
+                    ? "cursor-pointer border-primary/40 bg-primary/10 text-primary"
+                    : "cursor-pointer border-input text-muted-foreground hover:border-primary/40 hover:text-foreground"
               )}
             >
               {expiry}
@@ -89,8 +90,10 @@ const ExpirySelect: React.FC<ExpiryProps> = ({
             <button
               onClick={() => {}}
               className={cn(
-                "flex items-center justify-center md:col-span-2 cursor-pointer rounded text-nowrap border-2 p-4",
-                customExpiry ? "border-primary" : "border-muted"
+                "flex cursor-pointer items-center justify-center rounded-md border px-3 py-1.5 font-medium text-nowrap transition-colors md:col-span-2",
+                customExpiry
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-input text-muted-foreground hover:border-primary/40 hover:text-foreground"
               )}
             >
               <CalendarIcon className="me-2 h-4 w-4" />
