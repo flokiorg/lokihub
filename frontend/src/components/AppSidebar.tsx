@@ -5,7 +5,6 @@ import {
   HomeIcon,
   LogOut,
   LucideIcon,
-  MegaphoneIcon,
   Plug2Icon,
   ServerIcon,
   Settings,
@@ -105,13 +104,11 @@ export function AppSidebar() {
         icon: BanknoteIcon,
       },
     ],
-    // Network: how this hub is discovered and connected to others.
+    // Network: how this hub is discovered and connected to others. Listings
+    // are no longer a top-level nav item — a listing always belongs to one
+    // circle, so it's created and managed from that circle's own page; the
+    // cross-circle "all listings" view stays reachable from the Home dashboard.
     navNetwork: [
-      {
-        title: t("nav", { ns: "listings" }),
-        url: "/listings",
-        icon: MegaphoneIcon,
-      },
       {
         title: t("nav.connections"),
         url: "/apps",
