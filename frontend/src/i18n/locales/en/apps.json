@@ -145,7 +145,7 @@
     "links": "Links"
   },
   "usage": {
-    "isolatedBalance": "Isolated Balance",
+    "isolatedBalance": "Reserved balance",
     "decrease": "Decrease",
     "increase": "Increase",
     "totalSpent": "Total Spent",
