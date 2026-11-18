@@ -56,6 +56,12 @@ import {
 } from "src/components/ui/dropdown-menu";
 import { Input } from "src/components/ui/input";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "src/components/ui/tabs";
+import {
   DEFAULT_CASH_SPENT_RETENTION_SECS,
   localStorageKeys,
   SUBWALLET_APPSTORE_APP_ID,
@@ -590,32 +596,47 @@ function CashHubDashboardInternal({
 
       {!isEditing && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("circleHub.cashWalletsTitle")}</CardTitle>
-              {!isCashFormOpen && (
-                <CardAction>
-                  <ResponsiveButton
-                    size="sm"
-                    onClick={() => allocationsRef.current?.openAdd()}
-                    icon={PlusIcon}
-                    text={t("circleHub.addCashWallet")}
+          <Tabs defaultValue="wallets" className="w-full">
+            <TabsList>
+              <TabsTrigger value="wallets">
+                {t("circleHub.cashWalletsTitle")}
+              </TabsTrigger>
+              <TabsTrigger value="activity">
+                {t("tabs.activity", "Activity")}
+              </TabsTrigger>
+              <TabsTrigger value="permissions">
+                {t("permissions.title", "Permissions")}
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="wallets">
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("circleHub.cashWalletsTitle")}</CardTitle>
+                  {!isCashFormOpen && (
+                    <CardAction>
+                      <ResponsiveButton
+                        size="sm"
+                        onClick={() => allocationsRef.current?.openAdd()}
+                        icon={PlusIcon}
+                        text={t("circleHub.addCashWallet")}
+                      />
+                    </CardAction>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <CashHubAllocations
+                    appId={hub.id}
+                    ref={allocationsRef}
+                    onFormOpenChange={setCashFormOpen}
                   />
-                </CardAction>
-              )}
-            </CardHeader>
-            <CardContent>
-              <CashHubAllocations
-                appId={hub.id}
-                ref={allocationsRef}
-                onFormOpenChange={setCashFormOpen}
-              />
-            </CardContent>
-          </Card>
-
-          <AppTransactionList appId={hub.id} />
-
-          {permissionsCard}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="activity">
+              <AppTransactionList appId={hub.id} />
+            </TabsContent>
+            <TabsContent value="permissions">{permissionsCard}</TabsContent>
+          </Tabs>
 
           {showConnectionDetails && (
             <ConnectionDetailsModal
