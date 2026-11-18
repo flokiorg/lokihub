@@ -19,12 +19,6 @@ import { NodeStatusWidget } from "src/components/home/widgets/NodeStatusWidget";
 import { OnchainFeesWidget } from "src/components/home/widgets/OnchainFeesWidget";
 import Loading from "src/components/Loading";
 import { Button } from "src/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "src/components/ui/card";
 import { useAllCashHubStats } from "src/hooks/useCashHub";
 import { useApps } from "src/hooks/useApps";
 import { useBalances } from "src/hooks/useBalances";
@@ -124,13 +118,13 @@ function StatTile({
   icon?: React.ReactNode;
 }) {
   return (
-    <Card className="p-4">
+    <div className="min-w-0">
       <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {icon}
         {label}
       </div>
       <div className="mt-1 text-2xl font-bold tabular-nums">{children}</div>
-    </Card>
+    </div>
   );
 }
 
@@ -222,16 +216,17 @@ function Home() {
         <DashboardAlerts />
         <OnboardingChecklist />
 
-        {/* hero: balance split + shortcuts */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
-          <Card className="p-5">
+        {/* Hero: the total, how it splits across wallet/cash/circles, and the
+            two primary actions — a borderless lead, not a boxed card. */}
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("dashboard.totalLabel")}
             </div>
             <div className="mt-1 text-4xl font-bold tabular-nums">
               <FormattedFlokicoinAmount amount={totalMloki} />
             </div>
-            <div className="mt-4 flex h-3 overflow-hidden rounded-md bg-muted">
+            <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-muted">
               <span
                 style={{
                   width: `${pct(walletMloki)}%`,
@@ -283,59 +278,61 @@ function Home() {
                 </b>
               </span>
             </div>
-            <div className="mt-5 flex gap-3">
-              <Button asChild className="flex-1">
-                <Link to="/wallet/receive">
-                  <ArrowDownLeft className="size-4" />
-                  {t("dashboard.receive")}
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="flex-1">
-                <Link to="/wallet/send">
-                  <ArrowUpRight className="size-4" />
-                  {t("dashboard.send")}
-                </Link>
-              </Button>
-            </div>
-          </Card>
-
-          <Card className="p-5">
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t("dashboard.quickActions")}
-            </div>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <Shortcut
-                to="/cash-hub"
-                icon={<Zap className="size-4" />}
-                title={t("dashboard.mint")}
-                sub={t("dashboard.mintSub")}
-              />
-              <Shortcut
-                to="/sub-wallets/new/circle"
-                icon={<Users className="size-4" />}
-                title={t("dashboard.newCircle")}
-                sub={t("dashboard.newCircleSub")}
-                tint="teal"
-              />
-              <Shortcut
-                to="/listings"
-                icon={<Megaphone className="size-4" />}
-                title={t("dashboard.listOffer")}
-                sub={t("dashboard.listOfferSub")}
-              />
-              <Shortcut
-                to="/apps/new"
-                icon={<Plug className="size-4" />}
-                title={t("dashboard.connectApp")}
-                sub={t("dashboard.connectAppSub")}
-                tint="teal"
-              />
-            </div>
-          </Card>
+          </div>
+          <div className="flex gap-3 sm:shrink-0">
+            <Button asChild className="flex-1 sm:flex-none">
+              <Link to="/wallet/receive">
+                <ArrowDownLeft className="size-4" />
+                {t("dashboard.receive")}
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="flex-1 sm:flex-none">
+              <Link to="/wallet/send">
+                <ArrowUpRight className="size-4" />
+                {t("dashboard.send")}
+              </Link>
+            </Button>
+          </div>
         </div>
 
-        {/* metric tiles — 2-up on phones so they don't stack three tall */}
-        <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
+        {/* Quick actions — a full-width shortcut row. Was a short card beside
+            the taller balance, which left a dead gap under it. */}
+        <div className="grid gap-3 border-t pt-5">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("dashboard.quickActions")}
+          </div>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+            <Shortcut
+              to="/cash-hub"
+              icon={<Zap className="size-4" />}
+              title={t("dashboard.mint")}
+              sub={t("dashboard.mintSub")}
+            />
+            <Shortcut
+              to="/sub-wallets/new/circle"
+              icon={<Users className="size-4" />}
+              title={t("dashboard.newCircle")}
+              sub={t("dashboard.newCircleSub")}
+              tint="teal"
+            />
+            <Shortcut
+              to="/listings"
+              icon={<Megaphone className="size-4" />}
+              title={t("dashboard.listOffer")}
+              sub={t("dashboard.listOfferSub")}
+            />
+            <Shortcut
+              to="/apps/new"
+              icon={<Plug className="size-4" />}
+              title={t("dashboard.connectApp")}
+              sub={t("dashboard.connectAppSub")}
+              tint="teal"
+            />
+          </div>
+        </div>
+
+        {/* Key figures — a borderless strip, not three boxed tiles. */}
+        <div className="grid grid-cols-2 gap-5 border-t pt-5 sm:grid-cols-3">
           <StatTile label={t("dashboard.canReceive")}>
             <FormattedFlokicoinAmount
               amount={balances.lightning.totalReceivable}
@@ -358,11 +355,11 @@ function Home() {
           </StatTile>
         </div>
 
-        {/* what's listed + recent activity */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle>{t("dashboard.whatsListed")}</CardTitle>
+        {/* What's listed + recent activity — borderless sections. */}
+        <div className="grid grid-cols-1 gap-6 border-t pt-5 lg:grid-cols-2 lg:items-start">
+          <section className="grid gap-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">{t("dashboard.whatsListed")}</h3>
               <Link
                 to="/listings"
                 className="inline-flex items-center gap-0.5 text-sm font-semibold text-primary"
@@ -370,58 +367,54 @@ function Home() {
                 {t("dashboard.manage")}
                 <ChevronRight className="size-4" />
               </Link>
-            </CardHeader>
-            <CardContent>
-              {activeListings.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-6 text-center">
-                  <Megaphone className="size-8 text-muted-foreground" />
-                  <p className="font-semibold">
-                    {t("dashboard.nothingListed")}
-                  </p>
-                  <p className="max-w-xs text-sm text-muted-foreground">
-                    {t("dashboard.nothingListedHint")}
-                  </p>
-                  <Button asChild variant="secondary" size="sm">
-                    <Link to="/listings">{t("dashboard.listSomething")}</Link>
-                  </Button>
-                </div>
-              ) : (
-                <div className="grid gap-2">
-                  {activeListings.slice(0, 4).map((l) => (
-                    <Link
-                      key={l.id}
-                      to="/listings"
-                      className="flex items-center gap-3 rounded-lg p-2 hover:bg-accent"
-                    >
-                      {l.type === "circle_wallet" ? (
-                        <Users className="size-5 text-muted-foreground" />
-                      ) : (
-                        <Banknote className="size-5 text-muted-foreground" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">
-                          {l.title || tc("untitled", "Untitled")}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {t("dashboard.onRelays", {
-                            ok: l.relaysOk,
-                            total: l.relaysTotal,
-                          })}
-                        </div>
+            </div>
+            {activeListings.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-6 text-center">
+                <Megaphone className="size-8 text-muted-foreground" />
+                <p className="font-semibold">{t("dashboard.nothingListed")}</p>
+                <p className="max-w-xs text-sm text-muted-foreground">
+                  {t("dashboard.nothingListedHint")}
+                </p>
+                <Button asChild variant="secondary" size="sm">
+                  <Link to="/listings">{t("dashboard.listSomething")}</Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {activeListings.slice(0, 4).map((l) => (
+                  <Link
+                    key={l.id}
+                    to="/listings"
+                    className="flex items-center gap-3 rounded-lg p-2 hover:bg-accent"
+                  >
+                    {l.type === "circle_wallet" ? (
+                      <Users className="size-5 text-muted-foreground" />
+                    ) : (
+                      <Banknote className="size-5 text-muted-foreground" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">
+                        {l.title || tc("untitled", "Untitled")}
                       </div>
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        {statusLabel(l.status)}
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      <div className="text-xs text-muted-foreground">
+                        {t("dashboard.onRelays", {
+                          ok: l.relaysOk,
+                          total: l.relaysTotal,
+                        })}
+                      </div>
+                    </div>
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      {statusLabel(l.status)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
 
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle>{t("dashboard.recentActivity")}</CardTitle>
+          <section className="grid gap-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">{t("dashboard.recentActivity")}</h3>
               <Link
                 to="/wallet"
                 className="inline-flex items-center gap-0.5 text-sm font-semibold text-primary"
@@ -429,79 +422,77 @@ function Home() {
                 {t("dashboard.all")}
                 <ChevronRight className="size-4" />
               </Link>
-            </CardHeader>
-            <CardContent>
-              {recentTxns.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  {t("dashboard.noActivity")}
-                </p>
-              ) : (
-                <div className="grid gap-1">
-                  {recentTxns.map((tx, i) => {
-                    const incoming = tx.type === "incoming";
-                    return (
-                      <div
-                        key={`${tx.paymentHash || "tx"}-${i}`}
-                        className="flex items-center gap-3 rounded-lg p-2"
-                      >
-                        <span className="flex size-8 flex-none items-center justify-center rounded-full bg-muted text-muted-foreground">
-                          {incoming ? (
-                            <ArrowDownLeft className="size-4" />
-                          ) : (
-                            <ArrowUpRight className="size-4" />
-                          )}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium">
-                            {incoming
-                              ? t("dashboard.received")
-                              : t("dashboard.sent")}
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {tx.description || ""}
-                          </div>
+            </div>
+            {recentTxns.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {t("dashboard.noActivity")}
+              </p>
+            ) : (
+              <div className="grid gap-1">
+                {recentTxns.map((tx, i) => {
+                  const incoming = tx.type === "incoming";
+                  return (
+                    <div
+                      key={`${tx.paymentHash || "tx"}-${i}`}
+                      className="flex items-center gap-3 rounded-lg p-2"
+                    >
+                      <span className="flex size-8 flex-none items-center justify-center rounded-full bg-muted text-muted-foreground">
+                        {incoming ? (
+                          <ArrowDownLeft className="size-4" />
+                        ) : (
+                          <ArrowUpRight className="size-4" />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium">
+                          {incoming
+                            ? t("dashboard.received")
+                            : t("dashboard.sent")}
                         </div>
-                        <span
-                          className="text-sm font-semibold tabular-nums"
-                          style={
-                            incoming
-                              ? { color: "var(--color-series-covered)" }
-                              : undefined
-                          }
-                        >
-                          {incoming ? "+" : "−"}
-                          <FormattedFlokicoinAmount amount={tx.amount} />
-                        </span>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {tx.description || ""}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      <span
+                        className="text-sm font-semibold tabular-nums"
+                        style={
+                          incoming
+                            ? { color: "var(--color-series-covered)" }
+                            : undefined
+                        }
+                      >
+                        {incoming ? "+" : "−"}
+                        <FormattedFlokicoinAmount amount={tx.amount} />
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </div>
 
-        {/* stats for nerds (preserved, collapsible) */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>{t("widgets.statsForNerds")}</CardTitle>
-              <Button variant="secondary" onClick={() => setNerd(!isNerd)}>
-                {isNerd ? tc("actions.hide") : tc("actions.show")}
-              </Button>
-            </div>
-          </CardHeader>
+        {/* Stats for nerds — borderless collapsible. */}
+        <div className="border-t pt-5">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">{t("widgets.statsForNerds")}</h3>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setNerd(!isNerd)}
+            >
+              {isNerd ? tc("actions.hide") : tc("actions.show")}
+            </Button>
+          </div>
           {isNerd && (
-            <CardContent>
-              <div className="grid gap-5">
-                <NodeStatusWidget />
-                <BlockHeightWidget />
-                <OnchainFeesWidget />
-                <ForwardsWidget />
-              </div>
-            </CardContent>
+            <div className="mt-4 grid gap-5">
+              <NodeStatusWidget />
+              <BlockHeightWidget />
+              <OnchainFeesWidget />
+              <ForwardsWidget />
+            </div>
           )}
-        </Card>
+        </div>
       </div>
     </>
   );
