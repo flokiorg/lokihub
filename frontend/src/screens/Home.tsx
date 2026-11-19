@@ -330,7 +330,7 @@ function Home() {
               tint="teal"
             />
             <Shortcut
-              to="/listings"
+              to="/sub-wallets"
               icon={<Megaphone className="size-4" />}
               title={t("dashboard.listOffer")}
               sub={t("dashboard.listOfferSub")}
@@ -376,7 +376,7 @@ function Home() {
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">{t("dashboard.whatsListed")}</h3>
               <Link
-                to="/listings"
+                to="/sub-wallets"
                 className="inline-flex items-center gap-0.5 text-sm font-semibold text-primary"
               >
                 {t("dashboard.manage")}
@@ -391,7 +391,7 @@ function Home() {
                   {t("dashboard.nothingListedHint")}
                 </p>
                 <Button asChild variant="secondary" size="sm">
-                  <Link to="/listings">{t("dashboard.listSomething")}</Link>
+                  <Link to="/sub-wallets">{t("dashboard.listSomething")}</Link>
                 </Button>
               </div>
             ) : (
@@ -399,7 +399,7 @@ function Home() {
                 {activeListings.slice(0, 4).map((l) => (
                   <Link
                     key={l.id}
-                    to="/listings"
+                    to={`/apps/${l.hubAppId}`}
                     className="flex items-center gap-3 rounded-lg p-2 hover:bg-accent"
                   >
                     {l.type === "circle_wallet" ? (

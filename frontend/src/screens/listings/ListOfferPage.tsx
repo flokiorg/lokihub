@@ -1,7 +1,7 @@
 import { XIcon } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import Loading from "src/components/Loading";
@@ -86,102 +86,50 @@ const GeoRegionPicker = React.lazy(() =>
 export function ListOfferPage() {
   const { t } = useTranslation("listings");
   const navigate = useNavigate();
+  // The form is scoped to one circle: /apps/:id/list-offer. A listing belongs
+  // to its circle, so there is no cross-circle picker — the route's :id is the
+  // circle, and whether it already has a listing switches create vs. edit.
   const { id } = useParams();
-  const [search] = useSearchParams();
+  const circleId = Number(id);
 
   const { data: listings } = useListings();
   const { data: circleData } = useApps(100, 1, { kind: "circle_hub" });
 
-  const editing = !!id;
-  const circleId = search.get("circle")
-    ? Number(search.get("circle"))
-    : undefined;
-
-  if (!listings || (!editing && !circleData)) {
+  if (!listings || !circleData) {
     return <Loading />;
   }
 
-  const listing = editing
-    ? listings.find((x) => x.id === Number(id))
-    : undefined;
+  const circle = circleData.apps.find((a) => a.id === circleId);
+  // A circle has at most one active listing; its presence means we edit rather
+  // than create.
+  const listing = listings.find(
+    (x) => x.hubAppId === circleId && x.phase === "listed"
+  );
 
-  // A stale/invalid edit id must not fall through to a blank "create" form
-  // (which would submit with no circle). Show a clear not-found instead.
-  if (editing && !listing) {
-    return (
-      <div className="grid gap-5">
-        <AppHeader
-          title={t("dialog.editTitle")}
-          description={t("dialog.description")}
-          contentRight={
-            <Button variant="outline" onClick={() => navigate("/listings")}>
-              {t("dialog.cancel")}
-            </Button>
-          }
-        />
-        <p className="text-sm text-muted-foreground">
-          {t("pick.notFound", "That listing no longer exists.")}
-        </p>
-      </div>
-    );
-  }
-
-  // New listing with no circle chosen yet → pick one.
-  if (!editing && !circleId) {
-    const listed = new Set(
-      listings.filter((x) => x.phase !== "deleted").map((x) => x.hubAppId)
-    );
-    const unlisted = (circleData?.apps ?? []).filter((a) => !listed.has(a.id));
+  if (!circle) {
     return (
       <div className="grid gap-5">
         <AppHeader
           title={t("dialog.title")}
           description={t("dialog.description")}
           contentRight={
-            <Button variant="outline" onClick={() => navigate("/listings")}>
+            <Button variant="outline" onClick={() => navigate(-1)}>
               {t("dialog.cancel")}
             </Button>
           }
         />
-        <div className="grid gap-2 sm:max-w-md">
-          <p className="text-sm text-muted-foreground">
-            {t("pick.prompt", "Which circle do you want to list?")}
-          </p>
-          {unlisted.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("pick.none", "All your circles are already listed.")}
-            </p>
-          ) : (
-            unlisted.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => navigate(`/listings/new?circle=${c.id}`)}
-                className="flex items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/50"
-              >
-                <span className="truncate text-sm font-semibold">{c.name}</span>
-              </button>
-            ))
-          )}
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {t("pick.notFound", "That circle no longer exists.")}
+        </p>
       </div>
     );
   }
-
-  // Resolve the circle being listed for both flows: a new listing carries it
-  // in ?circle=, an edit derives it from the listing's own hubAppId — either
-  // way the form shows which circle this offer is for.
-  const circle = circleId
-    ? circleData?.apps.find((a) => a.id === circleId)
-    : listing
-      ? circleData?.apps.find((a) => a.id === listing.hubAppId)
-      : undefined;
 
   // key remounts the form once its data is in, so its useState initialisers
   // see the real values rather than an empty first render.
   return (
     <ListOfferForm
-      key={listing?.id ?? circleId}
+      key={listing?.id ?? `c${circleId}`}
       listing={listing}
       circle={circle}
       circleId={circleId}
@@ -284,7 +232,7 @@ function ListOfferForm({
         : await createListing({ circle_hub_app_id: circleId, ...fields });
       toast(l ? t("toast.updated") : t("toast.listed"));
       if (result) {
-        navigate("/listings");
+        navigate(`/apps/${circleId}`);
       }
     } catch (error) {
       handleRequestError(t("errors.save"), error);
@@ -299,7 +247,10 @@ function ListOfferForm({
         title={l ? t("dialog.editTitle") : t("dialog.title")}
         description={t("dialog.description")}
         contentRight={
-          <Button variant="outline" onClick={() => navigate("/listings")}>
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/apps/${circleId}`)}
+          >
             {t("dialog.cancel")}
           </Button>
         }

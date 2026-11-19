@@ -8,7 +8,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { StatusPill } from "src/components/listings/ListingActionsMenu";
+import { StatusPill } from "src/components/listings/StatusPill";
 import { ListingHealth } from "src/components/listings/ListingHealth";
 import { Button } from "src/components/ui/button";
 import {
@@ -101,7 +101,7 @@ export function CircleListingPanel({ appId }: { appId: number }) {
               {t("page.notListed")}
             </p>
             <Button asChild size="sm" className="shrink-0">
-              <Link to={`/listings/new?circle=${appId}`}>
+              <Link to={`/apps/${appId}/list-offer`}>
                 {t("page.listAction")}
               </Link>
             </Button>
@@ -155,7 +155,7 @@ export function CircleListingPanel({ appId }: { appId: number }) {
               )}
               {isListed && (
                 <Button asChild size="sm" variant="outline">
-                  <Link to={`/listings/edit/${listing.id}`}>
+                  <Link to={`/apps/${appId}/list-offer`}>
                     <PencilIcon className="size-4" />
                     {t("actions.edit")}
                   </Link>

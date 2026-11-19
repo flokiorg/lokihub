@@ -53,8 +53,6 @@ import { SetupSecurity } from "src/screens/setup/SetupSecurity";
 import { SetupServices } from "src/screens/setup/SetupServices";
 import { FLNDForm } from "src/screens/setup/node/FLNDForm";
 import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
-import { ListingDetail } from "src/screens/listings/ListingDetail";
-import { Listings } from "src/screens/listings/Listings";
 import { ListOfferPage } from "src/screens/listings/ListOfferPage";
 import { LspAnalytics } from "src/screens/lsp/LspAnalytics";
 import { LspClients } from "src/screens/lsp/LspClients";
@@ -268,6 +266,15 @@ const routes: RouteObject[] = [
                 element: <AppDetails />,
               },
               {
+                // The list-offer form lives under its circle — a listing
+                // belongs to one circle, so there is no top-level Listings
+                // area. The same route creates or edits: the circle's :id
+                // decides which, by whether it already has a listing.
+                path: ":id/list-offer",
+                element: <ListOfferPage />,
+                handle: { crumb: () => "Listing" },
+              },
+              {
                 path: "new",
                 element: <NewApp />,
                 handle: { crumb: () => "New App" },
@@ -330,31 +337,6 @@ const routes: RouteObject[] = [
                 // literal "new"/"created" siblings above.
                 path: ":id",
                 element: <CashHubDashboard />,
-              },
-            ],
-          },
-          {
-            path: "listings",
-            element: <DefaultRedirect />,
-            handle: { crumb: () => "Listings" },
-            children: [
-              { index: true, element: <Listings /> },
-              {
-                path: "new",
-                element: <ListOfferPage />,
-                handle: { crumb: () => "List an offer" },
-              },
-              {
-                path: "edit/:id",
-                element: <ListOfferPage />,
-                handle: { crumb: () => "Edit listing" },
-              },
-              {
-                // Read-only detail. Ranks below the static "new" / "edit/:id"
-                // segments, so it only matches a bare listing id.
-                path: ":id",
-                element: <ListingDetail />,
-                handle: { crumb: () => "Listing" },
               },
             ],
           },
