@@ -8,7 +8,7 @@ import {
   Plug2Icon,
   ServerIcon,
   Settings,
-  SquareStack,
+  Users,
   WalletIcon,
 } from "lucide-react";
 import React from "react";
@@ -100,7 +100,7 @@ export function AppSidebar() {
       {
         title: t("nav.subWallets"),
         url: "/sub-wallets",
-        icon: SquareStack,
+        icon: Users,
       },
       {
         title: t("nav.cashHub"),
