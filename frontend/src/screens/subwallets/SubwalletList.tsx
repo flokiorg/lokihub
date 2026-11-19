@@ -73,8 +73,8 @@ export function SubwalletList() {
   return (
     <div className="grid gap-4">
       <AppHeader
-        title="Sub-wallets"
-        description="Create sub-wallets for yourself, friends, family or coworkers"
+        title="Circles"
+        description="Shared wallets you host for a group — members request their own and pay each other instantly, for free."
         contentRight={
           <>
             <SubWalletInfoDialog
@@ -87,7 +87,7 @@ export function SubwalletList() {
             <ResponsiveLinkButton
               to="/sub-wallets/new"
               icon={CirclePlusIcon}
-              text="New Sub-wallet"
+              text="New Circle"
             />
           </>
         }
