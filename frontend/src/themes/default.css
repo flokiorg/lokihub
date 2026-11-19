@@ -7,111 +7,113 @@
    Based on assets: Gold/Orange (#D99525), Teal (#123C3C), Cream (#FDFCF5 / #ECDDB3)
 */
 
+/* Lokihub Green — revisited: cleaner cream canvas, lifted cards, crisp
+   borders, richer forest sidebar, softer radius, tuned semantics. The
+   classical identity, modernized. (Approved redesign — artifact-faithful.) */
 :root {
   --font-sans: "Inter var", serif;
-  --radius: 0.625rem;
-  
-  /* Light Mode - Cream & Teal */
-  --background: hsl(51 56% 98%); /* Cream */
-  --foreground: hsl(180 54% 15%); /* Teal */
+  --radius: 0.7rem;
 
-  --card: hsl(51 56% 98%);
-  --card-foreground: hsl(180 54% 15%);
-  
-  --popover: hsl(51 56% 98%);
-  --popover-foreground: hsl(180 54% 15%);
-  
-  --primary: hsl(37 71% 50%); /* Gold/Orange */
-  --primary-foreground: hsl(180 54% 15%);
-  
-  --secondary: hsl(43 58% 90%); /* Light Cream Accent */
-  --secondary-foreground: hsl(180 54% 15%);
-  
-  --muted: hsl(43 58% 90%);
-  --muted-foreground: hsl(180 30% 40%);
-  
-  --accent: hsl(37 71% 50%);
-  --accent-foreground: hsl(180 54% 15%);
-  
-  --destructive: hsl(0 84% 60%);
+  /* Light */
+  --background: hsl(46 42% 96.5%);
+  --foreground: hsl(178 46% 13%);
+
+  --card: hsl(48 52% 99.3%);
+  --card-foreground: hsl(178 46% 13%);
+
+  --popover: hsl(48 52% 99.3%);
+  --popover-foreground: hsl(178 46% 13%);
+
+  --primary: hsl(37 72% 49%);
+  --primary-foreground: hsl(178 50% 11%);
+
+  --secondary: hsl(45 42% 92.5%);
+  --secondary-foreground: hsl(178 38% 19%);
+
+  --muted: hsl(45 40% 94.2%);
+  --muted-foreground: hsl(183 15% 40%);
+
+  --accent: hsl(45 46% 91%);
+  --accent-foreground: hsl(178 44% 16%);
+
+  --destructive: hsl(4 66% 52%);
   --destructive-foreground: hsl(0 0% 100%);
 
-  --border: hsl(180 20% 85%);
-  --input: hsl(180 20% 85%);
-  --ring: hsl(37 71% 50%);
+  --border: hsl(162 18% 87%);
+  --input: hsl(162 18% 87%);
+  --ring: hsl(37 72% 49%);
 
-  /* Sidebar - Light */
-  /* Signature dark forest-green rail (matches the redesign prototype). The
-     content area stays light via --background; only the sidebar is dark. Other
-     themes + dark mode define their own --sidebar* below / in their files. */
-  --sidebar: hsl(169 50% 13%);
-  --sidebar-foreground: hsl(153 19% 88%);
-  --sidebar-primary: hsl(37 71% 50%);
-  --sidebar-primary-foreground: hsl(180 54% 15%);
-  --sidebar-accent: hsl(166 42% 20%);
-  --sidebar-accent-foreground: hsl(153 19% 94%);
-  --sidebar-border: hsl(166 35% 22%);
-  --sidebar-ring: hsl(37 71% 50%);
+  --sidebar: hsl(171 46% 11.5%);
+  --sidebar-foreground: hsl(150 16% 83%);
+  --sidebar-primary: hsl(37 76% 53%);
+  --sidebar-primary-foreground: hsl(178 50% 11%);
+  --sidebar-accent: hsl(167 34% 18%);
+  --sidebar-accent-foreground: hsl(150 20% 95%);
+  --sidebar-border: hsl(167 30% 19%);
+  --sidebar-ring: hsl(37 72% 49%);
 
-  /* Chart colors - approximated to palette */
-  --chart-1: hsl(37 71% 50%); /* Gold */
-  --chart-2: hsl(180 54% 30%); /* Teal */
-  --chart-3: hsl(43 58% 70%); /* Dark Cream */
+  --chart-1: hsl(37 71% 50%);
+  --chart-2: hsl(180 54% 30%);
+  --chart-3: hsl(43 58% 70%);
   --chart-4: hsl(180 30% 50%);
   --chart-5: hsl(37 71% 70%);
 
-  /* Custom colors */
-  --positive: hsl(138, 68%, 96%);
-  --positive-foreground: hsl(142 76% 36%);
+  --positive: hsl(146 52% 94%);
+  --positive-foreground: hsl(150 56% 32%);
 
-  --warning: hsl(33, 90%, 96%);
-  --warning-foreground: hsl(21, 90%, 48%);
+  --warning: hsl(37 90% 94%);
+  --warning-foreground: hsl(27 84% 43%);
 }
 
 .dark {
-  /* Dark Mode - Teal & Cream */
-  --background: hsl(180 54% 11%); /* Deep Teal */
-  --foreground: hsl(43 58% 85%); /* Cream */
+  /* Dark — deep teal-green, lifted cards */
+  --background: hsl(185 33% 8.5%);
+  --foreground: hsl(45 42% 88%);
 
-  --card: hsl(180 50% 13%); /* Slightly lighter teal */
-  --card-foreground: hsl(43 58% 85%);
+  --card: hsl(185 28% 12%);
+  --card-foreground: hsl(45 42% 88%);
 
-  --popover: hsl(180 50% 13%);
-  --popover-foreground: hsl(43 58% 85%);
+  --popover: hsl(185 28% 12%);
+  --popover-foreground: hsl(45 42% 88%);
 
-  --primary: hsl(37 71% 50%); /* Gold */
-  --primary-foreground: hsl(180 54% 15%); /* Dark text on gold */
+  --primary: hsl(38 76% 55%);
+  --primary-foreground: hsl(185 42% 9%);
 
-  --secondary: hsl(180 40% 20%);
-  --secondary-foreground: hsl(43 58% 85%);
+  --secondary: hsl(184 24% 17%);
+  --secondary-foreground: hsl(45 36% 85%);
 
-  --muted: hsl(180 40% 20%);
-  --muted-foreground: hsl(180 20% 60%);
+  --muted: hsl(184 24% 16%);
+  --muted-foreground: hsl(176 14% 63%);
 
-  --accent: hsl(180 40% 25%);
-  --accent-foreground: hsl(43 58% 85%);
+  --accent: hsl(184 26% 19%);
+  --accent-foreground: hsl(45 36% 88%);
 
-  --destructive: hsl(0 62% 60%);
+  --destructive: hsl(4 66% 61%);
   --destructive-foreground: hsl(0 0% 100%);
 
-  --border: hsl(180 30% 20%);
-  --input: hsl(180 30% 20%);
-  --ring: hsl(37 71% 50%);
+  --border: hsl(184 22% 19%);
+  --input: hsl(184 22% 19%);
+  --ring: hsl(38 76% 55%);
 
-  /* Sidebar - Dark */
-  --sidebar: hsl(180 54% 9%); /* Very dark teal */
-  --sidebar-foreground: hsl(43 58% 85%);
-  --sidebar-primary: hsl(37 71% 50%);
-  --sidebar-primary-foreground: hsl(180 54% 15%);
-  --sidebar-accent: hsl(180 40% 20%);
-  --sidebar-accent-foreground: hsl(43 58% 85%);
-  --sidebar-border: hsl(180 30% 20%);
-  --sidebar-ring: hsl(37 71% 50%);
-  
+  --sidebar: hsl(186 38% 6.5%);
+  --sidebar-foreground: hsl(45 34% 84%);
+  --sidebar-primary: hsl(38 76% 55%);
+  --sidebar-primary-foreground: hsl(185 42% 9%);
+  --sidebar-accent: hsl(184 26% 15%);
+  --sidebar-accent-foreground: hsl(45 36% 92%);
+  --sidebar-border: hsl(184 22% 16%);
+  --sidebar-ring: hsl(38 76% 55%);
+
   --chart-1: hsl(37 71% 50%);
   --chart-2: hsl(180 54% 40%);
   --chart-3: hsl(43 58% 60%);
   --chart-4: hsl(180 30% 60%);
   --chart-5: hsl(37 71% 60%);
+
+  --positive: hsl(150 42% 14%);
+  --positive-foreground: hsl(146 55% 56%);
+
+  --warning: hsl(32 44% 15%);
+  --warning-foreground: hsl(35 86% 63%);
 }
 
