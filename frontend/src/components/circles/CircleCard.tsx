@@ -4,6 +4,7 @@ import { Link } from "react-router";
 
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { NostrAvatar } from "src/components/NostrAvatar";
+import { Badge } from "src/components/ui/badge";
 import { Skeleton } from "src/components/ui/skeleton";
 import { useCircleAllowlist } from "src/hooks/useCircleAllowlist";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
@@ -59,6 +60,15 @@ export function CircleCard({ app }: { app: App }) {
           )
         )}
       </div>
+      {app.circleTeardownRequestedAt ? (
+        <Badge variant="warning" className="hidden shrink-0 sm:inline-flex">
+          {t("circleCard.closing", "Closing")}
+        </Badge>
+      ) : app.circleAccepting ? (
+        <Badge variant="positive" className="hidden shrink-0 sm:inline-flex">
+          {t("circleCard.accepting", "Accepting")}
+        </Badge>
+      ) : null}
       <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
         {memberCount === undefined ? (
           <Loader2 className="size-3.5 animate-spin" />
