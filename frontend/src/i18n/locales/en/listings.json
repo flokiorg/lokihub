@@ -105,7 +105,13 @@
   },
   "toast": {
     "listed": "Listed",
-    "updated": "Listing updated"
+    "updated": "Listing updated",
+    "reopened": "Reopened"
+  },
+  "state": {
+    "discoverable": "Discoverable on the network",
+    "paused": "Hidden from discovery — still reachable by its link",
+    "closing": "Winding down — still works by its link until it expires"
   },
   "errors": {
     "save": "Could not save the listing",
@@ -137,13 +143,28 @@
     "revokeConnection": "Revoke listing connection"
   },
   "detail": {
-    "noDescription": "No description added."
+    "noDescription": "No description added.",
+    "place": "Place",
+    "area": "Area",
+    "preview": "How people see it"
   },
   "relays": {
     "title": "Listing relays",
     "description": "Listings and this node's relay list go to: {{relays}}. Leave empty for the general relays.",
     "save": "Save",
-    "saved": "Listing relays saved"
+    "saved": "Listing relays saved",
+    "where": "Where it's published",
+    "summary": "{{ok}} of {{total}} relays",
+    "published": "Published",
+    "pending": "Pending",
+    "pendingCallout": "{{count}} relays from Settings aren't carrying this listing yet.",
+    "pendingCallout_one": "{{count}} relay from Settings isn't carrying this listing yet.",
+    "publishNew": "Publish to {{count}} relays",
+    "publishNew_one": "Publish to {{count}} relay",
+    "republish": "Republish now",
+    "republished": "Republished to your relays",
+    "manage": "Manage relays",
+    "none": "No relays configured — add one in Settings to publish this listing."
   },
   "regenerate": {
     "button": "Revoke and reissue the Cash Hub connection",

@@ -604,6 +604,37 @@ func TestReopenRefusedAfterDeletion(t *testing.T) {
 	require.ErrorIs(t, err, ErrRefused)
 }
 
+// Republish re-sends the current version with a newer created_at, so a relay
+// added after listing starts carrying it without waiting for the refresh.
+func TestRepublish(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	hub := f.circle(t, db.CirclePolicyAllowlist)
+	v, err := f.s.Create(ctx, CreateRequest{CircleHubAppID: uintp(hub.ID)})
+	require.NoError(t, err)
+	first := v.LastCreatedAt
+	f.clock.add(10)
+	v2, err := f.s.Republish(ctx, v.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "listed", v2.Phase)
+	assert.Equal(t, "open", v2.Status)
+	assert.Greater(t, v2.LastCreatedAt, first)
+}
+
+// Republish is refused for a closing listing — it is reopened first.
+func TestRepublishRefusedWhenClosing(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	hub := f.circle(t, db.CirclePolicyAllowlist)
+	v, err := f.s.Create(ctx, CreateRequest{CircleHubAppID: uintp(hub.ID)})
+	require.NoError(t, err)
+	f.clock.add(10)
+	_, err = f.s.Unlist(ctx, v.ID)
+	require.NoError(t, err)
+	_, err = f.s.Republish(ctx, v.ID)
+	require.ErrorIs(t, err, ErrRefused)
+}
+
 // Preview is the unsigned next version.
 func TestPreview(t *testing.T) {
 	f := newFixture(t)

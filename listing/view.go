@@ -50,7 +50,11 @@ type View struct {
 	LastOpenExpiresAt *int64 `json:"lastOpenExpiresAt"`
 	RelaysOK          int    `json:"relaysOk"`
 	RelaysTotal       int    `json:"relaysTotal"`
-	Failing           bool   `json:"failing"`
+	// OpenRelays are the relays that have accepted the live open version — what
+	// the listing is actually published to. Compared against the configured
+	// listing relays, it shows which newly-added relays a republish would reach.
+	OpenRelays []string `json:"openRelays"`
+	Failing    bool     `json:"failing"`
 	OperatorVerified  *bool  `json:"operatorVerified"`
 	OperatorCheckedAt *int64 `json:"operatorCheckedAt"`
 	ClosedAt          *int64 `json:"closedAt"`
@@ -92,7 +96,8 @@ func (s *Service) view(row *db.OfferListing, identity string) View {
 		OperatorPubkey: ptr(row.OperatorPubkey), OperatorRelay: ptr(row.OperatorRelay),
 		Status: row.Status, Phase: row.Phase,
 		LastCreatedAt: row.LastCreatedAt, LastEventID: row.LastEventID, LastOpenExpiresAt: row.LastOpenExpiresAt,
-		RelaysOK: row.RelaysOK, RelaysTotal: row.RelaysTotal, Failing: row.FailingSince != nil,
+		RelaysOK: row.RelaysOK, RelaysTotal: row.RelaysTotal, OpenRelays: decodeList(row.OpenRelays),
+		Failing: row.FailingSince != nil,
 		OperatorVerified: row.OperatorVerified, OperatorCheckedAt: row.OperatorCheckedAt,
 		ClosedAt: row.ClosedAt, DeleteDueAt: row.DeleteDueAt, DeletedAt: row.DeletedAt,
 	}

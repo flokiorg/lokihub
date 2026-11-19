@@ -357,6 +357,25 @@ func (s *Service) ensureServing(ctx context.Context, row *db.OfferListing) error
 	return nil
 }
 
+// Republish re-signs and re-sends the current version to every configured relay
+// now, instead of waiting for the ~7-day refresh — so a relay added in Settings
+// after the listing was published starts carrying it at once (open_relays then
+// covers it). It signs a fresh version (never post-dated), renewing the expiry
+// too, rather than re-sending the stored event.
+func (s *Service) Republish(ctx context.Context, id uint) (*View, error) {
+	row, err := s.load(id)
+	if err != nil {
+		return nil, err
+	}
+	if row.Phase != db.ListingPhaseListed {
+		return nil, refused("only a listed offer is republished")
+	}
+	if err := s.publishVersion(ctx, id, true); err != nil && !errors.Is(err, errDeferred) {
+		return nil, err
+	}
+	return s.Get(ctx, id)
+}
+
 // RetireOrder runs steps (b) and (c) for the listing of an Order connection
 // whose retirement is committed: its get_info already answers "cash_order": {}.
 func (s *Service) RetireOrder(ctx context.Context, connAppID uint) error {
