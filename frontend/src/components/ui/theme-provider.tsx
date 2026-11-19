@@ -2,11 +2,13 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { isHttpMode } from "src/utils/isHttpMode";
 
 export type DarkMode = "system" | "light" | "dark";
+// Matrix dropped from the picker (redesign theme critique: a novelty
+// hacker-green skin, too low-contrast for a money UI). Its CSS is left
+// unused rather than churned out.
 export const Themes = [
   "default",
 
   "nostr",
-  "matrix",
   "ghibli",
   "claymorphism",
 ] as const;
