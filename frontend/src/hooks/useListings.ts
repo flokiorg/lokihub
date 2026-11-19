@@ -60,6 +60,7 @@ export type ListingAction =
   | "pause"
   | "resume"
   | "unlist"
+  | "reopen"
   | "revoke-connection"
   | "check-operator";
 

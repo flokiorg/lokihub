@@ -115,6 +115,13 @@ export function ListingActionsMenu({
               <div onClick={() => act("pause")}>{t("actions.pause")}</div>
             </DropdownMenuItem>
           ))}
+        {/* A closing listing is still serving link-holders, so it can be
+            brought back into discovery in place before the deletion fires. */}
+        {l.phase === "closing" && (
+          <DropdownMenuItem asChild>
+            <div onClick={() => act("reopen")}>{t("actions.reopen")}</div>
+          </DropdownMenuItem>
+        )}
         {l.address && (
           <DropdownMenuItem asChild>
             <div

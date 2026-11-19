@@ -24,7 +24,7 @@ type ListingsAPI interface {
 	// string is refused (H-CASH-411).
 	CreateListing(ctx context.Context, body []byte) (*listing.View, error)
 	UpdateListing(ctx context.Context, id uint, body []byte) (*listing.View, error)
-	// ListingAction runs pause, resume, unlist, revoke-connection or
+	// ListingAction runs pause, resume, unlist, reopen, revoke-connection or
 	// check-operator.
 	ListingAction(ctx context.Context, id uint, action string) (*listing.View, error)
 	PreviewListing(ctx context.Context, id uint) (*nip01.Event, error)
@@ -109,6 +109,8 @@ func (api *api) ListingAction(ctx context.Context, id uint, action string) (*lis
 		return l.Resume(ctx, id)
 	case "unlist":
 		return l.Unlist(ctx, id)
+	case "reopen":
+		return l.Reopen(ctx, id)
 	case "revoke-connection":
 		return l.RevokeConnection(ctx, id)
 	case "check-operator":

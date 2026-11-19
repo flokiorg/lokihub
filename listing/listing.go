@@ -284,6 +284,79 @@ func (s *Service) Unlist(ctx context.Context, id uint) (*View, error) {
 	return s.Get(ctx, id)
 }
 
+// Reopen brings a still-serving offer back into discovery during its closing
+// window: it cancels the pending NIP-09 deletion and republishes an open
+// version with a newer created_at. Unlisting left get_info untouched — the
+// offer keeps serving whoever holds its string — so a live offer remains to
+// re-advertise, and per NIP-CASH §Wallet Rules a newer version un-hides what a
+// closed version or a deletion had hidden. A reopen is refused once the row is
+// fully deleted (it is relisted afresh), and when the underlying offer has
+// since stopped serving: a listing that reads open over a get_info that reads
+// closed is closed at tap.
+func (s *Service) Reopen(ctx context.Context, id uint) (*View, error) {
+	unlock := lockListing(id)
+	row, err := s.load(id)
+	if err != nil {
+		unlock()
+		return nil, err
+	}
+	if row.Phase != db.ListingPhaseClosing {
+		unlock()
+		return nil, refused("only a closing offer is reopened; relist a deleted one afresh")
+	}
+	if err := s.ensureServing(ctx, row); err != nil {
+		unlock()
+		return nil, err
+	}
+	// Back to listed/open, cancelling the scheduled deletion and clearing the
+	// relay-tracking the close started. publishVersion then signs the open
+	// version at a created_at past the closed one (mirrors Create's reset).
+	err = s.d.DB.Model(row).Updates(map[string]any{
+		"status": db.ListingStatusOpen, "phase": db.ListingPhaseListed,
+		"closed_at": nil, "delete_due_at": nil, "closed_relays": "",
+		"failing_since": nil, "retry_delay": 0, "due_at": 0,
+	}).Error
+	unlock()
+	if err != nil {
+		return nil, err
+	}
+	if err := s.publishVersion(ctx, id, true); err != nil && !errors.Is(err, errDeferred) {
+		return nil, err
+	}
+	return s.Get(ctx, id)
+}
+
+// ensureServing refuses a reopen whose underlying offer no longer serves an
+// open get_info: a circle torn down or not accepting joins, or a retired Order
+// connection (mirrors the open-listing guard in Create, R2-L2).
+func (s *Service) ensureServing(ctx context.Context, row *db.OfferListing) error {
+	switch row.Type {
+	case db.ListingTypeCircleWallet:
+		cfg, err := s.circleConfig(row.HubAppID)
+		if err != nil {
+			return refused("the circle has no configuration")
+		}
+		if cfg.TeardownRequestedAt != nil {
+			return refused("the circle is being torn down")
+		}
+		if cfg.AcceptingJoins != nil && !*cfg.AcceptingJoins {
+			return refused("reopen the circle to new members before listing it again")
+		}
+	case db.ListingTypeCashOrder:
+		if s.d.Orders == nil {
+			return refused("this Hub has no Order connections")
+		}
+		offer, err := s.d.Orders.Order(ctx, row.ConnAppID)
+		if err != nil || offer == nil {
+			return refused("the Order connection is gone")
+		}
+		if offer.Retired {
+			return refused("a retired Order connection is never listed")
+		}
+	}
+	return nil
+}
+
 // RetireOrder runs steps (b) and (c) for the listing of an Order connection
 // whose retirement is committed: its get_info already answers "cash_order": {}.
 func (s *Service) RetireOrder(ctx context.Context, connAppID uint) error {

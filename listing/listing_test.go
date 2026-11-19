@@ -555,6 +555,55 @@ func TestRelistAfterDeletion(t *testing.T) {
 	assert.NotZero(t, v2.ConnAppID)
 }
 
+// Reopen brings a closing listing back to open in place, before the deletion
+// fires: same row, open again, a newer created_at, and no deletion pending.
+func TestReopenFromClosing(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	hub := f.circle(t, db.CirclePolicyAllowlist)
+	v, err := f.s.Create(ctx, CreateRequest{CircleHubAppID: uintp(hub.ID)})
+	require.NoError(t, err)
+	f.clock.add(10)
+	_, err = f.s.Unlist(ctx, v.ID)
+	require.NoError(t, err)
+	closing, _ := f.s.load(v.ID)
+	require.Equal(t, db.ListingPhaseClosing, closing.Phase)
+	require.NotNil(t, closing.DeleteDueAt)
+	closedAt := closing.LastCreatedAt
+
+	f.clock.add(10)
+	v2, err := f.s.Reopen(ctx, v.ID)
+	require.NoError(t, err)
+	assert.Equal(t, v.ID, v2.ID)
+	assert.Equal(t, "open", v2.Status)
+	assert.Equal(t, "listed", v2.Phase)
+	assert.Greater(t, v2.LastCreatedAt, closedAt)
+
+	row, _ := f.s.load(v.ID)
+	assert.Equal(t, db.ListingPhaseListed, row.Phase)
+	assert.Nil(t, row.DeleteDueAt)
+	assert.Nil(t, row.ClosedAt)
+}
+
+// Reopen is refused once the row is fully deleted — it is relisted afresh.
+func TestReopenRefusedAfterDeletion(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	hub := f.circle(t, db.CirclePolicyAllowlist)
+	v, err := f.s.Create(ctx, CreateRequest{CircleHubAppID: uintp(hub.ID)})
+	require.NoError(t, err)
+	f.clock.add(10)
+	_, err = f.s.Unlist(ctx, v.ID)
+	require.NoError(t, err)
+	f.clock.add(ExpirationSecs)
+	f.s.Tick(ctx)
+	row, _ := f.s.load(v.ID)
+	require.Equal(t, db.ListingPhaseDeleted, row.Phase)
+
+	_, err = f.s.Reopen(ctx, v.ID)
+	require.ErrorIs(t, err, ErrRefused)
+}
+
 // Preview is the unsigned next version.
 func TestPreview(t *testing.T) {
 	f := newFixture(t)

@@ -10,7 +10,8 @@
     "notListed": "Not listed — people need an invite link to join",
     "discoverability": "Discoverability",
     "pausedHint": "Paused — hidden from discovery but still reachable by its link. Resume to make it discoverable again.",
-    "closingHint": "No longer discoverable. People who already have the link keep access until this listing expires — after that you can list the circle again."
+    "closingHint": "Winding down — no longer discoverable, but still working for anyone who has the link. Reopen to list it again, or let it finish closing.",
+    "detailsToggle": "Listing details"
   },
   "card": {
     "untitled": "Untitled offer",
@@ -126,12 +127,17 @@
   "actions": {
     "pause": "Pause",
     "resume": "Resume",
+    "reopen": "Reopen",
     "edit": "Edit",
     "manage": "Manage",
+    "more": "More actions",
     "back": "Back",
     "unlist": "Unlist",
     "checkOperator": "Check operator",
     "revokeConnection": "Revoke listing connection"
+  },
+  "detail": {
+    "noDescription": "No description added."
   },
   "relays": {
     "title": "Listing relays",
