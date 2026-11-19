@@ -125,7 +125,7 @@ export function Stat({
 // bills it has already issued? Outstanding is what it owes; shortfall is how
 // much of that its bills do not currently hold. One coloured word is the first
 // thing an operator should be able to read without doing arithmetic.
-function CoverageBadge({
+export function CoverageBadge({
   outstandingMloki,
   shortfallMloki,
 }: {

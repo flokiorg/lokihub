@@ -1,11 +1,13 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import {
+  CoverageBadge,
   MedianDuration,
   MetricInfo,
   Stat,
 } from "src/components/cash/CashHubOverview";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
+import { cn } from "src/lib/utils";
 import { CashHubStats } from "src/types";
 
 // The same figures CashHubOverview shows for one hub, totalled across every
@@ -55,13 +57,55 @@ export function CashHubsSummary({
           amountMloki={stats.outstanding_mloki}
           size="lg"
         >
-          <p className="text-muted-foreground mt-1 text-xs">
-            {t("cashKpis.outstandingHint", {
-              count: stats.outstanding_count,
-            })}
-          </p>
+          {stats.outstanding_mloki === 0 && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              {t("cashKpis.outstandingHint", {
+                count: stats.outstanding_count,
+              })}
+            </p>
+          )}
         </Stat>
       </div>
+
+      {/* Coverage — the redesign's "state you can see": is backing enough to
+          honour every bill still outstanding? A meter + one coloured verdict,
+          so a shortfall reads at a glance instead of by mental arithmetic. */}
+      {stats.outstanding_mloki > 0 && (
+        <div className="grid gap-2">
+          <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                stats.shortfall_mloki > 0
+                  ? "bg-warning-foreground"
+                  : "bg-positive-foreground"
+              )}
+              style={{
+                width: `${Math.max(
+                  3,
+                  Math.min(
+                    100,
+                    ((stats.outstanding_mloki - stats.shortfall_mloki) /
+                      stats.outstanding_mloki) *
+                      100
+                  )
+                )}%`,
+              }}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs">
+              {t("cashKpis.outstandingHint", {
+                count: stats.outstanding_count,
+              })}
+            </span>
+            <CoverageBadge
+              outstandingMloki={stats.outstanding_mloki}
+              shortfallMloki={stats.shortfall_mloki}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-4">
         <Stat
