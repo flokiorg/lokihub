@@ -23,6 +23,11 @@ import {
   CashOutstandingChart,
 } from "src/components/cash/CashMonitorCharts";
 import { CashHubOverview } from "src/components/cash/CashHubOverview";
+import { CashHubWithdrawCard } from "src/components/withdraw/CashHubWithdrawCard";
+import { CashHubPayoutsCard } from "src/components/withdraw/CashHubPayoutsCard";
+import { CashHubOrderConnectionsCard } from "src/components/cash/CashHubOrderConnectionsCard";
+import { CashHubOrderTermsCard } from "src/components/cash/CashHubOrderTermsCard";
+import { CashHubOrdersCard } from "src/components/cash/CashHubOrdersCard";
 import { CashHubConfigCard } from "src/components/CashHubConfigCard";
 import { AppTransactionList } from "src/components/connections/AppTransactionList";
 import { ConnectionDetailsModal } from "src/components/connections/ConnectionDetailsModal";
@@ -642,6 +647,12 @@ function CashHubDashboardInternal({
                 <TabsTrigger value="permissions">
                   {t("permissions.title", "Permissions")}
                 </TabsTrigger>
+                {/* Selling/payout tools used to live only on the legacy
+                    /apps/:id route, out of reach for managed hubs. They come
+                    home here so one hub's whole lifecycle is in one place. */}
+                <TabsTrigger value="sell">
+                  {t("circleHub.sellRedeemTab", "Sell & redeem")}
+                </TabsTrigger>
               </TabsList>
             </div>
             {isMobile && (
@@ -674,6 +685,13 @@ function CashHubDashboardInternal({
               <AppTransactionList appId={hub.id} />
             </TabsContent>
             <TabsContent value="permissions">{permissionsCard}</TabsContent>
+            <TabsContent value="sell" className="grid gap-4">
+              <CashHubWithdrawCard hubId={hub.id} />
+              <CashHubPayoutsCard hubId={hub.id} />
+              <CashHubOrderConnectionsCard hubId={hub.id} />
+              <CashHubOrderTermsCard hubId={hub.id} />
+              <CashHubOrdersCard hubId={hub.id} />
+            </TabsContent>
           </Tabs>
 
           {showConnectionDetails && (
