@@ -65,22 +65,47 @@ export function CircleHubOverview({
       {/* Balance and allocated lead: what the hub can still hand out, and
             what members are already holding. */}
       {showHero && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Stat
-            label={t("circleKpis.balance")}
-            amountMloki={hub.balance}
-            size="lg"
-          />
-          <Stat
-            label={t("circleCharts.allocated")}
-            amountMloki={stats.allocated_mloki}
-            size="lg"
-          >
-            <p className="text-muted-foreground mt-1 text-xs">
-              {t("circleCharts.acrossMembers", { count: stats.members_count })}
-            </p>
-          </Stat>
-        </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Stat
+              label={t("circleKpis.balance")}
+              amountMloki={hub.balance}
+              size="lg"
+            />
+            <Stat
+              label={t("circleCharts.allocated")}
+              amountMloki={stats.allocated_mloki}
+              size="lg"
+            >
+              <p className="text-muted-foreground mt-1 text-xs">
+                {t("circleCharts.acrossMembers", {
+                  count: stats.members_count,
+                })}
+              </p>
+            </Stat>
+          </div>
+          {/* Allocation meter — the same "state you can see" read as the Cash
+              Hub's coverage bar: how much of the pool members are holding vs
+              what's still free to allocate. */}
+          {hub.balance + stats.allocated_mloki > 0 && (
+            <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+              <div
+                className="bg-primary h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      (stats.allocated_mloki /
+                        (hub.balance + stats.allocated_mloki)) *
+                        100
+                    )
+                  )}%`,
+                }}
+              />
+            </div>
+          )}
+        </>
       )}
 
       {showDetails && (
