@@ -469,7 +469,7 @@ function CircleHubDashboardInternal({
                 isMobile && "sticky top-0 z-20 -mx-4 border-b px-4 pb-2"
               )}
             >
-              <TabsList>
+              <TabsList variant="underline">
                 {isMobile && (
                   <TabsTrigger value="summary">
                     {t("tabs.summary", "Summary")}
