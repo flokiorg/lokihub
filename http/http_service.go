@@ -87,6 +87,8 @@ type HttpService struct {
 	mcpSrv *mcp.Server
 	// mcpOAuth is the OAuth 2.1 client/code/consent store for remote MCP.
 	mcpOAuth *mcp.OAuthStore
+	// mcpLoopback is the desktop's local-listener controller (nil on servers).
+	mcpLoopback MCPLoopbackController
 }
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {

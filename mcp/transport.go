@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +29,7 @@ func (s *Server) sdkHandler() http.Handler {
 		if !ok {
 			return nil
 		}
-		return s.serverForConn(conn)
+		return s.cachedServerFor(conn)
 	}, &mcpsdk.StreamableHTTPOptions{
 		MaxRequestBodyBytes: maxRequestBodyBytes,
 		// Idle sessions are reaped so a token cannot accumulate unbounded
@@ -43,7 +44,88 @@ func (s *Server) sdkHandler() http.Handler {
 // the Streamable-HTTP handler. Mount it at /mcp (server mode) or serve it on the
 // loopback listener (desktop mode).
 func (s *Server) Handler() http.Handler {
-	return s.bearerAuth(bindSessionToConn(s.sdkHandler()))
+	return s.bearerAuth(bindSessionToConn(s.sessionCap(s.sdkHandler())))
+}
+
+// maxSessionsPerConn bounds concurrent MCP sessions per connection (re-audit
+// N4): a token cannot pile up sessions (each holds state until it idles out).
+const maxSessionsPerConn = 10
+
+type connServer struct {
+	scopes   string
+	srv      *mcpsdk.Server
+	starting int // new-session requests in flight (guarded by Server.srvMu)
+}
+
+// cachedServerFor returns the connection's MCP server, building it once per
+// (connection, scope set). The SDK asks for a server on EVERY request (protocol
+// version check), so building per request re-reflected ~66 tool schemas each
+// time — a CPU amplification (re-audit N4). Tool handlers re-check the
+// connection's CURRENT scopes on every call (authorizeCall), so a cached tool
+// list can never widen access; a rescope rebuilds the advertised list.
+func (s *Server) cachedServerFor(conn *Conn) *mcpsdk.Server {
+	key := scopesKey(conn.Scopes)
+	s.srvMu.Lock()
+	defer s.srvMu.Unlock()
+	if cs := s.srvByApp[conn.AppID]; cs != nil && cs.scopes == key {
+		return cs.srv
+	}
+	cs := &connServer{scopes: key, srv: s.serverForConn(conn)}
+	if old := s.srvByApp[conn.AppID]; old != nil {
+		cs.starting = old.starting
+	}
+	s.srvByApp[conn.AppID] = cs
+	return cs.srv
+}
+
+func scopesKey(sc []string) string {
+	c := append([]string(nil), sc...)
+	sort.Strings(c)
+	return strings.Join(c, " ")
+}
+
+// liveSessions counts the connection's open sessions plus new-session requests
+// still being set up (so a burst cannot race past the cap).
+func (s *Server) liveSessionsLocked(appID uint) int {
+	cs := s.srvByApp[appID]
+	if cs == nil {
+		return 0
+	}
+	n := cs.starting
+	for range cs.srv.Sessions() {
+		n++
+	}
+	return n
+}
+
+// sessionCap refuses a NEW session (a POST without Mcp-Session-Id) once the
+// connection already holds maxSessionsPerConn.
+func (s *Server) sessionCap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, ok := ConnFrom(r.Context())
+		if !ok || r.Method != http.MethodPost || r.Header.Get("Mcp-Session-Id") != "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		s.cachedServerFor(conn)
+		s.srvMu.Lock()
+		if s.liveSessionsLocked(conn.AppID) >= maxSessionsPerConn {
+			s.srvMu.Unlock()
+			http.Error(w, "too many open MCP sessions for this connection; close one or wait for idle sessions to expire", http.StatusTooManyRequests)
+			return
+		}
+		cs := s.srvByApp[conn.AppID]
+		cs.starting++
+		s.srvMu.Unlock()
+		defer func() {
+			s.srvMu.Lock()
+			if cur := s.srvByApp[conn.AppID]; cur != nil {
+				cur.starting--
+			}
+			s.srvMu.Unlock()
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 // sessionIdleTimeout reaps idle MCP sessions.

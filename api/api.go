@@ -1478,6 +1478,9 @@ func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interfa
 	if base == "" {
 		return nil, ErrNoExplorer
 	}
+	if !safeExplorerEndpoint(endpoint) {
+		return nil, fmt.Errorf("%w: invalid explorer endpoint", constants.ErrInvalidParams)
+	}
 	url := base + "/api" + endpoint
 
 	client := http.Client{
@@ -1498,10 +1501,13 @@ func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interfa
 
 	defer func() { _ = res.Body.Close() }()
 
-	body, readErr := io.ReadAll(res.Body)
+	body, readErr := io.ReadAll(io.LimitReader(res.Body, maxExplorerResponse+1))
 	if readErr != nil {
 		logger.Logger.Error().Err(readErr).Str("url", url).Msg("Failed to read response body")
 		return nil, errors.New("failed to read response body")
+	}
+	if len(body) > maxExplorerResponse {
+		return nil, errors.New("explorer response too large")
 	}
 
 	var jsonContent interface{}
@@ -3633,4 +3639,30 @@ func flndMacaroonPath(flndDir, network string) string {
 		netDir = "regtest"
 	}
 	return filepath.Join(flndDir, "data", "chain", "flokicoin", netDir, "admin.macaroon")
+}
+
+// maxExplorerResponse bounds what one explorer call may load into memory.
+const maxExplorerResponse = 4 << 20
+
+// safeExplorerEndpoint accepts an API path (with an optional query string) for
+// the configured explorer, refusing anything that could step outside its /api
+// tree or retarget the request: traversal, scheme/authority tricks, fragments,
+// backslashes, whitespace and control characters.
+func safeExplorerEndpoint(e string) bool {
+	if e == "" || e[0] != '/' || len(e) > 512 {
+		return false
+	}
+	path := e
+	if i := strings.IndexByte(e, '?'); i >= 0 {
+		path = e[:i]
+	}
+	if strings.Contains(path, "..") || strings.Contains(path, "//") || strings.ContainsAny(e, "@#\\") {
+		return false
+	}
+	for _, r := range e {
+		if r <= 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }

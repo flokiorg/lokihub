@@ -31,7 +31,28 @@ export type AIPendingAction = {
   status: "open" | "approved" | "denied";
 };
 
-export type AIControls = { paused?: boolean };
+export type AIActivity = {
+  time: string;
+  appId: number;
+  tool: string;
+  outcome:
+    | "done"
+    | "failed"
+    | "needs_confirmation"
+    | "pending_approval"
+    | "executing"
+    | "denied"
+    | "expired";
+  detail?: string;
+};
+
+export type AIControls = {
+  paused?: boolean;
+  /** true only in the desktop app, which can serve assistants on this computer */
+  loopbackSupported?: boolean;
+  /** port of the local listener on 127.0.0.1 (0 = off) */
+  loopbackPort?: number;
+};
 
 export type CreatedAssistant = {
   appId: number;
@@ -43,18 +64,21 @@ export function useAIAssistants() {
   const [assistants, setAssistants] = useState<AIAssistant[]>([]);
   const [pending, setPending] = useState<AIPendingAction[]>([]);
   const [controls, setControls] = useState<AIControls>({});
+  const [activity, setActivity] = useState<AIActivity[]>([]);
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
     try {
-      const [a, p, c] = await Promise.all([
+      const [a, p, c, act] = await Promise.all([
         request<AIAssistant[]>("/api/mcp/connections"),
         request<AIPendingAction[]>("/api/mcp/pending"),
         request<AIControls>("/api/mcp/controls"),
+        request<AIActivity[]>("/api/mcp/activity?limit=50"),
       ]);
       setAssistants(a ?? []);
       setPending(p ?? []);
       setControls(c ?? {});
+      setActivity(act ?? []);
     } finally {
       setLoading(false);
     }
@@ -98,6 +122,7 @@ export function useAIAssistants() {
     assistants,
     pending: pending.filter((p) => p.status === "open"),
     controls,
+    activity,
     loading,
     reload,
     revoke,

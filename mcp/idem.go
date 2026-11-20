@@ -22,7 +22,8 @@ var ErrIdempotencyConflict = errors.New("mcp: idempotency_key was already used w
 
 const (
 	idemTTL        = 24 * time.Hour
-	idemMaxEntries = 10000 // bounded memory (audit MED-2)
+	idemMaxEntries = 10000 // global bound on memory (audit MED-2)
+	idemMaxPerApp  = 1000  // per connection: one assistant can never evict another's records (re-audit N3)
 )
 
 // IdemStore runs a write exactly once per (connection, tool, key) and caches its
@@ -31,13 +32,16 @@ const (
 // tool, bound to a hash of the arguments, expire after idemTTL, and the store
 // is size-bounded. A failed execution is not cached: the same key may retry.
 type IdemStore struct {
-	mu  sync.Mutex
-	m   map[string]*idemEntry
-	now func() time.Time
+	mu    sync.Mutex
+	m     map[string]*idemEntry
+	count map[uint]int // entries per connection (kept in step with m)
+	now   func() time.Time
 }
 
 type idemEntry struct {
 	mu       sync.Mutex // serialises executions of this key
+	appID    uint
+	inflight int // callers currently inside Do for this key (guarded by the store mutex)
 	argsHash [32]byte
 	created  time.Time
 	done     bool
@@ -46,7 +50,7 @@ type idemEntry struct {
 
 // NewIdemStore builds an empty idempotency store.
 func NewIdemStore() *IdemStore {
-	return &IdemStore{m: make(map[string]*idemEntry), now: time.Now}
+	return &IdemStore{m: make(map[string]*idemEntry), count: map[uint]int{}, now: time.Now}
 }
 
 // ArgsHash hashes a tool's typed arguments for idempotency binding.
@@ -63,20 +67,31 @@ func (s *IdemStore) Do(appID uint, tool, key string, args [32]byte, fn func() (a
 	s.mu.Lock()
 	now := s.now()
 	e := s.m[k]
-	if e != nil && now.Sub(e.created) > idemTTL {
-		delete(s.m, k)
+	if e != nil && e.inflight == 0 && now.Sub(e.created) > idemTTL {
+		s.delLocked(k)
 		e = nil
 	}
 	if e == nil {
-		s.evictLocked(now)
-		e = &idemEntry{argsHash: args, created: now}
+		if err := s.evictLocked(now, appID); err != nil {
+			s.mu.Unlock()
+			return nil, err
+		}
+		e = &idemEntry{appID: appID, argsHash: args, created: now}
 		s.m[k] = e
+		s.count[appID]++
 	}
-	s.mu.Unlock()
-
 	if e.argsHash != args {
+		s.mu.Unlock()
 		return nil, ErrIdempotencyConflict
 	}
+	e.inflight++
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		e.inflight--
+		s.mu.Unlock()
+	}()
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.done {
@@ -90,24 +105,66 @@ func (s *IdemStore) Do(appID uint, tool, key string, args [32]byte, fn func() (a
 	return res, nil
 }
 
-// evictLocked drops expired entries and, if still at capacity, the oldest one.
-func (s *IdemStore) evictLocked(now time.Time) {
-	if len(s.m) < idemMaxEntries {
-		return
+// ErrIdempotencyBusy — the connection has too many writes in flight to make
+// room for a new idempotency record.
+var ErrIdempotencyBusy = errors.New("mcp: too many writes in progress for this connection; retry shortly")
+
+// evictLocked makes room for a new record of appID: expired entries go first;
+// then, if the connection is at its own cap, its oldest settled record; then, if
+// the store is at the global cap, the oldest settled record of the connection
+// holding the most. Entries with a call in flight are never evicted (evicting
+// one would let a concurrent retry execute the write again).
+func (s *IdemStore) evictLocked(now time.Time, appID uint) error {
+	if s.count[appID] < idemMaxPerApp && len(s.m) < idemMaxEntries {
+		return nil // common case: no scan
 	}
-	var oldestK string
-	var oldest time.Time
 	for k, e := range s.m {
-		if now.Sub(e.created) > idemTTL {
-			delete(s.m, k)
-			continue
-		}
-		if oldestK == "" || e.created.Before(oldest) {
-			oldestK, oldest = k, e.created
+		if e.inflight == 0 && now.Sub(e.created) > idemTTL {
+			s.delLocked(k)
 		}
 	}
-	if len(s.m) >= idemMaxEntries && oldestK != "" {
-		delete(s.m, oldestK)
+	oldestOf := func(app uint) string {
+		var key string
+		var t time.Time
+		for k, e := range s.m {
+			if e.appID != app || e.inflight > 0 {
+				continue
+			}
+			if key == "" || e.created.Before(t) {
+				key, t = k, e.created
+			}
+		}
+		return key
+	}
+	if s.count[appID] >= idemMaxPerApp {
+		k := oldestOf(appID)
+		if k == "" {
+			return ErrIdempotencyBusy
+		}
+		s.delLocked(k)
+	}
+	if len(s.m) >= idemMaxEntries {
+		var big uint
+		for a, n := range s.count {
+			if n > s.count[big] {
+				big = a
+			}
+		}
+		k := oldestOf(big)
+		if k == "" {
+			return ErrIdempotencyBusy
+		}
+		s.delLocked(k)
+	}
+	return nil
+}
+
+func (s *IdemStore) delLocked(k string) {
+	if e, ok := s.m[k]; ok {
+		delete(s.m, k)
+		if s.count[e.appID]--; s.count[e.appID] <= 0 {
+			delete(s.count, e.appID)
+		}
 	}
 }
 

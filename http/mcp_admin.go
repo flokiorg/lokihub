@@ -4,13 +4,34 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/mcp"
 	"github.com/labstack/echo/v4"
 )
 
-const cfgKeyMCPPaused = "MCPPaused"
+const (
+	cfgKeyMCPPaused = "MCPPaused"
+	// CfgKeyMCPLoopbackPort is the desktop owner's setting for the local MCP
+	// listener on 127.0.0.1 ("" / "0" = off, the default).
+	CfgKeyMCPLoopbackPort = "MCPLoopbackPort"
+)
+
+// MCPLoopbackController is provided by the desktop app: it opens or closes the
+// 127.0.0.1 MCP listener. Server builds register none (the switch is hidden).
+type MCPLoopbackController interface {
+	// Apply listens on port (0 = stop). It returns an error, leaving the
+	// previous state, if the port cannot be opened.
+	Apply(port int) error
+	// Port is the port currently listening (0 = off).
+	Port() int
+}
+
+// SetMCPLoopbackController registers the desktop's loopback controller.
+func (httpSvc *HttpService) SetMCPLoopbackController(c MCPLoopbackController) {
+	httpSvc.mcpLoopback = c
+}
 
 // cfgControls backs the owner's global MCP levers with the hub's persistent
 // config, so a pause survives a restart. A read error is treated as paused
@@ -26,7 +47,9 @@ func (c *cfgControls) Paused() bool {
 }
 
 type mcpControlsBody struct {
-	Paused *bool `json:"paused,omitempty"`
+	Paused            *bool `json:"paused,omitempty"`
+	LoopbackSupported *bool `json:"loopbackSupported,omitempty"`
+	LoopbackPort      *int  `json:"loopbackPort,omitempty"`
 }
 
 type mcpPendingView struct {
@@ -86,9 +109,23 @@ func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 		}
 		return c.NoContent(http.StatusNoContent)
 	})
+	// The owner's view of what each assistant did (newest first).
+	g.GET("/mcp/activity", func(c echo.Context) error {
+		if httpSvc.mcpSrv == nil {
+			return c.JSON(http.StatusOK, []mcp.ActivityEntry{})
+		}
+		appID, _ := strconv.ParseUint(c.QueryParam("app_id"), 10, 32)
+		limit, _ := strconv.Atoi(c.QueryParam("limit"))
+		return c.JSON(http.StatusOK, httpSvc.mcpSrv.Activity().List(uint(appID), limit))
+	})
 	g.GET("/mcp/controls", func(c echo.Context) error {
 		paused := (&cfgControls{cfg: httpSvc.cfg}).Paused()
-		return c.JSON(http.StatusOK, mcpControlsBody{Paused: &paused})
+		body := mcpControlsBody{Paused: &paused}
+		if httpSvc.mcpLoopback != nil {
+			yes, port := true, httpSvc.mcpLoopback.Port()
+			body.LoopbackSupported, body.LoopbackPort = &yes, &port
+		}
+		return c.JSON(http.StatusOK, body)
 	})
 	g.PUT("/mcp/controls", func(c echo.Context) error {
 		var body mcpControlsBody
@@ -101,6 +138,21 @@ func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 				v = "1"
 			}
 			if err := httpSvc.cfg.SetUpdate(cfgKeyMCPPaused, v, ""); err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to save")
+			}
+		}
+		if body.LoopbackPort != nil {
+			if httpSvc.mcpLoopback == nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "local access is only available in the desktop app")
+			}
+			port := *body.LoopbackPort
+			if port != 0 && (port < 1024 || port > 65535) {
+				return echo.NewHTTPError(http.StatusBadRequest, "port must be between 1024 and 65535 (or 0 to turn local access off)")
+			}
+			if err := httpSvc.mcpLoopback.Apply(port); err != nil {
+				return echo.NewHTTPError(http.StatusConflict, "could not open that port: "+err.Error())
+			}
+			if err := httpSvc.cfg.SetUpdate(CfgKeyMCPLoopbackPort, strconv.Itoa(port), ""); err != nil {
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to save")
 			}
 		}

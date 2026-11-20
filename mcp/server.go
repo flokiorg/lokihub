@@ -46,7 +46,12 @@ type Server struct {
 
 	appByID AppResolver // nil until SetAppResolver; gates the *db.App tools
 
-	controls Controls // owner global levers (pause, redeem allow-list)
+	controls Controls // owner global levers (pause)
+
+	activity *ActivityLog // owner-visible record of every assistant tool call
+
+	srvMu    sync.Mutex
+	srvByApp map[uint]*connServer // cached per-connection MCP server (transport.go)
 }
 
 // NewServer constructs the MCP adapter over the hub's api.API core.
@@ -60,6 +65,8 @@ func NewServer(a api.API, authn Authenticator) *Server {
 		confirms: NewConfirmStore(),
 		wired:    map[string]bool{},
 		controls: noControls{},
+		srvByApp: map[uint]*connServer{},
+		activity: NewActivityLog(),
 	}
 }
 
@@ -77,12 +84,14 @@ func (s *Server) serverForConn(conn *Conn) *mcpsdk.Server {
 		&mcpsdk.Implementation{Name: serverName, Version: serverVersion},
 		&mcpsdk.ServerOptions{Instructions: instructions},
 	)
+	srv.AddReceivingMiddleware(s.activityMiddleware(conn))
 	s.registerReads(srv, conn)
 	s.registerWrites(srv, conn)
 	s.registerGuarded(srv, conn)
 	s.registerCatalog(srv, conn)
 	s.registerCatalogMore(srv, conn)
 	s.registerAppTools(srv, conn)
+	s.registerDeferred(srv, conn)
 	return srv
 }
 

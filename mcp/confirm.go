@@ -49,6 +49,15 @@ type PaymentPreview struct {
 	// made the invoice. Never treat it as an instruction.
 	Description string `json:"description_untrusted,omitempty"`
 	ExpiresAt   string `json:"invoice_expires_at,omitempty"`
+	// Details are further hub-derived facts the user must see before
+	// confirming (fees, terms, exactly what will be published).
+	Details []PreviewDetail `json:"details,omitempty"`
+}
+
+// PreviewDetail is one labelled line of a preview.
+type PreviewDetail struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 // PaymentStep is the result of a two-step payment tool: either a preview with a
@@ -138,6 +147,22 @@ func confirmTool[In, Out any](
 	preview func(context.Context, api.API, In) (*PaymentPreview, error),
 	run func(context.Context, api.API, In) (Out, error),
 ) {
+	confirmToolWarn(s, srv, conn, apiMethod, name, desc, paymentWarning, keyOf, codeOf, payload, preview, run)
+}
+
+// confirmToolWarn is confirmTool with the warning chosen by the caller (e.g.
+// publishWarning for an irreversible public publish under the node identity).
+func confirmToolWarn[In, Out any](
+	s *Server,
+	srv *mcpsdk.Server,
+	conn *Conn,
+	apiMethod, name, desc, warning string,
+	keyOf func(In) string,
+	codeOf func(In) string,
+	payload func(In) any,
+	preview func(context.Context, api.API, In) (*PaymentPreview, error),
+	run func(context.Context, api.API, In) (Out, error),
+) {
 	if c, ok := classify(apiMethod); !ok || c.Kind != ClassTool || c.Mode != ModeWrite || c.Guarded {
 		panic("mcp: confirmTool requires a non-guarded write-classified method: " + apiMethod)
 	}
@@ -148,7 +173,7 @@ func confirmTool[In, Out any](
 	destructive := true
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name:        name,
-		Description: desc + "\n\n" + paymentWarning,
+		Description: desc + "\n\n" + warning,
 		Annotations: &mcpsdk.ToolAnnotations{DestructiveHint: &destructive},
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in In) (*mcpsdk.CallToolResult, PaymentStep[Out], error) {
 		var zero PaymentStep[Out]
@@ -174,7 +199,7 @@ func confirmTool[In, Out any](
 			}
 			return nil, PaymentStep[Out]{
 				Status:      "needs_confirmation",
-				Warning:     paymentWarning,
+				Warning:     warning,
 				Preview:     p,
 				ConfirmCode: c,
 				ExpiresIn:   int(confirmTTL / time.Second),

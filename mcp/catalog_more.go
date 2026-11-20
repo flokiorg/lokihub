@@ -15,39 +15,12 @@ import (
 // drops off (or onto) the surface. Shrink this list; never grow it without a
 // reason.
 var deferredTools = map[string]string{
-	// Need a loaded *db.App: wired once an owner-scoped app-resolution seam
-	// exists (resolve id → App, verify it is a top-level hub of the right kind).
-	"SubmitCircleMemberRequest":      "takes a member-signed event — the assistant cannot sign for a member",
-	"PutOrderTerms":                  "nested nip-CO terms payload — needs schema review before exposing",
-	"PublishCircleIdentityFollowSet": "publishes to Nostr under the node identity — needs payload validation review",
-	// Fee-paying / fund-committing LSP purchases: candidate for the residual
-	// guard (they commit funds to a third party); decide before exposing.
-	"LSPS1CreateOrder": "pays an LSP for a channel — residual-guard decision pending",
-	"LSPS2Buy":         "pays an LSP for a JIT channel — residual-guard decision pending",
-	// Loosely-typed seams the REST layer validates; the MCP schema layer must
-	// replicate that validation first (audit A F4).
-	"CreateListing":  "raw JSON body — needs schema + validation parity with REST",
-	"UpdateListing":  "raw JSON body — needs schema + validation parity with REST",
-	"ListingAction":  "action string incl. revoke-connection (excluded) — needs an allowlisted action enum",
-	"PreviewListing": "returns a nip01 event — needs output shaping",
-	// Complex requests / untyped results.
-	"CreateCashWallet":   "mints + funds cash for multiple recipients — needs request schema review",
-	"UpdateSettings":     "broad settings blob — needs per-field allowlist",
-	"PublishNodeProfile": "publishes under node identity — needs payload review",
-	"PublishNodeNote":    "publishes under node identity — needs payload review",
-	"RequestMempoolApi":  "proxies an arbitrary endpoint path — SSRF review (M-DOS/M-SSRF) before exposing",
-	"ListLSPs":           "returns manager.SettingsLSP — needs output shaping",
-	"HandleAddLSP":       "LSP catalogue write — request shape review",
-	"HandleTrustLSP":     "LSP trust write — request shape review",
-	"HandleLSPLiveCheck": "live network check — request shape review",
-	"LSPS0ListProtocols": "LSPS request types — wire with LSP batch",
-	"LSPS1GetInfo":       "LSPS request types — wire with LSP batch",
-	"LSPS1GetOrder":      "LSPS request types — wire with LSP batch",
-	"LSPS2GetInfo":       "LSPS request types — wire with LSP batch",
-	"LSPS5ListWebhooks":  "LSPS request types — wire with LSP batch",
-	"LSPS5SetWebhook":    "LSPS request types — wire with LSP batch",
-	"LSPS5RemoveWebhook": "LSPS request types — wire with LSP batch",
-	"ListListings":       "returns listing.View — needs output shaping",
+	"SubmitCircleMemberRequest": "excluded by design: it takes a member-signed join event — an assistant must never forge or relay a member's signature",
+	"LSPS5SetWebhook": "excluded: replaces this hub's single hub-wide LSPS5 registration (keyed by app name) with a caller-chosen URL — " +
+		"it would redirect the LSP's order/payment notifications to an arbitrary endpoint (exfiltration/SSRF-by-proxy) and silently " +
+		"stop order-state updates; the hub registers its own webhook when it orders a channel, so there is no operator need",
+	"LSPS5RemoveWebhook": "excluded: removes this hub's hub-wide LSPS5 registration (the URL argument is ignored), silently stopping " +
+		"order-state notifications for every order; no operator need through an assistant",
 }
 
 type (

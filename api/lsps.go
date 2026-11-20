@@ -103,6 +103,9 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 
 	logger.Logger.Info().Interface("order_params", orderParams).Msg("Creating LSPS1 order")
 
+	if api.svc.GetLiquidityManager() == nil {
+		return nil, ErrLiquidityNotRunning
+	}
 	event, err := api.svc.GetLiquidityManager().CreateLSPS1Order(ctx, req.LSPPubkey, orderParams, req.RefundOnchainAddress, req.AcceptedTerms)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Interface("params", orderParams).Msg("LSPS1 CreateOrder failed")
@@ -150,6 +153,9 @@ func (api *api) LSPS1GetOrder(ctx context.Context, req *LSPS1GetOrderRequest) (i
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
+	if api.svc.GetLiquidityManager() == nil {
+		return nil, ErrLiquidityNotRunning
+	}
 	event, err := api.svc.GetLiquidityManager().GetLSPS1Order(ctx, req.LSPPubkey, req.OrderID)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Str("order_id", req.OrderID).Msg("LSPS1 GetOrder failed")
@@ -292,6 +298,9 @@ func (api *api) LSPS5ListWebhooks(ctx context.Context, req *LSPS5ListWebhooksReq
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
+	if api.svc.GetLiquidityManager() == nil {
+		return nil, ErrLiquidityNotRunning
+	}
 	client := api.svc.GetLiquidityManager().LSPS5Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS5 client not available")
@@ -311,6 +320,9 @@ func (api *api) LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookR
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
+	if api.svc.GetLiquidityManager() == nil {
+		return nil, ErrLiquidityNotRunning
+	}
 	client := api.svc.GetLiquidityManager().LSPS5Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS5 client not available")
@@ -464,3 +476,7 @@ func (api *api) LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, 
 
 	return response, nil
 }
+
+// ErrLiquidityNotRunning is returned instead of panicking when an LSP call
+// arrives before the liquidity manager has started (or when it is disabled).
+var ErrLiquidityNotRunning = errors.New("the liquidity (LSP) service is not running")

@@ -195,3 +195,51 @@ func TestSessionBoundToToken(t *testing.T) {
 		t.Errorf("token B drove session A: HTTP %d %s", r.StatusCode, body)
 	}
 }
+
+// TestSessionCapAndServerCache (re-audit N4): a connection cannot hold more
+// than maxSessionsPerConn sessions; another connection is unaffected; and the
+// per-connection server is built once, not on every request.
+func TestSessionCapAndServerCache(t *testing.T) {
+	auth := &fakeAuth{byToken: map[string]*Conn{
+		"a": {AppID: 1, Scopes: []string{GroupNode.Scope(ModeRead)}},
+		"b": {AppID: 2, Scopes: []string{GroupNode.Scope(ModeRead)}},
+	}}
+	s := NewServer(testAPI{}, auth)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"x","version":"0"}}}`
+	open := func(tok string) int {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader(initBody))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for i := 0; i < maxSessionsPerConn; i++ {
+		if c := open("a"); c != http.StatusOK {
+			t.Fatalf("session %d refused below cap: %d", i, c)
+		}
+	}
+	if c := open("a"); c != http.StatusTooManyRequests {
+		t.Errorf("session over cap: status %d, want 429", c)
+	}
+	if c := open("b"); c != http.StatusOK {
+		t.Errorf("another connection was blocked: %d", c)
+	}
+	s.srvMu.Lock()
+	first := s.srvByApp[1].srv
+	s.srvMu.Unlock()
+	open("a")
+	s.srvMu.Lock()
+	same := s.srvByApp[1].srv == first
+	s.srvMu.Unlock()
+	if !same {
+		t.Error("per-connection server rebuilt across requests")
+	}
+}

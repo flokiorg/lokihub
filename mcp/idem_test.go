@@ -87,3 +87,53 @@ func TestIdemConflictAndNoErrorCache(t *testing.T) {
 		t.Errorf("idempotency store grew to %d (> cap %d)", n, idemMaxEntries)
 	}
 }
+
+// TestIdemPerAppIsolation (re-audit N3): one connection flooding new keys can
+// never evict another connection's settled record (which would re-open a
+// retry double-execution for it), and in-flight entries are never evicted.
+func TestIdemPerAppIsolation(t *testing.T) {
+	s := NewIdemStore()
+	h := ArgsHash("x")
+	var runs int32
+	pay := func() (any, error) { atomic.AddInt32(&runs, 1); return "paid", nil }
+	if _, err := s.Do(1, "send_payment", "victim-key", h, pay); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < idemMaxPerApp*3; i++ {
+		_, _ = s.Do(2, "set_node_alias", strconv.Itoa(i), h, func() (any, error) { return nil, nil })
+	}
+	// The victim's retry must hit its cached record, not run again.
+	if _, err := s.Do(1, "send_payment", "victim-key", h, pay); err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&runs); got != 1 {
+		t.Fatalf("flood by another connection evicted the record: executions = %d", got)
+	}
+
+	// An in-flight entry survives eviction pressure from its own connection.
+	release := make(chan struct{})
+	started := make(chan struct{})
+	var slow int32
+	go func() {
+		_, _ = s.Do(3, "send_payment", "slow", h, func() (any, error) {
+			close(started)
+			<-release
+			atomic.AddInt32(&slow, 1)
+			return "ok", nil
+		})
+	}()
+	<-started
+	for i := 0; i < idemMaxPerApp+10; i++ {
+		_, _ = s.Do(3, "t", strconv.Itoa(i), h, func() (any, error) { return nil, nil })
+	}
+	done := make(chan struct{})
+	go func() {
+		_, _ = s.Do(3, "send_payment", "slow", h, func() (any, error) { atomic.AddInt32(&slow, 1); return "ok", nil })
+		close(done)
+	}()
+	close(release)
+	<-done
+	if got := atomic.LoadInt32(&slow); got != 1 {
+		t.Fatalf("in-flight entry was evicted and re-executed: %d", got)
+	}
+}

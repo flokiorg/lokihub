@@ -1,8 +1,10 @@
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import {
+  ActivityIcon,
   BotIcon,
   CirclePlusIcon,
+  LaptopIcon,
   PauseIcon,
   ShieldAlertIcon,
 } from "lucide-react";
@@ -19,9 +21,11 @@ import {
   CardHeader,
   CardTitle,
 } from "src/components/ui/card";
+import { Input } from "src/components/ui/input";
 import { Switch } from "src/components/ui/switch";
 import {
   AI_GROUPS,
+  AIActivity,
   AIAssistant,
   useAIAssistants,
 } from "src/hooks/useAIAssistants";
@@ -40,6 +44,7 @@ export default function AIAssistants() {
     assistants,
     pending,
     controls,
+    activity,
     loading,
     revoke,
     decide,
@@ -82,6 +87,21 @@ export default function AIAssistants() {
           />
         </CardHeader>
       </Card>
+
+      {controls.loopbackSupported && (
+        <LocalAccessCard
+          port={controls.loopbackPort ?? 0}
+          onApply={(port) =>
+            run(
+              () => updateControls({ loopbackPort: port }),
+              t(
+                "assistants.localFailed",
+                "Could not change local access (is the port already in use?)"
+              )
+            )
+          }
+        />
+      )}
 
       {pending.length > 0 && (
         <Card className="border-warning-foreground/40">
@@ -177,7 +197,105 @@ export default function AIAssistants() {
           }
         />
       ))}
+
+      {assistants.length > 0 && (
+        <ActivityCard
+          activity={activity}
+          nameOf={(id) =>
+            assistants.find((a) => a.appId === id)?.name ??
+            t("assistants.unknown", "An assistant")
+          }
+        />
+      )}
     </div>
+  );
+}
+
+const OUTCOME_VARIANT: Record<
+  AIActivity["outcome"],
+  "positive" | "destructive" | "warning" | "secondary"
+> = {
+  done: "positive",
+  failed: "destructive",
+  needs_confirmation: "secondary",
+  pending_approval: "warning",
+  executing: "secondary",
+  denied: "destructive",
+  expired: "secondary",
+};
+
+// ActivityCard is the owner's record of what assistants did, newest first.
+function ActivityCard({
+  activity,
+  nameOf,
+}: {
+  activity: AIActivity[];
+  nameOf: (appId: number) => string;
+}) {
+  const { t } = useTranslation("apps");
+  const outcomeLabel: Record<AIActivity["outcome"], string> = {
+    done: t("assistants.outcome.done", "Done"),
+    failed: t("assistants.outcome.failed", "Refused or failed"),
+    needs_confirmation: t(
+      "assistants.outcome.needsConfirmation",
+      "Previewed, not confirmed"
+    ),
+    pending_approval: t(
+      "assistants.outcome.pendingApproval",
+      "Waiting for you"
+    ),
+    executing: t("assistants.outcome.executing", "Running"),
+    denied: t("assistants.outcome.denied", "Denied"),
+    expired: t("assistants.outcome.expired", "Expired"),
+  };
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ActivityIcon className="w-4 h-4" />
+          {t("assistants.activityTitle", "Recent activity")}
+        </CardTitle>
+        <CardDescription>
+          {t(
+            "assistants.activityDescription",
+            "Everything your assistants did or tried, newest first. Tool inputs are never recorded."
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {activity.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t("assistants.activityEmpty", "Nothing yet.")}
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-border">
+            {activity.map((e, i) => (
+              <li
+                key={`${e.time}-${i}`}
+                className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0"
+              >
+                <div className="flex min-w-0 flex-col">
+                  <span className="font-medium">
+                    {nameOf(e.appId)} · <code>{e.tool}</code>
+                  </span>
+                  {e.detail && (
+                    <span className="truncate text-sm text-muted-foreground">
+                      {e.detail}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Badge variant={OUTCOME_VARIANT[e.outcome] ?? "secondary"}>
+                    {outcomeLabel[e.outcome] ?? e.outcome}
+                  </Badge>
+                  {dayjs(e.time).fromNow()}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -247,6 +365,87 @@ function AssistantRow({
           </Button>
         )}
       </CardContent>
+    </Card>
+  );
+}
+
+const DEFAULT_LOCAL_PORT = 5607;
+
+// LocalAccessCard is the desktop-only switch for serving assistants that run on
+// this computer (127.0.0.1). Off by default; every request still needs the
+// assistant's own connection key.
+function LocalAccessCard({
+  port,
+  onApply,
+}: {
+  port: number;
+  onApply: (port: number) => void;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = React.useState(String(port || DEFAULT_LOCAL_PORT));
+  React.useEffect(() => {
+    if (port) {
+      setDraft(String(port));
+    }
+  }, [port]);
+  const enabled = port > 0;
+  const parsed = Number(draft);
+  const valid = Number.isInteger(parsed) && parsed >= 1024 && parsed <= 65535;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <CardTitle className="flex items-center gap-2">
+            <LaptopIcon className="w-4 h-4" />
+            {t("assistants.localTitle", "Assistants on this computer")}
+          </CardTitle>
+          <CardDescription>
+            {enabled
+              ? t("assistants.localOn", {
+                  defaultValue:
+                    "Assistants on this computer can connect at http://127.0.0.1:{{port}}/mcp with their connection key.",
+                  port,
+                })
+              : t(
+                  "assistants.localOff",
+                  "Off. Turn on to let an assistant running on this computer connect. Nothing outside this computer can reach it."
+                )}
+          </CardDescription>
+        </div>
+        <Switch
+          checked={enabled}
+          disabled={!enabled && !valid}
+          aria-label={t("assistants.localTitle", "Assistants on this computer")}
+          onCheckedChange={(v) => onApply(v ? parsed : 0)}
+        />
+      </CardHeader>
+      {!enabled && (
+        <CardContent className="flex items-center gap-3">
+          <label
+            htmlFor="local-port"
+            className="text-sm text-muted-foreground shrink-0"
+          >
+            {t("assistants.localPort", "Port")}
+          </label>
+          <Input
+            id="local-port"
+            inputMode="numeric"
+            className="max-w-32"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+            aria-invalid={!valid}
+          />
+          {!valid && (
+            <span className="text-sm text-destructive">
+              {t(
+                "assistants.localPortInvalid",
+                "Use a port from 1024 to 65535"
+              )}
+            </span>
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }

@@ -157,7 +157,12 @@ func TestConfirmStoreBinding(t *testing.T) {
 // every non-approval one is two-step (no effect on the first call).
 func TestMoneyToolsAllWarnAndConfirm(t *testing.T) {
 	twoStep := []string{"send_payment", "transfer", "delete_app", "delete_app_confirmed",
-		"delete_cash_wallet", "delete_cash_claim", "delete_circle_child", "delete_circle_hub"}
+		"delete_cash_wallet", "delete_cash_claim", "delete_circle_child", "delete_circle_hub",
+		// Formerly deferred: LSP purchases and trust, cash minting, selling
+		// terms, and irreversible public publishes under the node identity.
+		"create_cash_wallet", "lsp_order_channel", "lsp_buy_jit_channel", "set_lsp_trust", "put_order_terms",
+		"create_listing", "update_listing", "listing_action",
+		"publish_node_profile", "publish_node_note", "publish_circle_follow_set"}
 	ownerApproved := []string{"redeem_onchain_funds", "open_channel", "close_channel"}
 
 	s := NewServer(testAPI{}, &fakeAuth{})
