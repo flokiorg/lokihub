@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"github.com/flokiorg/lokihub/events"
 	"time"
 
 	"github.com/flokiorg/lokihub/db"
@@ -56,6 +57,9 @@ func (httpSvc *HttpService) registerMCP(e *echo.Echo) {
 	srv.SetControls(&cfgControls{cfg: httpSvc.cfg})
 	srv.Mount(e)
 	httpSvc.mcpSrv = srv
+	if httpSvc.eventPublisher != nil {
+		httpSvc.eventPublisher.RegisterSubscriber(&mcpAppDeleted{srv: srv})
+	}
 	httpSvc.registerMCPOAuth(e)
 	logger.Logger.Info().Msg("mcp: /mcp endpoint mounted")
 }
@@ -85,3 +89,29 @@ func (httpSvc *HttpService) mcpAppCreator() mcp.AppCreator {
 // MCPServer returns the hub's MCP server (nil before RegisterSharedRoutes). The
 // desktop app uses it to serve the opt-in loopback listener.
 func (httpSvc *HttpService) MCPServer() *mcp.Server { return httpSvc.mcpSrv }
+
+// mcpAppDeleted clears the MCP layer's per-connection state when any app is
+// deleted (owner revoke, assistant self-revoke, cascade).
+type mcpAppDeleted struct{ srv *mcp.Server }
+
+func (m *mcpAppDeleted) ConsumeEvent(_ context.Context, e *events.Event, _ map[string]interface{}) {
+	if e == nil || e.Event != "nwc_app_deleted" {
+		return
+	}
+	props, ok := e.Properties.(map[string]interface{})
+	if !ok {
+		return
+	}
+	switch id := props["id"].(type) {
+	case uint:
+		m.srv.ForgetApp(id)
+	case int:
+		if id > 0 {
+			m.srv.ForgetApp(uint(id))
+		}
+	case float64:
+		if id > 0 {
+			m.srv.ForgetApp(uint(id))
+		}
+	}
+}

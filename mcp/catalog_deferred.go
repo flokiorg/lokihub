@@ -13,11 +13,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/bits"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -71,6 +73,10 @@ func cleanText(s string, maxRunes int, multiline bool) bool {
 			return false
 		case r == 0x061c, r == 0x200e, r == 0x200f, r == 0x2028, r == 0x2029,
 			r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0xfeff:
+			return false
+		case unicode.Is(unicode.Cf, r), unicode.Is(unicode.Co, r), r == 0xfffd:
+			// every other format char (zero-width joiners/spaces, soft hyphen,
+			// tags…), private-use and replacement chars: invisible or spoofable
 			return false
 		}
 	}
@@ -326,8 +332,16 @@ func mulDiv(a, b uint64) (overflow bool, ceil uint64) {
 	if b != 0 && a > math.MaxUint64/b {
 		return true, 0
 	}
-	p := a * b
-	return false, (p + 999_999) / 1_000_000
+	hi, lo := bits.Mul64(a, b)
+	if hi != 0 {
+		return true, 0
+	}
+	// Ceil division without the wrap-around of (lo + 999_999) (pentest D PD-1).
+	q := lo / 1_000_000
+	if lo%1_000_000 != 0 {
+		q++
+	}
+	return false, q
 }
 
 // ---------------------------------------------------------------------------
@@ -820,8 +834,22 @@ func describeKind(name string, k *nipCO.KindTerms) string {
 	if k == nil {
 		return name + ": not sold"
 	}
-	return fmt.Sprintf("%s: %s to %s loki per order, fee %s loki + %d ppm, payment window %ds, %d confirmation tier(s)",
-		name, formatLoki(k.MinMillis), formatLoki(k.MaxMillis), formatLoki(k.FeeBase), k.FeePpm, k.Window, len(k.Confirmations))
+	out := fmt.Sprintf("%s: %s to %s loki per order, fee %s loki + %d ppm, payment window %ds",
+		name, formatLoki(k.MinMillis), formatLoki(k.MaxMillis), formatLoki(k.FeeBase), k.FeePpm, k.Window)
+	if len(k.Confirmations) > 0 {
+		// Every tier is shown in full: fewer confirmations = cash minted on a
+		// payment that can still be reversed, so it must be visible (pentest D PD-2).
+		tiers := make([]string, 0, len(k.Confirmations))
+		for _, t := range k.Confirmations {
+			if t.UpToMillis != nil {
+				tiers = append(tiers, fmt.Sprintf("up to %s loki: %d confirmation(s)", formatLoki(*t.UpToMillis), t.N))
+			} else {
+				tiers = append(tiers, fmt.Sprintf("above that: %d confirmation(s)", t.N))
+			}
+		}
+		out += "; cash is minted after " + strings.Join(tiers, ", ")
+	}
+	return out
 }
 
 func termsDetails(prefix string, s *cashorder.Settings) []PreviewDetail {

@@ -13,6 +13,9 @@ import (
 
 const (
 	cfgKeyMCPPaused = "MCPPaused"
+	// cfgKeyMCPApprovalLimit: above this many loki, an assistant's payment or
+	// transfer waits for the owner's approval (D22). "" = the default.
+	cfgKeyMCPApprovalLimit = "MCPApprovalLimitLoki"
 	// CfgKeyMCPLoopbackPort is the desktop owner's setting for the local MCP
 	// listener on 127.0.0.1 ("" / "0" = off, the default).
 	CfgKeyMCPLoopbackPort = "MCPLoopbackPort"
@@ -38,6 +41,23 @@ func (httpSvc *HttpService) SetMCPLoopbackController(c MCPLoopbackController) {
 // (fail closed).
 type cfgControls struct{ cfg config.Config }
 
+// ApprovalLimitMloki implements mcp.ApprovalLimiter. A read error falls back
+// to 0 (every payment needs approval: fail closed).
+func (c *cfgControls) ApprovalLimitMloki() uint64 {
+	v, err := c.cfg.Get(cfgKeyMCPApprovalLimit, "")
+	if err != nil {
+		return 0
+	}
+	if v == "" {
+		return mcp.DefaultApprovalLimitMloki
+	}
+	n, err := strconv.ParseUint(v, 10, 64)
+	if err != nil || n > 1<<40 {
+		return 0
+	}
+	return n * 1000
+}
+
 func (c *cfgControls) Paused() bool {
 	v, err := c.cfg.Get(cfgKeyMCPPaused, "")
 	if err != nil {
@@ -50,6 +70,8 @@ type mcpControlsBody struct {
 	Paused            *bool `json:"paused,omitempty"`
 	LoopbackSupported *bool `json:"loopbackSupported,omitempty"`
 	LoopbackPort      *int  `json:"loopbackPort,omitempty"`
+	// ApprovalLimitLoki: payments/transfers above it need owner approval.
+	ApprovalLimitLoki *uint64 `json:"approvalLimitLoki,omitempty"`
 }
 
 type mcpPendingView struct {
@@ -119,8 +141,10 @@ func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 		return c.JSON(http.StatusOK, httpSvc.mcpSrv.Activity().List(uint(appID), limit))
 	})
 	g.GET("/mcp/controls", func(c echo.Context) error {
-		paused := (&cfgControls{cfg: httpSvc.cfg}).Paused()
-		body := mcpControlsBody{Paused: &paused}
+		ctl := &cfgControls{cfg: httpSvc.cfg}
+		paused := ctl.Paused()
+		limit := ctl.ApprovalLimitMloki() / 1000
+		body := mcpControlsBody{Paused: &paused, ApprovalLimitLoki: &limit}
 		if httpSvc.mcpLoopback != nil {
 			yes, port := true, httpSvc.mcpLoopback.Port()
 			body.LoopbackSupported, body.LoopbackPort = &yes, &port
@@ -138,6 +162,14 @@ func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 				v = "1"
 			}
 			if err := httpSvc.cfg.SetUpdate(cfgKeyMCPPaused, v, ""); err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to save")
+			}
+		}
+		if body.ApprovalLimitLoki != nil {
+			if *body.ApprovalLimitLoki > 1_000_000_000 {
+				return echo.NewHTTPError(http.StatusBadRequest, "limit too large")
+			}
+			if err := httpSvc.cfg.SetUpdate(cfgKeyMCPApprovalLimit, strconv.FormatUint(*body.ApprovalLimitLoki, 10), ""); err != nil {
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to save")
 			}
 		}

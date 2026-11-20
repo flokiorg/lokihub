@@ -434,8 +434,28 @@ func TestDeferredConfirmTools(t *testing.T) {
 			}
 			args["confirm_code"] = st.ConfirmCode
 			r = callTool(t, cs, c.tool, args)
-			if r.IsError || stepOf(t, r.StructuredContent).Status != "executed" {
+			if r.IsError {
 				t.Fatalf("confirm failed: %s", resultText(r))
+			}
+			if cst := stepOf(t, r.StructuredContent); cst.Status == "pending_approval" {
+				// D22: the owner approves third-party/money-handing actions.
+				if !alwaysOwner[c.tool] {
+					t.Fatalf("%s queued for the owner but is not owner-gated", c.tool)
+				}
+				if rec.n(c.method) != 0 {
+					t.Fatalf("%s executed before owner approval", c.method)
+				}
+				if _, err := s.Pending().Approve(cst.ActionID); err != nil {
+					t.Fatalf("owner approve: %v", err)
+				}
+				r = callTool(t, cs, c.tool, args) // retry reports the outcome
+				if got := stepOf(t, r.StructuredContent).Status; got != "executed" {
+					t.Fatalf("after approval status = %s", got)
+				}
+			} else if cst.Status != "executed" {
+				t.Fatalf("confirm status = %s", cst.Status)
+			} else if alwaysOwner[c.tool] {
+				t.Fatalf("%s executed without the owner", c.tool)
 			}
 			if out := scJSON(t, r.StructuredContent); strings.Contains(out, "SECRET") {
 				t.Errorf("result leaks a secret: %s", out)

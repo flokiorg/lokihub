@@ -7,16 +7,18 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// TestOAuthClientIP (re-audit N2): behind the trusted local proxy the limiter
-// keys on the proxy-appended last XFF hop; a direct public peer cannot spoof it.
+// TestOAuthClientIP (re-audit N2, pentest D PD-7): forwarded headers count only
+// from a trusted proxy (default loopback); anyone else is keyed by TCP peer.
 func TestOAuthClientIP(t *testing.T) {
 	e := echo.New()
+	// Default trust = loopback only (the same-host proxy).
 	cases := []struct{ remote, xff, want string }{
-		{"172.17.0.5:1234", "1.2.3.4", "1.2.3.4"},          // via proxy
-		{"172.17.0.5:1234", "9.9.9.9, 1.2.3.4", "1.2.3.4"}, // client-forged first hop ignored
-		{"127.0.0.1:1234", "", "127.0.0.1"},                // no proxy header
-		{"8.8.8.8:1234", "1.2.3.4", "8.8.8.8"},             // public peer: XFF untrusted
-		{"172.17.0.5:1234", "not-an-ip", "172.17.0.5"},     // garbage hop
+		{"127.0.0.1:1234", "1.2.3.4", "1.2.3.4"},          // via trusted local proxy
+		{"127.0.0.1:1234", "9.9.9.9, 1.2.3.4", "1.2.3.4"}, // client-forged first hop ignored
+		{"127.0.0.1:1234", "", "127.0.0.1"},               // no proxy header
+		{"172.17.0.5:1234", "1.2.3.4", "172.17.0.5"},      // private but NOT a listed proxy: XFF ignored
+		{"8.8.8.8:1234", "1.2.3.4", "8.8.8.8"},            // public peer: XFF untrusted
+		{"127.0.0.1:1234", "not-an-ip", "127.0.0.1"},      // garbage hop
 	}
 	for _, c := range cases {
 		req := httptest.NewRequest("POST", "/oauth/register", nil)

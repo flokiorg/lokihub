@@ -99,7 +99,14 @@ func (s *IdemStore) Do(appID uint, tool, key string, args [32]byte, fn func() (a
 	}
 	res, err := fn()
 	if err != nil {
-		return nil, err // not cached: a transient failure may be retried with the same key
+		// Not cached, and the key is released if nobody else is using it, so a
+		// failed attempt never pins the key to its arguments (pentest F F-6).
+		s.mu.Lock()
+		if s.m[k] == e && !e.done && e.inflight <= 1 {
+			s.delLocked(k)
+		}
+		s.mu.Unlock()
+		return nil, err
 	}
 	e.done, e.result = true, res
 	return res, nil

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -175,57 +176,75 @@ func TestOAuthConsentFlow(t *testing.T) {
 	}
 }
 
-// TestOAuthStoreBounds (audit MED-3): per-client consent cap; idle clients are
-// evicted when the registry is full instead of locking out new registrations.
+// TestOAuthStoreBounds (audit MED-3, pentest A F1/F2): the per-client consent
+// cap replaces the oldest instead of locking the client out; a registration
+// flood never locks a newcomer out; one IP cannot hold more than
+// maxUnprovenPerIP unproven registrations; owner-approved (proven) clients are
+// never evicted by a flood; hostile names and redirect URIs are refused.
 func TestOAuthStoreBounds(t *testing.T) {
 	s := NewOAuthStore()
 	c, _ := s.Register("a", []string{"https://client.example/cb"})
 	res := "https://hub.example/mcp"
+	first, _ := s.BeginConsent(authReq(c), res)
 	for i := 0; i < maxConsentsPerCli; i++ {
 		if _, err := s.BeginConsent(authReq(c), res); err != nil {
-			t.Fatalf("consent %d refused below cap: %v", i, err)
+			t.Fatalf("consent %d refused: %v", i, err)
 		}
 	}
-	if _, err := s.BeginConsent(authReq(c), res); err == nil {
-		t.Error("per-client consent cap not enforced")
+	if _, err := s.Consent(first); err == nil {
+		t.Error("oldest consent for the client was not replaced")
+	}
+	n := 0
+	for _, cs := range s.consents {
+		if cs.req.ClientID == c.ID {
+			n++
+		}
+	}
+	if n > maxConsentsPerCli {
+		t.Errorf("client holds %d consents, cap %d", n, maxConsentsPerCli)
 	}
 
+	// One flooding IP keeps at most maxUnprovenPerIP registrations.
 	s2 := NewOAuthStore()
-	for i := 0; i < maxOAuthClients; i++ {
-		if _, err := s2.Register("squatter", []string{"https://x.example/cb"}); err != nil {
+	for i := 0; i < 100; i++ {
+		if _, err := s2.RegisterFrom("squat", []string{"https://x.example/cb"}, "6.6.6.6"); err != nil {
 			t.Fatalf("register %d: %v", i, err)
 		}
 	}
-	if _, err := s2.Register("legit", []string{"https://y.example/cb"}); err == nil {
-		t.Error("registry full of fresh clients should still refuse")
-	}
-	// Squatters never completed a token exchange: evictable after the short
-	// grace period even though they keep calling /authorize.
-	for _, cl := range s2.clients {
-		_, _ = s2.BeginConsent(AuthorizeRequest{ClientID: cl.ID, RedirectURI: cl.RedirectURIs[0], State: "s",
-			Challenge: pkceChallenge(testVerifier), ChallengeMethod: "S256", Resource: res}, res)
-		break
-	}
-	s2.now = func() time.Time { return time.Now().Add(unprovenClientTTL + time.Minute) }
-	if _, err := s2.Register("legit", []string{"https://y.example/cb"}); err != nil {
-		t.Errorf("unproven squatters not evicted: %v", err)
+	if len(s2.clients) > maxUnprovenPerIP {
+		t.Errorf("one IP holds %d unproven registrations (cap %d)", len(s2.clients), maxUnprovenPerIP)
 	}
 
-	// A full global consent table evicts the oldest rather than refusing.
+	// Many IPs fill the registry: a newcomer still gets in, and a proven
+	// (owner-approved) client survives the flood.
 	s3 := NewOAuthStore()
-	for i := 0; i < maxConsents; i++ {
-		c, _ := s3.Register("c", []string{"https://z.example/cb"})
-		if _, err := s3.BeginConsent(authReq(c), res); err != nil {
-			t.Fatalf("consent %d: %v", i, err)
-		}
-		if len(s3.clients) >= maxOAuthClients {
-			break
+	proven, _ := s3.Register("trusted", []string{"https://t.example/cb"})
+	proven.lastUsed = time.Now()
+	for i := 0; i < maxOAuthClients*2; i++ {
+		_, _ = s3.RegisterFrom("flood", []string{"https://x.example/cb"}, fmt.Sprintf("10.0.%d.%d", i/250, i%250))
+	}
+	if _, err := s3.RegisterFrom("legit", []string{"https://y.example/cb"}, "1.2.3.4"); err != nil {
+		t.Errorf("newcomer locked out by flood: %v", err)
+	}
+	if _, ok := s3.Client(proven.ID); !ok {
+		t.Error("proven client evicted by a registration flood")
+	}
+	if len(s3.clients) > maxOAuthClients {
+		t.Errorf("registry grew to %d", len(s3.clients))
+	}
+
+	// Hostile names and redirect URIs.
+	for _, name := range []string{"Claude\u202egnp.exe", "Desk assistant\u200b", "a\x00b", "x\nSYSTEM"} {
+		if _, err := s.Register(name, []string{"https://ok.example/cb"}); err == nil {
+			t.Errorf("hostile client_name accepted: %q", name)
 		}
 	}
-	legit, _ := s3.Register("legit", []string{"https://legit.example/cb"})
-	if legit != nil {
-		if _, err := s3.BeginConsent(authReq(legit), res); err != nil {
-			t.Errorf("legitimate authorize refused under flood: %v", err)
+	if _, err := s.Register(strings.Repeat("é", 60), []string{"https://ok.example/cb"}); err != nil {
+		t.Errorf("60-char accented name refused (limit must count characters): %v", err)
+	}
+	for _, u := range []string{"https://user:pw@evil.example/cb", "https://evil.example/cb#", "https://\u0430nthropic.com/cb", "http://127.0.0.1:99999/cb", "https://trusted.example@evil.example/cb"} {
+		if _, err := s.Register("ok", []string{u}); err == nil {
+			t.Errorf("hostile redirect_uri accepted: %q", u)
 		}
 	}
 }

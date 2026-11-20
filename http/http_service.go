@@ -151,7 +151,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 		// needs to reach an arbitrary image host. Keep this in sync with the
 		// dev CSP meta tag in frontend/vite.config.ts, which has no shared
 		// source with this header.
-		ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: ws://wails.localhost:*; img-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self';",
+		ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: ws://wails.localhost:*; img-src 'self' data:; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self';",
 		ReferrerPolicy:        "no-referrer",
 	}))
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
@@ -583,7 +583,10 @@ func (httpSvc *HttpService) unlockHandler(c echo.Context) error {
 // unlockLimiterIdentifier is the unlock rate limiter's key: the connection's
 // own peer address, never a forwarded header.
 func unlockLimiterIdentifier(c echo.Context) (string, error) {
-	return echo.ExtractIPDirect()(c.Request()), nil
+	// The real client behind a TRUSTED proxy (pentest F F-3: behind the proxy
+	// every caller used to share one bucket, so a flood locked the owner out),
+	// the TCP peer otherwise — forwarded headers from anyone else are ignored.
+	return clientIP(c), nil
 }
 
 func (httpSvc *HttpService) requireFullAccess(next echo.HandlerFunc) echo.HandlerFunc {

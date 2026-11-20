@@ -50,12 +50,13 @@ type PendingAction struct {
 	Status  PendingStatus
 	Created time.Time
 
-	argsHash [32]byte
-	run      func() (any, error)
-	once     sync.Once
-	result   any
-	err      error
-	done     bool // run finished (guarded by the store mutex)
+	argsHash  [32]byte
+	apiMethod string // re-gated against the connection's CURRENT scopes at approve time
+	run       func() (any, error)
+	once      sync.Once
+	result    any
+	err       error
+	done      bool // run finished (guarded by the store mutex)
 }
 
 // PendingStore queues and resolves irreversible actions. Creation is idempotent
@@ -121,6 +122,15 @@ func (s *PendingStore) CreateOrGetNew(appID uint, tool, key string, args [32]byt
 	s.byID[a.ID] = a
 	s.byKey[k] = a
 	return a, true, nil
+}
+
+// SetMethod records the api.API method a pending action will run.
+func (s *PendingStore) SetMethod(id, apiMethod string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a := s.byID[id]; a != nil && a.apiMethod == "" {
+		a.apiMethod = apiMethod
+	}
 }
 
 // pendingResultFor maps a record to what the assistant is told on a call or
@@ -284,4 +294,13 @@ func (s *PendingStore) ListAll() []PendingSnapshot {
 		out = append(out, a.snapshot())
 	}
 	return out
+}
+
+func (s *PendingStore) method(id string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a := s.byID[id]; a != nil {
+		return a.apiMethod
+	}
+	return ""
 }

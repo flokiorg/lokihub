@@ -147,6 +147,7 @@ func guardedTool[In any](
 		if err != nil {
 			return nil, pendingResult{}, err
 		}
+		s.pending.SetMethod(act.ID, apiMethod)
 		return nil, s.pending.Result(act.ID), nil
 	})
 }
@@ -443,9 +444,27 @@ func (s *Server) ApprovePending(ctx context.Context, id string) (any, error) {
 	if !ok {
 		return nil, ErrNoPending
 	}
-	if _, err := s.authn.Revalidate(ctx, &Conn{AppID: a.AppID}); err != nil {
+	scopes, err := s.authn.Revalidate(ctx, &Conn{AppID: a.AppID})
+	if err != nil {
 		_ = s.pending.Deny(id)
 		return nil, err
 	}
+	// The owner may have narrowed this assistant since it asked: an action it
+	// may no longer request must not run (pentest D PD-3).
+	if c, ok := classify(s.pending.method(id)); !ok || Gate(scopes, c) != nil {
+		_ = s.pending.Deny(id)
+		return nil, ErrRevoked
+	}
 	return s.pending.Approve(id)
+}
+
+// ForgetApp drops everything the MCP layer holds for a deleted connection:
+// its open approval requests (so they no longer show as pending — pentest D
+// PD-4), unredeemed confirmation codes, and its cached per-session server.
+func (s *Server) ForgetApp(appID uint) {
+	s.pending.DropForApp(appID)
+	s.confirms.dropApp(appID)
+	s.srvMu.Lock()
+	delete(s.srvByApp, appID)
+	s.srvMu.Unlock()
 }

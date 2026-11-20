@@ -2,7 +2,6 @@ package http
 
 import (
 	"errors"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -68,7 +67,7 @@ func (httpSvc *HttpService) registerMCPOAuth(e *echo.Echo) {
 		if err := c.Bind(&req); err != nil {
 			return oauthError(c, http.StatusBadRequest, mcp.ErrOAuthInvalidRequest, "invalid JSON")
 		}
-		cl, err := store.Register(req.ClientName, req.RedirectURIs)
+		cl, err := store.RegisterFrom(req.ClientName, req.RedirectURIs, oauthClientIP0(c))
 		if err != nil {
 			return oauthError(c, http.StatusBadRequest, err, err.Error())
 		}
@@ -190,26 +189,8 @@ func (httpSvc *HttpService) registerMCPConsent(g *echo.Group) {
 	})
 }
 
-// oauthClientIP keys the OAuth rate limit by the real client. Behind the local
-// reverse proxy every request arrives from the proxy's address, which would put
-// all clients in ONE bucket (one attacker could starve everyone — re-audit N2).
-// When — and only when — the direct peer is loopback/private (the trusted
-// proxy), the last X-Forwarded-For hop is used: that hop is appended by the
-// proxy itself, so a client cannot forge it.
-func oauthClientIP(c echo.Context) (string, error) {
-	direct := echo.ExtractIPDirect()(c.Request())
-	ip := net.ParseIP(direct)
-	if ip == nil || !(ip.IsLoopback() || ip.IsPrivate()) {
-		return direct, nil
-	}
-	xff := c.Request().Header.Get("X-Forwarded-For")
-	if xff == "" {
-		return direct, nil
-	}
-	hops := strings.Split(xff, ",")
-	last := strings.TrimSpace(hops[len(hops)-1])
-	if net.ParseIP(last) == nil {
-		return direct, nil
-	}
-	return last, nil
-}
+// oauthClientIP keys the OAuth rate limit and registration bound by the real
+// client (see clientIP: forwarded headers count only from a trusted proxy).
+func oauthClientIP(c echo.Context) (string, error) { return clientIP(c), nil }
+
+func oauthClientIP0(c echo.Context) string { ip, _ := oauthClientIP(c); return ip }

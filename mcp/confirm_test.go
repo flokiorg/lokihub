@@ -195,4 +195,58 @@ func TestMoneyToolsAllWarnAndConfirm(t *testing.T) {
 			t.Errorf("%s is not two-step (no confirm_code)", n)
 		}
 	}
+	// Access / publish changes (pentest D PD-10, F F-1, F-6): two-step with an
+	// untrusted-text warning, even though they move no funds.
+	for _, n := range []string{"set_listing_relays", "delete_identity_authority", "replace_circle_allowlist", "remove_circle_member"} {
+		if !strings.Contains(schema[n], "confirm_code") || !strings.Contains(byName[n], "untrusted") {
+			t.Errorf("%s is not two-step with a warning", n)
+		}
+	}
+}
+
+type limitControls struct{ limit uint64 }
+
+func (limitControls) Paused() bool                 { return false }
+func (l limitControls) ApprovalLimitMloki() uint64 { return l.limit }
+
+// TestPaymentAboveLimitNeedsOwner (owner decision D22): below the owner's
+// limit the assistant's confirmation pays; above it the payment waits in the
+// owner's approval queue and runs exactly once on approval.
+func TestPaymentAboveLimitNeedsOwner(t *testing.T) {
+	var pays, transfers int32
+	s := NewServer(payAPI{pays: &pays, transfers: &transfers}, &fakeAuth{})
+	s.SetControls(limitControls{limit: 50_000}) // 50 loki
+	cs, done := connectInMem(t, s, &Conn{AppID: 1, Scopes: []string{GroupWallet.Scope(ModeWrite)}})
+	defer done()
+
+	pay := func(key string, mloki int64) PaymentStep[json.RawMessage] {
+		inv, _ := tests.SignedInvoice(mloki, time.Now(), time.Hour)
+		args := map[string]any{"idempotency_key": key, "invoice": inv}
+		st := stepOf(t, callTool(t, cs, "send_payment", args).StructuredContent)
+		args["confirm_code"] = st.ConfirmCode
+		return stepOf(t, callTool(t, cs, "send_payment", args).StructuredContent)
+	}
+	if st := pay("small", 21_000); st.Status != "executed" || atomic.LoadInt32(&pays) != 1 {
+		t.Fatalf("payment under the limit: %+v pays=%d", st, pays)
+	}
+	big := pay("big", 900_000)
+	if big.Status != "pending_approval" || big.ActionID == "" || atomic.LoadInt32(&pays) != 1 {
+		t.Fatalf("payment over the limit was not held for the owner: %+v pays=%d", big, pays)
+	}
+	if _, err := s.Pending().Approve(big.ActionID); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&pays) != 2 {
+		t.Fatalf("approved payment did not run exactly once: %d", pays)
+	}
+	// The owner sees hub facts only — never the invoice memo.
+	for _, a := range s.Pending().ListAll() {
+		if a.ID == big.ActionID && (!strings.Contains(a.Summary, "900 loki") || strings.Contains(a.Summary, "test")) {
+			t.Errorf("owner summary = %q", a.Summary)
+		}
+	}
+	// Default (no limit configured) is 10,000 loki.
+	if NewServer(testAPI{}, &fakeAuth{}).approvalLimit() != DefaultApprovalLimitMloki {
+		t.Error("default limit not applied")
+	}
 }

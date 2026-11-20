@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // OAuth 2.1 for remote MCP (M5): Lokihub is both the Authorization Server and
@@ -49,7 +51,8 @@ type OAuthClient struct {
 	Name         string
 	RedirectURIs []string
 	CreatedAt    time.Time
-	lastUsed     time.Time // last /authorize; idle clients are evictable
+	lastUsed     time.Time // set on a successful token exchange (owner-approved); zero = unproven
+	fromIP       string    // registering peer (squatting bound)
 }
 
 type consent struct {
@@ -92,8 +95,18 @@ func randToken(n int) string {
 // loopback host (native/desktop clients); no fragment.
 func validRedirectURI(raw string) bool {
 	u, err := url.Parse(raw)
-	if err != nil || u.Fragment != "" || u.Host == "" {
-		return false
+	if err != nil || strings.Contains(raw, "#") || u.Host == "" || u.User != nil {
+		return false // userinfo ("https://trusted.example@evil.example") disguises the real host
+	}
+	if p := u.Port(); p != "" {
+		if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
+			return false
+		}
+	}
+	for _, r := range u.Host {
+		if r > 0x7e || r <= 0x20 {
+			return false // IDN lookalikes must be registered in punycode, which is what the owner sees
+		}
 	}
 	switch u.Scheme {
 	case "https":
@@ -108,9 +121,19 @@ func validRedirectURI(raw string) bool {
 
 // Register performs dynamic client registration.
 func (s *OAuthStore) Register(name string, redirectURIs []string) (*OAuthClient, error) {
+	return s.RegisterFrom(name, redirectURIs, "")
+}
+
+// maxUnprovenPerIP bounds the registrations one peer can hold before any of
+// them is approved by the owner (pentest A F1): beyond it, that peer only
+// replaces its own oldest unproven registration.
+const maxUnprovenPerIP = 10
+
+// RegisterFrom is Register with the registering peer's address.
+func (s *OAuthStore) RegisterFrom(name string, redirectURIs []string, ip string) (*OAuthClient, error) {
 	name = strings.TrimSpace(name)
-	if name == "" || len(name) > maxClientNameLen {
-		return nil, fmt.Errorf("%w: client_name required (max %d chars)", ErrOAuthInvalidRequest, maxClientNameLen)
+	if name == "" || utf8.RuneCountInString(name) > maxClientNameLen || !cleanText(name, maxClientNameLen, false) {
+		return nil, fmt.Errorf("%w: client_name required (max %d chars, no control, invisible or direction-changing characters)", ErrOAuthInvalidRequest, maxClientNameLen)
 	}
 	if len(redirectURIs) == 0 || len(redirectURIs) > maxRedirectURIs {
 		return nil, fmt.Errorf("%w: 1-%d redirect_uris required", ErrOAuthInvalidRequest, maxRedirectURIs)
@@ -122,26 +145,52 @@ func (s *OAuthStore) Register(name string, redirectURIs []string) (*OAuthClient,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.clients) >= maxOAuthClients {
-		// Evict registrations that never (or no longer) start authorizations,
-		// so the registry cannot be locked by squatting (audit MED-3).
-		now := s.now()
+	now := s.now()
+	// Expired registrations go first: unproven ones after a short grace,
+	// proven ones once idle for clientIdleTTL.
+	for id, c := range s.clients {
+		switch {
+		case c.lastUsed.IsZero() && now.Sub(c.CreatedAt) > unprovenClientTTL:
+			delete(s.clients, id)
+		case !c.lastUsed.IsZero() && now.Sub(c.lastUsed) > clientIdleTTL:
+			delete(s.clients, id)
+		}
+	}
+	oldestUnproven := func(ip string, anyIP bool) string {
+		var key string
+		var t time.Time
 		for id, c := range s.clients {
-			// A client that never completed a token exchange (which needs the
-			// owner's approval) is evictable after a short grace period; one
-			// that did is kept until idle for clientIdleTTL (re-audit N2).
-			switch {
-			case c.lastUsed.IsZero() && now.Sub(c.CreatedAt) > unprovenClientTTL:
-				delete(s.clients, id)
-			case !c.lastUsed.IsZero() && now.Sub(c.lastUsed) > clientIdleTTL:
-				delete(s.clients, id)
+			if !c.lastUsed.IsZero() || (!anyIP && c.fromIP != ip) {
+				continue
 			}
+			if key == "" || c.CreatedAt.Before(t) {
+				key, t = id, c.CreatedAt
+			}
+		}
+		return key
+	}
+	if ip != "" {
+		mine := 0
+		for _, c := range s.clients {
+			if c.lastUsed.IsZero() && c.fromIP == ip {
+				mine++
+			}
+		}
+		if mine >= maxUnprovenPerIP {
+			delete(s.clients, oldestUnproven(ip, false))
 		}
 	}
 	if len(s.clients) >= maxOAuthClients {
-		return nil, fmt.Errorf("%w: too many registered clients", ErrOAuthInvalidRequest)
+		// Full: push out the oldest UNPROVEN registration instead of refusing,
+		// so a flood can never lock a newcomer out (pentest A F1). Proven
+		// clients (owner-approved) are never evicted by a flood.
+		k := oldestUnproven("", true)
+		if k == "" {
+			return nil, fmt.Errorf("%w: too many registered clients", ErrOAuthInvalidRequest)
+		}
+		delete(s.clients, k)
 	}
-	c := &OAuthClient{ID: "lkc_" + randToken(18), Name: name, RedirectURIs: append([]string(nil), redirectURIs...), CreatedAt: s.now()}
+	c := &OAuthClient{ID: "lkc_" + randToken(18), Name: name, RedirectURIs: append([]string(nil), redirectURIs...), CreatedAt: now, fromIP: ip}
 	s.clients[c.ID] = c
 	return c, nil
 }
@@ -334,7 +383,17 @@ func (s *OAuthStore) BeginConsent(r AuthorizeRequest, expectedResource string) (
 		}
 	}
 	if perClient >= maxConsentsPerCli {
-		return "", fmt.Errorf("%w: too many pending authorizations for this client", ErrOAuthInvalidRequest)
+		// Replace this client's oldest pending authorization rather than
+		// refusing: knowing a client_id must not let a third party block
+		// that client's sign-in (pentest A F2).
+		var oldestK string
+		var oldest time.Time
+		for k, c := range s.consents {
+			if c.req.ClientID == r.ClientID && (oldestK == "" || c.expires.Before(oldest)) {
+				oldestK, oldest = k, c.expires
+			}
+		}
+		delete(s.consents, oldestK)
 	}
 
 	s.consents[id] = &consent{req: r, resource: expectedResource, expires: now.Add(consentTTL)}
@@ -382,7 +441,7 @@ func (s *OAuthStore) ApproveConsent(id string, appID uint, issuer string) (strin
 	if err != nil {
 		return "", err
 	}
-	return redirectWith(c.req.RedirectURI, url.Values{"code": {code}, "state": {c.req.State}, "iss": {issuer}}), nil
+	return redirectWith(c.req.RedirectURI, url.Values{"code": {code}, "state": {c.req.State}, "iss": {consentIssuer(c, issuer)}}), nil
 }
 
 // DenyConsent returns the client redirect carrying error=access_denied.
@@ -391,7 +450,17 @@ func (s *OAuthStore) DenyConsent(id, issuer string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return redirectWith(c.req.RedirectURI, url.Values{"error": {"access_denied"}, "state": {c.req.State}, "iss": {issuer}}), nil
+	return redirectWith(c.req.RedirectURI, url.Values{"error": {"access_denied"}, "state": {c.req.State}, "iss": {consentIssuer(c, issuer)}}), nil
+}
+
+// consentIssuer is the RFC 9207 iss for a consent: the origin the client
+// discovered at /oauth/authorize (recorded in its resource), NOT the Host of
+// the owner's approve request, which may arrive through a different proxy.
+func consentIssuer(c *consent, fallback string) string {
+	if iss, ok := strings.CutSuffix(c.resource, "/mcp"); ok && iss != "" {
+		return iss
+	}
+	return fallback
 }
 
 func redirectWith(base string, v url.Values) string {

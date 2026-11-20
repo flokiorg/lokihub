@@ -73,3 +73,21 @@ func TestGrantsFromScopesRoundTrip(t *testing.T) {
 		t.Errorf("GrantsFromScopes = %v, want %v", got, in)
 	}
 }
+
+// TestCleanConnectionName (pentest E MED-2): lookalike names collapse to the
+// same string, so the core's duplicate check sees them.
+func TestCleanConnectionName(t *testing.T) {
+	for in, want := range map[string]string{
+		"Desk assistant\u200b":          "Desk assistant",
+		"Desk\u00a0assistant":           "Desk assistant",
+		"  Desk   assistant  ":          "Desk assistant",
+		"Ｄｅｓｋ assistant":                "Desk assistant",
+		"PENTEST \u202egnp.exe\u202c x": "PENTEST gnp.exe x",
+		"a\nb\tc":                       "a b c",
+		"\u200b\u200b":                  "",
+	} {
+		if got := CleanConnectionName(in); got != want {
+			t.Errorf("CleanConnectionName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

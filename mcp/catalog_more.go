@@ -3,6 +3,9 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/flokiorg/lokihub/listing"
+	"strconv"
+	"strings"
 
 	"github.com/flokiorg/lokihub/api"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -48,6 +51,12 @@ type (
 	relaysArgs struct {
 		IdempotencyKey string   `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
 		Relays         []string `json:"relays"`
+		ConfirmCode    string   `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
+	}
+	authorityDelArgs struct {
+		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
+		Pubkey         string `json:"pubkey" jsonschema:"the identity authority's pubkey (64 hex characters)"`
+		ConfirmCode    string `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
 	}
 	idArgs struct {
 		ID uint `json:"id"`
@@ -102,6 +111,7 @@ func (a transferArgs) key() string      { return a.IdempotencyKey }
 func (a updateChannelArgs) key() string { return a.IdempotencyKey }
 func (a stringArgs) key() string        { return a.IdempotencyKey }
 func (a relaysArgs) key() string        { return a.IdempotencyKey }
+func (a authorityDelArgs) key() string  { return a.IdempotencyKey }
 func (a hubChildArgs) key() string      { return a.IdempotencyKey }
 func (a claimArgs) key() string         { return a.IdempotencyKey }
 func (a idWriteArgs) key() string       { return a.IdempotencyKey }
@@ -119,8 +129,17 @@ func (s *Server) registerCatalogMore(srv *mcpsdk.Server, conn *Conn) {
 	readToolIn(s, srv, conn, "GetNetworkGraph", "network_graph",
 		"Network graph info for the given node ids.",
 		func(ctx context.Context, a api.API, in struct {
-			NodeIDs []string `json:"node_ids"`
+			NodeIDs []string `json:"node_ids" jsonschema:"1-50 node ids (66 hex characters)"`
 		}) (anyResult, error) {
+			// Each call walks the whole graph per id: bounded (pentest D PD-8).
+			if len(in.NodeIDs) == 0 || len(in.NodeIDs) > 50 {
+				return anyResult{}, errInvalidArgs("give 1 to 50 node ids")
+			}
+			for _, id := range in.NodeIDs {
+				if !isNodePubkey(id) {
+					return anyResult{}, errInvalidArgs("node ids must be 66 hex characters")
+				}
+			}
 			g, err := a.GetNetworkGraph(ctx, in.NodeIDs)
 			return anyResult{Data: g}, err
 		})
@@ -141,15 +160,25 @@ func (s *Server) registerCatalogMore(srv *mcpsdk.Server, conn *Conn) {
 		"Move funds between the main wallet and sub-wallets.", keyOf[transferArgs],
 		func(in transferArgs) string { return in.ConfirmCode },
 		func(in transferArgs) any { return [3]any{in.FromAppID, in.ToAppID, in.AmountMloki} },
-		func(_ context.Context, _ api.API, in transferArgs) (*PaymentPreview, error) {
+		func(ctx context.Context, a api.API, in transferArgs) (*PaymentPreview, error) {
 			if in.AmountMloki == 0 {
 				return nil, errInvalidArgs("amount_mloki must be greater than zero")
 			}
+			// Name every wallet from the hub's own records — an id the user
+			// cannot recognise is not something they can approve (pentest D PD-5).
+			from, err := s.walletDesc(ctx, a, in.FromAppID)
+			if err != nil {
+				return nil, err
+			}
+			to, err := s.walletDesc(ctx, a, in.ToAppID)
+			if err != nil {
+				return nil, err
+			}
 			return &PaymentPreview{
-				Action:      "Move funds from " + walletLabel(in.FromAppID) + " to " + walletLabel(in.ToAppID),
+				Action:      "Move funds from " + from + " to " + to,
 				AmountLoki:  formatLoki(in.AmountMloki),
 				AmountMloki: in.AmountMloki,
-				Recipient:   walletLabel(in.ToAppID),
+				Recipient:   to,
 			}, nil
 		},
 		func(ctx context.Context, a api.API, in transferArgs) (okResult, error) {
@@ -173,8 +202,33 @@ func (s *Server) registerCatalogMore(srv *mcpsdk.Server, conn *Conn) {
 		})
 
 	// Listings & discoverability.
-	writeTool(s, srv, conn, "SetListingRelays", "set_listing_relays",
-		"Set the relays listings are published to.", keyOf[relaysArgs],
+	// The node signs and publishes its relay list (NIP-65) on change, and every
+	// listing is republished there: a public, identity-level action (pentest F
+	// F-1). Two-step, and only public wss:// relays (no SSRF into the LAN).
+	confirmToolWarn(s, srv, conn, "SetListingRelays", "set_listing_relays",
+		"Set the relays listings are published to. The node publishes its new relay list publicly.", publishWarning, keyOf[relaysArgs],
+		func(in relaysArgs) string { return in.ConfirmCode },
+		func(in relaysArgs) any { return in.Relays },
+		func(_ context.Context, a api.API, in relaysArgs) (*PaymentPreview, error) {
+			if len(in.Relays) == 0 || len(in.Relays) > 10 {
+				return nil, errInvalidArgs("give 1 to 10 relays")
+			}
+			for _, r := range in.Relays {
+				if !listing.IsPublicRelay(r) {
+					return nil, errInvalidArgs("relays must be public wss:// URLs (no local or private addresses): " + strconv.QuoteToASCII(r))
+				}
+			}
+			cur := a.GetListingRelays()
+			current := "(default)"
+			if cur != nil && len(cur.Configured) > 0 {
+				current = strings.Join(cur.Configured, ", ")
+			}
+			return &PaymentPreview{
+				Action:    "Replace the node's listing relays and publish the new relay list",
+				Recipient: strings.Join(in.Relays, ", "),
+				Details:   []PreviewDetail{{Label: "current relays", Value: current}, {Label: "new relays", Value: strings.Join(in.Relays, ", ")}},
+			}, nil
+		},
 		func(ctx context.Context, a api.API, in relaysArgs) (*api.ListingRelaysResponse, error) {
 			return a.SetListingRelays(ctx, in.Relays)
 		})
@@ -218,10 +272,27 @@ func (s *Server) registerCatalogMore(srv *mcpsdk.Server, conn *Conn) {
 		func(in claimArgs) any { return [3]uint{in.HubAppID, in.WalletAppID, in.ClaimID} },
 		func(ctx context.Context, a api.API, in claimArgs) (*PaymentPreview, error) {
 			p, err := s.appFundsPreview(ctx, a, in.WalletAppID, fmt.Sprintf("Take back unclaimed cash slice #%d from wallet", in.ClaimID), fmt.Sprintf("cash hub #%d — the slice's recipient can no longer claim it", in.HubAppID))
-			if p != nil {
-				p.AmountLoki, p.AmountMloki = "", 0 // the slice amount, not the whole wallet's balance
+			if err != nil {
+				return nil, err
 			}
-			return p, err
+			// Show the slice's own amount and recipient (pentest D PD-6).
+			rows, err := a.GetCashWalletRecipients(in.WalletAppID)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range rows {
+				if r.ID != in.ClaimID {
+					continue
+				}
+				amt := uint64(0)
+				if r.AmountMloki > 0 {
+					amt = uint64(r.AmountMloki)
+				}
+				p.AmountMloki, p.AmountLoki = amt, formatLoki(amt)
+				p.Details = append(p.Details, PreviewDetail{Label: "slice recipient", Value: r.IdentityType + " " + r.IdentityValue})
+				return p, nil
+			}
+			return nil, errInvalidArgs(fmt.Sprintf("cash slice #%d not found in wallet #%d", in.ClaimID, in.WalletAppID))
 		},
 		func(_ context.Context, a api.API, in claimArgs) (okResult, error) {
 			return okResult{OK: true}, a.DeleteCashClaim(in.HubAppID, in.WalletAppID, in.ClaimID)
@@ -253,10 +324,30 @@ func (s *Server) registerCatalogMore(srv *mcpsdk.Server, conn *Conn) {
 		func(_ context.Context, a api.API, in authorityArgs) (*api.IdentityAuthorityResponse, error) {
 			return a.AddIdentityAuthority(&api.AddIdentityAuthorityRequest{Pubkey: in.Pubkey, Name: in.Name, RelayURLs: in.RelayURLs})
 		})
-	writeTool(s, srv, conn, "DeleteIdentityAuthority", "delete_identity_authority",
-		"Remove a trusted identity authority.", keyOf[stringArgs],
-		func(_ context.Context, a api.API, in stringArgs) (okResult, error) {
-			return okResult{OK: true}, a.DeleteIdentityAuthority(in.Value)
+	// Removing an authority strands every unclaimed slice it vouched for
+	// (pentest D PD-10): two-step, with that count in the preview.
+	confirmToolWarn(s, srv, conn, "DeleteIdentityAuthority", "delete_identity_authority",
+		"Remove a trusted identity authority. Unclaimed cash slices it vouched for can no longer be redeemed.", accessWarning, keyOf[authorityDelArgs],
+		func(in authorityDelArgs) string { return in.ConfirmCode },
+		func(in authorityDelArgs) any { return in.Pubkey },
+		func(_ context.Context, a api.API, in authorityDelArgs) (*PaymentPreview, error) {
+			list, err := a.ListIdentityAuthorities()
+			if err != nil {
+				return nil, err
+			}
+			for _, ia := range list {
+				if ia.Pubkey == in.Pubkey {
+					return &PaymentPreview{
+						Action:    fmt.Sprintf("Remove identity authority %q (%s)", ia.Name, ia.Pubkey),
+						Recipient: "nobody — slices it vouched for become unredeemable until it is re-added",
+						Details:   []PreviewDetail{{Label: "unclaimed slices stranded", Value: strconv.Itoa(ia.UnredeemedSliceCount)}},
+					}, nil
+				}
+			}
+			return nil, errInvalidArgs("no identity authority with that pubkey")
+		},
+		func(_ context.Context, a api.API, in authorityDelArgs) (okResult, error) {
+			return okResult{OK: true}, a.DeleteIdentityAuthority(in.Pubkey)
 		})
 }
 
@@ -265,4 +356,25 @@ func walletLabel(id *uint) string {
 		return "the main wallet"
 	}
 	return fmt.Sprintf("sub-wallet #%d", *id)
+}
+
+// walletDesc names a wallet for a preview from the hub's records: name, kind
+// and balance; nil = the main wallet. An unknown id is refused.
+func (s *Server) walletDesc(ctx context.Context, a api.API, id *uint) (string, error) {
+	if id == nil {
+		return "the main wallet", nil
+	}
+	app, err := s.resolveApp(*id, "")
+	if err != nil {
+		return "", err
+	}
+	v := a.GetApp(ctx, app)
+	if v == nil {
+		return fmt.Sprintf("wallet #%d", *id), nil
+	}
+	bal := uint64(0)
+	if v.Balance > 0 {
+		bal = uint64(v.Balance)
+	}
+	return fmt.Sprintf("%q (#%d, %s, balance %s loki)", v.Name, *id, v.Kind, formatLoki(bal)), nil
 }

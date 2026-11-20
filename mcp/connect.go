@@ -3,8 +3,11 @@ package mcp
 import (
 	"errors"
 	"fmt"
+	"golang.org/x/text/unicode/norm"
 	"sort"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // ErrNoGrants is returned when a connection is requested with no capability
@@ -45,6 +48,7 @@ type AppCreator func(name string, expiresAt *time.Time, scopes []string) (appID 
 // the owner once; the hub never stores it (it is re-derivable only with the
 // hub secret, and deleting the App revokes it).
 func CreateConnection(create AppCreator, tokens *HMACTokenStore, name string, grants map[Group]Mode, expiresAt *time.Time) (uint, string, error) {
+	name = CleanConnectionName(name)
 	if name == "" {
 		return 0, "", errors.New("mcp: connection name required")
 	}
@@ -86,4 +90,35 @@ func GrantsFromScopes(scopes []string) map[Group]Mode {
 		}
 	}
 	return out
+}
+
+// CleanConnectionName canonicalises an assistant's display name so two names
+// that LOOK the same are the same string (pentest E MED-2): NFKC-normalised,
+// invisible / direction-changing / control characters dropped, whitespace
+// collapsed, capped at 64 characters. The core's duplicate-name check then
+// catches lookalikes ("Desk assistant" + zero-width space).
+func CleanConnectionName(s string) string {
+	s = norm.NFKC.String(s)
+	var b strings.Builder
+	space := false
+	for _, r := range s {
+		switch {
+		case unicode.IsSpace(r):
+			space = b.Len() > 0
+			continue
+		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), unicode.Is(unicode.Co, r),
+			r == 0x2028, r == 0x2029, r == 0xfffd:
+			continue
+		}
+		if space {
+			b.WriteByte(' ')
+			space = false
+		}
+		b.WriteRune(r)
+	}
+	out := b.String()
+	if r := []rune(out); len(r) > 64 {
+		out = string(r[:64])
+	}
+	return strings.TrimSpace(out)
 }

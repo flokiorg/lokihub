@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -94,6 +95,11 @@ func (s *Server) activityMiddleware(conn *Conn) mcpsdk.Middleware {
 			if p, ok := req.GetParams().(*mcpsdk.CallToolParamsRaw); ok && p != nil {
 				tool = p.Name
 			}
+			// The name is caller-chosen: log only real tool names, so an
+			// assistant cannot write arbitrary text into the owner's log.
+			if !isSafeToolName(tool) {
+				tool = "unknown_tool"
+			}
 			outcome, detail := describeCall(res, err)
 			s.activity.Add(ActivityEntry{Time: time.Now().UTC(), AppID: conn.AppID, Tool: clip(tool, 64), Outcome: outcome, Detail: detail})
 			return res, err
@@ -154,8 +160,11 @@ func describeCall(res mcpsdk.Result, err error) (string, string) {
 // so attacker-influenced text cannot forge extra log lines.
 func clip(s string, n int) string {
 	s = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
+		switch {
+		case r < 0x20, r == 0x7f, r >= 0x80 && r <= 0x9f:
 			return ' '
+		case unicode.Is(unicode.Cf, r), unicode.Is(unicode.Co, r), r == 0x2028, r == 0x2029:
+			return -1 // invisible / direction-changing: dropped
 		}
 		return r
 	}, s)
@@ -163,4 +172,17 @@ func clip(s string, n int) string {
 		return s
 	}
 	return string([]rune(s)[:n]) + "…"
+}
+
+// isSafeToolName accepts the shape of every registered tool name.
+func isSafeToolName(s string) bool {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		if !(r == '_' || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+			return false
+		}
+	}
+	return true
 }

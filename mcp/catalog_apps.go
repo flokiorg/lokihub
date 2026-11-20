@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/flokiorg/lokihub/api"
 	"github.com/flokiorg/lokihub/cash/cashorder"
@@ -40,11 +41,13 @@ type (
 		IdempotencyKey string   `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
 		AppID          uint     `json:"app_id"`
 		Pubkeys        []string `json:"pubkeys"`
+		ConfirmCode    string   `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
 	}
 	appPubkeyArgs struct {
 		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
 		AppID          uint   `json:"app_id"`
 		Pubkey         string `json:"pubkey"`
+		ConfirmCode    string `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
 	}
 	appWriteArgs struct {
 		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
@@ -199,8 +202,31 @@ func (s *Server) registerAppTools(srv *mcpsdk.Server, conn *Conn) {
 			c, total, err := a.ListCircleChildrenBalances(app, clampLimit(in.Limit), in.Offset)
 			return childrenPage{Children: c, Total: total}, err
 		})
-	writeTool(s, srv, conn, "ReplaceCircleAllowlist", "replace_circle_allowlist",
-		"Replace a circle's member allowlist.", keyOf[pubkeysArgs],
+	// Membership edits suspend members at once (pentest F F-6): two-step,
+	// with the exact added/removed counts in the preview.
+	confirmToolWarn(s, srv, conn, "ReplaceCircleAllowlist", "replace_circle_allowlist",
+		"Replace a circle's member allowlist. Members not in the new list are suspended.", accessWarning, keyOf[pubkeysArgs],
+		func(in pubkeysArgs) string { return in.ConfirmCode },
+		func(in pubkeysArgs) any { return [2]any{in.AppID, in.Pubkeys} },
+		func(_ context.Context, a api.API, in pubkeysArgs) (*PaymentPreview, error) {
+			app, err := s.resolveApp(in.AppID, "")
+			if err != nil {
+				return nil, err
+			}
+			cur, err := a.ListCircleAllowlist(app)
+			if err != nil {
+				return nil, err
+			}
+			added, removed := setDiff(cur, in.Pubkeys)
+			return &PaymentPreview{
+				Action:    fmt.Sprintf("Replace the member list of circle %q (#%d)", app.Name, app.ID),
+				Recipient: fmt.Sprintf("%d member(s) after the change", len(in.Pubkeys)),
+				Details: []PreviewDetail{
+					{Label: "members added", Value: strconv.Itoa(len(added))},
+					{Label: "members removed (suspended)", Value: strconv.Itoa(len(removed))},
+				},
+			}, nil
+		},
 		func(_ context.Context, a api.API, in pubkeysArgs) (okResult, error) {
 			app, err := s.resolveApp(in.AppID, "")
 			if err != nil {
@@ -208,8 +234,20 @@ func (s *Server) registerAppTools(srv *mcpsdk.Server, conn *Conn) {
 			}
 			return okResult{OK: true}, a.ReplaceCircleAllowlist(app, in.Pubkeys)
 		})
-	writeTool(s, srv, conn, "RemoveCircleAllowedPubkey", "remove_circle_member",
-		"Remove one pubkey from a circle's allowlist.", keyOf[appPubkeyArgs],
+	confirmToolWarn(s, srv, conn, "RemoveCircleAllowedPubkey", "remove_circle_member",
+		"Remove one pubkey from a circle's allowlist (the member is suspended).", accessWarning, keyOf[appPubkeyArgs],
+		func(in appPubkeyArgs) string { return in.ConfirmCode },
+		func(in appPubkeyArgs) any { return [2]any{in.AppID, in.Pubkey} },
+		func(_ context.Context, _ api.API, in appPubkeyArgs) (*PaymentPreview, error) {
+			app, err := s.resolveApp(in.AppID, "")
+			if err != nil {
+				return nil, err
+			}
+			return &PaymentPreview{
+				Action:    fmt.Sprintf("Remove a member from circle %q (#%d)", app.Name, app.ID),
+				Recipient: in.Pubkey,
+			}, nil
+		},
 		func(_ context.Context, a api.API, in appPubkeyArgs) (okResult, error) {
 			app, err := s.resolveApp(in.AppID, "")
 			if err != nil {
@@ -319,4 +357,25 @@ func (s *Server) guardAssistantDelete(conn *Conn, app *db.App) error {
 		return errInvalidArgs("an assistant cannot revoke another AI assistant's connection")
 	}
 	return nil
+}
+
+// setDiff returns what next adds to and removes from cur.
+func setDiff(cur, next []string) (added, removed []string) {
+	in := map[string]bool{}
+	for _, c := range cur {
+		in[c] = true
+	}
+	nx := map[string]bool{}
+	for _, n := range next {
+		nx[n] = true
+		if !in[n] {
+			added = append(added, n)
+		}
+	}
+	for _, c := range cur {
+		if !nx[c] {
+			removed = append(removed, c)
+		}
+	}
+	return added, removed
 }
