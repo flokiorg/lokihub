@@ -35,6 +35,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/daemonclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/flokiorg/lokihub/mcp"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -80,6 +81,12 @@ type HttpService struct {
 
 	// svc is read only by the test hooks (testhooks builds).
 	svc service.Service
+
+	// mcpSrv is the MCP endpoint (nil until registerMCP); the owner admin
+	// routes use it for the approval queue.
+	mcpSrv *mcp.Server
+	// mcpOAuth is the OAuth 2.1 client/code/consent store for remote MCP.
+	mcpOAuth *mcp.OAuthStore
 }
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
@@ -194,6 +201,10 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	e.POST("/api/backup", httpSvc.createBackupHandler, unlockRateLimiter)
 	e.GET("/logout", httpSvc.logoutHandler, unlockRateLimiter)
 
+	// Mount the MCP endpoint BEFORE the SPA fallback so the HTML5 static handler
+	// does not swallow /mcp (and, in M4, the OAuth /.well-known routes).
+	httpSvc.registerMCP(e)
+
 	frontend.RegisterHandlers(e)
 
 	// restricted routes
@@ -296,6 +307,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/apps/:pubkey", httpSvc.appsDeleteHandler)
 	fullAccessApiGroup.POST("/transfers", httpSvc.transfersHandler)
 	fullAccessApiGroup.POST("/apps", httpSvc.appsCreateHandler)
+	httpSvc.registerMCPAdmin(fullAccessApiGroup)
 	fullAccessApiGroup.GET("/apps/:id/circle/allowlist", httpSvc.circleAllowlistListHandler)
 	fullAccessApiGroup.PUT("/apps/:id/circle/allowlist", httpSvc.circleAllowlistReplaceHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/circle/allowlist/:pubkey", httpSvc.circleAllowlistRemoveHandler)

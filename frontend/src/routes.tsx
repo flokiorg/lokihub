@@ -18,6 +18,8 @@ import AppDetails from "src/screens/apps/AppDetails";
 import { AppsCleanup } from "src/screens/apps/AppsCleanup";
 import { Connections } from "src/screens/apps/Connections";
 import NewApp from "src/screens/apps/NewApp";
+import { ConsentAssistant } from "src/screens/apps/ConsentAssistant";
+import { NewAssistant } from "src/screens/apps/NewAssistant";
 import { AppStoreDetail } from "src/screens/appstore/AppStoreDetail";
 import Channels from "src/screens/channels/Channels";
 import { CurrentChannelOrder } from "src/screens/channels/CurrentChannelOrder";
@@ -280,10 +282,22 @@ const routes: RouteObject[] = [
                 handle: { crumb: () => "New App" },
               },
               {
+                path: "new/assistant",
+                element: <NewAssistant />,
+                handle: { crumb: () => "AI assistant" },
+              },
+              {
                 path: "cleanup",
                 element: <AppsCleanup />,
               },
             ],
+          },
+          {
+            // Owner consent for a remote AI assistant (OAuth); the hub's
+            // /oauth/authorize redirects here with an opaque consent id.
+            path: "connect-assistant",
+            element: <ConsentAssistant />,
+            handle: { crumb: () => "Connect AI assistant" },
           },
           {
             path: "sub-wallets",
