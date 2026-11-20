@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/flokiorg/lokihub/api"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -58,6 +59,7 @@ type (
 		FromAppID      *uint  `json:"from_app_id,omitempty" jsonschema:"source sub-wallet id; omit for the main wallet"`
 		ToAppID        *uint  `json:"to_app_id,omitempty" jsonschema:"destination sub-wallet id; omit for the main wallet"`
 		AmountMloki    uint64 `json:"amount_mloki"`
+		ConfirmCode    string `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
 	}
 	updateChannelArgs struct {
 		IdempotencyKey                      string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
@@ -160,8 +162,21 @@ func (s *Server) registerCatalogMore(srv *mcpsdk.Server, conn *Conn) {
 		})
 
 	// Wallet & payments.
-	writeTool(s, srv, conn, "Transfer", "transfer",
+	confirmTool(s, srv, conn, "Transfer", "transfer",
 		"Move funds between the main wallet and sub-wallets.", keyOf[transferArgs],
+		func(in transferArgs) string { return in.ConfirmCode },
+		func(in transferArgs) any { return [3]any{in.FromAppID, in.ToAppID, in.AmountMloki} },
+		func(_ context.Context, _ api.API, in transferArgs) (*PaymentPreview, error) {
+			if in.AmountMloki == 0 {
+				return nil, errInvalidArgs("amount_mloki must be greater than zero")
+			}
+			return &PaymentPreview{
+				Action:      "Move funds from " + walletLabel(in.FromAppID) + " to " + walletLabel(in.ToAppID),
+				AmountLoki:  formatLoki(in.AmountMloki),
+				AmountMloki: in.AmountMloki,
+				Recipient:   walletLabel(in.ToAppID),
+			}, nil
+		},
 		func(ctx context.Context, a api.API, in transferArgs) (okResult, error) {
 			return okResult{OK: true}, a.Transfer(ctx, in.FromAppID, in.ToAppID, in.AmountMloki)
 		})
@@ -249,4 +264,11 @@ func (s *Server) registerCatalogMore(srv *mcpsdk.Server, conn *Conn) {
 		func(_ context.Context, a api.API, in stringArgs) (okResult, error) {
 			return okResult{OK: true}, a.DeleteIdentityAuthority(in.Value)
 		})
+}
+
+func walletLabel(id *uint) string {
+	if id == nil {
+		return "the main wallet"
+	}
+	return fmt.Sprintf("sub-wallet #%d", *id)
 }

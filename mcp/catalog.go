@@ -3,8 +3,11 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/flokiorg/lokihub/api"
+	"github.com/flokiorg/lokihub/internal/decodepay"
 	"github.com/flokiorg/lokihub/lnclient"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -96,9 +99,12 @@ func (s *Server) registerCatalog(srv *mcpsdk.Server, conn *Conn) {
 			r, err := a.CreateInvoice(ctx, &api.MakeInvoiceRequest{Amount: in.AmountMloki, Description: in.Description})
 			return toTxView(r), err
 		})
-	writeTool(s, srv, conn, "SendPayment", "send_payment",
+	confirmTool(s, srv, conn, "SendPayment", "send_payment",
 		"Pay a Lightning invoice from the hub's main balance.",
 		func(in sendPaymentArgs) string { return in.IdempotencyKey },
+		func(in sendPaymentArgs) string { return in.ConfirmCode },
+		func(in sendPaymentArgs) any { return [2]any{in.Invoice, in.AmountMloki} },
+		previewInvoice,
 		func(ctx context.Context, a api.API, in sendPaymentArgs) (paymentView, error) {
 			var amt *uint64
 			if in.AmountMloki > 0 {
@@ -192,6 +198,40 @@ type sendPaymentArgs struct {
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
 	Invoice        string `json:"invoice"`
 	AmountMloki    uint64 `json:"amount_mloki,omitempty" jsonschema:"only for zero-amount invoices"`
+	ConfirmCode    string `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; then, after the user explicitly approves the previewed amount and recipient, call again with the code from the preview"`
+}
+
+// previewInvoice decodes the invoice on the hub so the preview shows what the
+// invoice really pays — not what the assistant believes it pays.
+func previewInvoice(_ context.Context, _ api.API, in sendPaymentArgs) (*PaymentPreview, error) {
+	inv, err := decodepay.Decode(strings.TrimSpace(in.Invoice))
+	if err != nil {
+		return nil, errInvalidArgs("invoice could not be decoded: " + err.Error())
+	}
+	amt := uint64(0)
+	if inv.AmountMloki > 0 {
+		amt = uint64(inv.AmountMloki)
+		if in.AmountMloki != 0 && in.AmountMloki != amt {
+			return nil, errInvalidArgs("amount_mloki differs from the amount fixed in the invoice; omit amount_mloki")
+		}
+	} else {
+		if in.AmountMloki == 0 {
+			return nil, errInvalidArgs("this invoice has no amount; amount_mloki is required")
+		}
+		amt = in.AmountMloki
+	}
+	exp := time.Unix(inv.CreatedAt+inv.Expiry, 0)
+	if time.Now().After(exp) {
+		return nil, errInvalidArgs("this invoice has expired")
+	}
+	return &PaymentPreview{
+		Action:      "Pay a Lightning invoice",
+		AmountLoki:  formatLoki(amt),
+		AmountMloki: amt,
+		Recipient:   inv.Payee,
+		Description: inv.Description,
+		ExpiresAt:   exp.UTC().Format(time.RFC3339),
+	}, nil
 }
 
 type signArgs struct {

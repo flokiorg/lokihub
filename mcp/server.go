@@ -39,6 +39,7 @@ type Server struct {
 	authn    Authenticator
 	idem     *IdemStore
 	pending  *PendingStore
+	confirms *ConfirmStore
 
 	wiredMu sync.Mutex
 	wired   map[string]bool // api.API methods that have a registered tool
@@ -56,6 +57,7 @@ func NewServer(a api.API, authn Authenticator) *Server {
 		authn:    authn,
 		idem:     NewIdemStore(),
 		pending:  NewPendingStore(),
+		confirms: NewConfirmStore(),
 		wired:    map[string]bool{},
 		controls: noControls{},
 	}

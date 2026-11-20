@@ -133,7 +133,7 @@ export const AI_GROUPS: {
     title: "Wallet & payments",
     read: "See balances and transactions.",
     writeRisk:
-      "Can send payments from your whole balance, create invoices, and move funds between your main wallet and sub-wallets (cash hubs, circles, isolated apps). On-chain sends to a new address still need your approval.",
+      "Can send payments from your whole balance, create invoices, and move funds between your main wallet and sub-wallets (cash hubs, circles, isolated apps). Every payment is previewed with a warning first and only goes through on a second, confirmed request. On-chain sends to a new address still need your approval.",
   },
   {
     id: "cash_circles",
