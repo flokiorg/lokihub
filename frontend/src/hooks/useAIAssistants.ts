@@ -140,7 +140,7 @@ export const AI_GROUPS: {
     title: "Cash & circles",
     read: "See cash hubs, cash bills, circles and members.",
     writeRisk:
-      "Can mint and reclaim cash, change circle members, delete cash wallets or whole circles, and create public selling connections for your cash hubs.",
+      "Can mint and reclaim cash, change circle members, delete cash wallets or whole circles, and create public selling connections for your cash hubs. Anything that takes back or settles money is previewed with a warning first and needs a second, confirmed request.",
   },
   {
     id: "channels",

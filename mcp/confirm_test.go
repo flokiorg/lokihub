@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/api"
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/tests"
 )
 
@@ -148,5 +149,45 @@ func TestConfirmStoreBinding(t *testing.T) {
 	}
 	if _, err := c.Issue(7, "send_payment", a); !errors.Is(err, ErrTooManyConfirms) {
 		t.Error("unbounded previews per connection")
+	}
+}
+
+// TestMoneyToolsAllWarnAndConfirm is the ratchet for the owner's rule: every
+// tool that can move, take back, lock or strand money carries the warning, and
+// every non-approval one is two-step (no effect on the first call).
+func TestMoneyToolsAllWarnAndConfirm(t *testing.T) {
+	twoStep := []string{"send_payment", "transfer", "delete_app", "delete_app_confirmed",
+		"delete_cash_wallet", "delete_cash_claim", "delete_circle_child", "delete_circle_hub"}
+	ownerApproved := []string{"redeem_onchain_funds", "open_channel", "close_channel"}
+
+	s := NewServer(testAPI{}, &fakeAuth{})
+	s.SetAppResolver(func(id uint) *db.App { return &db.App{ID: id, Kind: db.AppKindCircleHub} })
+	cs, done := connectInMem(t, s, &Conn{AppID: 1, Scopes: AllScopes()})
+	defer done()
+	lt, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]string{}
+	schema := map[string]string{}
+	for _, tl := range lt.Tools {
+		byName[tl.Name] = tl.Description
+		b, _ := json.Marshal(tl.InputSchema)
+		schema[tl.Name] = string(b)
+	}
+	for _, n := range append(append([]string{}, twoStep...), ownerApproved...) {
+		d, ok := byName[n]
+		if !ok {
+			t.Errorf("%s not advertised", n)
+			continue
+		}
+		if !strings.Contains(d, "cannot be undone") || !strings.Contains(d, "untrusted") {
+			t.Errorf("%s lacks the money warning", n)
+		}
+	}
+	for _, n := range twoStep {
+		if !strings.Contains(schema[n], "confirm_code") {
+			t.Errorf("%s is not two-step (no confirm_code)", n)
+		}
 	}
 }

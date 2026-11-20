@@ -50,15 +50,22 @@ type (
 		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
 		AppID          uint   `json:"app_id"`
 	}
+	appDeleteArgs struct {
+		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
+		AppID          uint   `json:"app_id"`
+		ConfirmCode    string `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
+	}
 	deleteAppArgs struct {
 		IdempotencyKey  string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
 		AppID           uint   `json:"app_id"`
 		ConfirmWatchEnd bool   `json:"confirm_watch_end,omitempty" jsonschema:"confirm ending the watch on a cash hub's paid on-chain order addresses"`
+		ConfirmCode     string `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
 	}
 	deleteCircleArgs struct {
 		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
 		AppID          uint   `json:"app_id"`
 		Mode           string `json:"mode" jsonschema:"how member balances are settled, as in the hub UI"`
+		ConfirmCode    string `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
 	}
 	acceptingArgs struct {
 		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
@@ -95,6 +102,7 @@ type (
 func (a pubkeysArgs) key() string      { return a.IdempotencyKey }
 func (a appPubkeyArgs) key() string    { return a.IdempotencyKey }
 func (a appWriteArgs) key() string     { return a.IdempotencyKey }
+func (a appDeleteArgs) key() string    { return a.IdempotencyKey }
 func (a deleteAppArgs) key() string    { return a.IdempotencyKey }
 func (a deleteCircleArgs) key() string { return a.IdempotencyKey }
 func (a acceptingArgs) key() string    { return a.IdempotencyKey }
@@ -116,9 +124,19 @@ func (s *Server) registerAppTools(srv *mcpsdk.Server, conn *Conn) {
 			}
 			return a.GetApp(ctx, app), nil
 		})
-	writeTool(s, srv, conn, "DeleteApp", "delete_app",
-		"Delete (revoke) a connected app.", keyOf[appWriteArgs],
-		func(_ context.Context, a api.API, in appWriteArgs) (okResult, error) {
+	confirmTool(s, srv, conn, "DeleteApp", "delete_app",
+		"Delete (revoke) a connected app. If it holds its own balance, that balance is affected.", keyOf[appDeleteArgs],
+		func(in appDeleteArgs) string { return in.ConfirmCode },
+		func(in appDeleteArgs) any { return in.AppID },
+		func(ctx context.Context, a api.API, in appDeleteArgs) (*PaymentPreview, error) {
+			if app, err := s.resolveApp(in.AppID, ""); err != nil {
+				return nil, err
+			} else if err := s.guardAssistantDelete(conn, app); err != nil {
+				return nil, err
+			}
+			return s.appFundsPreview(ctx, a, in.AppID, "Delete app", "the hub (per the app's kind; see the Lokihub app for details)")
+		},
+		func(_ context.Context, a api.API, in appDeleteArgs) (okResult, error) {
 			app, err := s.resolveApp(in.AppID, "")
 			if err != nil {
 				return okResult{}, err
@@ -128,8 +146,21 @@ func (s *Server) registerAppTools(srv *mcpsdk.Server, conn *Conn) {
 			}
 			return okResult{OK: true}, a.DeleteApp(app)
 		})
-	writeTool(s, srv, conn, "DeleteAppWithOptions", "delete_app_confirmed",
+	confirmTool(s, srv, conn, "DeleteAppWithOptions", "delete_app_confirmed",
 		"Delete an app, confirming side effects (e.g. ending a cash hub's on-chain order watch).", keyOf[deleteAppArgs],
+		func(in deleteAppArgs) string { return in.ConfirmCode },
+		func(in deleteAppArgs) any { return [2]any{in.AppID, in.ConfirmWatchEnd} },
+		func(ctx context.Context, a api.API, in deleteAppArgs) (*PaymentPreview, error) {
+			if in.ConfirmWatchEnd {
+				return nil, errInvalidArgs("ending a cash hub's order-address watch must be confirmed by the owner in the Lokihub app")
+			}
+			if app, err := s.resolveApp(in.AppID, ""); err != nil {
+				return nil, err
+			} else if err := s.guardAssistantDelete(conn, app); err != nil {
+				return nil, err
+			}
+			return s.appFundsPreview(ctx, a, in.AppID, "Delete app", "the hub (per the app's kind; see the Lokihub app for details)")
+		},
 		func(_ context.Context, a api.API, in deleteAppArgs) (okResult, error) {
 			app, err := s.resolveApp(in.AppID, "")
 			if err != nil {
@@ -204,8 +235,16 @@ func (s *Server) registerAppTools(srv *mcpsdk.Server, conn *Conn) {
 			}
 			return okResult{OK: true}, a.SetCircleAccepting(app, in.Accepting)
 		})
-	writeTool(s, srv, conn, "DeleteCircleHub", "delete_circle_hub",
-		"Tear down a whole circle.", keyOf[deleteCircleArgs],
+	confirmTool(s, srv, conn, "DeleteCircleHub", "delete_circle_hub",
+		"Tear down a whole circle; mode decides how member balances are settled.", keyOf[deleteCircleArgs],
+		func(in deleteCircleArgs) string { return in.ConfirmCode },
+		func(in deleteCircleArgs) any { return [2]any{in.AppID, in.Mode} },
+		func(ctx context.Context, a api.API, in deleteCircleArgs) (*PaymentPreview, error) {
+			if _, err := s.resolveApp(in.AppID, db.AppKindCircleHub); err != nil {
+				return nil, err
+			}
+			return s.appFundsPreview(ctx, a, in.AppID, "Tear down circle", "member balances settled by mode \""+in.Mode+"\"")
+		},
 		func(_ context.Context, a api.API, in deleteCircleArgs) (*api.DeleteCircleHubResult, error) {
 			// Same kind check the REST handler applies before this call.
 			app, err := s.resolveApp(in.AppID, db.AppKindCircleHub)

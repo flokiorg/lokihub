@@ -83,12 +83,14 @@ type (
 		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
 		HubAppID       uint   `json:"hub_app_id"`
 		ChildAppID     uint   `json:"child_app_id"`
+		ConfirmCode    string `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
 	}
 	claimArgs struct {
 		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
 		HubAppID       uint   `json:"hub_app_id"`
 		WalletAppID    uint   `json:"wallet_app_id"`
 		ClaimID        uint   `json:"claim_id"`
+		ConfirmCode    string `json:"confirm_code,omitempty" jsonschema:"omit on the first call to get a preview; call again with the code only after the user explicitly approves it"`
 	}
 	idWriteArgs struct {
 		IdempotencyKey string `json:"idempotency_key" jsonschema:"a unique key identifying this write; retrying with the same key will not repeat the effect"`
@@ -227,18 +229,37 @@ func (s *Server) registerCatalogMore(srv *mcpsdk.Server, conn *Conn) {
 		func(ctx context.Context, a api.API, in idArgs) (*api.FollowSetResponse, error) {
 			return a.GetCircleIdentityFollowSet(ctx, in.ID)
 		})
-	writeTool(s, srv, conn, "DeleteCashWallet", "delete_cash_wallet",
-		"Reclaim a cash wallet's remaining balance to its hub and delete it.", keyOf[hubChildArgs],
+	confirmTool(s, srv, conn, "DeleteCashWallet", "delete_cash_wallet",
+		"Reclaim a cash wallet's remaining balance to its hub and delete it. Bills issued from it stop working.", keyOf[hubChildArgs],
+		func(in hubChildArgs) string { return in.ConfirmCode },
+		func(in hubChildArgs) any { return [2]uint{in.HubAppID, in.ChildAppID} },
+		func(ctx context.Context, a api.API, in hubChildArgs) (*PaymentPreview, error) {
+			return s.appFundsPreview(ctx, a, in.ChildAppID, "Reclaim and delete cash wallet", fmt.Sprintf("its cash hub #%d — anyone still holding its cash loses it", in.HubAppID))
+		},
 		func(_ context.Context, a api.API, in hubChildArgs) (okResult, error) {
 			return okResult{OK: true}, a.DeleteCashWallet(in.HubAppID, in.ChildAppID)
 		})
-	writeTool(s, srv, conn, "DeleteCashClaim", "delete_cash_claim",
-		"Remove an unclaimed cash slice, sweeping it back to the hub.", keyOf[claimArgs],
+	confirmTool(s, srv, conn, "DeleteCashClaim", "delete_cash_claim",
+		"Remove an unclaimed cash slice, sweeping it back to the hub. Its recipient can no longer claim it.", keyOf[claimArgs],
+		func(in claimArgs) string { return in.ConfirmCode },
+		func(in claimArgs) any { return [3]uint{in.HubAppID, in.WalletAppID, in.ClaimID} },
+		func(ctx context.Context, a api.API, in claimArgs) (*PaymentPreview, error) {
+			p, err := s.appFundsPreview(ctx, a, in.WalletAppID, fmt.Sprintf("Take back unclaimed cash slice #%d from wallet", in.ClaimID), fmt.Sprintf("cash hub #%d — the slice's recipient can no longer claim it", in.HubAppID))
+			if p != nil {
+				p.AmountLoki, p.AmountMloki = "", 0 // the slice amount, not the whole wallet's balance
+			}
+			return p, err
+		},
 		func(_ context.Context, a api.API, in claimArgs) (okResult, error) {
 			return okResult{OK: true}, a.DeleteCashClaim(in.HubAppID, in.WalletAppID, in.ClaimID)
 		})
-	writeTool(s, srv, conn, "DeleteCircleWalletChild", "delete_circle_child",
-		"Remove one member wallet from a circle.", keyOf[hubChildArgs],
+	confirmTool(s, srv, conn, "DeleteCircleWalletChild", "delete_circle_child",
+		"Remove one member wallet from a circle (it closes after its grace period; the member's balance is not swept).", keyOf[hubChildArgs],
+		func(in hubChildArgs) string { return in.ConfirmCode },
+		func(in hubChildArgs) any { return [2]uint{in.HubAppID, in.ChildAppID} },
+		func(ctx context.Context, a api.API, in hubChildArgs) (*PaymentPreview, error) {
+			return s.appFundsPreview(ctx, a, in.ChildAppID, "Close circle member wallet", "stays with the member until the wallet closes")
+		},
 		func(_ context.Context, a api.API, in hubChildArgs) (okResult, error) {
 			return okResult{OK: true}, a.DeleteCircleWalletChild(in.HubAppID, in.ChildAppID)
 		})
