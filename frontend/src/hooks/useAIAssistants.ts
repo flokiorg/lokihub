@@ -29,6 +29,7 @@ export type AIPendingAction = {
   tool: string;
   summary: string;
   status: "open" | "approved" | "denied";
+  createdAt: string;
 };
 
 export type AIActivity = {
@@ -52,6 +53,8 @@ export type AIControls = {
   loopbackSupported?: boolean;
   /** port of the local listener on 127.0.0.1 (0 = off) */
   loopbackPort?: number;
+  /** payments/transfers above this many loki wait for the owner's approval */
+  approvalLimitLoki?: number;
 };
 
 export type CreatedAssistant = {
@@ -86,6 +89,14 @@ export function useAIAssistants() {
 
   useEffect(() => {
     reload();
+    // Keep the approval queue live while the page is open: an assistant's
+    // request should appear without a manual refresh.
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        reload();
+      }
+    }, 10_000);
+    return () => clearInterval(timer);
   }, [reload]);
 
   const revoke = useCallback(
@@ -158,34 +169,36 @@ export const AI_GROUPS: {
     title: "Wallet & payments",
     read: "See balances and transactions.",
     writeRisk:
-      "Can send payments from your whole balance, create invoices, and move funds between your main wallet and sub-wallets (cash hubs, circles, isolated apps). Every payment is previewed with a warning first and only goes through on a second, confirmed request. On-chain sends to a new address still need your approval.",
+      "Can send payments from your whole balance, create invoices, move funds between your main wallet and sub-wallets (cash hubs, circles, isolated apps) and sign messages with your node key. Each payment needs the assistant to show a preview and confirm it — the hub can't check that you agreed — and payments above your approval limit wait for you here. Every on-chain send waits for your approval.",
   },
   {
     id: "cash_circles",
     title: "Cash & circles",
     read: "See cash hubs, cash bills, circles and members.",
     writeRisk:
-      "Can mint and reclaim cash, change circle members, delete cash wallets or whole circles, and create public selling connections for your cash hubs. Anything that takes back or settles money is previewed with a warning first and needs a second, confirmed request.",
+      "Can create and reclaim cash, change what customers pay (order terms), change circle members and follow sets, delete cash wallets or whole circles, and create public selling connections for your cash hubs. Each of these needs the assistant to show a preview and confirm it; creating cash and changing order terms also wait for your approval here.",
   },
   {
     id: "channels",
     title: "Network & liquidity",
     read: "See channels, peers and liquidity.",
     writeRisk:
-      "Can connect peers and change channel fees. Opening or closing a channel still needs your approval.",
+      "Can connect peers, change channel fees, add liquidity providers (LSPs) and — after your approval here — trust an LSP and buy channels from it, which costs fees. Opening or closing a channel always needs your approval.",
     advanced: true,
   },
   {
     id: "listings",
     title: "Listings & discoverability",
     read: "See your listings and where they are published.",
-    writeRisk: "Can change where your listings are published.",
+    writeRisk:
+      "Can create, edit, pause, unlist, reopen and republish your listings and change the relays they are published to — publicly, under your node's identity. Each change needs the assistant to show a preview and confirm it.",
   },
   {
     id: "node",
     title: "Node info & hub settings",
     read: "See node status and hub info.",
-    writeRisk: "Can rename the node and change display settings.",
+    writeRisk:
+      "Can rename the node, change display settings, and publish public notes and your node profile under your node's identity (the profile can carry a payment address, so it waits for your approval here).",
     advanced: true,
   },
   {
@@ -193,7 +206,7 @@ export const AI_GROUPS: {
     title: "App connections",
     read: "See your connected apps and identity authorities.",
     writeRisk:
-      "Can revoke connected apps (not your other AI assistants) and manage identity authorities. It can never create wallet connections.",
+      "Can delete connected apps — including cash hubs and circles, whose money then goes back to your hub — but never your other AI assistants, and can add or remove identity authorities. Each deletion needs the assistant to show a preview and confirm it. It can never create wallet connections.",
   },
 ];
 

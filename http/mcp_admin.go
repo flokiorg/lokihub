@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/mcp"
@@ -75,16 +76,17 @@ type mcpControlsBody struct {
 }
 
 type mcpPendingView struct {
-	ID      string `json:"id"`
-	AppID   uint   `json:"appId"`
-	Tool    string `json:"tool"`
-	Summary string `json:"summary"`
-	Status  string `json:"status"`
+	ID        string    `json:"id"`
+	AppID     uint      `json:"appId"`
+	Tool      string    `json:"tool"`
+	Summary   string    `json:"summary"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // registerMCPAdmin mounts the owner's MCP controls under the full-access admin
 // token: the irreversible-action approval queue (list/approve/deny) and the
-// global pause switch + redeem allow-list. The assistant cannot reach these —
+// global pause switch, approval limit and desktop local access. The assistant cannot reach these —
 // /mcp tokens are not admin JWTs.
 func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 	httpSvc.registerMCPConnections(g)
@@ -96,9 +98,9 @@ func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 		acts := httpSvc.mcpSrv.Pending().ListAll()
 		out := make([]mcpPendingView, 0, len(acts))
 		for _, a := range acts {
-			out = append(out, mcpPendingView{ID: a.ID, AppID: a.AppID, Tool: a.Tool, Summary: a.Summary, Status: string(a.Status)})
+			out = append(out, mcpPendingView{ID: a.ID, AppID: a.AppID, Tool: a.Tool, Summary: a.Summary, Status: string(a.Status), CreatedAt: a.Created})
 		}
-		sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+		sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 		return c.JSON(http.StatusOK, out)
 	})
 	g.POST("/mcp/pending/:id/approve", func(c echo.Context) error {

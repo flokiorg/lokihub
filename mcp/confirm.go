@@ -213,8 +213,9 @@ func confirmToolWarn[In, Out any](
 			// Step 1: preview only — nothing moves.
 			p, err := preview(ctx, s.api, in)
 			if err != nil {
-				return nil, zero, err
+				return nil, zero, toolErr(err)
 			}
+			p = scrubOutput(p)
 			c, err := s.confirms.Issue(conn.AppID, name, bind, ArgsHash(p))
 			if err != nil {
 				return nil, zero, err
@@ -237,6 +238,7 @@ func confirmToolWarn[In, Out any](
 			if err != nil {
 				return nil, err
 			}
+			p = scrubOutput(p) // fingerprint exactly what was shown
 			if err := s.confirms.Redeem(code, conn.AppID, name, bind, ArgsHash(p)); err != nil {
 				return nil, err
 			}
@@ -257,7 +259,7 @@ func confirmToolWarn[In, Out any](
 			return run(ctx, s.api, in)
 		})
 		if err != nil {
-			return nil, zero, err
+			return nil, zero, toolErr(err)
 		}
 		if q, ok := res.(ownerQueued); ok {
 			r := s.pending.Result(q.id)
@@ -268,10 +270,10 @@ func confirmToolWarn[In, Out any](
 			if out, ok := r.Result.(Out); ok && r.Status == "executed" {
 				st.Result = &out
 			}
-			return nil, st, nil
+			return nil, scrubOutput(st), nil
 		}
 		out, _ := res.(Out)
-		return nil, PaymentStep[Out]{Status: "executed", Result: &out}, nil
+		return nil, scrubOutput(PaymentStep[Out]{Status: "executed", Result: &out}), nil
 	})
 }
 
@@ -368,5 +370,5 @@ func ownerSummary(p *PaymentPreview) string {
 	if p.Recipient != "" {
 		out += " → " + p.Recipient
 	}
-	return clip(out, 300)
+	return clip(out, 600)
 }

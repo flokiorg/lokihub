@@ -281,6 +281,9 @@ func (s *Server) registerAppTools(srv *mcpsdk.Server, conn *Conn) {
 			if _, err := s.resolveApp(in.AppID, db.AppKindCircleHub); err != nil {
 				return nil, err
 			}
+			if in.Mode != db.CircleDeleteModeAll && in.Mode != db.CircleDeleteModeEmptyOnly {
+				return nil, errInvalidArgs("mode must be " + strconv.Quote(db.CircleDeleteModeAll) + " or " + strconv.Quote(db.CircleDeleteModeEmptyOnly))
+			}
 			return s.appFundsPreview(ctx, a, in.AppID, "Tear down circle", "member balances settled by mode \""+in.Mode+"\"")
 		},
 		func(_ context.Context, a api.API, in deleteCircleArgs) (*api.DeleteCircleHubResult, error) {

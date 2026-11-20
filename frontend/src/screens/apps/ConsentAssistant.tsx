@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import AssistantGroupPicker from "src/components/connections/AssistantGroupPicker";
+import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import {
   Card,
@@ -53,7 +54,9 @@ export function ConsentAssistant() {
     request<ConsentView>(`/api/mcp/oauth/consent/${encodeURIComponent(id)}`)
       .then((v) => {
         setView(v);
-        setName(v?.clientName ?? "");
+        // Never pre-fill the attacker-choosable client name (pentest E MED-1/2):
+        // default to where the access goes, which the hub verified.
+        setName(v?.redirectHost ? `Assistant via ${v.redirectHost}` : "");
       })
       .catch((e: Error) => setError(e.message));
   }, [id, t]);
@@ -112,16 +115,29 @@ export function ConsentAssistant() {
       <div className="flex flex-col gap-6 max-w-2xl">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BotIcon className="w-5 h-5" />
-              {view.clientName}
-            </CardTitle>
             <CardDescription>
-              {t(
-                "consent.redirectNote",
-                "After you decide you'll be sent back to {{host}}. Only continue if you started this from your assistant just now.",
-                { host: view.redirectHost }
-              )}
+              {t("consent.accessGoesTo", "Access goes to")}
+            </CardDescription>
+            <CardTitle className="flex items-center gap-2 text-2xl break-all">
+              <BotIcon className="w-5 h-5 shrink-0" />
+              {view.redirectHost}
+            </CardTitle>
+            <CardDescription className="flex flex-col gap-1">
+              <span>
+                {t("consent.callsItself", "It calls itself")}{" "}
+                <span className="font-medium text-foreground">
+                  “{view.clientName}”
+                </span>{" "}
+                <Badge variant="warning">
+                  {t("consent.unverified", "name not verified")}
+                </Badge>
+              </span>
+              <span>
+                {t(
+                  "consent.redirectNote2",
+                  "Only continue if you started this from your assistant just now and the address above is the one you expect."
+                )}
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-1.5">

@@ -1063,7 +1063,37 @@ func (s *Server) registerLSPTools(srv *mcpsdk.Server, conn *Conn) {
 					},
 				}
 				if in.Trusted {
-					p.Action = "Trust LSP " + e.NodeKey + " — this hub may then contact it and buy liquidity from it"
+					// Hub-derived risk facts go INTO the action text, so they
+					// reach the owner's approval queue too (pentest C F2: a
+					// spoofed announcement can copy a real LSP's name).
+					var risks []string
+					if !e.InGraph {
+						risks = append(risks, "NOT in the Lightning graph (no public channels)")
+					} else if e.GraphChannels < 3 {
+						risks = append(risks, fmt.Sprintf("only %d public channel(s)", e.GraphChannels))
+					}
+					same := 0
+					for _, o := range entries {
+						if o.NodeKey != e.NodeKey && strings.EqualFold(strings.TrimSpace(o.Name), strings.TrimSpace(e.Name)) {
+							same++
+						}
+					}
+					if same > 0 {
+						risks = append(risks, fmt.Sprintf("%d other LSP(s) announce the SAME name", same))
+					}
+					if !e.CreatedAt.IsZero() && time.Since(e.CreatedAt) < 7*24*time.Hour {
+						risks = append(risks, "first seen "+e.CreatedAt.UTC().Format("2006-01-02")+" (less than a week ago)")
+					}
+					if !e.Usable {
+						risks = append(risks, "announcement not usable: "+quoteUntrusted(e.InvalidReason))
+					}
+					p.Action = "Trust LSP " + quoteUntrusted(e.Name) + " (" + e.NodeKey[:16] + "…) — this hub may then contact it and buy liquidity from it"
+					if len(risks) > 0 {
+						p.Action += ". RISKS: " + strings.Join(risks, "; ")
+					}
+					p.Details = append(p.Details,
+						PreviewDetail{Label: "in channel graph", Value: fmt.Sprintf("%v (%d channels)", e.InGraph, e.GraphChannels)},
+						PreviewDetail{Label: "first seen by this hub", Value: e.CreatedAt.UTC().Format(time.RFC3339)})
 					for _, f := range e.LSPS2Fees {
 						p.Details = append(p.Details, PreviewDetail{Label: "announced JIT fee", Value: fmt.Sprintf("%+v", f)})
 					}
@@ -1109,7 +1139,7 @@ func (s *Server) registerLSPTools(srv *mcpsdk.Server, conn *Conn) {
 				d = append(d, PreviewDetail{Label: "LSP live fee rule", Value: fmt.Sprintf("min %s loki, %d ppm", formatLoki(p.MinFeeMloki), p.Proportional)})
 			}
 			return &PaymentPreview{
-				Action:      "Order a channel from " + lspLabel(a, in.LSPPubkey),
+				Action:      "Order a channel from " + lspLabel(a, in.LSPPubkey) + " (its fee is quoted in the order; the hub refuses an invoice that does not match the quote or does not pay the LSP)",
 				AmountLoki:  strconv.FormatUint(in.ClientBalanceLoki, 10),
 				AmountMloki: in.ClientBalanceLoki * 1000,
 				Recipient:   lspLabel(a, in.LSPPubkey),

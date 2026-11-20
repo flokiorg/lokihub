@@ -24,7 +24,7 @@ type txView struct {
 	Type            string          `json:"type"`
 	State           string          `json:"state"`
 	Invoice         string          `json:"invoice"`
-	Description     string          `json:"description"`
+	Description     string          `json:"description_untrusted"` // payer/payee-written memo
 	DescriptionHash string          `json:"descriptionHash"`
 	PaymentHash     string          `json:"paymentHash"`
 	Amount          uint64          `json:"amount"`
@@ -34,7 +34,7 @@ type txView struct {
 	CreatedAt       string          `json:"createdAt"`
 	SettledAt       *string         `json:"settledAt"`
 	AppID           *uint           `json:"appId"`
-	Boostagram      *api.Boostagram `json:"boostagram,omitempty"`
+	Boostagram      *api.Boostagram `json:"boostagram_untrusted,omitempty"` // sender-written
 	FailureReason   string          `json:"failureReason"`
 }
 

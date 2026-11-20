@@ -53,11 +53,25 @@ func TestActivityLogRecordsCalls(t *testing.T) {
 	}
 
 	l := NewActivityLog()
-	for i := 0; i < activityCap+25; i++ {
+	for i := 0; i < activityPerApp+25; i++ {
 		l.Add(ActivityEntry{AppID: 1, Tool: "t"})
 	}
-	if n := len(l.List(0, activityCap)); n != activityCap {
-		t.Errorf("ring holds %d, want cap %d", n, activityCap)
+	if n := len(l.List(1, activityCap)); n != activityPerApp {
+		t.Errorf("per-assistant space holds %d, want %d", n, activityPerApp)
+	}
+	// Pentest F F-2: a flood of reads by assistant 2 never evicts assistant 1's
+	// write, and assistant 2's reads cannot evict its own write either.
+	l.Add(ActivityEntry{AppID: 1, Tool: "send_payment", Outcome: "pending_approval"})
+	l.add(ActivityEntry{AppID: 2, Tool: "set_listing_relays", Outcome: "done"}, false)
+	for i := 0; i < 5000; i++ {
+		l.add(ActivityEntry{AppID: 2, Tool: "health", Outcome: "done"}, true)
+	}
+	found := map[string]bool{}
+	for _, e := range l.List(0, activityCap) {
+		found[e.Tool] = true
+	}
+	if !found["send_payment"] || !found["set_listing_relays"] {
+		t.Errorf("read flood evicted writes: %v", found)
 	}
 	if c := clip("a\u202eb\u200bc", 100); c != "abc" {
 		t.Errorf("bidi/zero-width survive clip: %q", c)

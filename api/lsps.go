@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	decodepay "github.com/flokiorg/lokihub/internal/decodepay"
 	"strconv"
 	"strings"
 	"time"
@@ -123,6 +124,12 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 		// then fee must be the total payload (for LSPS1 buy-inbound).
 		if feeTotalLoki == 0 && orderTotalLoki > 0 {
 			feeTotalLoki = orderTotalLoki
+		}
+	}
+	if invoice != "" {
+		if err := verifyLSPInvoice(invoice, orderTotalLoki, req.LSPPubkey); err != nil {
+			logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Msg("LSPS1 order invoice rejected")
+			return nil, err
 		}
 	}
 
@@ -480,3 +487,25 @@ func (api *api) LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, 
 // ErrLiquidityNotRunning is returned instead of panicking when an LSP call
 // arrives before the liquidity manager has started (or when it is disabled).
 var ErrLiquidityNotRunning = errors.New("the liquidity (LSP) service is not running")
+
+// ErrLSPInvoiceMismatch: the LSP's payment invoice does not match its quote.
+var ErrLSPInvoiceMismatch = errors.New("the LSP's invoice does not match its quoted order total or is not payable to the LSP itself — order refused")
+
+// verifyLSPInvoice checks that an LSPS1 order invoice charges exactly the
+// quoted order total and pays the LSP's own node, so a malicious or spoofed
+// LSP cannot quote a small price and bill a different amount or redirect the
+// payment elsewhere (pentest C F3).
+func verifyLSPInvoice(invoice string, orderTotalLoki uint64, lspPubkey string) error {
+	inv, err := decodepay.Decode(strings.TrimSpace(invoice))
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrLSPInvoiceMismatch, err)
+	}
+	if inv.AmountMloki < 0 || uint64(inv.AmountMloki) != orderTotalLoki*1000 {
+		return fmt.Errorf("%w (invoice %d mloki, quoted %d loki)", ErrLSPInvoiceMismatch, inv.AmountMloki, orderTotalLoki)
+	}
+	want := strings.ToLower(strings.SplitN(strings.TrimSpace(lspPubkey), "@", 2)[0])
+	if !strings.EqualFold(inv.Payee, want) {
+		return fmt.Errorf("%w (invoice pays %s, not the LSP)", ErrLSPInvoiceMismatch, inv.Payee)
+	}
+	return nil
+}

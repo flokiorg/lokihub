@@ -88,6 +88,16 @@ export default function AIAssistants() {
         </CardHeader>
       </Card>
 
+      <ApprovalLimitCard
+        limit={controls.approvalLimitLoki ?? 10000}
+        onSave={(v) =>
+          run(
+            () => updateControls({ approvalLimitLoki: v }),
+            t("assistants.limitFailed", "Could not save the approval limit")
+          )
+        }
+      />
+
       {controls.loopbackSupported && (
         <LocalAccessCard
           port={controls.loopbackPort ?? 0}
@@ -123,13 +133,12 @@ export default function AIAssistants() {
                 key={p.id}
                 className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0"
               >
-                <div className="flex flex-col">
-                  <span className="font-medium">{p.summary}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {assistants.find((a) => a.appId === p.appId)?.name ??
-                      t("assistants.unknown", "An assistant")}
-                  </span>
-                </div>
+                <PendingFrom
+                  summary={p.summary}
+                  createdAt={p.createdAt}
+                  appId={p.appId}
+                  assistant={assistants.find((a) => a.appId === p.appId)}
+                />
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -258,7 +267,7 @@ function ActivityCard({
         <CardDescription>
           {t(
             "assistants.activityDescription",
-            "Everything your assistants did or tried, newest first. Tool inputs are never recorded."
+            "Everything your assistants did or tried, newest first. Each entry keeps a short description (such as an amount and recipient), not the full request. Older entries are in the hub log."
           )}
         </CardDescription>
       </CardHeader>
@@ -446,6 +455,104 @@ function LocalAccessCard({
           )}
         </CardContent>
       )}
+    </Card>
+  );
+}
+
+// PendingFrom shows WHO is asking in a way a lookalike name cannot fake: the
+// assistant's id, when it was connected (flagged when new) and when it asked.
+function PendingFrom({
+  summary,
+  createdAt,
+  appId,
+  assistant,
+}: {
+  summary: string;
+  createdAt: string;
+  appId: number;
+  assistant?: AIAssistant;
+}) {
+  const { t } = useTranslation("apps");
+  const isNew =
+    assistant && dayjs(assistant.createdAt).isAfter(dayjs().subtract(1, "day"));
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="font-medium break-words">{summary}</span>
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+        <span>
+          {assistant?.name ?? t("assistants.unknown", "An assistant")} · #
+          {appId}
+        </span>
+        {assistant && (
+          <span>
+            {t("assistants.connectedAgo", {
+              defaultValue: "connected {{ago}}",
+              ago: dayjs(assistant.createdAt).fromNow(),
+            })}
+          </span>
+        )}
+        {isNew && (
+          <Badge variant="warning">
+            {t("assistants.newAssistant", "New assistant")}
+          </Badge>
+        )}
+        <span>
+          {t("assistants.askedAgo", {
+            defaultValue: "asked {{ago}}",
+            ago: dayjs(createdAt).fromNow(),
+          })}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+// ApprovalLimitCard sets the amount above which an assistant's payment or
+// transfer waits for the owner's approval (decision D22).
+function ApprovalLimitCard({
+  limit,
+  onSave,
+}: {
+  limit: number;
+  onSave: (loki: number) => void;
+}) {
+  const { t } = useTranslation("apps");
+  const [draft, setDraft] = React.useState(String(limit));
+  React.useEffect(() => setDraft(String(limit)), [limit]);
+  const parsed = Number(draft);
+  const valid = draft !== "" && Number.isInteger(parsed) && parsed >= 0;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldAlertIcon className="w-4 h-4" />
+          {t("assistants.limitTitle", "Approval limit")}
+        </CardTitle>
+        <CardDescription>
+          {t(
+            "assistants.limitDescription",
+            "Payments and transfers above this amount wait for your approval here, even after the assistant confirms them. Trusting an LSP, creating cash, publishing your node profile and changing order terms always wait for you. Set 0 to approve every payment."
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-3">
+        <Input
+          id="approval-limit"
+          inputMode="numeric"
+          className="max-w-40"
+          value={draft}
+          aria-label={t("assistants.limitTitle", "Approval limit")}
+          onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+        />
+        <span className="text-sm text-muted-foreground">loki</span>
+        <Button
+          variant="outline"
+          disabled={!valid || parsed === limit}
+          onClick={() => onSave(parsed)}
+        >
+          {t("assistants.limitSave", "Save")}
+        </Button>
+      </CardContent>
     </Card>
   );
 }

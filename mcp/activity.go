@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -26,29 +27,75 @@ type ActivityEntry struct {
 }
 
 const (
-	activityCap       = 2000
+	activityCap       = 2000 // newest entries returned at most / ring size per kind of call
+	activityPerApp    = 500  // per assistant: its writes/denials/approvals
+	activityReadsKeep = 100  // per assistant: plain successful reads (noise, kept apart)
 	activityDetailMax = 160
 )
 
-// ActivityLog is a bounded, newest-first record of assistant tool calls. Every
-// entry is also written to the hub log, so the history outlives a restart.
+// ActivityLog is a bounded, newest-first record of assistant tool calls. Each
+// assistant has its OWN space, and plain successful reads are kept apart from
+// everything else, so no assistant — and no flood of harmless reads — can push
+// another call out of the owner's view (pentest F F-2). Every entry is also
+// written to the hub log, so the history outlives a restart.
 type ActivityLog struct {
-	mu   sync.Mutex
-	buf  []ActivityEntry // ring
+	mu    sync.Mutex
+	apps  map[uint]*appActivity
+	order uint64
+}
+
+type appActivity struct {
+	main  ring
+	reads ring
+}
+
+type stamped struct {
+	seq uint64
+	e   ActivityEntry
+}
+
+type ring struct {
+	buf  []stamped
 	next int
 	full bool
 }
 
-// NewActivityLog builds an empty log.
-func NewActivityLog() *ActivityLog { return &ActivityLog{buf: make([]ActivityEntry, activityCap)} }
+func (r *ring) add(x stamped, size int) {
+	if r.buf == nil {
+		r.buf = make([]stamped, size)
+	}
+	r.buf[r.next] = x
+	r.next = (r.next + 1) % len(r.buf)
+	if r.next == 0 {
+		r.full = true
+	}
+}
 
-// Add records an entry.
-func (l *ActivityLog) Add(e ActivityEntry) {
+func (r *ring) all() []stamped {
+	if r.full {
+		return append(append([]stamped(nil), r.buf[r.next:]...), r.buf[:r.next]...)
+	}
+	return append([]stamped(nil), r.buf[:r.next]...)
+}
+
+// NewActivityLog builds an empty log.
+func NewActivityLog() *ActivityLog { return &ActivityLog{apps: map[uint]*appActivity{}} }
+
+// Add records an entry. read marks a plain read-tool call.
+func (l *ActivityLog) Add(e ActivityEntry) { l.add(e, false) }
+
+func (l *ActivityLog) add(e ActivityEntry, read bool) {
 	l.mu.Lock()
-	l.buf[l.next] = e
-	l.next = (l.next + 1) % len(l.buf)
-	if l.next == 0 {
-		l.full = true
+	l.order++
+	a := l.apps[e.AppID]
+	if a == nil {
+		a = &appActivity{}
+		l.apps[e.AppID] = a
+	}
+	if read && e.Outcome == "done" {
+		a.reads.add(stamped{l.order, e}, activityReadsKeep)
+	} else {
+		a.main.add(stamped{l.order, e}, activityPerApp)
 	}
 	l.mu.Unlock()
 	logger.Logger.Info().
@@ -65,19 +112,31 @@ func (l *ActivityLog) List(appID uint, limit int) []ActivityEntry {
 		limit = 100
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
-	n := l.next
-	if l.full {
-		n = len(l.buf)
-	}
-	out := make([]ActivityEntry, 0, min(limit, n))
-	for i := 1; i <= n && len(out) < limit; i++ {
-		e := l.buf[(l.next-i+len(l.buf))%len(l.buf)]
-		if appID == 0 || e.AppID == appID {
-			out = append(out, e)
+	var all []stamped
+	for id, a := range l.apps {
+		if appID != 0 && id != appID {
+			continue
 		}
+		all = append(all, a.main.all()...)
+		all = append(all, a.reads.all()...)
+	}
+	l.mu.Unlock()
+	sort.Slice(all, func(i, j int) bool { return all[i].seq > all[j].seq })
+	if len(all) > limit {
+		all = all[:limit]
+	}
+	out := make([]ActivityEntry, len(all))
+	for i, x := range all {
+		out[i] = x.e
 	}
 	return out
+}
+
+// Forget drops a deleted assistant's in-memory activity (the hub log keeps it).
+func (l *ActivityLog) Forget(appID uint) {
+	l.mu.Lock()
+	delete(l.apps, appID)
+	l.mu.Unlock()
 }
 
 // Activity exposes the log to the owner API.
@@ -97,11 +156,11 @@ func (s *Server) activityMiddleware(conn *Conn) mcpsdk.Middleware {
 			}
 			// The name is caller-chosen: log only real tool names, so an
 			// assistant cannot write arbitrary text into the owner's log.
-			if !isSafeToolName(tool) {
-				tool = "unknown_tool"
-			}
 			outcome, detail := describeCall(res, err)
-			s.activity.Add(ActivityEntry{Time: time.Now().UTC(), AppID: conn.AppID, Tool: clip(tool, 64), Outcome: outcome, Detail: detail})
+			if !isSafeToolName(tool) {
+				tool, detail = "unknown_tool", "" // the error would echo the forged name
+			}
+			s.activity.add(ActivityEntry{Time: time.Now().UTC(), AppID: conn.AppID, Tool: clip(tool, 64), Outcome: outcome, Detail: detail}, s.isReadTool(tool))
 			return res, err
 		}
 	}
@@ -133,6 +192,7 @@ func describeCall(res mcpsdk.Result, err error) (string, string) {
 		Preview *struct {
 			Action     string `json:"action"`
 			AmountLoki string `json:"amount_loki"`
+			Recipient  string `json:"recipient"`
 		} `json:"preview"`
 	}
 	if b, mErr := json.Marshal(r.StructuredContent); mErr == nil {
@@ -145,6 +205,9 @@ func describeCall(res mcpsdk.Result, err error) (string, string) {
 			d = sc.Preview.Action
 			if sc.Preview.AmountLoki != "" && sc.Preview.AmountLoki != "0" {
 				d += " — " + sc.Preview.AmountLoki + " loki"
+			}
+			if sc.Preview.Recipient != "" {
+				d += " → " + sc.Preview.Recipient
 			}
 		}
 		return "needs_confirmation", clip(d, activityDetailMax)
