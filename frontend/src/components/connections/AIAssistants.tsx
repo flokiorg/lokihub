@@ -23,10 +23,14 @@ import {
 } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Switch } from "src/components/ui/switch";
+import AssistantGroupPicker from "src/components/connections/AssistantGroupPicker";
 import {
   AI_GROUPS,
   AIActivity,
   AIAssistant,
+  editAssistant,
+  grantsToLevels,
+  levelsToGrants,
   useAIAssistants,
 } from "src/hooks/useAIAssistants";
 
@@ -46,6 +50,7 @@ export default function AIAssistants() {
     controls,
     activity,
     loading,
+    reload,
     revoke,
     decide,
     updateControls,
@@ -198,6 +203,7 @@ export default function AIAssistants() {
         <AssistantRow
           key={a.appId}
           assistant={a}
+          onChanged={reload}
           onRevoke={() =>
             run(
               () => revoke(a.appPubkey),
@@ -206,6 +212,15 @@ export default function AIAssistants() {
           }
         />
       ))}
+
+      {assistants.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {t(
+            "assistants.passwordNote",
+            "Changing your hub password disconnects every assistant. To reconnect one, open Edit and rotate its key, then give the new key to the assistant."
+          )}
+        </p>
+      )}
 
       {assistants.length > 0 && (
         <ActivityCard
@@ -311,12 +326,15 @@ function ActivityCard({
 function AssistantRow({
   assistant,
   onRevoke,
+  onChanged,
 }: {
   assistant: AIAssistant;
   onRevoke: () => void;
+  onChanged: () => void;
 }) {
   const { t } = useTranslation("apps");
   const [confirming, setConfirming] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
   const expired =
     assistant.expiresAt && dayjs(assistant.expiresAt).isBefore(dayjs());
   // Canonical group order (not map-key order) so every row reads the same way.
@@ -369,12 +387,119 @@ function AssistantRow({
             </Button>
           </div>
         ) : (
-          <Button variant="outline" onClick={() => setConfirming(true)}>
-            {t("assistants.revoke", "Revoke")}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditing((v) => !v)}>
+              {editing
+                ? t("assistants.closeEdit", "Close")
+                : t("assistants.edit", "Edit")}
+            </Button>
+            <Button variant="outline" onClick={() => setConfirming(true)}>
+              {t("assistants.revoke", "Revoke")}
+            </Button>
+          </div>
         )}
       </CardContent>
+      {editing && (
+        <AssistantEditor
+          assistant={assistant}
+          onSaved={() => {
+            setEditing(false);
+            onChanged();
+          }}
+        />
+      )}
     </Card>
+  );
+}
+
+// AssistantEditor changes an assistant's name and what it may do (effective on
+// its next call) and can rotate its key (the old key stops working at once).
+function AssistantEditor({
+  assistant,
+  onSaved,
+}: {
+  assistant: AIAssistant;
+  onSaved: () => void;
+}) {
+  const { t } = useTranslation("apps");
+  const [name, setName] = React.useState(assistant.name);
+  const [levels, setLevels] = React.useState(() =>
+    grantsToLevels(assistant.groups)
+  );
+  const [busy, setBusy] = React.useState(false);
+  const [newKey, setNewKey] = React.useState<string>();
+  const grants = levelsToGrants(levels);
+  const nothing = Object.keys(grants).length === 0;
+
+  async function save() {
+    setBusy(true);
+    try {
+      await editAssistant(assistant.appId, {
+        name: name.trim(),
+        groups: grants,
+      });
+      toast.success(
+        t("assistants.saved", "Saved — applies from its next request")
+      );
+      onSaved();
+    } catch (e) {
+      toast.error(t("assistants.saveFailed", "Could not save"), {
+        description: (e as Error).message,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rotate() {
+    setBusy(true);
+    try {
+      setNewKey(await editAssistant(assistant.appId, { rotateKey: true }));
+    } catch (e) {
+      toast.error(t("assistants.rotateFailed", "Could not rotate the key"), {
+        description: (e as Error).message,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <CardContent className="flex flex-col gap-4 border-t pt-4">
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor={`name-${assistant.appId}`}
+          className="text-sm font-medium"
+        >
+          {t("assistants.nameLabel", "Name")}
+        </label>
+        <Input
+          id={`name-${assistant.appId}`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <AssistantGroupPicker levels={levels} onChange={setLevels} />
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={busy || nothing || !name.trim()} onClick={save}>
+          {t("assistants.save", "Save changes")}
+        </Button>
+        <Button variant="outline" disabled={busy} onClick={rotate}>
+          {t("assistants.rotate", "Rotate key")}
+        </Button>
+      </div>
+      {newKey && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm text-muted-foreground">
+            {t(
+              "assistants.newKeyNote",
+              "New key — shown once. The old key has stopped working; paste this one into the assistant."
+            )}
+          </span>
+          <Input readOnly value={newKey} onFocus={(e) => e.target.select()} />
+        </div>
+      )}
+    </CardContent>
   );
 }
 

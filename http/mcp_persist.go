@@ -1,0 +1,81 @@
+package http
+
+import (
+	"errors"
+	"sync/atomic"
+	"time"
+
+	"gorm.io/gorm"
+
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/mcp"
+)
+
+const (
+	mcpExecutionTTL     = 24 * time.Hour // the idempotency window
+	mcpActivityKeepDays = 90             // durable activity retention
+	mcpActivityPerApp   = 5000           // and at most this many per assistant
+	mcpPruneEvery       = 200            // writes between prunes
+)
+
+// gormExecutions persists completed assistant writes (critic O1).
+type gormExecutions struct {
+	db *gorm.DB
+	n  atomic.Uint64
+}
+
+func (g *gormExecutions) Get(appID uint, tool, key string) (string, []byte, bool, error) {
+	var row db.MCPExecution
+	err := g.db.Where("app_id = ? AND tool = ? AND key = ? AND created_at > ?", appID, tool, key, time.Now().Add(-mcpExecutionTTL)).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil, false, nil
+	}
+	if err != nil {
+		return "", nil, false, err
+	}
+	return row.ArgsHash, []byte(row.Result), true, nil
+}
+
+func (g *gormExecutions) Put(appID uint, tool, key, argsHash string, result []byte) error {
+	if g.n.Add(1)%mcpPruneEvery == 0 {
+		g.db.Where("created_at < ?", time.Now().Add(-mcpExecutionTTL)).Delete(&db.MCPExecution{})
+	}
+	return g.db.Create(&db.MCPExecution{AppID: appID, Tool: tool, Key: key, ArgsHash: argsHash, Result: string(result)}).Error
+}
+
+// gormActivity persists the owner's activity log.
+type gormActivity struct {
+	db *gorm.DB
+	n  atomic.Uint64
+}
+
+func (g *gormActivity) Save(e mcp.ActivityEntry) error {
+	if g.n.Add(1)%mcpPruneEvery == 0 {
+		g.prune(e.AppID)
+	}
+	return g.db.Create(&db.MCPActivity{AppID: e.AppID, Tool: e.Tool, Outcome: e.Outcome, Detail: e.Detail, CreatedAt: e.Time}).Error
+}
+
+func (g *gormActivity) prune(appID uint) {
+	g.db.Where("created_at < ?", time.Now().AddDate(0, 0, -mcpActivityKeepDays)).Delete(&db.MCPActivity{})
+	var cutoff db.MCPActivity
+	if err := g.db.Where("app_id = ?", appID).Order("id desc").Offset(mcpActivityPerApp).First(&cutoff).Error; err == nil {
+		g.db.Where("app_id = ? AND id <= ?", appID, cutoff.ID).Delete(&db.MCPActivity{})
+	}
+}
+
+func (g *gormActivity) Recent(appID uint, limit int) ([]mcp.ActivityEntry, error) {
+	q := g.db.Order("id desc").Limit(limit)
+	if appID != 0 {
+		q = q.Where("app_id = ?", appID)
+	}
+	var rows []db.MCPActivity
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]mcp.ActivityEntry, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, mcp.ActivityEntry{Time: r.CreatedAt, AppID: r.AppID, Tool: r.Tool, Outcome: r.Outcome, Detail: r.Detail})
+	}
+	return out, nil
+}

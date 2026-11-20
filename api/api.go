@@ -381,7 +381,19 @@ func circleHubConfigPatch(req *UpdateAppRequest) apps.CircleHubConfigPatch {
 	}
 }
 
+// appKindMCP is the AI-assistant connection kind (mcp.AppKindMCP; not imported
+// here to keep api free of the mcp package).
+const appKindMCP = "mcp"
+
+// ErrManagedElsewhere — AI assistant connections are edited on their own screen.
+var ErrManagedElsewhere = errors.New("AI assistant connections are managed from the AI assistants screen")
+
 func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) error {
+	if userApp.Kind == appKindMCP {
+		// The generic editor would replace mcp:* scopes with wallet-connection
+		// scopes on a row that still holds a key pair (critic O9).
+		return fmt.Errorf("%w: %w", constants.ErrInvalidParams, ErrManagedElsewhere)
+	}
 	updatesCashHub := userApp.Kind == db.AppKindCashHub &&
 		(updateAppRequest.CashPerWalletMaxMloki != nil || updateAppRequest.CashMaxExpSecs != nil ||
 			updateAppRequest.CashMinTransferMloki != nil || updateAppRequest.CashRedeemFeePpm != nil ||
@@ -987,6 +999,11 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 		query = query.Where("last_used_at IS NULL OR last_used_at < ?", time.Now().Add(-60*24*time.Hour))
 	}
 
+	if (filters.SubWallets != nil && !*filters.SubWallets) || filters.Unused {
+		// AI assistant connections are managed on their own screen: never
+		// listed (or cleaned up) as ordinary wallet connections (critic O9).
+		query = query.Where("kind IS NULL OR kind != ?", appKindMCP)
+	}
 	if filters.SubWallets != nil && !*filters.SubWallets {
 		// exclude subwallets :scream:
 		if api.db.Name() == "sqlite" {

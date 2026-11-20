@@ -125,7 +125,13 @@ func (s *Server) registerAppTools(srv *mcpsdk.Server, conn *Conn) {
 			if err != nil {
 				return nil, err
 			}
-			return a.GetApp(ctx, app), nil
+			v := a.GetApp(ctx, app)
+			if v != nil {
+				cp := *v
+				cp.Metadata = nil // raw metadata never reaches an assistant (redact.go)
+				v = &cp
+			}
+			return v, nil
 		})
 	confirmTool(s, srv, conn, "DeleteApp", "delete_app",
 		"Delete (revoke) a connected app. If it holds its own balance, that balance is affected.", keyOf[appDeleteArgs],

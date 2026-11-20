@@ -1,8 +1,12 @@
 package http
 
 import (
+	"encoding/json"
 	"errors"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -102,5 +106,84 @@ func (httpSvc *HttpService) registerMCPConnections(g *echo.Group) {
 			})
 		}
 		return c.JSON(http.StatusOK, out)
+	})
+
+	// Edit an assistant: rename it, change what it may do, and/or rotate its
+	// key (the old key stops working at once). Owner-only (critic G4/C1).
+	//	PATCH /api/mcp/connections/:appId {name?, groups?, rotateKey?}
+	g.PATCH("/mcp/connections/:appId", func(c echo.Context) error {
+		id, err := strconv.ParseUint(c.Param("appId"), 10, 32)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+		}
+		var req struct {
+			Name      *string                 `json:"name"`
+			Groups    *map[mcp.Group]mcp.Mode `json:"groups"`
+			RotateKey bool                    `json:"rotateKey"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+		}
+		var token string
+		err = httpSvc.db.Transaction(func(tx *gorm.DB) error {
+			var app db.App
+			if err := tx.Where("id = ? AND kind = ?", id, mcp.AppKindMCP).First(&app).Error; err != nil {
+				return echo.NewHTTPError(http.StatusNotFound, "no such assistant")
+			}
+			if req.Name != nil {
+				name := mcp.CleanConnectionName(*req.Name)
+				if name == "" {
+					return echo.NewHTTPError(http.StatusBadRequest, "name required")
+				}
+				var n int64
+				tx.Model(&db.App{}).Where("name = ? AND id != ?", name, app.ID).Count(&n)
+				if n > 0 {
+					return echo.NewHTTPError(http.StatusConflict, "another connection already has that name")
+				}
+				if err := tx.Model(&app).Update("name", name).Error; err != nil {
+					return err
+				}
+			}
+			if req.Groups != nil {
+				scopes, err := mcp.ScopesFor(*req.Groups)
+				if err != nil {
+					return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+				}
+				if err := tx.Where("app_id = ?", app.ID).Delete(&db.AppPermission{}).Error; err != nil {
+					return err
+				}
+				for _, sc := range scopes {
+					if err := tx.Create(&db.AppPermission{AppId: app.ID, Scope: sc, BudgetRenewal: "never", ExpiresAt: app.ExpiresAt}).Error; err != nil {
+						return err
+					}
+				}
+			}
+			if req.RotateKey {
+				md := map[string]any{}
+				if len(app.Metadata) > 0 {
+					_ = json.Unmarshal(app.Metadata, &md)
+				}
+				g, _ := md[mcpKeyGenKey].(float64)
+				md[mcpKeyGenKey] = g + 1
+				b, _ := json.Marshal(md)
+				if err := tx.Model(&app).Update("metadata", datatypes.JSON(b)).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			var he *echo.HTTPError
+			if errors.As(err, &he) {
+				return he
+			}
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to update the assistant")
+		}
+		if req.RotateKey {
+			if token, err = httpSvc.mcpTokens().Mint(uint(id)); err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to issue the new key")
+			}
+		}
+		return c.JSON(http.StatusOK, map[string]string{"token": token})
 	})
 }

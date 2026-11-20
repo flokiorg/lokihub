@@ -21,6 +21,14 @@ contents:
     file_info:
       mode: 0755
 
+  # Stdio bridge for AI assistants on this computer (lokihub-mcp --stdio)
+  - src: "ops/bin/${MCP_BINARY_NAME}"
+    dst: "/usr/bin/lokihub-mcp"
+    type: "tree"
+    expand: true
+    file_info:
+      mode: 0755
+
   # Desktop Entry & Icon
   - src: "ops/appicon.png"
     dst: "/usr/share/icons/hicolor/256x256/apps/lokihub.png"

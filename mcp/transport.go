@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -23,7 +24,7 @@ const maxRequestBodyBytes = 4 << 20 // 4 MiB
 // connection the bearer middleware authenticated and builds a per-session
 // server bound to it; a missing connection yields 400 from the SDK (but the
 // bearer middleware returns 401 first, so that path is unreachable in practice).
-func (s *Server) sdkHandler() http.Handler {
+func (s *Server) sdkHandler(behindProxy bool) http.Handler {
 	return mcpsdk.NewStreamableHTTPHandler(func(r *http.Request) *mcpsdk.Server {
 		conn, ok := ConnFrom(r.Context())
 		if !ok {
@@ -35,8 +36,12 @@ func (s *Server) sdkHandler() http.Handler {
 		// Idle sessions are reaped so a token cannot accumulate unbounded
 		// per-session servers (audit MED-2).
 		SessionTimeout: sessionIdleTimeout,
-		// DisableLocalhostProtection stays false: the SDK rejects
-		// cross-origin / rebinding requests to loopback for us.
+		// Localhost (DNS-rebinding) protection: kept on the desktop loopback
+		// listener, where a browser page could otherwise reach 127.0.0.1. On
+		// the hub's own endpoint it would refuse every request from a
+		// same-host reverse proxy (loopback peer, public Host — critic O7), and
+		// a bearer token is mandatory there, which a rebinding page lacks.
+		DisableLocalhostProtection: behindProxy,
 	})
 }
 
@@ -44,7 +49,11 @@ func (s *Server) sdkHandler() http.Handler {
 // the Streamable-HTTP handler. Mount it at /mcp (server mode) or serve it on the
 // loopback listener (desktop mode).
 func (s *Server) Handler() http.Handler {
-	return s.bearerAuth(bindSessionToConn(s.sessionCap(s.sdkHandler())))
+	return s.handler(false)
+}
+
+func (s *Server) handler(behindProxy bool) http.Handler {
+	return s.bearerAuth(bindSessionToConn(s.sessionCap(s.sdkHandler(behindProxy))))
 }
 
 // maxSessionsPerConn bounds concurrent MCP sessions per connection (re-audit
@@ -159,6 +168,11 @@ func (s *Server) bearerAuth(next http.Handler) http.Handler {
 			return
 		}
 		conn, err := s.authn.Resolve(r.Context(), tok)
+		if errors.Is(err, ErrHubLocked) {
+			w.Header().Set("Retry-After", "30")
+			http.Error(w, "the hub is locked; unlock it in the Lokihub app", http.StatusServiceUnavailable)
+			return
+		}
 		if err != nil {
 			unauthorized(w, r)
 			return
@@ -191,7 +205,7 @@ func unauthorized(w http.ResponseWriter, r *http.Request) {
 // IMPORTANT: call this BEFORE the SPA's HTML5 static fallback is registered, or
 // the fallback swallows /mcp (and, in M4, the /.well-known/* metadata routes).
 func (s *Server) Mount(e *echo.Echo) {
-	h := echo.WrapHandler(s.Handler())
+	h := echo.WrapHandler(s.handler(true))
 	e.Any("/mcp", h)
 	e.Any("/mcp/*", h)
 }

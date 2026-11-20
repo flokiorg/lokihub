@@ -18,6 +18,7 @@ import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "src/components/ui/tabs";
 import {
+  AIControls,
   AIGrants,
   CreatedAssistant,
   createAssistant,
@@ -26,6 +27,36 @@ import {
   levelsToGrants,
 } from "src/hooks/useAIAssistants";
 import { copyToClipboard } from "src/lib/clipboard";
+import { request } from "src/utils/request";
+
+// useEndpoint resolves where an assistant connects. In the desktop app the page
+// origin (wails://…) is not reachable by an assistant: it connects to the
+// local listener on 127.0.0.1, which must be switched on first (critic G1).
+function useEndpoint(): { url?: string; desktop: boolean; loading: boolean } {
+  const [c, setC] = React.useState<AIControls>();
+  React.useEffect(() => {
+    request<AIControls>("/api/mcp/controls")
+      .then((v) => setC(v ?? {}))
+      .catch(() => setC({}));
+  }, []);
+  if (!c) {
+    return { desktop: false, loading: true };
+  }
+  if (c.loopbackSupported) {
+    return {
+      desktop: true,
+      loading: false,
+      url: c.loopbackPort
+        ? `http://127.0.0.1:${c.loopbackPort}/mcp`
+        : undefined,
+    };
+  }
+  return {
+    desktop: false,
+    loading: false,
+    url: `${window.location.origin}/mcp`,
+  };
+}
 
 const EXPIRY_CHOICES = [
   { days: 0, label: "Never" },
@@ -85,6 +116,7 @@ export function NewAssistant() {
         )}
       />
       <form onSubmit={onCreate} className="flex flex-col gap-6 max-w-2xl">
+        <SignInByLink />
         <Card>
           <CardHeader>
             <CardTitle>{t("assistant.nameTitle", "Name")}</CardTitle>
@@ -201,7 +233,8 @@ function AssistantCreated({
   name: string;
 }) {
   const { t } = useTranslation("apps");
-  const url = `${window.location.origin}/mcp`;
+  const endpoint = useEndpoint();
+  const url = endpoint.url ?? "";
   const config = JSON.stringify(
     {
       mcpServers: {
@@ -234,6 +267,23 @@ function AssistantCreated({
           </AlertDescription>
         </Alert>
 
+        {endpoint.desktop && !endpoint.url && (
+          <Alert>
+            <TriangleAlertIcon className="w-4 h-4" />
+            <AlertTitle>
+              {t("assistant.desktopOffTitle", "Turn on local access first")}
+            </AlertTitle>
+            <AlertDescription>
+              {t(
+                "assistant.desktopOffBody",
+                "Assistants on this computer connect to the Lokihub app directly. Switch on “Assistants on this computer” on the AI assistants page, then come back here — this key stays valid."
+              )}{" "}
+              <Link className="underline" to="/apps?tab=assistants">
+                {t("assistant.openAssistants", "Open AI assistants")}
+              </Link>
+            </AlertDescription>
+          </Alert>
+        )}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -294,6 +344,29 @@ function AssistantCreated({
           <summary className="cursor-pointer text-sm font-medium">
             {t("assistant.advancedSetup", "Advanced — manual config")}
           </summary>
+          {endpoint.desktop && endpoint.url && (
+            <div className="mt-3">
+              <CopyRow
+                label={t(
+                  "assistant.stdioConfig",
+                  "For assistants that only run local programs (stdio)"
+                )}
+                value={JSON.stringify(
+                  {
+                    mcpServers: {
+                      lokihub: {
+                        command: "lokihub-mcp",
+                        args: ["--stdio", "--url", url],
+                        env: { LOKIHUB_MCP_TOKEN: created.token },
+                      },
+                    },
+                  },
+                  null,
+                  2
+                )}
+              />
+            </div>
+          )}
           <div className="mt-3 flex flex-col gap-2">
             <p className="text-sm text-muted-foreground">
               {t(
@@ -327,5 +400,37 @@ function AssistantCreated({
         </Link>
       </div>
     </>
+  );
+}
+
+// SignInByLink: assistants that connect by link and ask you to approve (OAuth)
+// need nothing created here — creating a key for them would leave an unused
+// connection behind (critic E2).
+function SignInByLink() {
+  const { t } = useTranslation("apps");
+  const endpoint = useEndpoint();
+  if (endpoint.loading || endpoint.desktop || !endpoint.url) {
+    return null;
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          {t("assistant.byLinkTitle", "Does your assistant connect by link?")}
+        </CardTitle>
+        <CardDescription>
+          {t(
+            "assistant.byLinkBody",
+            "Many assistants only need this link: they then open a Lokihub page where you choose what they may do. In that case you don't need to create anything here."
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <CopyRow
+          label={t("assistant.connectorLink", "Connector link")}
+          value={endpoint.url}
+        />
+      </CardContent>
+    </Card>
   );
 }

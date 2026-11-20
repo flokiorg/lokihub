@@ -269,7 +269,7 @@ func writeTool[In, Out any](
 		if err != nil {
 			return nil, zero, toolErr(err)
 		}
-		out, _ := res.(Out)
+		out := asOut[Out](res)
 		return nil, scrubOutput(out), nil
 	})
 }
@@ -495,7 +495,7 @@ func (s *Server) ForgetApp(appID uint) {
 	delete(s.srvByApp, appID)
 	s.srvMu.Unlock()
 	s.limiters.Delete(appID)
-	s.activity.Forget(appID)
+	s.activity.Forget(appID) // in-memory only: the durable record outlives the assistant
 }
 
 // ErrRateLimited — the connection is calling faster than its allowance.

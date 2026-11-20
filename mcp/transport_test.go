@@ -243,3 +243,49 @@ func TestSessionCapAndServerCache(t *testing.T) {
 		t.Error("per-connection server rebuilt across requests")
 	}
 }
+
+// TestLockedHubAndProxyHost covers critic O2 and O7.
+func TestLockedHubAndProxyHost(t *testing.T) {
+	// O2: with the hub secret unavailable, the endpoint says 503, not 401.
+	locked := &StandardAuthenticator{Store: NewHMACTokenStore(func() ([]byte, error) { return nil, ErrNoSecret })}
+	ls := httptest.NewServer(NewServer(testAPI{}, locked).Handler())
+	defer ls.Close()
+	req, _ := http.NewRequest(http.MethodPost, ls.URL+"/mcp", strings.NewReader("{}"))
+	req.Header.Set("Authorization", "Bearer lkm_1_00")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("locked hub status = %d, want 503", resp.StatusCode)
+	}
+
+	// O7: a same-host proxy (loopback peer, public Host) reaches the hub's own
+	// endpoint; the desktop loopback handler still refuses such a Host.
+	auth := &fakeAuth{byToken: map[string]*Conn{"tok": {AppID: 1, Scopes: []string{GroupNode.Scope(ModeRead)}}}}
+	s := NewServer(testAPI{}, auth)
+	initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"x","version":"0"}}}`
+	status := func(h http.Handler) int {
+		srv := httptest.NewServer(h)
+		defer srv.Close()
+		r, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(initBody))
+		r.Host = "hub.example.com"
+		r.Header.Set("Authorization", "Bearer tok")
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Accept", "application/json, text/event-stream")
+		rs, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.Copy(io.Discard, rs.Body)
+		rs.Body.Close()
+		return rs.StatusCode
+	}
+	if c := status(s.handler(true)); c != http.StatusOK {
+		t.Errorf("proxied request to the hub endpoint: %d, want 200", c)
+	}
+	if c := status(s.handler(false)); c == http.StatusOK {
+		t.Error("desktop loopback handler accepted a non-local Host (DNS-rebinding guard off)")
+	}
+}

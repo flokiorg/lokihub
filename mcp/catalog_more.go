@@ -317,7 +317,13 @@ func (s *Server) registerCatalogMore(srv *mcpsdk.Server, conn *Conn) {
 	readToolIn(s, srv, conn, "ListApps", "list_apps",
 		"Connected apps (paged, max 100).",
 		func(_ context.Context, a api.API, in appsPage) (*api.ListAppsResponse, error) {
-			return a.ListApps(clampLimit(in.Limit), in.Offset, api.ListAppsFilters{Name: in.Name}, "")
+			r, err := a.ListApps(clampLimit(in.Limit), in.Offset, api.ListAppsFilters{Name: in.Name}, "")
+			if r != nil {
+				for i := range r.Apps {
+					r.Apps[i].Metadata = nil // raw metadata never reaches an assistant (redact.go)
+				}
+			}
+			return r, err
 		})
 	writeTool(s, srv, conn, "AddIdentityAuthority", "add_identity_authority",
 		"Trust a new identity authority.", keyOf[authorityArgs],

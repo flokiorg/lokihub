@@ -69,11 +69,14 @@ if [ "$BUILD_MODE" != "desktop" ] && [ -z "$DEB_SUFFIX" ]; then
 
     go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=${VERSION_STRING}'" \
         -o "ops/bin/${OUTPUT_NAME}" ./cmd/http
+    # The stdio bridge for AI assistants that only run local programs
+    # (lokihub-mcp --stdio --url https://<hub>/mcp).
+    go build -trimpath -ldflags "-s -w" -o "ops/bin/lokihub-mcp" ./cmd/mcp
 
     pushd ops/bin > /dev/null
     mv "$OUTPUT_NAME" "$TARGET_BINARY_NAME"
-    tar -czf "${ARCHIVE_NAME}.tar.gz" "$TARGET_BINARY_NAME"
-    rm "$TARGET_BINARY_NAME"
+    tar -czf "${ARCHIVE_NAME}.tar.gz" "$TARGET_BINARY_NAME" lokihub-mcp
+    rm "$TARGET_BINARY_NAME" lokihub-mcp
     popd > /dev/null
 else
     echo "--- Skipping HTTP Server build (already built in the legacy leg for this arch) ---"
@@ -93,6 +96,7 @@ LDFLAGS="-X 'github.com/flokiorg/lokihub/internal/buildinfo.Tag=${VERSION_STRING
 
 go build -trimpath -tags wails -ldflags "${LDFLAGS} -s -w" \
     -o "build/bin/${BASENAME}" .
+go build -trimpath -ldflags "-s -w" -o "build/bin/lokihub-mcp" ./cmd/mcp
 
 echo "--- Staging AppDir ---"
 mkdir -p AppDir/usr/bin
@@ -100,6 +104,7 @@ mkdir -p AppDir/usr/share/applications
 mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
 
 cp "build/bin/${BASENAME}" "AppDir/usr/bin/lokihub"
+cp "build/bin/lokihub-mcp" "AppDir/usr/bin/lokihub-mcp"
 cp "ops/appicon.png" "AppDir/usr/share/icons/hicolor/256x256/apps/lokihub.png"
 cp "ops/packaging/lokihub.desktop" "AppDir/usr/share/applications/lokihub.desktop"
 
@@ -113,11 +118,14 @@ echo "--- Native Packaging (DEB/RPM) ---"
 
 TARGET_BINARY="lokihub-desktop-linux-${GOARCH}${DEB_SUFFIX}"
 cp "build/bin/${BASENAME}" "ops/bin/${TARGET_BINARY}"
+MCP_BINARY="lokihub-mcp-linux-${GOARCH}${DEB_SUFFIX}"
+cp "build/bin/lokihub-mcp" "ops/bin/${MCP_BINARY}"
 
 # nfpm.yaml uses nfpm's native ${VAR} env-var expansion directly - no
 # preprocessing needed, just export the values it references.
 export GOARCH TAG
 export BINARY_NAME="$TARGET_BINARY"
+export MCP_BINARY_NAME="$MCP_BINARY"
 export LIBWEBKIT LIBWEBKIT_RPM
 
 DEB_NAME="lokihub-desktop-linux${DEB_SUFFIX}-${GOARCH}-${TAG}.deb"
@@ -130,7 +138,7 @@ fi
 RPM_NAME="lokihub-desktop-linux${DEB_SUFFIX}-${RPM_ARCH}-${TAG}.rpm"
 nfpm package --config ops/packaging/nfpm.yaml --packager rpm --target "ops/bin/${RPM_NAME}"
 
-rm "ops/bin/${TARGET_BINARY}"
+rm "ops/bin/${TARGET_BINARY}" "ops/bin/${MCP_BINARY}"
 fi  # BUILD_MODE != server
 
 echo "Build Complete. Artifacts in ops/bin:"

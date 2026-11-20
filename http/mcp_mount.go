@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/flokiorg/lokihub/events"
 	"time"
@@ -57,6 +58,7 @@ func (httpSvc *HttpService) registerMCP(e *echo.Echo) {
 	srv.SetControls(&cfgControls{cfg: httpSvc.cfg})
 	srv.Mount(e)
 	httpSvc.mcpSrv = srv
+	srv.SetPersistence(&gormExecutions{db: httpSvc.db}, &gormActivity{db: httpSvc.db})
 	if httpSvc.eventPublisher != nil {
 		httpSvc.eventPublisher.RegisterSubscriber(&mcpAppDeleted{srv: srv})
 	}
@@ -71,7 +73,7 @@ func (httpSvc *HttpService) mcpTokens() *mcp.HMACTokenStore {
 	return mcp.NewHMACTokenStore(func() ([]byte, error) {
 		s, err := httpSvc.cfg.GetJWTSecret()
 		return []byte(s), err
-	})
+	}).WithGeneration(httpSvc.mcpKeyGen)
 }
 
 // mcpAppCreator persists an MCP connection as a kind="mcp" App with the given
@@ -114,4 +116,27 @@ func (m *mcpAppDeleted) ConsumeEvent(_ context.Context, e *events.Event, _ map[s
 			m.srv.ForgetApp(uint(id))
 		}
 	}
+}
+
+// mcpKeyGenKey is the App.Metadata field holding an assistant's key generation.
+const mcpKeyGenKey = "mcp_key_gen"
+
+// mcpKeyGen reads an assistant's key generation (0 when never rotated or the
+// app is unknown — an unknown app fails authentication later anyway).
+func (httpSvc *HttpService) mcpKeyGen(appID uint) (uint64, error) {
+	var app db.App
+	if err := httpSvc.db.Select("metadata").Where("id = ?", appID).First(&app).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	var md map[string]any
+	if len(app.Metadata) == 0 || json.Unmarshal(app.Metadata, &md) != nil {
+		return 0, nil
+	}
+	if g, ok := md[mcpKeyGenKey].(float64); ok && g > 0 {
+		return uint64(g), nil
+	}
+	return 0, nil
 }

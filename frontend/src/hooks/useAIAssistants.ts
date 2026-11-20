@@ -234,3 +234,31 @@ export function levelsToGrants(levels: AssistantLevels): AIGrants {
   }
   return g;
 }
+
+/** grantsToLevels is the inverse of levelsToGrants (unset groups are "off"). */
+export function grantsToLevels(grants: AIGrants): AssistantLevels {
+  const levels = { ...DEFAULT_ASSISTANT_LEVELS };
+  for (const g of AI_GROUPS) {
+    levels[g.id] = grants[g.id] ?? "off";
+  }
+  return levels;
+}
+
+/**
+ * editAssistant renames an assistant, changes what it may do, and/or rotates
+ * its key. Returns the new key when rotated (shown once).
+ */
+export async function editAssistant(
+  appId: number,
+  change: { name?: string; groups?: AIGrants; rotateKey?: boolean }
+): Promise<string | undefined> {
+  const res = await request<{ token?: string }>(
+    `/api/mcp/connections/${appId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(change),
+    }
+  );
+  return res?.token || undefined;
+}

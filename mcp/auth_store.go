@@ -59,6 +59,9 @@ func (a *StandardAuthenticator) Resolve(ctx context.Context, bearer string) (*Co
 	}
 	appID, ok := a.Store.AppID(ctx, bearer)
 	if !ok {
+		if av, isAv := a.Store.(interface{ Available() bool }); isAv && !av.Available() {
+			return nil, ErrHubLocked
+		}
 		return nil, ErrInvalidToken
 	}
 	info, err := a.load(ctx, appID)

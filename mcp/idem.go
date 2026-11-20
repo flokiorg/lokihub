@@ -32,10 +32,11 @@ const (
 // tool, bound to a hash of the arguments, expire after idemTTL, and the store
 // is size-bounded. A failed execution is not cached: the same key may retry.
 type IdemStore struct {
-	mu    sync.Mutex
-	m     map[string]*idemEntry
-	count map[uint]int // entries per connection (kept in step with m)
-	now   func() time.Time
+	mu      sync.Mutex
+	m       map[string]*idemEntry
+	count   map[uint]int // entries per connection (kept in step with m)
+	now     func() time.Time
+	persist ExecutionStore // optional: completed writes survive a restart
 }
 
 type idemEntry struct {
@@ -97,6 +98,18 @@ func (s *IdemStore) Do(appID uint, tool, key string, args [32]byte, fn func() (a
 	if e.done {
 		return e.result, nil
 	}
+	if s.persist != nil {
+		// A write completed before a restart is answered from the store.
+		if h, b, ok, err := s.persist.Get(appID, tool, key); err != nil {
+			return nil, err
+		} else if ok {
+			if h != hashHex(args) {
+				return nil, ErrIdempotencyConflict
+			}
+			e.done, e.result = true, decodeResult(b)
+			return e.result, nil
+		}
+	}
 	res, err := fn()
 	if err != nil {
 		// Not cached, and the key is released if nobody else is using it, so a
@@ -109,6 +122,11 @@ func (s *IdemStore) Do(appID uint, tool, key string, args [32]byte, fn func() (a
 		return nil, err
 	}
 	e.done, e.result = true, res
+	if s.persist != nil {
+		// Best effort: the in-memory record already prevents a re-run while
+		// the hub stays up.
+		_ = s.persist.Put(appID, tool, key, hashHex(args), encodeResult(res))
+	}
 	return res, nil
 }
 

@@ -59,6 +59,8 @@ func Models() []any {
 		&db.CashOrder{},
 		&db.CashOrderAddress{},
 		&db.CashOrderPayment{},
+		&db.MCPExecution{},
+		&db.MCPActivity{},
 	}
 	base = append(base, withdrawModels()...)
 	return append(base, listingModels()...)

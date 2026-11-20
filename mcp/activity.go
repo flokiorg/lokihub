@@ -42,6 +42,7 @@ type ActivityLog struct {
 	mu    sync.Mutex
 	apps  map[uint]*appActivity
 	order uint64
+	store ActivityStore // optional durable copy (survives restarts)
 }
 
 type appActivity struct {
@@ -97,7 +98,14 @@ func (l *ActivityLog) add(e ActivityEntry, read bool) {
 	} else {
 		a.main.add(stamped{l.order, e}, activityPerApp)
 	}
+	store := l.store
 	l.mu.Unlock()
+	if store != nil && !(read && e.Outcome == "done") {
+		// Durable copy of everything except plain successful reads, which
+		// stay in their own bounded in-memory space (a read flood can
+		// never displace a write — pentest F F-2).
+		_ = store.Save(e)
+	}
 	logger.Logger.Info().
 		Uint("app_id", e.AppID).
 		Str("tool", e.Tool).
@@ -110,6 +118,24 @@ func (l *ActivityLog) add(e ActivityEntry, read bool) {
 func (l *ActivityLog) List(appID uint, limit int) []ActivityEntry {
 	if limit <= 0 || limit > activityCap {
 		limit = 100
+	}
+	if l.store != nil {
+		if out, err := l.store.Recent(appID, limit); err == nil {
+			l.mu.Lock()
+			for id, a := range l.apps {
+				if appID == 0 || id == appID {
+					for _, x := range a.reads.all() {
+						out = append(out, x.e)
+					}
+				}
+			}
+			l.mu.Unlock()
+			sort.SliceStable(out, func(i, j int) bool { return out[i].Time.After(out[j].Time) })
+			if len(out) > limit {
+				out = out[:limit]
+			}
+			return out
+		}
 	}
 	l.mu.Lock()
 	var all []stamped

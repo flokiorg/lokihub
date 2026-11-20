@@ -537,3 +537,76 @@ func TestLiveOAuth(t *testing.T) {
 		}
 	}
 }
+
+// TestLiveEditAssistant (critic G4/O9): the owner renames an assistant,
+// narrows what it may do (effective on the next call) and rotates its key (the
+// old key dies at once); the generic app editor refuses assistant connections
+// and the ordinary connected-apps list leaves them out.
+func TestLiveEditAssistant(t *testing.T) {
+	h := newLiveHub(t)
+	var created struct {
+		AppID     uint   `json:"appId"`
+		AppPubkey string `json:"appPubkey"`
+		Token     string `json:"token"`
+	}
+	name := fmt.Sprintf("edit-%d", time.Now().UnixNano())
+	if c := h.do(t, http.MethodPost, "/api/mcp/connections", h.admin, map[string]any{
+		"name": name, "groups": map[string]string{"node": "write"},
+	}, &created); c != http.StatusOK {
+		t.Fatalf("create: HTTP %d", c)
+	}
+	path := fmt.Sprintf("/api/mcp/connections/%d", created.AppID)
+
+	// Narrow node:write → node:read; set_node_alias must disappear.
+	if c := h.do(t, http.MethodPatch, path, h.admin, map[string]any{"name": name + "-renamed", "groups": map[string]string{"node": "read"}}, nil); c != http.StatusOK {
+		t.Fatalf("edit: HTTP %d", c)
+	}
+	cs, err := h.dial(t, created.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{Name: "set_node_alias", Arguments: map[string]any{"idempotency_key": "e1", "alias": "x"}})
+	if err == nil && !res.IsError {
+		t.Error("narrowed assistant could still write")
+	}
+
+	// Rotate: the old key is refused, the new one works.
+	var rot struct {
+		Token string `json:"token"`
+	}
+	if c := h.do(t, http.MethodPatch, path, h.admin, map[string]any{"rotateKey": true}, &rot); c != http.StatusOK || rot.Token == "" || rot.Token == created.Token {
+		t.Fatalf("rotate: HTTP %d", c)
+	}
+	if _, err := h.dial(t, created.Token); err == nil {
+		t.Error("old key still accepted after rotation")
+	}
+	cs2, err := h.dial(t, rot.Token)
+	if err != nil {
+		t.Fatalf("new key refused: %v", err)
+	}
+	if r, err := cs2.CallTool(context.Background(), &mcpsdk.CallToolParams{Name: "get_info"}); err != nil || r.IsError {
+		t.Errorf("new key cannot call get_info: %v", err)
+	}
+
+	// The assistant's own key cannot edit itself.
+	if c := h.do(t, http.MethodPatch, path, rot.Token, map[string]any{"groups": map[string]string{"wallet": "write"}}, nil); c < 400 {
+		t.Errorf("assistant edited its own grant: HTTP %d", c)
+	}
+	// The generic app editor refuses an assistant connection.
+	if c := h.do(t, http.MethodPatch, "/api/apps/"+created.AppPubkey, h.admin, map[string]any{"scopes": []string{"pay_invoice"}}, nil); c < 400 {
+		t.Errorf("generic editor changed an assistant connection: HTTP %d", c)
+	}
+	// Not listed among ordinary wallet connections.
+	var list struct {
+		Apps []struct {
+			ID uint `json:"id"`
+		} `json:"apps"`
+	}
+	h.do(t, http.MethodGet, "/api/apps?limit=100&filters="+url.QueryEscape(`{"subWallets":false}`), h.admin, nil, &list)
+	for _, a := range list.Apps {
+		if a.ID == created.AppID {
+			t.Error("assistant listed among ordinary connected apps")
+		}
+	}
+	h.do(t, http.MethodDelete, "/api/apps/"+created.AppPubkey, h.admin, nil, nil)
+}

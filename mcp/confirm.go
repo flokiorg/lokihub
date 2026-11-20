@@ -272,7 +272,7 @@ func confirmToolWarn[In, Out any](
 			}
 			return nil, scrubOutput(st), nil
 		}
-		out, _ := res.(Out)
+		out := asOut[Out](res)
 		return nil, scrubOutput(PaymentStep[Out]{Status: "executed", Result: &out}), nil
 	})
 }
