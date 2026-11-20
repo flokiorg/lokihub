@@ -197,36 +197,32 @@ func TestPendingBoundsAndOwnerChecks(t *testing.T) {
 	}
 }
 
-// TestAllowlistAndQueueShareOneRecord (re-audit N1): a key first queued, then
-// retried after the owner allow-lists the address, must NOT execute directly —
-// and approving the queued record executes exactly once in total.
-func TestAllowlistAndQueueShareOneRecord(t *testing.T) {
+// TestRedeemAlwaysNeedsApproval (owner decision D20): there is no pre-approved
+// address list — every on-chain send queues for the owner, and a retry with the
+// same key reports the same record and never executes; reusing the key with
+// different arguments is a conflict.
+func TestRedeemAlwaysNeedsApproval(t *testing.T) {
 	var redeems int32
-	ctl := &fakeControls{allow: map[string]bool{}}
 	s := NewServer(testAPI{redeemCalls: &redeems}, &fakeAuth{})
-	s.SetControls(ctl)
 	cs, done := connectInMem(t, s, &Conn{AppID: 1, Scopes: []string{GroupWallet.Scope(ModeWrite)}})
 	defer done()
 	args := map[string]any{"idempotency_key": "K", "to_address": "bc1qsametargetaddrx", "amount": float64(100)}
-
-	callTool(t, cs, "redeem_onchain_funds", args) // queued
-	ctl.allow["bc1qsametargetaddrx"] = true       // owner allow-lists it later
+	callTool(t, cs, "redeem_onchain_funds", args)
 	res := callTool(t, cs, "redeem_onchain_funds", args)
 	if atomic.LoadInt32(&redeems) != 0 {
-		t.Fatalf("retry after allow-listing executed directly (%d) — would double-send on approval", redeems)
+		t.Fatalf("on-chain send executed without owner approval (%d)", redeems)
 	}
 	if !strings.Contains(resultText(res)+fmt.Sprint(res.StructuredContent), "pending_approval") {
-		t.Errorf("retry did not report the existing queued record: %+v", res.StructuredContent)
+		t.Errorf("retry did not report the queued record: %+v", res.StructuredContent)
 	}
 	id := s.Pending().List(1)[0].ID
 	if _, err := s.Pending().Approve(id); err != nil {
 		t.Fatal(err)
 	}
-	callTool(t, cs, "redeem_onchain_funds", args) // another retry after approval
+	callTool(t, cs, "redeem_onchain_funds", args)
 	if got := atomic.LoadInt32(&redeems); got != 1 {
 		t.Fatalf("total executions = %d, want exactly 1", got)
 	}
-	// Reusing the key with different args is a conflict, not a stale answer.
 	bad := map[string]any{"idempotency_key": "K", "to_address": "bc1qsametargetaddrx", "amount": float64(999)}
 	if r := callTool(t, cs, "redeem_onchain_funds", bad); !r.IsError {
 		t.Error("key reused with different amount was accepted")

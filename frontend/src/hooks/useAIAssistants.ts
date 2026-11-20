@@ -31,7 +31,7 @@ export type AIPendingAction = {
   status: "open" | "approved" | "denied";
 };
 
-export type AIControls = { paused?: boolean; redeemAllowlist?: string[] };
+export type AIControls = { paused?: boolean };
 
 export type CreatedAssistant = {
   appId: number;

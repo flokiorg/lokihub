@@ -1,25 +1,20 @@
 package http
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
-	"strings"
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/mcp"
 	"github.com/labstack/echo/v4"
 )
 
-const (
-	cfgKeyMCPPaused         = "MCPPaused"
-	cfgKeyMCPRedeemAllowlst = "MCPRedeemAllowlist"
-)
+const cfgKeyMCPPaused = "MCPPaused"
 
 // cfgControls backs the owner's global MCP levers with the hub's persistent
-// config, so a pause survives a restart. A read error is treated as paused /
-// not-allow-listed (fail closed).
+// config, so a pause survives a restart. A read error is treated as paused
+// (fail closed).
 type cfgControls struct{ cfg config.Config }
 
 func (c *cfgControls) Paused() bool {
@@ -30,34 +25,8 @@ func (c *cfgControls) Paused() bool {
 	return v == "1"
 }
 
-func (c *cfgControls) allowlist() ([]string, error) {
-	v, err := c.cfg.Get(cfgKeyMCPRedeemAllowlst, "")
-	if err != nil || v == "" {
-		return nil, err
-	}
-	var out []string
-	if err := json.Unmarshal([]byte(v), &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *cfgControls) RedeemAllowed(addr string) bool {
-	list, err := c.allowlist()
-	if err != nil {
-		return false
-	}
-	for _, a := range list {
-		if a == addr {
-			return true
-		}
-	}
-	return false
-}
-
 type mcpControlsBody struct {
-	Paused          *bool    `json:"paused,omitempty"`
-	RedeemAllowlist []string `json:"redeemAllowlist,omitempty"`
+	Paused *bool `json:"paused,omitempty"`
 }
 
 type mcpPendingView struct {
@@ -118,10 +87,8 @@ func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 		return c.NoContent(http.StatusNoContent)
 	})
 	g.GET("/mcp/controls", func(c echo.Context) error {
-		ctl := &cfgControls{cfg: httpSvc.cfg}
-		list, _ := ctl.allowlist()
-		paused := ctl.Paused()
-		return c.JSON(http.StatusOK, mcpControlsBody{Paused: &paused, RedeemAllowlist: list})
+		paused := (&cfgControls{cfg: httpSvc.cfg}).Paused()
+		return c.JSON(http.StatusOK, mcpControlsBody{Paused: &paused})
 	})
 	g.PUT("/mcp/controls", func(c echo.Context) error {
 		var body mcpControlsBody
@@ -134,18 +101,6 @@ func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 				v = "1"
 			}
 			if err := httpSvc.cfg.SetUpdate(cfgKeyMCPPaused, v, ""); err != nil {
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to save")
-			}
-		}
-		if body.RedeemAllowlist != nil {
-			norm := make([]string, 0, len(body.RedeemAllowlist))
-			for _, a := range body.RedeemAllowlist {
-				if a = mcp.NormalizeAddress(a); a != "" && !strings.ContainsAny(a, " \t\n") {
-					norm = append(norm, a)
-				}
-			}
-			b, _ := json.Marshal(norm)
-			if err := httpSvc.cfg.SetUpdate(cfgKeyMCPRedeemAllowlst, string(b), ""); err != nil {
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to save")
 			}
 		}

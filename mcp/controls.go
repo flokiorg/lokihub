@@ -1,9 +1,6 @@
 package mcp
 
-import (
-	"errors"
-	"strings"
-)
+import "errors"
 
 // ErrPaused is returned for every tool call while the owner has paused all AI
 // assistants. It is checked per call, so a pause takes effect on live sessions
@@ -17,18 +14,14 @@ type Controls interface {
 	// Paused reports the global "Pause all AI assistants" switch. An error
 	// reading it must be treated as paused (fail closed).
 	Paused() bool
-	// RedeemAllowed reports whether an on-chain address is on the owner's
-	// pre-approved withdrawal allow-list; a redeem to such an address runs
-	// without a per-action approval.
-	RedeemAllowed(address string) bool
 }
 
-// noControls is the default: never paused, empty allow-list (every irreversible
-// action goes through owner approval).
+// noControls is the default: never paused. Every irreversible action always
+// goes through owner approval (there is no pre-approved address list — owner
+// decision D20).
 type noControls struct{}
 
-func (noControls) Paused() bool              { return false }
-func (noControls) RedeemAllowed(string) bool { return false }
+func (noControls) Paused() bool { return false }
 
 // SetControls installs the owner's global controls.
 func (s *Server) SetControls(c Controls) {
@@ -44,8 +37,3 @@ func (s *Server) checkPaused() error {
 	}
 	return nil
 }
-
-// NormalizeAddress canonicalizes an on-chain address for allow-list matching
-// (trimmed, lower-cased: bech32 is case-insensitive, and a mixed-case variant of
-// an allow-listed address must not slip past or be refused).
-func NormalizeAddress(a string) string { return strings.ToLower(strings.TrimSpace(a)) }

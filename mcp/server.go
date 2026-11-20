@@ -98,7 +98,6 @@ func guardedTool[In any](
 	apiMethod, name, desc string,
 	summarize func(In) (string, error), // validates + describes EVERY executed parameter
 	keyOf func(In) string,
-	direct func(In) bool, // nil = always queue; true = owner pre-approved, run now
 	run func(context.Context, api.API, In) (any, error),
 ) {
 	if c, ok := classify(apiMethod); !ok || c.Kind != ClassTool || !c.Guarded {
@@ -112,7 +111,7 @@ func guardedTool[In any](
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name: name,
 		Description: desc + " This is irreversible and requires the hub owner to approve it before it runs; the call returns a pending action id." +
-			" (To an address the owner allow-listed, an on-chain send runs at once.)\n\n" + guardedWarning,
+			"\n\n" + guardedWarning,
 		Annotations: &mcpsdk.ToolAnnotations{DestructiveHint: &destructive},
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in In) (*mcpsdk.CallToolResult, pendingResult, error) {
 		if err := s.authorizeCall(ctx, conn, apiMethod); err != nil {
@@ -128,24 +127,16 @@ func guardedTool[In any](
 		if err != nil {
 			return nil, pendingResult{}, err
 		}
-		// ONE record per (connection, tool, key) whichever path it takes
-		// (audit N1): the queued path and the owner-allow-listed direct path
-		// share the pending store, so a retry with the same key can never
-		// execute a second time, and it reports the record's real status.
+		// ONE record per (connection, tool, key), bound to the arguments: a
+		// retry never queues or executes a second time, and it reports the
+		// record's real status (pending / executing / executed / denied).
 		captured := in
-		act, created, err := s.pending.CreateOrGetNew(conn.AppID, name, key, ArgsHash(in), summary, func() (any, error) {
+		act, _, err := s.pending.CreateOrGetNew(conn.AppID, name, key, ArgsHash(in), summary, func() (any, error) {
 			// Executes on approval, after the original request context is gone.
 			return run(context.Background(), s.api, captured)
 		})
 		if err != nil {
 			return nil, pendingResult{}, err
-		}
-		if created && direct != nil && direct(in) {
-			res, err := s.pending.Approve(act.ID)
-			if err != nil {
-				return nil, pendingResult{}, err
-			}
-			return nil, pendingResult{Status: "executed", ActionID: act.ID, Summary: act.Summary, Result: res}, nil
 		}
 		return nil, s.pending.Result(act.ID), nil
 	})
@@ -165,7 +156,6 @@ func (s *Server) registerGuarded(srv *mcpsdk.Server, conn *Conn) {
 			return fmt.Sprintf("Close channel %s with peer %s (cooperative)", in.ChannelID, in.PeerID), nil
 		},
 		func(in closeChannelArgs) string { return in.IdempotencyKey },
-		nil,
 		func(ctx context.Context, a api.API, in closeChannelArgs) (any, error) {
 			return a.CloseChannel(ctx, in.PeerID, in.ChannelID, in.Force)
 		})
@@ -187,7 +177,6 @@ func (s *Server) registerGuarded(srv *mcpsdk.Server, conn *Conn) {
 			return fmt.Sprintf("Send %d loki on-chain to %s", in.Amount, in.ToAddress), nil
 		},
 		func(in redeemOnchainArgs) string { return in.IdempotencyKey },
-		func(in redeemOnchainArgs) bool { return s.controls.RedeemAllowed(NormalizeAddress(in.ToAddress)) },
 		func(ctx context.Context, a api.API, in redeemOnchainArgs) (any, error) {
 			return a.RedeemOnchainFunds(ctx, in.ToAddress, in.Amount, nil, in.SendAll)
 		})

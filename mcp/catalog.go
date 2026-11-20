@@ -162,7 +162,6 @@ func (s *Server) registerCatalog(srv *mcpsdk.Server, conn *Conn) {
 			return fmt.Sprintf("Open a %d loki %s channel to %s (commits on-chain funds)", in.AmountLoki, vis, in.Pubkey), nil
 		},
 		func(in openChannelArgs) string { return in.IdempotencyKey },
-		nil,
 		func(ctx context.Context, a api.API, in openChannelArgs) (any, error) {
 			return a.OpenChannel(ctx, &api.OpenChannelRequest{Pubkey: in.Pubkey, AmountLoki: in.AmountLoki, Public: in.Public})
 		})

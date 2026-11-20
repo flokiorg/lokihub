@@ -10,11 +10,9 @@ import (
 
 type fakeControls struct {
 	paused atomic.Bool
-	allow  map[string]bool
 }
 
-func (f *fakeControls) Paused() bool                { return f.paused.Load() }
-func (f *fakeControls) RedeemAllowed(a string) bool { return f.allow[a] }
+func (f *fakeControls) Paused() bool { return f.paused.Load() }
 
 // TestPauseBlocksLiveSession: pausing takes effect on the next call of an
 // already-open session (reads, writes and guarded alike), and unpausing restores
@@ -55,38 +53,6 @@ func TestPauseBlocksLiveSession(t *testing.T) {
 	ctl.paused.Store(false)
 	if res := callTool(t, cs, "get_info", nil); res.IsError {
 		t.Error("read still failing after unpause")
-	}
-}
-
-// TestRedeemAllowlist: a redeem to an owner allow-listed address executes
-// immediately (once, deduped); any other address is queued for approval; a
-// case-variant of an allow-listed bech32 address is matched (normalized), while
-// a lookalike is not.
-func TestRedeemAllowlist(t *testing.T) {
-	var redeems int32
-	ctl := &fakeControls{allow: map[string]bool{"bc1qowncoldwallet": true}}
-	s := NewServer(testAPI{redeemCalls: &redeems}, &fakeAuth{})
-	s.SetControls(ctl)
-	cs, done := connectInMem(t, s, &Conn{AppID: 1, Scopes: []string{GroupWallet.Scope(ModeWrite)}})
-	defer done()
-
-	args := map[string]any{"idempotency_key": "a1", "to_address": "BC1QownColdWallet", "amount": float64(5)}
-	callTool(t, cs, "redeem_onchain_funds", args)
-	callTool(t, cs, "redeem_onchain_funds", args) // replay
-	if got := atomic.LoadInt32(&redeems); got != 1 {
-		t.Fatalf("allow-listed redeem executions = %d, want exactly 1", got)
-	}
-	if n := openPending(s, 1); n != 0 {
-		t.Fatalf("allow-listed redeem was queued for approval (%d open)", n)
-	}
-
-	// Lookalike (extra char) is NOT allow-listed → queued, not executed.
-	callTool(t, cs, "redeem_onchain_funds", map[string]any{"idempotency_key": "a2", "to_address": "bc1qowncoldwallet1", "amount": float64(5)})
-	if got := atomic.LoadInt32(&redeems); got != 1 {
-		t.Fatalf("lookalike address executed (%d)", got)
-	}
-	if n := openPending(s, 1); n != 1 {
-		t.Fatalf("lookalike redeem not queued (%d open)", n)
 	}
 }
 
