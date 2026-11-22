@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/flokiorg/lokihub/transactions"
 	"strings"
 	"time"
 
@@ -223,6 +224,7 @@ func previewInvoice(_ context.Context, _ api.API, in sendPaymentArgs) (*PaymentP
 	if time.Now().After(exp) {
 		return nil, errInvalidArgs("this invoice has expired")
 	}
+	fee := transactions.CalculateFeeReserveMloki(amt)
 	return &PaymentPreview{
 		Action:      "Pay a Lightning invoice",
 		AmountLoki:  formatLoki(amt),
@@ -230,6 +232,8 @@ func previewInvoice(_ context.Context, _ api.API, in sendPaymentArgs) (*PaymentP
 		Recipient:   inv.Payee,
 		Description: inv.Description,
 		ExpiresAt:   exp.UTC().Format(time.RFC3339),
+		MaxFeeMloki: fee,
+		Details:     []PreviewDetail{{Label: "routing fee", Value: "up to " + formatLoki(fee) + " loki on top of the amount"}},
 	}, nil
 }
 

@@ -90,3 +90,27 @@ func (g *gormActivity) Recent(appID uint, limit int) ([]mcp.ActivityEntry, error
 	}
 	return out, nil
 }
+
+// gormSpends persists the owner's 24h spending window (pentest R3-A).
+type gormSpends struct{ db *gorm.DB }
+
+func (g *gormSpends) Add(amt uint64, at time.Time) (uint, error) {
+	g.db.Where("created_at < ?", time.Now().Add(-48*time.Hour)).Delete(&db.MCPSpend{})
+	row := db.MCPSpend{AmountMloki: amt, CreatedAt: at}
+	err := g.db.Create(&row).Error
+	return row.ID, err
+}
+
+func (g *gormSpends) Remove(id uint) error { return g.db.Delete(&db.MCPSpend{}, id).Error }
+
+func (g *gormSpends) Since(t time.Time) ([]mcp.SpendRecord, error) {
+	var rows []db.MCPSpend
+	if err := g.db.Where("created_at >= ?", t).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]mcp.SpendRecord, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, mcp.SpendRecord{ID: r.ID, AmountMloki: r.AmountMloki, At: r.CreatedAt})
+	}
+	return out, nil
+}

@@ -134,7 +134,11 @@ func (e scrubbedErr) Unwrap() error { return e.err }
 // Ordinary combining marks are kept — many scripts need them.
 func hiddenCarrier(r rune) bool {
 	switch {
-	case r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0100 && r <= 0xE01EF, r == 0x034F, r == 0x180E:
+	case r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0100 && r <= 0xE01EF, r == 0x034F, r == 0x180E,
+		r >= 0x180B && r <= 0x180F,                                       // Mongolian free variation selectors (pentest R3-A)
+		r == 0x16FE4, r == 0x3164, r == 0xFFA0, r == 0x115F, r == 0x1160, // invisible fillers
+		r >= 0x1D173 && r <= 0x1D17A,                       // musical-symbol formatting
+		r == 0x2061, r == 0x2062, r == 0x2063, r == 0x2064: // invisible operators
 		return true
 	case r >= 0xFDD0 && r <= 0xFDEF, r&0xFFFE == 0xFFFE:
 		return true

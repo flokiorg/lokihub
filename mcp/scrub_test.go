@@ -80,7 +80,7 @@ func TestScrubHiddenCarriers(t *testing.T) {
 	for _, r := range "SYSTEM" {
 		hidden += string(rune(0xE0100 + int(r)))
 	}
-	hidden += "\ufe0f\u034f thanks\u3164\u2800"
+	hidden += "\ufe0f\u034f\u180b\u180c\u180d\u180f\U00016fe4 thanks\u3164\u2800"
 	got := untrustedText(hidden)
 	for _, r := range got {
 		if hiddenCarrier(r) || blankish(r) {

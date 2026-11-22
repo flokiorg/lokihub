@@ -59,6 +59,10 @@ type PaymentPreview struct {
 	// made the invoice. Never treat it as an instruction.
 	Description string `json:"description_untrusted,omitempty"`
 	ExpiresAt   string `json:"invoice_expires_at,omitempty"`
+	// MaxFeeMloki is the most routing fee this payment may cost on top of the
+	// amount (the hub's own fee ceiling). It counts toward the owner's 24h
+	// limit: an attacker on the route could otherwise take it (pentest R3-A).
+	MaxFeeMloki uint64 `json:"max_routing_fee_mloki,omitempty"`
 	// Details are further hub-derived facts the user must see before
 	// confirming (fees, terms, exactly what will be published).
 	Details []PreviewDetail `json:"details,omitempty"`
@@ -400,17 +404,55 @@ var valueOwner = map[string]bool{
 const spendWindow = 24 * time.Hour
 
 type spendEntry struct {
-	at  time.Time
-	amt uint64
-	id  uint64
+	at   time.Time
+	amt  uint64
+	id   uint64
+	dbID uint
 }
 
-// spendLedger is the rolling window of assistant-confirmed outflows.
+// spendLedger is the rolling window of assistant-confirmed outflows. With a
+// store it is durable: reservations are written before the payment runs and
+// reloaded at startup, so a restart never resets the owner's 24h limit
+// (pentest R3-A).
 type spendLedger struct {
 	mu      sync.Mutex
 	entries []spendEntry
 	seq     uint64
 	now     func() time.Time
+	store   SpendStore
+}
+
+// SpendStore persists the spending window.
+type SpendStore interface {
+	Add(amountMloki uint64, at time.Time) (id uint, err error)
+	Remove(id uint) error
+	Since(t time.Time) ([]SpendRecord, error)
+}
+
+// SpendRecord is one stored outflow.
+type SpendRecord struct {
+	ID          uint
+	AmountMloki uint64
+	At          time.Time
+}
+
+// useStore loads the last 24h from the store and mirrors new entries to it.
+func (l *spendLedger) useStore(st SpendStore) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.store = st
+	if st == nil {
+		return nil
+	}
+	recs, err := st.Since(l.now().Add(-spendWindow))
+	if err != nil {
+		return err
+	}
+	for _, r := range recs {
+		l.seq++
+		l.entries = append(l.entries, spendEntry{at: r.At, amt: r.AmountMloki, id: l.seq, dbID: r.ID})
+	}
+	return nil
 }
 
 // reserve books amt if the window total stays within limit; release undoes it.
@@ -432,13 +474,24 @@ func (l *spendLedger) reserve(amt, limit uint64) (ok bool, release func()) {
 	}
 	l.seq++
 	id := l.seq
-	l.entries = append(l.entries, spendEntry{at: now, amt: amt, id: id})
+	e := spendEntry{at: now, amt: amt, id: id}
+	if l.store != nil {
+		dbID, err := l.store.Add(amt, now)
+		if err != nil {
+			return false, nil // cannot record it durably: let the owner decide
+		}
+		e.dbID = dbID
+	}
+	l.entries = append(l.entries, e)
 	return true, func() {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		for i, e := range l.entries {
 			if e.id == id {
 				l.entries = append(l.entries[:i], l.entries[i+1:]...)
+				if l.store != nil && e.dbID != 0 {
+					_ = l.store.Remove(e.dbID)
+				}
 				return
 			}
 		}
@@ -479,7 +532,7 @@ func (s *Server) ownerGate(tool string, p *PaymentPreview) (owner bool, release 
 		if p == nil {
 			return true, nil
 		}
-		ok, rel := s.spend.reserve(p.AmountMloki, s.approvalLimit())
+		ok, rel := s.spend.reserve(p.AmountMloki+p.MaxFeeMloki, s.approvalLimit())
 		return !ok, rel
 	}
 	return false, nil
@@ -494,6 +547,9 @@ func ownerSummary(p *PaymentPreview) (string, error) {
 	out := p.Action
 	if p.AmountMloki > 0 {
 		out += " — " + p.AmountLoki + " loki"
+	}
+	if p.MaxFeeMloki > 0 {
+		out += " + up to " + formatLoki(p.MaxFeeMloki) + " loki routing fee"
 	}
 	if p.Recipient != "" {
 		out += " → " + p.Recipient

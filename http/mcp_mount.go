@@ -59,6 +59,9 @@ func (httpSvc *HttpService) registerMCP(e *echo.Echo) {
 	srv.Mount(e)
 	httpSvc.mcpSrv = srv
 	srv.SetPersistence(&gormExecutions{db: httpSvc.db}, &gormActivity{db: httpSvc.db})
+	if err := srv.SetSpendStore(&gormSpends{db: httpSvc.db}); err != nil {
+		logger.Logger.Error().Err(err).Msg("mcp: could not load the assistants' 24h spending window")
+	}
 	if httpSvc.eventPublisher != nil {
 		httpSvc.eventPublisher.RegisterSubscriber(&mcpAppDeleted{srv: srv})
 	}

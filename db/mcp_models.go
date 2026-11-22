@@ -26,3 +26,12 @@ type MCPActivity struct {
 	Detail    string
 	CreatedAt time.Time `gorm:"index"`
 }
+
+// MCPSpend is one assistant-confirmed outflow (amount + maximum routing fee)
+// counted against the owner's 24h approval limit; durable so a restart never
+// resets the limit.
+type MCPSpend struct {
+	ID          uint
+	AmountMloki uint64
+	CreatedAt   time.Time `gorm:"index"`
+}

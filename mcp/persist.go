@@ -24,6 +24,9 @@ func (s *Server) SetPersistence(exec ExecutionStore, act ActivityStore) {
 	s.activity.store = act
 }
 
+// SetSpendStore makes the owner's 24h spending window durable.
+func (s *Server) SetSpendStore(st SpendStore) error { return s.spend.useStore(st) }
+
 // persisted is how a completed result is stored and restored.
 type persisted struct {
 	OwnerQueued string          `json:"owner_queued,omitempty"`
