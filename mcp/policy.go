@@ -54,7 +54,7 @@ func na(reason string) Classification {
 }
 
 // methodClass classifies every method of the api.API interface (direct methods
-// plus the embedded ListingsAPI and LSPCatalogueAPI). The ratchet test asserts
+// plus the embedded ListingsAPI, LSPCatalogueAPI, WithdrawAPI and LSPOperatorAPI). The ratchet test asserts
 // this map's keys exactly cover api.API's method set.
 var methodClass = map[string]Classification{
 	// ---- Wallet & payments ----
@@ -128,6 +128,21 @@ var methodClass = map[string]Classification{
 	"HandleTrustLSP":     tool(GroupChannels, ModeWrite),
 	"HandleLSPLiveCheck": tool(GroupChannels, ModeWrite),
 
+	// ---- Channels & liquidity: LSP-operator back-office (lspd, D10) ----
+	"LSPOperatorStatus":              tool(GroupChannels, ModeRead),
+	"LSPOperatorSummary":             tool(GroupChannels, ModeRead),
+	"LSPOperatorOrders":              tool(GroupChannels, ModeRead),
+	"LSPOperatorOrder":               tool(GroupChannels, ModeRead),
+	"LSPOperatorPeers":               tool(GroupChannels, ModeRead),
+	"LSPOperatorJitChannels":         tool(GroupChannels, ModeRead),
+	"LSPOperatorNodes":               tool(GroupChannels, ModeRead),
+	"LSPOperatorAnalytics":           tool(GroupChannels, ModeRead),
+	"LSPOperatorConfig":              tool(GroupChannels, ModeRead),
+	"LSPOperatorAnnounceState":       tool(GroupChannels, ModeRead),
+	"LSPOperatorUpdateConfig":        tool(GroupChannels, ModeWrite), // fees/limits peers pay: two-step + owner (D22)
+	"LSPOperatorSetAnnounceState":    tool(GroupChannels, ModeWrite), // public NIP-LSP listing: two-step
+	"LSPOperatorRecheckAnnouncement": tool(GroupChannels, ModeWrite),
+
 	// ---- Listings & discoverability (embedded ListingsAPI) ----
 	"ListListings":     tool(GroupListings, ModeRead),
 	"PreviewListing":   tool(GroupListings, ModeRead),
@@ -151,6 +166,15 @@ var methodClass = map[string]Classification{
 	"SetFlokicoinDisplayFormat": tool(GroupNode, ModeWrite),
 	"PublishNodeProfile":        tool(GroupNode, ModeWrite),
 	"PublishNodeNote":           tool(GroupNode, ModeWrite),
+
+	// ---- Node & settings: on-chain cash withdrawals (WithdrawAPI, CONTRACTS Group 5) ----
+	"GetCashHubWithdrawTerms":    tool(GroupNode, ModeRead),
+	"ListCashHubPayouts":         tool(GroupNode, ModeRead),
+	"GetCashHubPayout":           tool(GroupNode, ModeRead),
+	"CashWithdrawStatus":         tool(GroupNode, ModeRead),
+	"CashWithdrawNode":           tool(GroupNode, ModeRead),
+	"SetCashHubWithdrawTerms":    tool(GroupNode, ModeWrite), // what holders pay to withdraw: two-step + owner (D22)
+	"SetCashWithdrawNodeEnabled": tool(GroupNode, ModeWrite), // node pays cash out on-chain: two-step + owner (D22)
 
 	// ---- App connections & identity authorities ----
 	"ListApps":                tool(GroupConnections, ModeRead),

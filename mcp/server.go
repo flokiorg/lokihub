@@ -115,6 +115,7 @@ func (s *Server) serverForConn(conn *Conn) *mcpsdk.Server {
 	s.registerCatalogMore(srv, conn)
 	s.registerAppTools(srv, conn)
 	s.registerDeferred(srv, conn)
+	s.registerBackoffice(srv, conn)
 	return srv
 }
 

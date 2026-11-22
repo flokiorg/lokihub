@@ -17,6 +17,8 @@ import (
 
 type API interface {
 	ListingsAPI
+	WithdrawAPI
+	LSPOperatorAPI
 	CreateApp(createAppRequest *CreateAppRequest) (*CreateAppResponse, error)
 	UpdateApp(app *db.App, updateAppRequest *UpdateAppRequest) error
 	Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, amountMloki uint64) error

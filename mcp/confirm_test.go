@@ -162,7 +162,9 @@ func TestMoneyToolsAllWarnAndConfirm(t *testing.T) {
 		// terms, and irreversible public publishes under the node identity.
 		"create_cash_wallet", "lsp_order_channel", "lsp_buy_jit_channel", "set_lsp_trust", "put_order_terms",
 		"create_listing", "update_listing", "listing_action",
-		"publish_node_profile", "publish_node_note", "publish_circle_follow_set"}
+		"publish_node_profile", "publish_node_note", "publish_circle_follow_set",
+		// Back-office: LSP fees/limits, withdrawal terms and switch, LSP announcement.
+		"put_lsp_config", "set_withdraw_terms", "set_withdraw_node", "set_lsp_announce_state"}
 	ownerApproved := []string{"redeem_onchain_funds", "open_channel", "close_channel"}
 
 	s := NewServer(testAPI{}, &fakeAuth{})

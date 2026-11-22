@@ -45,6 +45,7 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/daemonclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/ttlcache"
 	"github.com/ohstr/nmilat/nipcash"
@@ -81,6 +82,11 @@ type api struct {
 	// the entries its changes make stale. Nil caches nothing.
 	orderInfo  *ttlcache.Cache[string]
 	listedInfo *ttlcache.Cache[uint]
+
+	// lspOperator is the Hub's lspd client (LSP-operator back-office, D10),
+	// shared with the HTTP service; nil when no LSP service is configured.
+	lspOperatorMu sync.RWMutex
+	lspOperator   *daemonclient.Client
 }
 
 func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys keys.Keys, hubInfoSvc hubinfo.HubInfoService, eventPublisher events.EventPublisher) *api {

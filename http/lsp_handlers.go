@@ -30,21 +30,7 @@ func newLspClient(env *config.AppConfig) *daemonclient.Client {
 
 // lspStatusToInfo maps the daemonclient status onto the /api/info block.
 func lspStatusToInfo(s daemonclient.Status) *api.LSPServiceInfo {
-	info := &api.LSPServiceInfo{
-		Configured: s.Configured,
-		Reachable:  s.Reachable,
-		Attached:   s.Attached,
-		Endpoint:   s.Endpoint,
-		Pubkey:     s.Pubkey,
-		Version:    s.Version,
-		Alias:      s.Alias,
-		Error:      s.Error,
-	}
-	if !s.CheckedAt.IsZero() {
-		checkedAt := s.CheckedAt
-		info.CheckedAt = &checkedAt
-	}
-	return info
+	return api.LSPServiceStatusInfo(s)
 }
 
 // registerLspRoutes mounts the /api/lsp/* proxy. Every route is behind the

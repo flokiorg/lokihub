@@ -92,7 +92,7 @@ type HttpService struct {
 }
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
-	return &HttpService{
+	httpSvc := &HttpService{
 		api:             api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetHubInfoSvc(), eventPublisher),
 		hubInfoHttpSvc:  NewHubInfoHttpService(svc, svc.GetHubInfoSvc(), svc.GetConfig().GetEnv()),
 		cfg:             svc.GetConfig(),
@@ -107,6 +107,14 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		lsps5Replay:     newLSPS5ReplayGuard(),
 		svc:             svc,
 	}
+	// The API (and so the MCP LSP-operator tools) shares this lspd client:
+	// one signer, one status cache (D10).
+	if a, ok := httpSvc.api.(interface {
+		SetLSPOperatorClient(*daemonclient.Client)
+	}); ok {
+		a.SetLSPOperatorClient(httpSvc.lspClient)
+	}
+	return httpSvc
 }
 
 // Shutdown signals long-lived handlers (e.g. SSE streams) to stop.

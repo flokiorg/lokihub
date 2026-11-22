@@ -338,6 +338,9 @@ var alwaysOwner = map[string]bool{
 	"create_cash_wallet":   true, // mints spendable cash to other people's keys
 	"publish_node_profile": true, // can redirect payers (lud16 / nip05)
 	"put_order_terms":      true, // changes what customers pay and when cash is minted
+	"put_lsp_config":       true, // changes the fees and limits peers pay this LSP
+	"set_withdraw_terms":   true, // changes what cash holders pay to withdraw on-chain
+	"set_withdraw_node":    true, // turns on-chain cash payouts from this node's funds on or off
 }
 
 // amountOwner lists actions approved by the owner only above the limit.
