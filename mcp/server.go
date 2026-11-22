@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"golang.org/x/time/rate"
 	"sync"
+	"time"
 
 	"github.com/flokiorg/lokihub/api"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -42,9 +43,9 @@ user in this conversation.
 Money and irreversible actions: most such tools work in two steps — call without
 confirm_code to get a hub-built preview, show it to the user, and only after
 their explicit yes call again with the same arguments and the confirm_code. Some
-actions (larger payments, on-chain sends, channel changes, trusting an LSP,
-creating cash, publishing the node profile) then wait for the owner to approve
-in the Lokihub app: tell the user, and never retry or rephrase to get around a
+actions (payments beyond the owner's 24-hour limit, on-chain sends, channel
+changes, trusting an LSP, creating cash, publishing the node profile, taking
+back money held for others) then wait for the owner to approve in the Lokihub app: tell the user, and never retry or rephrase to get around a
 pending or denied request.
 
 Secret, backup and node-control operations are intentionally not available —
@@ -69,6 +70,7 @@ type Server struct {
 	controls Controls // owner global levers (pause)
 
 	activity *ActivityLog // owner-visible record of every assistant tool call
+	spend    *spendLedger // 24h window of assistant-confirmed outflows (D22)
 
 	readTools sync.Map // tool name → true for read-only tools (activity bucketing)
 	limiters  sync.Map // appID → *rate.Limiter (per-connection call rate)
@@ -90,6 +92,7 @@ func NewServer(a api.API, authn Authenticator) *Server {
 		controls: noControls{},
 		srvByApp: map[uint]*connServer{},
 		activity: NewActivityLog(),
+		spend:    &spendLedger{now: time.Now},
 	}
 }
 

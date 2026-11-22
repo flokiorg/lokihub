@@ -656,7 +656,7 @@ function ApprovalLimitCard({
         <CardDescription>
           {t(
             "assistants.limitDescription",
-            "Payments and transfers above this amount wait for your approval here, even after the assistant confirms them. Trusting an LSP, creating cash, publishing your node profile and changing order terms always wait for you. Set 0 to approve every payment."
+            "The most your assistants may pay or transfer, together, in any 24 hours without asking you. Beyond it, each payment waits for your approval here, even after the assistant confirms it. Trusting an LSP, creating cash, publishing your node profile, changing order terms and taking back money held for others always wait for you. Set 0 to approve every payment."
           )}
         </CardDescription>
       </CardHeader>

@@ -169,7 +169,7 @@ export const AI_GROUPS: {
     title: "Wallet & payments",
     read: "See balances and transactions.",
     writeRisk:
-      "Can send payments from your whole balance, create invoices, move funds between your main wallet and sub-wallets (cash hubs, circles, isolated apps) and sign messages with your node key. Each payment needs the assistant to show a preview and confirm it — the hub can't check that you agreed — and payments above your approval limit wait for you here. Every on-chain send waits for your approval.",
+      "Can send payments from your whole balance, create invoices, move funds between your main wallet and sub-wallets (cash hubs, circles, isolated apps) and sign messages with your node key. Each payment needs the assistant to show a preview and confirm it — the hub can't check that you agreed — and once your assistants' payments in the last 24 hours reach your approval limit, the rest wait for you here. Every on-chain send waits for your approval.",
   },
   {
     id: "cash_circles",

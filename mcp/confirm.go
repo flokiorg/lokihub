@@ -245,7 +245,8 @@ func confirmToolWarn[In, Out any](
 			// Owner decision D22: above the owner's limit, or for actions that
 			// hand money or trust to a third party, the assistant's own
 			// confirmation is not enough — the owner approves in the app.
-			if s.needsOwner(name, p) {
+			owner, release := s.ownerGate(name, p)
+			if owner {
 				captured := in
 				act, _, err := s.pending.CreateOrGetNew(conn.AppID, name, key, bind, ownerSummary(p), func() (any, error) {
 					return run(context.Background(), s.api, captured)
@@ -256,7 +257,11 @@ func confirmToolWarn[In, Out any](
 				s.pending.SetMethod(act.ID, apiMethod)
 				return ownerQueued{id: act.ID}, nil
 			}
-			return run(ctx, s.api, in)
+			out, err := run(ctx, s.api, in)
+			if err != nil && release != nil {
+				release() // a failed payment does not count toward the window
+			}
+			return out, err
 		})
 		if err != nil {
 			return nil, zero, toolErr(err)
@@ -343,8 +348,82 @@ var alwaysOwner = map[string]bool{
 	"set_withdraw_node":    true, // turns on-chain cash payouts from this node's funds on or off
 }
 
-// amountOwner lists actions approved by the owner only above the limit.
+// amountOwner lists actions that move money out of reach; together they share
+// one 24-hour spending window across ALL assistants (pentest R2 HIGH-1: a
+// per-payment limit let a fooled assistant drain the wallet in limit-sized
+// steps). Once a payment would take the window over the owner's limit, it waits
+// for the owner. Owner-approved payments don't count — the owner saw them.
 var amountOwner = map[string]bool{"send_payment": true, "transfer": true}
+
+// valueOwner lists actions that take back, settle or strand money held for
+// other people (cash slices, cash/circle wallets, balance-holding apps): the
+// owner approves them whenever a balance is involved (pentest R2 MED-3).
+var valueOwner = map[string]bool{
+	"delete_cash_wallet": true, "delete_cash_claim": true, "delete_circle_child": true,
+	"delete_circle_hub": true, "delete_app": true, "delete_app_confirmed": true,
+}
+
+const spendWindow = 24 * time.Hour
+
+type spendEntry struct {
+	at  time.Time
+	amt uint64
+	id  uint64
+}
+
+// spendLedger is the rolling window of assistant-confirmed outflows.
+type spendLedger struct {
+	mu      sync.Mutex
+	entries []spendEntry
+	seq     uint64
+	now     func() time.Time
+}
+
+// reserve books amt if the window total stays within limit; release undoes it.
+func (l *spendLedger) reserve(amt, limit uint64) (ok bool, release func()) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	kept := l.entries[:0]
+	var total uint64
+	for _, e := range l.entries {
+		if now.Sub(e.at) < spendWindow {
+			kept = append(kept, e)
+			total += e.amt
+		}
+	}
+	l.entries = kept
+	if amt > limit || total > limit-amt {
+		return false, nil
+	}
+	l.seq++
+	id := l.seq
+	l.entries = append(l.entries, spendEntry{at: now, amt: amt, id: id})
+	return true, func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		for i, e := range l.entries {
+			if e.id == id {
+				l.entries = append(l.entries[:i], l.entries[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+// spentInWindow reports the assistants' confirmed outflows in the window.
+func (l *spendLedger) spentInWindow() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var total uint64
+	now := l.now()
+	for _, e := range l.entries {
+		if now.Sub(e.at) < spendWindow {
+			total += e.amt
+		}
+	}
+	return total
+}
 
 func (s *Server) approvalLimit() uint64 {
 	if l, ok := s.controls.(ApprovalLimiter); ok {
@@ -353,11 +432,23 @@ func (s *Server) approvalLimit() uint64 {
 	return DefaultApprovalLimitMloki
 }
 
-func (s *Server) needsOwner(tool string, p *PaymentPreview) bool {
-	if alwaysOwner[tool] {
-		return true
+// ownerGate decides whether a confirmed action must wait for the owner. When it
+// may run now and counts toward the spending window, release undoes its
+// reservation if the action then fails.
+func (s *Server) ownerGate(tool string, p *PaymentPreview) (owner bool, release func()) {
+	switch {
+	case alwaysOwner[tool]:
+		return true, nil
+	case valueOwner[tool]:
+		return p != nil && p.AmountMloki > 0, nil
+	case amountOwner[tool]:
+		if p == nil {
+			return true, nil
+		}
+		ok, rel := s.spend.reserve(p.AmountMloki, s.approvalLimit())
+		return !ok, rel
 	}
-	return amountOwner[tool] && p != nil && p.AmountMloki > s.approvalLimit()
+	return false, nil
 }
 
 // ownerSummary is the approval text the owner sees: hub-built preview facts
