@@ -63,6 +63,12 @@ var expectedTables = []string{
 	// Token revocation denylist (#176). Carried across a migration so a jti
 	// revoked before its expiry stays revoked on the destination.
 	"revoked_tokens",
+	// AI assistants (MCP): completed writes (so a retry after the move never
+	// re-runs one), the owner's activity log, and the 24h spending window the
+	// owner's approval limit is counted against.
+	"mcp_executions",
+	"mcp_activities",
+	"mcp_spends",
 }
 
 func main() {
@@ -290,6 +296,9 @@ func migrateDB(from, to *gorm.DB) error {
 		{"offer_listings", migrateTable[db.OfferListing]},
 		{"listing_node_states", migrateTable[db.ListingNodeState]},
 		{"revoked_tokens", migrateTable[db.RevokedToken]},
+		{"mcp_executions", migrateTable[db.MCPExecution]},
+		{"mcp_activities", migrateTable[db.MCPActivity]},
+		{"mcp_spends", migrateTable[db.MCPSpend]},
 	} {
 		logger.Logger.Info().Msg("migrating " + step.name + "...")
 		if err := step.run(from, tx); err != nil {
