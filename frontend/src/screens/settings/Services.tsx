@@ -237,18 +237,22 @@ export function Services() {
 
           <ImageProxyCard className="border-border shadow-sm" />
 
-          <ListingRelaysCard className="border-border shadow-sm" />
+          <div id="listing-relays" className="scroll-mt-20">
+            <ListingRelaysCard className="border-border shadow-sm" />
+          </div>
 
           <PrivateTransportStatusCard
             privateTransport={info.privateTransport}
             className="border-border shadow-sm"
           />
 
-          <IdentityAuthorityManagementCard
-            localAuthorities={localAuthorities}
-            setLocalAuthorities={setLocalAuthorities}
-            className="border-border shadow-sm"
-          />
+          <div id="identity-authorities" className="scroll-mt-20">
+            <IdentityAuthorityManagementCard
+              localAuthorities={localAuthorities}
+              setLocalAuthorities={setLocalAuthorities}
+              className="border-border shadow-sm"
+            />
+          </div>
 
           {/* Save Services Button */}
           <div className="flex justify-end">

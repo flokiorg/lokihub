@@ -7,6 +7,7 @@ import { NostrAvatar } from "src/components/NostrAvatar";
 import { Badge } from "src/components/ui/badge";
 import { Skeleton } from "src/components/ui/skeleton";
 import { useCircleAllowlist } from "src/hooks/useCircleAllowlist";
+import { useListings } from "src/hooks/useListings";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
 import { App } from "src/types";
 import { safeNpubEncode, shortenMiddle } from "src/utils/nostr";
@@ -26,6 +27,12 @@ export function CircleCard({ app }: { app: App }) {
   );
   const isAllowlist = identity?.policy === "allowlist";
   const { data: allowlistData } = useCircleAllowlist(app.id, isAllowlist);
+  // SWR dedupes "/api/listings" across every card, so this is one request for
+  // the whole list. "Listed" = this circle has a live (non-deleted) listing.
+  const { data: listings } = useListings();
+  const isListed = !!listings?.some(
+    (l) => l.hubAppId === app.id && l.phase !== "deleted" && l.status !== "closed"
+  );
 
   if (!identity) {
     return null;
@@ -59,7 +66,50 @@ export function CircleCard({ app }: { app: App }) {
             </p>
           )
         )}
+        {/* Mobile secondary line: the discoverability/lifecycle chips and the
+            member count reflow under the name instead of being dropped at
+            narrow widths (design hides nothing on mobile). The desktop columns
+            below carry the same data from sm: up. */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
+          <Badge
+            variant={isListed ? "warning" : "secondary"}
+            className="px-2 py-0 text-xs font-normal"
+          >
+            {isListed ? t("circleCard.listed") : t("circleCard.private")}
+          </Badge>
+          {app.circleTeardownRequestedAt ? (
+            <Badge
+              variant="warning"
+              className="px-2 py-0 text-xs font-normal"
+            >
+              {t("circleCard.closing", "Closing")}
+            </Badge>
+          ) : app.circleAccepting ? (
+            <Badge
+              variant="positive"
+              className="px-2 py-0 text-xs font-normal"
+            >
+              {t("circleCard.accepting", "Accepting")}
+            </Badge>
+          ) : null}
+          <span className="text-xs text-muted-foreground">
+            {memberCount === undefined ? (
+              <Loader2 className="inline size-3 animate-spin" />
+            ) : (
+              memberCount
+            )}{" "}
+            {t("circleCard.membersLabel")}
+          </span>
+        </div>
       </div>
+      {/* Discoverability + lifecycle chips (design row): Listed/Private, then
+          Accepting/Closing. Hidden on the narrowest widths to protect the name. */}
+      <Badge
+        variant={isListed ? "warning" : "secondary"}
+        className="hidden shrink-0 sm:inline-flex"
+      >
+        {isListed ? t("circleCard.listed") : t("circleCard.private")}
+      </Badge>
       {app.circleTeardownRequestedAt ? (
         <Badge variant="warning" className="hidden shrink-0 sm:inline-flex">
           {t("circleCard.closing", "Closing")}
@@ -69,16 +119,27 @@ export function CircleCard({ app }: { app: App }) {
           {t("circleCard.accepting", "Accepting")}
         </Badge>
       ) : null}
-      <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
-        {memberCount === undefined ? (
-          <Loader2 className="size-3.5 animate-spin" />
-        ) : (
-          t("circleCard.member", { count: memberCount })
-        )}
-      </span>
-      <span className="sensitive shrink-0 text-sm font-medium">
-        <FormattedFlokicoinAmount amount={app.balance} />
-      </span>
+      {/* Members and Held read as labeled columns, matching the design row. */}
+      <div className="hidden shrink-0 text-right sm:block">
+        <p className="text-xs text-muted-foreground">
+          {t("circleCard.membersLabel")}
+        </p>
+        <p className="text-sm font-medium">
+          {memberCount === undefined ? (
+            <Loader2 className="inline size-3.5 animate-spin" />
+          ) : (
+            memberCount
+          )}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-xs text-muted-foreground">
+          {t("circleCard.heldLabel")}
+        </p>
+        <p className="sensitive text-sm font-medium">
+          <FormattedFlokicoinAmount amount={app.balance} />
+        </p>
+      </div>
       <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
     </Link>
   );

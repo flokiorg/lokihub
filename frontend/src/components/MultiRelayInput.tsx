@@ -101,7 +101,7 @@ export function MultiRelayInput({
                     relative group flex items-start justify-between p-4 rounded-xl border transition-all cursor-pointer select-none overflow-hidden
                     ${
                       isSelected
-                        ? "border-primary ring-1 ring-primary"
+                        ? "border-primary bg-primary/15"
                         : "border-border hover:border-primary"
                     }
                   `}

@@ -13,6 +13,7 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import AppAvatar from "src/components/AppAvatar";
 import AppHeader from "src/components/AppHeader";
+import BudgetExpiryFields from "src/components/BudgetExpiryFields";
 import BudgetRenewalSelect from "src/components/BudgetRenewalSelect";
 import { CircleAnalytics } from "src/components/circles/CircleAnalytics";
 import {
@@ -25,10 +26,11 @@ import {
   CircleHubSettingsFields,
 } from "src/components/circles/CircleHubSettingsFields";
 import { CircleIdentityCard } from "src/components/circles/CircleIdentityCard";
+import { WarningAlert } from "src/components/circles/WarningAlert";
 import { AppTransactionList } from "src/components/connections/AppTransactionList";
 import { ConnectionDetailsModal } from "src/components/connections/ConnectionDetailsModal";
 import { DisconnectCircleHub } from "src/components/connections/DisconnectCircleHub";
-import { CircleListingPanel } from "src/components/listings/CircleListingPanel";
+import { StatusPill } from "src/components/listings/StatusPill";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { DurationInput } from "src/components/DurationInput";
 import { OverviewCardSkeleton } from "src/components/OverviewCardSkeleton";
@@ -67,7 +69,10 @@ import {
 } from "src/constants";
 import { useSiblingHubs } from "src/hooks/useApps";
 import { useCircleHubStats } from "src/hooks/useCircleHubStats";
+import { useInfo } from "src/hooks/useInfo";
+import { useListings } from "src/hooks/useListings";
 import { useIsNarrow } from "src/hooks/useIsNarrow";
+import { splitRelayUrls } from "src/hooks/useNdk";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import {
@@ -119,7 +124,18 @@ function CircleHubDashboardInternal({
   const { t } = useTranslation("apps");
   const { t: tc } = useTranslation("common");
   const { t: tCircles } = useTranslation("circles");
+  const { data: info } = useInfo();
   const { data: stats } = useCircleHubStats(app.id);
+  // Discoverability: whether this circle is listed on the network. The full
+  // management now lives on the Discoverability page + the list-offer form; the
+  // detail hero only shows a listed/not-listed summary with a link.
+  const { data: listings } = useListings();
+  const circleListing = listings?.find(
+    (l) => l.hubAppId === app.id && l.phase !== "deleted"
+  );
+  // Accepting new members — the circle operator's core header status, matching
+  // the design's "● Accepting members" chip. Defaults open.
+  const circleAccepting = app.circleAccepting ?? true;
   const { scaleInputAmount, parseInputAmount } = useUnit();
   // Phone layout: the balance/allocated lead stays pinned, the rest of the
   // overview moves into a Summary tab, and the tab bar sticks. Desktop keeps
@@ -249,42 +265,114 @@ function CircleHubDashboardInternal({
     setIsEditing(false);
   };
 
+  // Two groups: Permissions (scopes) and a separate Budget & expiry — so expiry
+  // and renewal don't read as "permissions". Used in both the Permissions tab
+  // (read-only) and the edit form.
   const permissionsCard = (
-    <Card>
-      {/* Title only in edit mode — in the Permissions tab it would just repeat
-          the active tab's label. */}
-      {isEditing && (
-        <CardHeader>
-          <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
-        </CardHeader>
-      )}
-      <CardContent>
+    <div className="grid gap-4">
+      <Card>
+        {/* Title only in edit mode — in the Permissions tab it would just
+            repeat the active tab's label. */}
         {isEditing && (
-          <p className="text-sm text-muted-foreground mb-4">
-            {t("circleHub.budgetManagedNote")}
-          </p>
+          <CardHeader>
+            <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
+          </CardHeader>
         )}
-        <Permissions
-          capabilities={capabilities}
-          permissions={isEditing ? permissions : savedPermissions}
-          setPermissions={setPermissions}
-          readOnly={!isEditing}
-          scopesReadOnly
-          isNewConnection={false}
-          kindLabel={kindLabel}
-          budgetUsage={app.budgetUsage}
-          showBudgetUsage={isEditing}
-          showBudgetSection
-          budgetCaption={t(
-            "budget.circleSharedCaption",
-            "Shared by all wallets in this circle."
+        <CardContent>
+          <Permissions
+            capabilities={capabilities}
+            permissions={isEditing ? permissions : savedPermissions}
+            setPermissions={setPermissions}
+            readOnly={!isEditing}
+            scopesReadOnly
+            isNewConnection={false}
+            kindLabel={kindLabel}
+            showBudgetAndExpiry={false}
+          />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("circleHub.budgetExpiryTitle")}</CardTitle>
+          {isEditing && (
+            <CardDescription>
+              {t("circleHub.budgetManagedNote")}
+            </CardDescription>
           )}
-        />
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent>
+          <BudgetExpiryFields
+            permissions={isEditing ? permissions : savedPermissions}
+            setPermissions={setPermissions}
+            readOnly={!isEditing}
+            isNewConnection={false}
+            budgetUsage={app.budgetUsage}
+            showBudgetSection
+            budgetCaption={t(
+              "budget.circleSharedCaption",
+              "Shared by all wallets in this circle."
+            )}
+          />
+        </CardContent>
+      </Card>
+    </div>
   );
 
   const isAllowlistPolicy = app.circleIdentity?.policy === "allowlist";
+  // An allowlist circle can only take members once its identity is published
+  // (that is what assigns the provider pubkey the member picker needs). A circle
+  // publishes to the hub's General relay — so when none is selected, it never
+  // gets published and the picker is dead. Surface exactly that, where the user
+  // tries to add, instead of leaving them with a disabled picker and no reason.
+  const circleIsPublished = !!app.circleIdentity?.providerPubkey;
+  const hasGeneralRelay = splitRelayUrls(info?.generalRelay).length > 0;
+
+  // The "is it taking members?" chip, shown on the right of the header (the
+  // design keeps it apart from the Connected badge beside the name).
+  const acceptingChip = (
+    <span
+      className={cn(
+        "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+        circleAccepting
+          ? "border border-positive-foreground/30 bg-positive-foreground/10 text-positive-foreground"
+          : "bg-muted text-muted-foreground"
+      )}
+    >
+      <span
+        className={cn(
+          "size-1.5 rounded-full",
+          circleAccepting ? "bg-positive-foreground" : "bg-muted-foreground"
+        )}
+      />
+      {circleAccepting
+        ? tCircles("circleKpis.acceptingChip")
+        : tCircles("circleKpis.notAcceptingChip")}
+    </span>
+  );
+
+  // Discoverability, folded into the hero's right column (under Members) rather
+  // than a separate strip: one line + the listing's status, and a link to
+  // manage/create the listing. Full management lives on the list-offer form.
+  const discoverabilityNode = (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="text-muted-foreground text-xs">
+        {circleListing
+          ? t("circleHub.discoverableOnNetwork")
+          : t("circleHub.notListedInvite")}
+      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        {circleListing && <StatusPill listing={circleListing} />}
+        <Link
+          to={`/apps/${app.id}/list-offer`}
+          className="text-primary text-xs font-medium underline-offset-2 hover:underline"
+        >
+          {circleListing
+            ? t("circleHub.manageListing")
+            : t("circleHub.listOffer")}
+        </Link>
+      </div>
+    </div>
+  );
 
   // grid-cols-1 (= minmax(0,1fr)) clamps the single column to the page width
   // so a wide child (filter tabs, long rows) scrolls inside its own box
@@ -293,56 +381,63 @@ function CircleHubDashboardInternal({
     <div className="grid grid-cols-1 gap-5">
       <AppHeader
         title={
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <div className="flex flex-row gap-2 items-center min-w-0">
-              <AppAvatar app={app} className="w-10 h-10 shrink-0" />
-              <h2
-                title={app.name}
-                className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xl font-semibold"
-              >
-                {app.name}
-              </h2>
-            </div>
-            <Badge
-              variant="positive"
-              className="flex items-center gap-1 self-start sm:self-center"
+          <div className="flex flex-row flex-wrap gap-2 items-center min-w-0">
+            <AppAvatar app={app} className="w-10 h-10 shrink-0" />
+            <h2
+              title={app.name}
+              className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-xl font-semibold"
             >
-              {(siblingHubs?.length || 0) > 1 ? (
-                <DropdownMenu modal={false} key={app.id}>
-                  <DropdownMenuTrigger>
-                    <div className="flex items-center gap-1">
-                      {appKindSiblingsLabel(
-                        "circle_hub",
-                        siblingHubs?.length ?? 0
-                      )}{" "}
-                      <ChevronDownIcon className="size-3 -mr-1" />
-                    </div>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56">
-                    <DropdownMenuGroup>
-                      {siblingHubs?.map((siblingHub) => (
-                        <DropdownMenuItem key={siblingHub.id}>
-                          <Link
-                            to={`/apps/${siblingHub.id}`}
-                            className={cn(
-                              "flex flex-1 items-center gap-2",
-                              siblingHub.id === app.id && "font-semibold"
-                            )}
-                          >
-                            {siblingHub.name}
-                          </Link>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <>
-                  <CheckCircleIcon className="w-3 h-3" />{" "}
-                  {t("connections.connected", "Connected")}
-                </>
-              )}
+              {app.name}
+            </h2>
+            {/* The circle's connection health reads next to its name, like the
+                design; whether it's taking members is a separate chip on the
+                right (contentRight). */}
+            <Badge variant="positive" className="shrink-0 gap-1">
+              <CheckCircleIcon className="size-3.5" />
+              {t("circleHub.connectedBadge")}
             </Badge>
+            <div className="flex items-center gap-2">
+              {(siblingHubs?.length || 0) > 1 && (
+                <Badge
+                  variant="positive"
+                  className="flex items-center gap-1"
+                >
+                  <DropdownMenu modal={false} key={app.id}>
+                    <DropdownMenuTrigger>
+                      <div className="flex items-center gap-1">
+                        {appKindSiblingsLabel(
+                          "circle_hub",
+                          siblingHubs?.length ?? 0
+                        )}{" "}
+                        <ChevronDownIcon className="size-3 -mr-1" />
+                      </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-56">
+                      <DropdownMenuGroup>
+                        {siblingHubs?.map((siblingHub) => (
+                          <DropdownMenuItem key={siblingHub.id}>
+                            <Link
+                              to={`/apps/${siblingHub.id}`}
+                              className={cn(
+                                "flex flex-1 items-center gap-2",
+                                siblingHub.id === app.id && "font-semibold"
+                              )}
+                            >
+                              {siblingHub.name}
+                            </Link>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </Badge>
+              )}
+            </div>
+            {/* On a phone the accepting chip can't share the top row with the
+                ⋯ menu without colliding, so it wraps under the name here (like
+                the cash hub's "Live" badge); from sm: up it shows on the right
+                via contentRight instead. */}
+            {!isEditing && <span className="sm:hidden">{acceptingChip}</span>}
           </div>
         }
         description={tCircles(
@@ -359,6 +454,9 @@ function CircleHubDashboardInternal({
             </div>
           ) : (
             <>
+              {/* Desktop: accepting chip on the right. On mobile it's rendered
+                  under the name (in the title) to avoid colliding with ⋯. */}
+              <span className="hidden sm:flex">{acceptingChip}</span>
               <DropdownMenu modal={false}>
                 <Button variant="outline" size="icon" asChild>
                   <DropdownMenuTrigger>
@@ -422,7 +520,7 @@ function CircleHubDashboardInternal({
                   variant="secondary"
                   onClick={() => setIsEditing(true)}
                   icon={SquarePenIcon}
-                  text={t("connections.editConnection")}
+                  text={t("circleHub.edit")}
                 />
               )}
             </>
@@ -446,15 +544,12 @@ function CircleHubDashboardInternal({
                 hub={app}
                 stats={stats}
                 section={isMobile ? "hero" : "full"}
+                discoverability={discoverabilityNode}
               />
             ) : (
               <OverviewCardSkeleton />
             )}
           </div>
-
-          {/* The circle's public-listing control, right under the circle —
-              list / unlist / manage without leaving this page. */}
-          <CircleListingPanel appId={app.id} />
 
           <Tabs
             value={effectiveTab}
@@ -475,14 +570,14 @@ function CircleHubDashboardInternal({
                     {t("tabs.summary", "Summary")}
                   </TabsTrigger>
                 )}
-                {isAllowlistPolicy && (
-                  <TabsTrigger value="allowlist">
-                    {t("circleHub.allowlistTitle")}
-                  </TabsTrigger>
-                )}
                 <TabsTrigger value="wallets">
                   {t("circleHub.circleWalletsTitle")}
                 </TabsTrigger>
+                {isAllowlistPolicy && (
+                  <TabsTrigger value="allowlist">
+                    {t("circleHub.membersTab")}
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="analytics">
                   {t("circleHub.analyticsTitle")}
                 </TabsTrigger>
@@ -508,8 +603,30 @@ function CircleHubDashboardInternal({
 
             {isAllowlistPolicy && (
               <TabsContent value="allowlist">
-                {/* No heading — the active tab already reads "Allowlist". */}
-                {!isAllowlistFormOpen && (
+                {/* No heading — the active tab already reads "Members". */}
+                {/* Why the picker is dead: the circle has no published identity
+                    yet, so there is nothing to attach members to. Say so here,
+                    at the point of action, and point at the fix. */}
+                {!circleIsPublished && (
+                  <div className="mb-3">
+                    <WarningAlert>
+                      {hasGeneralRelay ? (
+                        t("circleHub.cantAddUnpublished")
+                      ) : (
+                        <>
+                          {t("circleHub.cantAddNoRelay")}{" "}
+                          <Link
+                            to="/settings/services#relays"
+                            className="font-medium underline underline-offset-2"
+                          >
+                            {t("circleHub.cantAddNoRelayCta")}
+                          </Link>
+                        </>
+                      )}
+                    </WarningAlert>
+                  </div>
+                )}
+                {!isAllowlistFormOpen && circleIsPublished && (
                   <div className="mb-3 flex justify-end">
                     <ResponsiveButton
                       size="sm"

@@ -80,7 +80,7 @@ export default function SuggestedApps() {
         title="App store not configured"
         description="Choose an app store under Settings → Services to browse community apps."
         buttonText="Open Settings"
-        buttonLink="/settings/services"
+        buttonLink="/settings/services#app-store"
       />
     );
   }

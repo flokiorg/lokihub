@@ -5,7 +5,7 @@ import { CustomPagination } from "src/components/CustomPagination";
 import EmptyState from "src/components/EmptyState";
 import Loading from "src/components/Loading";
 import ResponsiveLinkButton from "src/components/ResponsiveLinkButton";
-import AppCard from "src/components/connections/AppCard";
+import AppRow from "src/components/connections/AppRow";
 import {
   LIST_APPS_LIMIT,
   LOKI_ACCOUNT_APP_NAME,
@@ -89,12 +89,9 @@ function ConnectedApps() {
       )}
 
       {otherApps.length > 0 && (
-        <div
-          ref={appsListRef}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch app-list"
-        >
+        <div ref={appsListRef} className="flex flex-col gap-3 app-list">
           {otherApps.map((app, index) => (
-            <AppCard key={index} app={app} />
+            <AppRow key={index} app={app} />
           ))}
         </div>
       )}

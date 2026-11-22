@@ -1,4 +1,4 @@
-import { Check, Globe, ListChecks, Server, UserPlus } from "lucide-react";
+import { Globe, ListChecks, Server, UserPlus } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -48,10 +48,10 @@ import { NostrProfileRow } from "src/components/circles/NostrProfileRow";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "src/components/ui/card";
+import { NumberedGroupHeading } from "src/components/redesign/NumberedGroupHeading";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import { createApp } from "src/requests/createApp";
@@ -103,16 +103,16 @@ function OptionCards<T extends string>({
             key={option}
             onClick={() => onChange(option)}
             className={cn(
-              "relative flex flex-col gap-2 rounded-lg border p-3 text-start transition-all",
+              "relative flex flex-col gap-2 rounded-lg border p-3 text-start transition-colors",
+              // Selected = the design's brand-wash + brand border (no hard ring
+              // or shadow); matches the segmented-tab / chip selected treatment.
               isSelected
-                ? "border-primary ring-1 ring-primary shadow-sm"
+                ? "border-primary bg-primary/15"
                 : "border-border hover:border-primary/50"
             )}
           >
             {isSelected && (
-              <div className="absolute top-2 end-2 rounded-full bg-primary p-0.5 text-primary-foreground">
-                <Check className="h-3 w-3" />
-              </div>
+              <div className="absolute top-2.5 end-2.5 size-3.5 rounded-full bg-primary" />
             )}
             <Icon
               className={cn(
@@ -509,10 +509,11 @@ export function NewCircleHub() {
         <div className="grid gap-6">
           <Card className="w-full">
             <CardHeader>
-              <CardTitle>{t("newCircleHub.essentialsTitle")}</CardTitle>
-              <CardDescription>
-                {t("newCircleHub.essentialsDesc")}
-              </CardDescription>
+              <NumberedGroupHeading
+                step={1}
+                title={t("newCircleHub.essentialsTitle")}
+                description={t("newCircleHub.essentialsDesc")}
+              />
             </CardHeader>
             <CardContent className="grid gap-6">
               <div className="w-full grid gap-1.5">
@@ -636,12 +637,11 @@ export function NewCircleHub() {
           {isNewIdentity && (
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>
-                  {t("newCircleHub.membershipDetailsTitle")}
-                </CardTitle>
-                <CardDescription>
-                  {t("newCircleHub.membershipDetailsDesc")}
-                </CardDescription>
+                <NumberedGroupHeading
+                  step={2}
+                  title={t("newCircleHub.membershipDetailsTitle")}
+                  description={t("newCircleHub.membershipDetailsDesc")}
+                />
               </CardHeader>
               <CardContent>
                 <div className="w-full grid gap-4 min-w-0">
@@ -754,10 +754,28 @@ export function NewCircleHub() {
             </Card>
           )}
 
-          <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="advanced">
-              <AccordionTrigger className="text-sm">
-                {t("common.advancedSettings")}
+          <Accordion
+            type="single"
+            collapsible
+            className="w-full rounded-xl border bg-card px-4"
+          >
+            <AccordionItem value="advanced" className="border-b-0">
+              <AccordionTrigger className="text-sm hover:no-underline">
+                <span className="flex w-full items-center gap-2.5">
+                  <span
+                    className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
+                    aria-hidden
+                  >
+                    3
+                  </span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("common.advancedSettings")}
+                  </span>
+                  {/* Right-aligned hint of what Advanced holds (matches design). */}
+                  <span className="ms-auto hidden text-xs font-normal normal-case text-muted-foreground sm:inline">
+                    {t("newCircleHub.advancedHint")}
+                  </span>
+                </span>
               </AccordionTrigger>
               <AccordionContent className="grid gap-4">
                 <div className="w-full grid gap-1.5">
@@ -853,13 +871,6 @@ export function NewCircleHub() {
 
           <div className="grid gap-2">
             <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate(-1)}
-              >
-                {tc("actions.cancel")}
-              </Button>
               <LoadingButton
                 loading={isLoading}
                 type="submit"
@@ -867,6 +878,13 @@ export function NewCircleHub() {
               >
                 {t("newCircleHub.submit")}
               </LoadingButton>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate(-1)}
+              >
+                {tc("actions.cancel")}
+              </Button>
             </div>
             {submitHint && (
               <p className="text-sm text-muted-foreground">{submitHint}</p>

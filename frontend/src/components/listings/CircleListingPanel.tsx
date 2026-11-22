@@ -379,7 +379,7 @@ export function CircleListingPanel({ appId }: { appId: number }) {
                       {t("relays.republish")}
                     </Button>
                     <Link
-                      to="/settings/services"
+                      to="/settings/services#listing-relays"
                       className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                     >
                       <Settings2Icon className="size-3.5" />

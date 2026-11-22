@@ -23,10 +23,16 @@ const TabsList = React.forwardRef<
     <TabsPrimitive.List
       ref={ref}
       className={cn(
-        "max-w-full overflow-x-auto text-muted-foreground",
+        "max-w-full text-muted-foreground",
         variant === "underline"
-          ? "inline-flex h-auto items-center justify-start gap-1 border-b"
-          : "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1",
+          ? // Main section tabs: WRAP onto a second row when they don't fit
+            // rather than hiding tabs behind a horizontal scroll (scrolling a
+            // menu to find a tab is bad UX). border-b spans the full width so
+            // the wrapped rows still read as one tab bar.
+            "flex h-auto flex-wrap items-center justify-start gap-x-1 gap-y-0 border-b"
+          : // Segmented sub-filter pill: a compact control; it fits its few
+            // options, with overflow-x-auto only as a last-resort safety net.
+            "inline-flex h-9 items-center justify-center overflow-x-auto rounded-lg bg-muted p-1",
         className
       )}
       {...props}

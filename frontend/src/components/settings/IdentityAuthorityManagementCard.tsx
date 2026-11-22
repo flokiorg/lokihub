@@ -265,7 +265,7 @@ export function IdentityAuthorityManagementCard({
             className={cn(
               "relative flex flex-col p-4 rounded-xl border transition-all duration-200",
               isAdding
-                ? "bg-card shadow-sm border-primary ring-1 ring-primary"
+                ? "bg-card shadow-sm border-primary"
                 : "bg-transparent border-border hover:border-primary hover:shadow-sm cursor-pointer group"
             )}
             onClick={() => !isAdding && setIsAdding(true)}

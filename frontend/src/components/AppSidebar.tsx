@@ -81,11 +81,11 @@ export function AppSidebar() {
   }, [_isHttpMode, navigate, refetchInfo]);
 
   const data = {
-    // One flat primary nav — every top-level destination at level 0, with no
-    // Money/Network grouping. Funds first (home, wallet, sub-wallets, cash
-    // hubs), then how the hub reaches out (connections, and the LSP backoffice
-    // once attached). Listings are no longer here: a listing belongs to one
-    // circle and is managed from that circle's own page.
+    // One flat primary nav — every top-level destination at level 0, no
+    // grouping. Funds first (home, wallet, cash hubs, circles), then how the hub
+    // reaches out (connections, and the LSP backoffice once attached). No
+    // Discoverability entry: a listing belongs to one circle and is managed from
+    // that circle's own page.
     navPrimary: [
       {
         title: t("nav.home"),
@@ -98,24 +98,23 @@ export function AppSidebar() {
         icon: WalletIcon,
       },
       {
-        title: t("nav.subWallets"),
-        url: "/sub-wallets",
-        icon: Users,
-      },
-      {
         title: t("nav.cashHub"),
         url: "/cash-hub",
         icon: BanknoteIcon,
+      },
+      {
+        title: t("nav.subWallets"),
+        url: "/sub-wallets",
+        icon: Users,
       },
       {
         title: t("nav.connections"),
         url: "/apps",
         icon: Plug2Icon,
       },
-      // The LSP backoffice is shown only once the Hub is actually attached to an
-      // lspd daemon (info.lspService.attached), the same conditional-nav pattern
-      // as the Node entry's `hasChannelManagement` gate below. Operators who
-      // never attach an LSP never see it.
+      // The LSP backoffice is shown only once the Hub is attached to an lspd
+      // daemon (info.lspService.attached), the same conditional-nav pattern as
+      // the Node entry below.
       ...(info?.lspService?.attached
         ? [
             {

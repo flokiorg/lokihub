@@ -1,6 +1,5 @@
 import { RegenerateCashHubConnection } from "src/components/listings/RegenerateCashHubConnection";
 import {
-  CheckCircleIcon,
   ChevronDownIcon,
   EllipsisIcon,
   InfoIcon,
@@ -34,6 +33,7 @@ import { ConnectionDetailsModal } from "src/components/connections/ConnectionDet
 import { DisconnectCashHub } from "src/components/connections/DisconnectCashHub";
 import Loading from "src/components/Loading";
 import Permissions from "src/components/Permissions";
+import BudgetExpiryFields from "src/components/BudgetExpiryFields";
 import ResponsiveButton from "src/components/ResponsiveButton";
 import { Alert, AlertDescription } from "src/components/ui/alert";
 import { Badge } from "src/components/ui/badge";
@@ -41,6 +41,7 @@ import { Button } from "src/components/ui/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "src/components/ui/card";
@@ -332,44 +333,59 @@ function CashHubDashboardInternal({
     </div>
   );
 
+  // Two groups: Permissions (scopes) + a separate Budget & expiry, so expiry
+  // and renewal don't read as "permissions". Used in both the tab and the edit
+  // form.
   const permissionsCard = (
-    <Card>
-      {/* Title only in edit mode — in the Permissions tab it would just repeat
-          the active tab's label. */}
-      {isEditing && (
-        <CardHeader>
-          <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
-        </CardHeader>
-      )}
-      <CardContent>
+    <div className="grid gap-4">
+      <Card>
         {isEditing && (
-          <p className="text-sm text-muted-foreground mb-4">
-            {t("circleHub.budgetManagedNote")}
-          </p>
+          <CardHeader>
+            <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
+          </CardHeader>
         )}
-        <Permissions
-          capabilities={capabilities}
-          permissions={isEditing ? permissions : savedPermissions}
-          setPermissions={setPermissions}
-          readOnly={!isEditing}
-          scopesReadOnly
-          isNewConnection={false}
-          kindLabel={kindLabel}
-          budgetUsage={hub.budgetUsage}
-          showBudgetUsage={isEditing}
-          showBudgetSection={
-            permissions.scopes.includes("pay_invoice") ||
-            permissions.scopes.includes("cash_redeem")
-          }
-          // A hub's budget looks like it should cap issuance and does not:
-          // every mint funds its bill by internal transfer, which is exempt
-          // from the budget cap (transactions_service.go's skipBudgetCap).
-          // What it actually caps is an ordinary pay_invoice made over the
-          // hub's own connection.
-          budgetCaption={t("budget.cashHubCaption")}
-        />
-      </CardContent>
-    </Card>
+        <CardContent>
+          <Permissions
+            capabilities={capabilities}
+            permissions={isEditing ? permissions : savedPermissions}
+            setPermissions={setPermissions}
+            readOnly={!isEditing}
+            scopesReadOnly
+            isNewConnection={false}
+            kindLabel={kindLabel}
+            showBudgetAndExpiry={false}
+          />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("circleHub.budgetExpiryTitle")}</CardTitle>
+          {isEditing && (
+            <CardDescription>
+              {t("circleHub.budgetManagedNote")}
+            </CardDescription>
+          )}
+        </CardHeader>
+        <CardContent>
+          <BudgetExpiryFields
+            permissions={isEditing ? permissions : savedPermissions}
+            setPermissions={setPermissions}
+            readOnly={!isEditing}
+            isNewConnection={false}
+            budgetUsage={hub.budgetUsage}
+            showBudgetSection={
+              permissions.scopes.includes("pay_invoice") ||
+              permissions.scopes.includes("cash_redeem")
+            }
+            // A hub's budget looks like it should cap issuance and does not:
+            // every mint funds its bill by internal transfer, which is exempt
+            // from the budget cap. What it caps is an ordinary pay_invoice made
+            // over the hub's own connection.
+            budgetCaption={t("budget.cashHubCaption")}
+          />
+        </CardContent>
+      </Card>
+    </div>
   );
 
   // grid-cols-1 (= minmax(0,1fr)) clamps this single column to the available
@@ -426,8 +442,11 @@ function CashHubDashboardInternal({
                 </DropdownMenu>
               ) : (
                 <>
-                  <CheckCircleIcon className="w-3 h-3" />{" "}
-                  {t("connections.connected", "Connected")}
+                  {/* A live-status dot + "Live" (the redesign's header chip),
+                      not a generic "Connected" — the hub is active and able to
+                      honour its bills. */}
+                  <span className="size-2 rounded-full bg-current" />
+                  {t("circleHub.liveChip", "Live")}
                 </>
               )}
             </Badge>
@@ -462,7 +481,7 @@ function CashHubDashboardInternal({
                             onClick={() => setIsEditing(true)}
                           >
                             <SquarePenIcon className="size-4" />{" "}
-                            {t("connections.editConnection")}
+                            {tc("actions.edit", "Edit")}
                           </div>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -519,7 +538,7 @@ function CashHubDashboardInternal({
                   variant="secondary"
                   onClick={() => setIsEditing(true)}
                   icon={SquarePenIcon}
-                  text={t("connections.editConnection")}
+                  text={tc("actions.edit", "Edit")}
                 />
               )}
             </>

@@ -65,6 +65,7 @@ import { LspOverview } from "src/screens/lsp/LspOverview";
 import { LspWebhooks } from "src/screens/lsp/LspWebhooks";
 import { CashHubDashboard } from "src/screens/subwallets/CashHubDashboard";
 import { CashHubList } from "src/screens/subwallets/CashHubList";
+import { LspLayout } from "src/screens/lsp/LspLayout";
 import { NewCircleHub } from "src/screens/subwallets/NewCircleHub";
 import { NewCashHub } from "src/screens/subwallets/NewCashHub";
 import { NewSimpleSubwallet } from "src/screens/subwallets/NewSimpleSubwallet";
@@ -216,7 +217,12 @@ const routes: RouteObject[] = [
                   },
                   {
                     path: "identity-authorities",
-                    element: <Navigate to="/settings/services" replace />,
+                    element: (
+                      <Navigate
+                        to="/settings/services#identity-authorities"
+                        replace
+                      />
+                    ),
                   },
                   {
                     path: "about",
@@ -359,19 +365,27 @@ const routes: RouteObject[] = [
             element: <DefaultRedirect />,
             handle: { crumb: () => "LSP" },
             children: [
-              { index: true, element: <LspOverview /> },
               {
-                path: "orders",
-                handle: { crumb: () => "Orders" },
+                // Shared LSP layout: header + tab bar, so Overview / Orders /
+                // Peers / Analytics / Config are all reachable (they used to be
+                // URL-only). Mirrors the Settings DefaultRedirect → Layout nest.
+                element: <LspLayout />,
                 children: [
-                  { index: true, element: <LspOrders /> },
-                  { path: ":orderId", element: <LspOrderDetail /> },
+                  { index: true, element: <LspOverview /> },
+                  {
+                    path: "orders",
+                    handle: { crumb: () => "Orders" },
+                    children: [
+                      { index: true, element: <LspOrders /> },
+                      { path: ":orderId", element: <LspOrderDetail /> },
+                    ],
+                  },
+                  { path: "peers", element: <LspClients /> },
+                  { path: "webhooks", element: <LspWebhooks /> },
+                  { path: "analytics", element: <LspAnalytics /> },
+                  { path: "config", element: <LspConfig /> },
                 ],
               },
-              { path: "peers", element: <LspClients /> },
-              { path: "webhooks", element: <LspWebhooks /> },
-              { path: "analytics", element: <LspAnalytics /> },
-              { path: "config", element: <LspConfig /> },
             ],
           },
           {

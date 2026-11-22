@@ -10,7 +10,6 @@ import {
   YAxis,
 } from "recharts";
 import { useTranslation } from "react-i18next";
-import AppHeader from "src/components/AppHeader";
 import { ChartCard, ChartPlot } from "src/components/charts/ChartCard";
 import { axisProps, SERIES } from "src/components/charts/chartTheme";
 import {
@@ -29,13 +28,9 @@ export function LspAnalytics() {
   const formatLoki = useFormatLoki();
   const { data, error } = useLspAnalytics();
 
+  // Header + tab bar come from the shared LspLayout now.
   return (
     <div className="space-y-4">
-      <AppHeader
-        title={t("analytics.title")}
-        description={t("analytics.description")}
-      />
-
       {error ? (
         <LspUnavailable error={error} />
       ) : !data ? (

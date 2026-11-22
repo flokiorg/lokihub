@@ -45,7 +45,9 @@ export function NewCashHub() {
   const navigate = useNavigate();
   const [name, setName] = React.useState("");
   const [perWalletMaxLoki, setPerWalletMaxLoki] = React.useState(1000);
-  const [maxExpSecs, setMaxExpSecs] = React.useState(86400);
+  // Cash bills default to NO expiry ("never", 0) — an operator opts into a
+  // finite ceiling, bills don't silently expire out from under holders.
+  const [maxExpSecs, setMaxExpSecs] = React.useState(0);
   const [minTransferLoki, setMinTransferLoki] = React.useState(
     DEFAULT_CASH_MIN_TRANSFER_LOKI
   );
@@ -108,7 +110,9 @@ export function NewCashHub() {
         <div className="grid gap-4">
           <Card className="w-full">
             <CardHeader>
-              <CardTitle>{t("newCashHub.essentialsTitle")}</CardTitle>
+              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("newCashHub.essentialsTitle")}
+              </CardTitle>
               <CardDescription>
                 {t("newCashHub.essentialsDesc")}
               </CardDescription>
@@ -144,29 +148,6 @@ export function NewCashHub() {
               />
             </CardContent>
           </Card>
-          <div className="grid gap-2">
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate(-1)}
-              >
-                {tc("actions.cancel")}
-              </Button>
-              <LoadingButton
-                loading={isLoading}
-                type="submit"
-                disabled={!canSubmit}
-              >
-                {t("newCashHub.submit")}
-              </LoadingButton>
-            </div>
-            {!canSubmit && (
-              <p className="text-muted-foreground text-sm">
-                {t("newCashHub.submitHint")}
-              </p>
-            )}
-          </div>
         </div>
 
         {/* A live recap on the right fills the width and shows what this hub
@@ -174,7 +155,7 @@ export function NewCashHub() {
         <aside className="slashed-zero lg:sticky lg:top-4">
           <div className="rounded-xl border bg-muted/30 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t("newCashHub.summaryTitle", "Summary")}
+              {t("newCashHub.summaryTitle", "You're creating")}
             </p>
             <div className="mt-3 grid gap-3 text-sm">
               <div>
@@ -183,6 +164,14 @@ export function NewCashHub() {
                 </p>
                 <p className="font-medium">
                   {name || t("newCashHub.summaryName", "Untitled Cash Hub")}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  {t("newCashHub.summaryBackedBy", "Backed by")}
+                </p>
+                <p className="font-medium">
+                  {t("newCashHub.summaryNodeWallet", "Node wallet")}
                 </p>
               </div>
               <div>
@@ -211,6 +200,34 @@ export function NewCashHub() {
                   <p className="font-medium">{redeemFeePpm} ppm</p>
                 </div>
               )}
+            </div>
+            {/* Create/Cancel live in the summary card (design), with a note that
+                limits are editable later. */}
+            <div className="mt-4 grid gap-2 border-t pt-4">
+              <div className="flex gap-3">
+                <LoadingButton
+                  loading={isLoading}
+                  type="submit"
+                  disabled={!canSubmit}
+                >
+                  {t("newCashHub.submit")}
+                </LoadingButton>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate(-1)}
+                >
+                  {tc("actions.cancel")}
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {canSubmit
+                  ? t(
+                      "newCashHub.summaryEditableLater",
+                      "You can change every limit later from the hub's settings."
+                    )
+                  : t("newCashHub.submitHint")}
+              </p>
             </div>
           </div>
         </aside>

@@ -1,7 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import AppHeader from "src/components/AppHeader";
 import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import {
@@ -33,6 +32,7 @@ import {
 import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
 import { LSP_CONFIG_SECRET_KEYS, LspConfigObject } from "src/screens/lsp/types";
 import { handleRequestError } from "src/utils/handleRequestError";
+import { shortenMiddle } from "src/utils/nostr";
 
 // The only fields edited from the Hub: the business fee knobs. They are safe to
 // change live and arrive as strings (the NodeConfig json tags are ",string").
@@ -58,13 +58,9 @@ export function LspConfig() {
     }
   }, [nodes, selected]);
 
+  // Header + tab bar come from the shared LspLayout now.
   return (
     <div className="space-y-4">
-      <AppHeader
-        title={t("config.title")}
-        description={t("config.description")}
-      />
-
       {nodesError ? (
         <LspUnavailable error={nodesError} />
       ) : !nodesResp ? (
@@ -85,7 +81,7 @@ export function LspConfig() {
                 <SelectContent>
                   {nodes.map((n) => (
                     <SelectItem key={n.node_id} value={n.node_id}>
-                      {n.name || n.node_id.slice(0, 16) + "…"}
+                      {n.name || shortenMiddle(n.node_id)}
                     </SelectItem>
                   ))}
                 </SelectContent>

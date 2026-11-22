@@ -20,6 +20,17 @@
     },
     "themes": {
       "default": "Default"
+    },
+    "accent": "Accent colour",
+    "accentDescription": "Tints buttons, links and highlights across the app.",
+    "accents": {
+      "default": "Theme default",
+      "amber": "Amber",
+      "green": "Green",
+      "teal": "Teal",
+      "blue": "Blue",
+      "purple": "Purple",
+      "rose": "Rose"
     }
   },
   "units": {
@@ -124,6 +135,7 @@
   },
   "toasts": {
     "themeUpdated": "Theme updated.",
+    "accentUpdated": "Accent colour updated.",
     "appearanceUpdated": "Appearance updated.",
     "currencyUpdated": "Currency set to {{currency}}",
     "formatUpdated": "{{chain}} display format updated",

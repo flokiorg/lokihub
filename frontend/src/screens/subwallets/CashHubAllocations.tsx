@@ -1248,7 +1248,47 @@ export const CashHubAllocations = React.forwardRef<
 
   const formFields = (
     <>
+      {/* Context line: which hub this bill is minted from, and what backs it —
+          the design puts this at the top of the mint sheet so the operator
+          always sees the source and its coverage before setting amounts. */}
+      {hub && (
+        <p className="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
+          <span>{t("cashHubAllocations.mintFrom", { hub: hub.name })}</span>
+          {hub.balance > 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <span>
+                {t("cashHubAllocations.mintBackedBy")}{" "}
+                <span className="sensitive font-medium text-foreground">
+                  <FormattedFlokicoinAmount amount={hub.balance} />
+                </span>
+              </span>
+            </>
+          )}
+        </p>
+      )}
       <div className="grid gap-3">{recipients.map(recipientRowFields)}</div>
+      {/* Cap meter: requested amount against the per-bill max — green within
+          the cap, amber once it's exceeded (same coverage-aware convention as
+          the hub's circulation/backing meters). */}
+      {maxAmountLoki !== undefined && maxAmountLoki > 0 && (
+        <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              totalExceedsMax
+                ? "bg-warning-foreground"
+                : "bg-positive-foreground"
+            )}
+            style={{
+              width: `${Math.min(
+                100,
+                Math.max(0, (totalRequestedLoki / maxAmountLoki) * 100)
+              )}%`,
+            }}
+          />
+        </div>
+      )}
       <p
         className={cn(
           "text-sm",

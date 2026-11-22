@@ -102,7 +102,7 @@ export function ServiceCardSelector({
             className={cn(
               "relative group flex flex-col gap-2 p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full overflow-hidden",
               isSelected
-                ? "border-primary ring-1 ring-primary shadow-sm"
+                ? "border-primary bg-primary/15"
                 : "border-border hover:border-primary hover:shadow-sm",
               disabled && "opacity-50 pointer-events-none"
             )}
@@ -176,7 +176,7 @@ export function ServiceCardSelector({
         className={cn(
           "relative flex flex-col p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full min-h-[110px] overflow-hidden group col-span-full",
           isCustom
-            ? "border-primary ring-1 ring-primary shadow-sm bg-card"
+            ? "border-primary bg-primary/15"
             : "border-border hover:border-primary hover:shadow-sm bg-transparent",
           disabled && "opacity-50 pointer-events-none"
         )}

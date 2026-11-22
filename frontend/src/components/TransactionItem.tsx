@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import AppAvatar from "src/components/AppAvatar";
 import ExternalLink from "src/components/ExternalLink";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
+import { shortenMiddle } from "src/utils/nostr";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { PaymentFailedAlert } from "src/components/PaymentFailedAlert";
 import PodcastingInfo from "src/components/PodcastingInfo";
@@ -92,7 +93,7 @@ function TransactionItem({ tx }: Props) {
       ? payerName
         ? t("transactions.fromPayer", { name: payerName })
         : npub
-          ? t("transactions.zapFrom", { npub: npub.substring(0, 12) + "..." })
+          ? t("transactions.zapFrom", { npub: shortenMiddle(npub) })
           : undefined
       : undefined;
 
@@ -100,7 +101,7 @@ function TransactionItem({ tx }: Props) {
   const to =
     type === "outgoing"
       ? npub
-        ? t("transactions.zapTo", { npub: npub.substring(0, 12) + "..." })
+        ? t("transactions.zapTo", { npub: shortenMiddle(npub) })
         : recipientIdentifier
           ? t(
               tx.state === "failed"

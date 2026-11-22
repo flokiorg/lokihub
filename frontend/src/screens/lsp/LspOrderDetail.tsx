@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
-import AppHeader from "src/components/AppHeader";
 import QRCode from "src/components/QRCode";
 import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
@@ -58,19 +57,25 @@ export function LspOrderDetail() {
   // "not found" instead of the generic "could not load LSP data" warning.
   const notFound = (error as { status?: number } | undefined)?.status === 404;
 
+  // A drill-down below the shared LspLayout header + tabs: its own compact
+  // sub-header (which order + a way back), not a second full page header.
   return (
     <div className="space-y-4">
-      <AppHeader
-        title={t("orderDetail.title")}
-        description={orderId ? <CopyMono value={orderId} /> : undefined}
-        contentRight={
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/lsp/orders">
-              <ArrowLeftIcon className="size-4" /> {t("orderDetail.back")}
-            </Link>
-          </Button>
-        }
-      />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold">{t("orderDetail.title")}</h2>
+          {orderId && (
+            <div className="text-muted-foreground">
+              <CopyMono value={orderId} />
+            </div>
+          )}
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/lsp/orders">
+            <ArrowLeftIcon className="size-4" /> {t("orderDetail.back")}
+          </Link>
+        </Button>
+      </div>
 
       {notFound ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center">

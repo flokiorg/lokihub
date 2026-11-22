@@ -2,6 +2,7 @@ import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { ACCENT_KEY, ACCENTS, applyAccent } from "src/lib/accent";
 import { cn } from "src/lib/utils";
 import { LanguageSwitcher } from "src/components/LanguageSwitcher";
 import { WithdrawNodeSettings } from "src/components/withdraw/WithdrawNodeSettings";
@@ -38,6 +39,15 @@ import { request } from "src/utils/request";
 function Settings() {
   const { theme, darkMode, setTheme, setDarkMode } = useTheme();
   const { t } = useTranslation("settings");
+
+  const [accent, setAccent] = useState<string>(
+    () => localStorage.getItem(ACCENT_KEY) || "default"
+  );
+  // Re-assert the stored accent whenever this screen mounts (and after a theme
+  // switch repaints the tokens), so the override survives theme changes.
+  useEffect(() => {
+    applyAccent(ACCENTS.find((a) => a.id === accent)?.value ?? null);
+  }, [accent, theme, darkMode]);
 
   const [fiatCurrencies, setFiatCurrencies] = useState<[string, string][]>([]);
 
@@ -181,6 +191,52 @@ function Settings() {
                   </SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>{t("appearance.accent")}</Label>
+              <p className="text-muted-foreground -mt-1 text-sm">
+                {t("appearance.accentDescription")}
+              </p>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {ACCENTS.map((a) => {
+                  const selected = accent === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      title={t(`appearance.accents.${a.id}` as never)}
+                      aria-label={t(`appearance.accents.${a.id}` as never)}
+                      aria-pressed={selected}
+                      onClick={() => {
+                        setAccent(a.id);
+                        localStorage.setItem(ACCENT_KEY, a.id);
+                        applyAccent(a.value);
+                        toast(t("toasts.accentUpdated"));
+                      }}
+                      className={cn(
+                        "relative flex size-8 items-center justify-center rounded-full border transition-transform hover:scale-110",
+                        selected &&
+                          "ring-2 ring-ring ring-offset-2 ring-offset-background"
+                      )}
+                      style={
+                        a.value
+                          ? { backgroundColor: `hsl(${a.value})` }
+                          : undefined
+                      }
+                    >
+                      {/* "Theme default" has no colour of its own — show a quiet
+                          reset dot rather than a swatch that could read as a
+                          colour choice. */}
+                      {!a.value && (
+                        <span className="bg-foreground/20 size-3 rounded-full" />
+                      )}
+                      {selected && a.value && (
+                        <Check className="size-4 text-white drop-shadow" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </section>

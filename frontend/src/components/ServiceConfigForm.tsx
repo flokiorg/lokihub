@@ -1,4 +1,11 @@
-import { AlertCircle, Globe, LayoutGrid, Search, Users, Zap } from "lucide-react";
+import {
+  AlertCircle,
+  Globe,
+  LayoutGrid,
+  Search,
+  Users,
+  Zap,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LSPCatalogue } from "src/components/lsps/LSPCatalogue";
@@ -242,7 +249,7 @@ export function ServiceConfigForm({
       </Card>
 
       {/* Nostr Relays — grouped: Wallet Connect, General, Search each keep their own independent list */}
-      <Card className="border-border shadow-sm">
+      <Card id="relays" className="border-border shadow-sm scroll-mt-20">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <Zap className="w-5 h-5 text-primary" />
@@ -336,7 +343,7 @@ export function ServiceConfigForm({
       {/* App Store — optional. Empty means OFF (no sync, no fetch); the
           raw.githubusercontent suggestion below is inactive until picked. */}
       {showAppStore && (
-        <Card className="border-border shadow-sm">
+        <Card id="app-store" className="border-border shadow-sm scroll-mt-20">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <LayoutGrid className="w-5 h-5 text-primary" />
@@ -349,9 +356,7 @@ export function ServiceConfigForm({
           <CardContent>
             <ServiceCardSelector
               value={state.lokihubStoreUrl}
-              onChange={(val) =>
-                onChange({ ...state, lokihubStoreUrl: val })
-              }
+              onChange={(val) => onChange({ ...state, lokihubStoreUrl: val })}
               options={communityOptions.appStore}
               placeholder="https://..."
               customIcon={<LayoutGrid className="w-4 h-4" />}
@@ -364,7 +369,9 @@ export function ServiceConfigForm({
       {/* LSP catalogue (NIP-LSP announcements; WP-26). Shown in both setup and
           Settings; trusting an LSP is always optional, so setup stays
           skippable. */}
-      <LSPCatalogue className="border-border shadow-sm" />
+      <div id="lsp" className="scroll-mt-20">
+        <LSPCatalogue className="border-border shadow-sm" />
+      </div>
 
       {validationErrors.length > 0 && (
         <div id="service-config-errors" className="scroll-mt-4">

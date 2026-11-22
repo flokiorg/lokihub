@@ -29,7 +29,9 @@ const EmptyState: React.FC<Props> = ({
     <div
       className={cn(
         "flex flex-1 items-center justify-center rounded-lg p-8 mt-2",
-        showBorder && "shadow-xs border border-dashed"
+        // Solid bordered card (not dashed) — the design's single empty-state
+        // treatment, shared by every caller of this component.
+        showBorder && "border bg-card shadow-sm"
       )}
     >
       <div className="flex flex-col items-center gap-1 text-center max-w-sm">

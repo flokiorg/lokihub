@@ -1,6 +1,12 @@
 import { useTranslation } from "react-i18next";
 
 import { DurationInput } from "src/components/DurationInput";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "src/components/ui/accordion";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { Switch } from "src/components/ui/switch";
@@ -68,8 +74,12 @@ export function CircleHubSettingsFields({
     </div>
   );
 
+  // Essentials: the three limits almost every circle operator sets. The
+  // economics/lifecycle knobs below have good defaults, so they live under one
+  // collapsed "Advanced" disclosure — the same essentials-first shape as the
+  // New Circle form and the Cash Hub config card, instead of one long stack.
   return (
-    <>
+    <div className="w-full grid gap-4">
       <div className="w-full grid gap-1.5">
         <Label htmlFor="circleDefaultExpSecs">
           {t("circleSettings.defaultExpiry")}
@@ -87,78 +97,94 @@ export function CircleHubSettingsFields({
       </div>
       {loki("circlePerWalletMaxReceiveMloki", "maxReceive")}
       {loki("circleHoldingsCeilingMloki", "holdingsCeiling")}
-      <div className="w-full grid gap-1.5">
-        <Label htmlFor="circleFeeReservePpm">
-          {t("circleSettings.feeReservePpm")}
-        </Label>
-        <Input
-          id="circleFeeReservePpm"
-          type="number"
-          min={0}
-          value={value.circleFeeReservePpm}
-          onChange={(e) => set("circleFeeReservePpm", Number(e.target.value))}
-        />
-      </div>
-      {loki("circleFeeReserveMinMloki", "feeReserveMin")}
-      {loki("circleOutboundCeilingMloki", "outboundCeiling")}
-      <div className="w-full grid gap-1.5">
-        <Label htmlFor="circleOutboundPeriod">
-          {t("circleSettings.outboundPeriod")}
-        </Label>
-        <select
-          id="circleOutboundPeriod"
-          className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
-          value={value.circleOutboundPeriod}
-          onChange={(e) =>
-            set("circleOutboundPeriod", e.target.value as OutboundPeriod)
-          }
-        >
-          {OUTBOUND_PERIODS.map((p) => (
-            <option key={p} value={p}>
-              {t(`circleSettings.period.${p}`)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="w-full grid gap-1.5">
-        <Label htmlFor="circleGraceSecs">{t("circleSettings.grace")}</Label>
-        <DurationInput
-          id="circleGraceSecs"
-          seconds={value.circleGraceSecs}
-          onChange={(s) => set("circleGraceSecs", s)}
-        />
-        <p className="text-muted-foreground text-sm">
-          {t("circleSettings.graceHelper")}
-        </p>
-      </div>
-      {loki("circleDustThresholdMloki", "dust")}
-      <div className="w-full grid gap-1.5">
-        <div className="flex items-center gap-3">
-          <Switch
-            id="circleRotationEnabled"
-            checked={value.circleRotationEnabled}
-            onCheckedChange={(c) => set("circleRotationEnabled", c)}
-          />
-          <Label htmlFor="circleRotationEnabled">
-            {t("circleSettings.rotation")}
-          </Label>
-        </div>
-        <p className="text-muted-foreground text-sm">
-          {t("circleSettings.rotationHelper")}
-        </p>
-      </div>
-      {value.circleRotationEnabled && (
-        <div className="w-full grid gap-1.5">
-          <Label htmlFor="circleRotationDelaySecs">
-            {t("circleSettings.rotationDelay")}
-          </Label>
-          <DurationInput
-            id="circleRotationDelaySecs"
-            seconds={value.circleRotationDelaySecs}
-            onChange={(s) => set("circleRotationDelaySecs", s)}
-          />
-        </div>
-      )}
-    </>
+
+      <Accordion type="single" collapsible>
+        <AccordionItem value="advanced" className="border-b-0">
+          <AccordionTrigger className="py-2 text-sm font-medium">
+            {t("common.advancedSettings")}
+          </AccordionTrigger>
+          <AccordionContent className="pb-0">
+            <div className="w-full grid gap-4">
+              <div className="w-full grid gap-1.5">
+                <Label htmlFor="circleFeeReservePpm">
+                  {t("circleSettings.feeReservePpm")}
+                </Label>
+                <Input
+                  id="circleFeeReservePpm"
+                  type="number"
+                  min={0}
+                  value={value.circleFeeReservePpm}
+                  onChange={(e) =>
+                    set("circleFeeReservePpm", Number(e.target.value))
+                  }
+                />
+              </div>
+              {loki("circleFeeReserveMinMloki", "feeReserveMin")}
+              {loki("circleOutboundCeilingMloki", "outboundCeiling")}
+              <div className="w-full grid gap-1.5">
+                <Label htmlFor="circleOutboundPeriod">
+                  {t("circleSettings.outboundPeriod")}
+                </Label>
+                <select
+                  id="circleOutboundPeriod"
+                  className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
+                  value={value.circleOutboundPeriod}
+                  onChange={(e) =>
+                    set("circleOutboundPeriod", e.target.value as OutboundPeriod)
+                  }
+                >
+                  {OUTBOUND_PERIODS.map((p) => (
+                    <option key={p} value={p}>
+                      {t(`circleSettings.period.${p}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-full grid gap-1.5">
+                <Label htmlFor="circleGraceSecs">
+                  {t("circleSettings.grace")}
+                </Label>
+                <DurationInput
+                  id="circleGraceSecs"
+                  seconds={value.circleGraceSecs}
+                  onChange={(s) => set("circleGraceSecs", s)}
+                />
+                <p className="text-muted-foreground text-sm">
+                  {t("circleSettings.graceHelper")}
+                </p>
+              </div>
+              {loki("circleDustThresholdMloki", "dust")}
+              <div className="w-full grid gap-1.5">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="circleRotationEnabled"
+                    checked={value.circleRotationEnabled}
+                    onCheckedChange={(c) => set("circleRotationEnabled", c)}
+                  />
+                  <Label htmlFor="circleRotationEnabled">
+                    {t("circleSettings.rotation")}
+                  </Label>
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  {t("circleSettings.rotationHelper")}
+                </p>
+              </div>
+              {value.circleRotationEnabled && (
+                <div className="w-full grid gap-1.5">
+                  <Label htmlFor="circleRotationDelaySecs">
+                    {t("circleSettings.rotationDelay")}
+                  </Label>
+                  <DurationInput
+                    id="circleRotationDelaySecs"
+                    seconds={value.circleRotationDelaySecs}
+                    onChange={(s) => set("circleRotationDelaySecs", s)}
+                  />
+                </div>
+              )}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </div>
   );
 }

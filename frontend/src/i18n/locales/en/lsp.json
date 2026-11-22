@@ -1,4 +1,18 @@
 {
+  "header": {
+    "title": "Liquidity Provider",
+    "subtitle": "The channels you sell and the orders they come from",
+    "online": "Online",
+    "synced": "synced",
+    "offline": "Offline"
+  },
+  "tabs": {
+    "overview": "Overview",
+    "orders": "Orders",
+    "peers": "Peers",
+    "analytics": "Analytics",
+    "config": "Config"
+  },
   "values": {
     "yes": "yes",
     "no": "no",
@@ -40,31 +54,48 @@
   "overview": {
     "title": "LSP Overview",
     "description": "Monitoring home for your attached Liquidity Service Provider",
+    "attention": {
+      "healthy": "All healthy — liquidity covers every open order, no failed orders in the recent window.",
+      "failed_one": "{{count}} order failed in the recent window — review it.",
+      "failed_other": "{{count}} orders failed in the recent window — review them.",
+      "liquidityUnknown": "Liquidity is unknown — the node was unreachable when last checked.",
+      "reviewOrders": "Review orders"
+    },
     "kpi": {
       "totalLiquidity": "Total liquidity",
+      "sellableLiquidity": "Sellable liquidity",
       "free": "{{amount}} free",
-      "revenue24h": "24h revenue",
+      "freePctReserved": "{{pct}}% free · {{reserved}} reserved to open orders",
+      "liquidityUnknown": "unavailable — node unreachable",
+      "revenue24h": "Revenue · 24h",
       "trend": "trend {{trend}}",
+      "vsPriorDay": "{{trend}} vs prior day",
       "activeOrders": "Active orders",
       "createdPaid": "CREATED + PAID",
+      "opensOrders": "opens the Orders list",
       "successRate": "Success rate",
-      "successFormula": "completed / (completed + failed)"
+      "successFormula": "completed / (completed + failed)",
+      "viewAnalytics": "Full detail in Analytics"
     },
     "node": {
+      "title": "This node",
       "fallbackName": "Node",
+      "pubkey": "Pubkey",
       "host": "Host",
       "synced": "Synced",
       "height": "Height",
-      "peers": "Peers",
-      "channelsActive": "Channels active",
-      "channelsPending": "Channels pending",
+      "chainTip": "Chain tip",
+      "chainTipValue": "block {{height}} · synced",
+      "chainTipUnsynced": "block {{height}} · syncing",
+      "peers": "Peers connected",
+      "channels": "Channels",
+      "channelsActive": "{{count}} active",
+      "channelsPending": "{{count}} pending",
+      "channelsInactive": "{{count}} inactive",
+      "inboundOutbound": "Inbound / outbound",
       "inbound": "Inbound",
       "outbound": "Outbound",
       "blocked": "Blocked"
-    },
-    "orderStates": {
-      "title": "Recent order states",
-      "description": "Across the last orders lspd reports for this node."
     },
     "fleet": {
       "title": "Fleet ({{count}} nodes)",
@@ -72,7 +103,8 @@
       "nodeFallback": "node"
     },
     "topPeers": {
-      "title": "Top peers by volume"
+      "title": "Top peers by volume",
+      "all": "All peers →"
     }
   },
   "orders": {
@@ -87,7 +119,22 @@
       "allStates": "All states"
     },
     "count": "{{filtered}} of {{total}}",
+    "showingHint": "Showing {{filtered}} of {{total}} · click a row for timeline, invoice, funding tx and params",
     "empty": "No orders match.",
+    "search": "Search order id or peer…",
+    "states": {
+      "all": "All",
+      "created": "Created",
+      "paid": "Paid",
+      "completed": "Completed",
+      "failed": "Failed",
+      "expired": "Expired"
+    },
+    "sort": {
+      "newest": "Newest",
+      "amount": "Amount",
+      "fee": "Fee"
+    },
     "table": {
       "order": "Order",
       "peer": "Peer",
@@ -100,6 +147,8 @@
       "empty": "No funded JIT channels yet.",
       "scid": "SCID",
       "capacity": "Capacity",
+      "fee": "Fee",
+      "created": "Created",
       "status": "Status"
     }
   },

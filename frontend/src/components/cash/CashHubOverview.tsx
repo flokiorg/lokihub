@@ -1,6 +1,8 @@
 import {
+  ArrowUpDownIcon,
   CircleMinusIcon,
   CirclePlusIcon,
+  CoinsIcon,
   InfoIcon,
   ShieldCheckIcon,
   TriangleAlertIcon,
@@ -19,7 +21,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "src/components/ui/tooltip";
-import { useIsNarrow } from "src/hooks/useIsNarrow";
+import { useFiatRate } from "src/hooks/useFiatRate";
+import { useInfo } from "src/hooks/useInfo";
 import { cn } from "src/lib/utils";
 import { getBudgetRenewalLabel } from "src/lib/utils";
 import { App, CashHubStats } from "src/types";
@@ -103,8 +106,9 @@ export function Stat({
 }) {
   return (
     <div className="min-w-0">
-      <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-        <MetricInfo text={info} />
+      {/* No ⓘ icon on the strip — the design's stat cells are a bare
+          label+value; `info` stays as a hover title for the curious. */}
+      <p className="text-muted-foreground text-xs" title={info}>
         {label}
       </p>
       <p
@@ -126,7 +130,6 @@ export function Stat({
 // much of that its bills do not currently hold. One coloured word is the first
 // thing an operator should be able to read without doing arithmetic.
 export function CoverageBadge({
-  outstandingMloki,
   shortfallMloki,
 }: {
   outstandingMloki: number;
@@ -135,13 +138,9 @@ export function CoverageBadge({
   const { t } = useTranslation("circles");
   const base =
     "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium";
-  if (outstandingMloki === 0) {
-    return (
-      <span className={cn(base, "bg-muted text-muted-foreground")}>
-        {t("cashKpis.coverageNone")}
-      </span>
-    );
-  }
+  // Underfunded is the only alarm state. Everything else — nothing outstanding,
+  // or outstanding but fully reserved — reads as a calm green "Covered", the
+  // one-word verdict the design leads with.
   if (shortfallMloki > 0) {
     return (
       <span
@@ -163,7 +162,7 @@ export function CoverageBadge({
       )}
     >
       <ShieldCheckIcon className="size-3" />
-      {t("cashKpis.coverageCovered")}
+      {t("cashKpis.covered")}
     </span>
   );
 }
@@ -193,7 +192,14 @@ export function CashHubOverview({
 }) {
   const { t } = useTranslation("circles");
   const { t: ta } = useTranslation("apps");
-  const isMobile = useIsNarrow();
+  // Whether to show the "≈ $X" fiat fragment at all — on regtest/LOKI there is
+  // no rate, so the fiat + its separator are omitted rather than left dangling.
+  const { data: info } = useInfo();
+  const { data: fiatRate, error: fiatRateError } = useFiatRate();
+  const hasFiat =
+    info?.currency !== "LOKI" && !fiatRateError && !!fiatRate;
+  // Coverage: a covered hub (no shortfall) reads GREEN; a short hub reads amber.
+  const covered = stats.shortfall_mloki <= 0;
 
   // A hub that has never minted a bill has no flow to show — four zero tiles
   // and a "nothing redeemed yet" line read as broken, not new.
@@ -201,10 +207,6 @@ export function CashHubOverview({
 
   const showHero = section !== "details";
   const showDetails = section !== "hero";
-  // The flow stats open the "details" slice; on desktop (one card) they sit
-  // under the hero behind a hairline, but as the first thing in a Summary tab
-  // that leading border would float with nothing above it.
-  const detailsFirst = section === "details";
 
   return (
     // Card-light: the overview is the page's lead, rendered borderless (the
@@ -218,144 +220,173 @@ export function CashHubOverview({
             change it, beside a coverage panel that answers "can it honour what
             it owes?" at a glance. */}
       {showHero && (
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              <MetricInfo text={t("cashKpis.balanceInfo")} />
-              {ta("usage.isolatedBalance")}
+        // One bordered hero CARD split into a card-bg left lead + a tinted
+        // right half (divided by a hairline) — the design's hero framing.
+        <div className="grid overflow-hidden rounded-xl border bg-card shadow-sm sm:grid-cols-[1.3fr_1fr]">
+          <div className="min-w-0 p-5 sm:p-6">
+            <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide">
+              <ArrowUpDownIcon className="size-3.5" />
+              {t("cashKpis.backing")}
             </p>
             <p className="balance sensitive mt-0.5 text-3xl font-semibold">
               <FormattedFlokicoinAmount amount={hub.balance} />
             </p>
-            <FormattedFiatAmount amount={Math.floor(hub.balance / 1000)} />
+            {/* ≈ fiat, then a one-line coverage verdict — "more than enough to
+                cover every live bill" when the reserve covers what's in
+                circulation, or the shortfall when it doesn't. */}
+            <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-1.5 text-xs">
+              {hasFiat && (
+                <>
+                  <FormattedFiatAmount
+                    amount={Math.floor(hub.balance / 1000)}
+                  />
+                  <span aria-hidden>·</span>
+                </>
+              )}
+              {stats.shortfall_mloki > 0 ? (
+                <span className="text-warning-foreground">
+                  <FormattedFlokicoinAmount amount={stats.shortfall_mloki} />{" "}
+                  {t("cashKpis.coverShort")}
+                </span>
+              ) : (
+                <span>{t("cashKpis.coverEnough")}</span>
+              )}
+            </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              <IsolatedAppTopupDialog appId={hub.id}>
+                <Button size="sm" variant="outline">
+                  <CirclePlusIcon />
+                  {t("cashKpis.addBacking")}
+                </Button>
+              </IsolatedAppTopupDialog>
               {hub.balance > 0 && (
                 <IsolatedAppDrawDownDialog appId={hub.id}>
                   <Button size="sm" variant="outline">
                     <CircleMinusIcon />
-                    {ta("usage.decrease")}
+                    {t("cashKpis.withdraw")}
                   </Button>
                 </IsolatedAppDrawDownDialog>
               )}
-              <IsolatedAppTopupDialog appId={hub.id}>
-                <Button size="sm" variant="outline">
-                  <CirclePlusIcon />
-                  {ta("usage.increase")}
-                </Button>
-              </IsolatedAppTopupDialog>
             </div>
           </div>
 
-          {isMobile && stats.outstanding_mloki === 0 ? (
-            // Mobile, nothing outstanding: a quiet one-line read rather than a
-            // tall tinted card spending prime space to say "nothing to see".
-            <CoverageBadge
-              outstandingMloki={stats.outstanding_mloki}
-              shortfallMloki={stats.shortfall_mloki}
-            />
-          ) : (
-            // The coverage panel: what the hub owes, and whether its bills can
-            // cover it. Set apart with a tint + border so health reads as a
-            // distinct object, not a twin of the balance beside it. On desktop
-            // it's a fixed side panel; on a phone with value owed it spans the
-            // width.
-            <div className="bg-muted/40 flex flex-col justify-between gap-2 rounded-lg border p-3 sm:min-w-[12rem] sm:text-right">
-              <div>
-                <p className="text-muted-foreground flex items-center gap-1.5 text-xs sm:justify-end">
-                  <MetricInfo text={t("cashKpis.outstandingInfo")} />
-                  {t("cashKpis.outstanding")}
-                </p>
-                <p className="balance sensitive mt-0.5 text-2xl font-semibold">
-                  <FormattedFlokicoinAmount amount={stats.outstanding_mloki} />
-                </p>
-                <p className="text-muted-foreground text-xs">
-                  {t("cashKpis.outstandingHint", {
-                    count: stats.outstanding_count,
-                  })}
-                </p>
-              </div>
-              <div className="sm:flex sm:justify-end">
-                <CoverageBadge
-                  outstandingMloki={stats.outstanding_mloki}
-                  shortfallMloki={stats.shortfall_mloki}
-                />
-              </div>
+          {/* The tinted right half: "Cash in circulation" + coverage, divided
+              from the backing lead by the hairline (border-t on mobile when the
+              grid stacks, border-s on desktop). */}
+          <div className="min-w-0 border-t bg-muted/40 p-5 sm:border-s sm:border-t-0 sm:p-6">
+            <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide">
+              <CoinsIcon className="size-3.5" />
+              {t("cashKpis.inCirculation")}
+            </p>
+            <p className="balance sensitive mt-0.5 text-2xl font-semibold">
+              <FormattedFlokicoinAmount amount={stats.outstanding_mloki} />
+            </p>
+            {/* Coverage meter: GREEN when the reserve covers what's in
+                circulation, amber only on a shortfall. */}
+            <div className="bg-muted mt-2 h-2 w-full overflow-hidden rounded-full">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all",
+                  covered ? "bg-positive-foreground" : "bg-warning-foreground"
+                )}
+                style={{
+                  width: `${
+                    stats.outstanding_mloki === 0
+                      ? 100
+                      : Math.max(
+                          0,
+                          Math.min(
+                            100,
+                            ((stats.outstanding_mloki - stats.shortfall_mloki) /
+                              stats.outstanding_mloki) *
+                              100
+                          )
+                        )
+                  }%`,
+                }}
+              />
             </div>
-          )}
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span className="text-muted-foreground text-xs">
+                {t("cashKpis.outstandingHint", {
+                  count: stats.outstanding_count,
+                })}
+              </span>
+              <CoverageBadge
+                outstandingMloki={stats.outstanding_mloki}
+                shortfallMloki={stats.shortfall_mloki}
+              />
+            </div>
+            {/* Median time to redeem — the "how fast does value leave" read. */}
+            <p className="text-muted-foreground mt-2 flex items-center gap-1.5 text-xs">
+              {t("cashKpis.medianTimeToRedeem")}:{" "}
+              <span className="text-foreground font-medium">
+                {stats.median_time_to_redeem_secs === null ? (
+                  t("cashKpis.noRedemptionsYet")
+                ) : stats.median_time_to_redeem_secs === 0 ? (
+                  t("cashKpis.medianInstant")
+                ) : (
+                  <MedianDuration secs={stats.median_time_to_redeem_secs} />
+                )}
+              </span>
+            </p>
+          </div>
         </div>
       )}
 
       {/* Flow of value through the hub — only once there is any. */}
       {showDetails && (
         <>
-          {hasActivity ? (
-            <>
-              <div
-                className={cn(
-                  "grid grid-cols-2 gap-4 pt-4 sm:grid-cols-4",
-                  !detailsFirst && "border-t"
-                )}
-              >
-                <Stat
-                  label={t("cashKpis.issued")}
-                  info={t("cashKpis.issuedInfo")}
-                  amountMloki={stats.minted_mloki}
-                />
-                <Stat
-                  label={t("cashKpis.redeemed")}
-                  info={t("cashKpis.redeemedInfo")}
-                  amountMloki={stats.redeemed_mloki}
-                />
-                <Stat
-                  label={t("cashKpis.returned")}
-                  info={t("cashKpis.returnedInfo")}
-                  amountMloki={stats.returned_mloki}
-                />
-                <Stat
-                  label={t("cashKpis.feesEarned")}
-                  info={t("cashKpis.feesEarnedInfo")}
-                  amountMloki={stats.fees_earned_mloki}
-                />
-              </div>
-
-              <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
-                <span className="flex items-center gap-1.5">
-                  <MetricInfo text={t("cashKpis.medianTimeToRedeemInfo")} />
-                  {t("cashKpis.medianTimeToRedeem")}:{" "}
-                  <span className="text-foreground font-medium">
-                    {stats.median_time_to_redeem_secs === null ? (
-                      t("cashKpis.noRedemptionsYet")
-                    ) : (
-                      <MedianDuration secs={stats.median_time_to_redeem_secs} />
-                    )}
-                  </span>
-                </span>
-                {/*
-                Only shown when non-zero: a write-off means value that could
-                not be returned to the hub at all, so it should stand out when
-                it happens rather than sit at zero as permanent furniture.
-              */}
-                {stats.written_off_mloki > 0 && (
-                  <span className="text-destructive flex items-center gap-1.5">
-                    <MetricInfo text={t("cashKpis.writtenOffInfo")} />
-                    {t("cashKpis.writtenOff")}:{" "}
-                    <FormattedFlokicoinAmount
-                      amount={stats.written_off_mloki}
-                    />
-                  </span>
-                )}
-              </div>
-            </>
-          ) : (
-            <p
-              className={cn(
-                "text-muted-foreground pt-4 text-sm",
-                !detailsFirst && "border-t"
+          {/* Flow strip — its OWN bordered card with a vertical divider between
+              every cell (the gap-px over a border-coloured bg draws the lines),
+              ALWAYS present (zeros for a new hub) per the design. */}
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-4">
+            <div className="bg-card p-4">
+              <Stat
+                label={t("cashKpis.issued")}
+                info={t("cashKpis.issuedInfo")}
+                amountMloki={stats.minted_mloki}
+              />
+            </div>
+            <div className="bg-card p-4">
+              <Stat
+                label={t("cashKpis.redeemed")}
+                info={t("cashKpis.redeemedInfo")}
+                amountMloki={stats.redeemed_mloki}
+              />
+            </div>
+            <div className="bg-card p-4">
+              <Stat
+                label={t("cashKpis.returned")}
+                info={t("cashKpis.returnedInfo")}
+                amountMloki={stats.returned_mloki}
+              />
+            </div>
+            <div className="bg-card p-4">
+              <Stat
+                label={t("cashKpis.feesEarned")}
+                info={t("cashKpis.feesEarnedInfo")}
+                amountMloki={stats.fees_earned_mloki}
+              />
+            </div>
+          </div>
+          {hasActivity
+            ? // A write-off (value that could not be returned at all) stands
+              // out when it happens rather than sitting at zero as furniture.
+              stats.written_off_mloki > 0 && (
+                <p className="text-destructive flex flex-wrap items-center gap-1.5 text-xs">
+                  <MetricInfo text={t("cashKpis.writtenOffInfo")} />
+                  {t("cashKpis.writtenOff")}:{" "}
+                  <FormattedFlokicoinAmount amount={stats.written_off_mloki} />
+                </p>
+              )
+            : // New hub: the strip above shows zeros; one calm caption explains
+              // why, instead of hiding the strip.
+              (
+                <p className="text-muted-foreground text-xs">
+                  {t("cashKpis.noActivityCaption")}
+                </p>
               )}
-            >
-              {t("cashKpis.noActivityYet")}
-            </p>
-          )}
 
           {/* A hub need not have a budget at all — the row appears only once
             one is set, the same condition AppUsage's Budget card used. */}
