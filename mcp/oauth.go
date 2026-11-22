@@ -141,7 +141,7 @@ const maxUnprovenPerIP = 10
 // RegisterFrom is Register with the registering peer's address.
 func (s *OAuthStore) RegisterFrom(name string, redirectURIs []string, ip string) (*OAuthClient, error) {
 	name = strings.TrimSpace(name)
-	if name == "" || utf8.RuneCountInString(name) > maxClientNameLen || !cleanText(name, maxClientNameLen, false) || hasInvisible(name) {
+	if name == "" || utf8.RuneCountInString(name) > maxClientNameLen || !cleanText(name, maxClientNameLen, false) || hasInvisible(name) || MixedScript(name) {
 		return nil, fmt.Errorf("%w: client_name required (max %d chars, no control, invisible or direction-changing characters)", ErrOAuthInvalidRequest, maxClientNameLen)
 	}
 	if len(redirectURIs) == 0 || len(redirectURIs) > maxRedirectURIs {
@@ -165,18 +165,49 @@ func (s *OAuthStore) RegisterFrom(name string, redirectURIs []string, ip string)
 			delete(s.clients, id)
 		}
 	}
+	// A client with a pending consent is mid-sign-in: the owner may be on the
+	// consent screen right now, so it is evicted only as a last resort and
+	// then from the source holding the most registrations (pentest R3-B #1:
+	// a registration flood evicted a legitimate client mid-consent).
+	pending := map[string]bool{}
+	for _, c := range s.consents {
+		if now.Before(c.expires) {
+			pending[c.req.ClientID] = true
+		}
+	}
+	perIP := map[string]int{}
+	for _, c := range s.clients {
+		if c.lastUsed.IsZero() {
+			perIP[c.fromIP]++
+		}
+	}
 	oldestUnproven := func(ip string, anyIP bool) string {
-		var key string
-		var t time.Time
-		for id, c := range s.clients {
-			if !c.lastUsed.IsZero() || (!anyIP && c.fromIP != ip) {
-				continue
+		pick := func(allowPending bool, onlyIP string) string {
+			var key string
+			var t time.Time
+			for id, c := range s.clients {
+				if !c.lastUsed.IsZero() || (!anyIP && c.fromIP != ip) || (onlyIP != "" && c.fromIP != onlyIP) {
+					continue
+				}
+				if pending[id] && !allowPending {
+					continue
+				}
+				if key == "" || c.CreatedAt.Before(t) {
+					key, t = id, c.CreatedAt
+				}
 			}
-			if key == "" || c.CreatedAt.Before(t) {
-				key, t = id, c.CreatedAt
+			return key
+		}
+		if k := pick(false, ""); k != "" {
+			return k
+		}
+		heaviest, n := "", 0
+		for src, c := range perIP {
+			if c > n {
+				heaviest, n = src, c
 			}
 		}
-		return key
+		return pick(true, heaviest)
 	}
 	if ip != "" {
 		mine := 0
@@ -464,7 +495,13 @@ func (s *OAuthStore) Consent(id string) (ConsentView, error) {
 			v.Domain = d
 		}
 		loopback := h == "localhost" || h == "127.0.0.1" || h == "::1"
-		v.PathTenant = !loopback && (u.RawQuery != "" || strings.Count(strings.Trim(u.Path, "/"), "/") >= 2)
+		_, icann := publicsuffix.PublicSuffix(h)
+		path := strings.Trim(u.Path, "/")
+		// Flag only where the host really is shared — a private suffix
+		// (github.io, pages.dev…: every subdomain is someone's) or a known host
+		// that puts tenants in the path/query — so ordinary clients' callbacks
+		// don't train the owner to ignore the warning.
+		v.PathTenant = !loopback && (!icann || ((path != "" || u.RawQuery != "") && sharedPathHost(h)))
 	}
 	return v, nil
 }
@@ -563,4 +600,21 @@ func hasInvisible(s string) bool {
 		}
 	}
 	return false
+}
+
+// sharedPathHosts put tenants in the PATH, so the host alone says nothing about
+// who receives an authorization code (pentest R3-B LOW).
+var sharedPathHosts = []string{
+	"storage.googleapis.com", "script.google.com", "s3.amazonaws.com", "webhook.site", "ntfy.sh",
+	"raw.githubusercontent.com", "gist.githubusercontent.com", "pipedream.net", "requestbin.com",
+	"hookdeck.com", "beeceptor.com", "glitch.me", "replit.app", "repl.co",
+}
+
+func sharedPathHost(h string) bool {
+	for _, s := range sharedPathHosts {
+		if h == s || strings.HasSuffix(h, "."+s) {
+			return true
+		}
+	}
+	return strings.HasPrefix(h, "s3.") && strings.HasSuffix(h, ".amazonaws.com")
 }

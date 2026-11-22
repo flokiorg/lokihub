@@ -108,3 +108,23 @@ func TestNameSkeleton(t *testing.T) {
 		t.Error("different names collide")
 	}
 }
+
+// TestNameLookalikesRound3 (pentest R3-B #3): cross-script and Latin-lookalike
+// twins of an existing name collide or are refused as mixed-script.
+func TestNameLookalikesRound3(t *testing.T) {
+	base := NameSkeleton("Pentest3 Claude")
+	for _, n := range []string{
+		"Pentest3 Cl\u0561ude", "Pentest3 \u13dflaude", "Pentest3 \ua4dalaude", "Pentest3 C\u01c0aude",
+		"Pentest\u0417 Claude", "Pentest3 CIaude", "P\u04bdntest3 Claude", "Pentest3 \ua4dal\u0251ude",
+		"Pentest3 \u1d04laude",
+	} {
+		if NameSkeleton(n) != base && !MixedScript(CleanConnectionName(n)) {
+			t.Errorf("lookalike %q is neither a duplicate nor refused as mixed-script", n)
+		}
+	}
+	for _, ok := range []string{"Kitchen helper", "Ассистент", "助手アシスタント", "Desk assistant 2"} {
+		if MixedScript(ok) {
+			t.Errorf("single-script name %q refused", ok)
+		}
+	}
+}

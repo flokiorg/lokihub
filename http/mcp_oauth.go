@@ -169,7 +169,7 @@ func (httpSvc *HttpService) registerMCPConsent(g *echo.Group) {
 			return echo.NewHTTPError(http.StatusBadRequest, "choose a name and at least one area")
 		}
 		if httpSvc.mcpNameLooksTaken(name, 0) {
-			return echo.NewHTTPError(http.StatusConflict, "another AI assistant already has a name that looks the same — choose a different name")
+			return echo.NewHTTPError(http.StatusConflict, "choose a different name: it looks like another assistant's, or mixes letters from different alphabets")
 		}
 		if body.ExpiresInDays < 0 || body.ExpiresInDays > 365 {
 			return echo.NewHTTPError(http.StatusBadRequest, "expiry must be 0 (never) to 365 days")

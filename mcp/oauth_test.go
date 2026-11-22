@@ -286,3 +286,48 @@ func TestConsentFloodSparesOwner(t *testing.T) {
 		}
 	}
 }
+
+// TestConsentSharedHostWarning (pentest R3-B LOW): shared hosts that put
+// tenants in the path, and private multi-tenant suffixes, are flagged.
+func TestConsentSharedHostWarning(t *testing.T) {
+	s := NewOAuthStore()
+	res := "https://hub.example/mcp"
+	for uri, want := range map[string]bool{
+		"https://storage.googleapis.com/attacker-bucket/cb": true,
+		"https://webhook.site/7f3a/cb":                      true,
+		"https://ntfy.sh/topic":                             true,
+		"https://evil.github.io/cb":                         true,
+		"https://claude.ai/api/mcp/auth_callback":           false, // an ordinary client's own callback
+		"https://app.example.com/cb":                        false,
+		"http://127.0.0.1:33418/callback":                   false,
+	} {
+		c, err := s.Register("x", []string{uri})
+		if err != nil {
+			t.Fatalf("register %s: %v", uri, err)
+		}
+		id, err := s.BeginConsent(authReq2(c, uri), res)
+		if err != nil {
+			t.Fatalf("consent %s: %v", uri, err)
+		}
+		v, _ := s.Consent(id)
+		if v.PathTenant != want {
+			t.Errorf("%s: shared-host warning = %v, want %v", uri, v.PathTenant, want)
+		}
+	}
+	// A client mid-consent survives a registration flood that fills the registry.
+	s2 := NewOAuthStore()
+	victim, _ := s2.RegisterFrom("victim", []string{"https://legit.example/cb"}, "1.1.1.1")
+	vc, _ := s2.BeginConsentFrom(authReq(victim), res, "1.1.1.1")
+	for i := 0; i < maxOAuthClients*2; i++ {
+		_, _ = s2.RegisterFrom("flood", []string{"https://x.example/cb"}, fmt.Sprintf("10.8.%d.%d", i/250, i%250))
+	}
+	if _, err := s2.Consent(vc); err != nil {
+		t.Fatal("registration flood evicted a client in the middle of its consent")
+	}
+}
+
+func authReq2(c *OAuthClient, redirect string) AuthorizeRequest {
+	r := authReq(c)
+	r.RedirectURI = redirect
+	return r
+}

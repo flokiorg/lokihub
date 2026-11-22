@@ -143,6 +143,11 @@ var confusables = map[rune]rune{
 	'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'х': 'x', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ԝ': 'w', 'ӏ': 'l',
 	'α': 'a', 'β': 'b', 'ε': 'e', 'η': 'n', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o', 'ρ': 'p', 'τ': 't',
 	'υ': 'u', 'χ': 'x', 'γ': 'y', 'ω': 'w', 'ɡ': 'g', 'ı': 'i', 'ℓ': 'l', '0': 'o', '1': 'l',
+	// Latin-script lookalikes (pentest R3-B #3): IPA, small capitals, click.
+	'ǀ': 'l', '|': 'l', 'ɑ': 'a', 'ɒ': 'a', 'ɛ': 'e', 'ɩ': 'i', 'ɪ': 'i', 'ʟ': 'l', 'ʀ': 'r', 'ɴ': 'n',
+	'ᴀ': 'a', 'ʙ': 'b', 'ᴄ': 'c', 'ᴅ': 'd', 'ᴇ': 'e', 'ꜰ': 'f', 'ɢ': 'g', 'ʜ': 'h', 'ᴊ': 'j',
+	'ᴋ': 'k', 'ᴍ': 'm', 'ᴏ': 'o', 'ᴘ': 'p', 'ꜱ': 's', 'ᴛ': 't', 'ᴜ': 'u', 'ᴠ': 'v', 'ᴡ': 'w', 'ʏ': 'y', 'ᴢ': 'z',
+	'ⲥ': 'c', 'ⲟ': 'o', 'ս': 'u', 'օ': 'o', 'ҽ': 'e', 'з': '3',
 }
 
 // NameSkeleton reduces an assistant name to how it LOOKS: cleaned, lower
@@ -155,9 +160,58 @@ func NameSkeleton(s string) string {
 		if m, ok := confusables[r]; ok {
 			r = m
 		}
+		// Capital I, lower-case l and i are one letter for this purpose: "CIaude"
+		// (capital I) looks like "Claude" in most UI fonts.
+		if r == 'i' {
+			r = 'l'
+		}
 		b.WriteRune(r)
 	}
-	return b.String()
+	out := b.String()
+	for _, pair := range [][2]string{{"rn", "m"}, {"vv", "w"}} {
+		out = strings.ReplaceAll(out, pair[0], pair[1])
+	}
+	return out
+}
+
+// MixedScript reports a name whose letters come from more than one writing
+// system (Latin with Armenian, Cherokee, Lisu, Cyrillic, Greek…): the
+// classic way to build a visual twin of another name (pentest R3-B #3).
+// Han/Kana and Han/Hangul count as one system; digits, spaces and punctuation
+// belong to every script.
+func MixedScript(s string) bool {
+	seen := ""
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
+			continue
+		}
+		sc := scriptOf(r)
+		if sc == "" {
+			continue
+		}
+		if seen == "" {
+			seen = sc
+		} else if sc != seen {
+			return true
+		}
+	}
+	return false
+}
+
+func scriptOf(r rune) string {
+	for name, table := range unicode.Scripts {
+		if name == "Common" || name == "Inherited" {
+			continue
+		}
+		if unicode.Is(table, r) {
+			switch name {
+			case "Han", "Hiragana", "Katakana", "Hangul", "Bopomofo":
+				return "CJK"
+			}
+			return name
+		}
+	}
+	return ""
 }
 
 // blankish: characters that render as an empty gap (Hangul fillers, braille

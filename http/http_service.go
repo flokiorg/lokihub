@@ -209,6 +209,13 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 		return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 			Store:               middleware.NewRateLimiterMemoryStore(1),
 			IdentifierExtractor: unlockLimiterIdentifier,
+			// A request the handler will reject before checking anything (not
+			// JSON — e.g. a cross-site no-cors POST from a web page) must not
+			// use up the owner's budget (pentest R3-B LOW).
+			Skipper: func(c echo.Context) bool {
+				return c.Request().Method == http.MethodPost &&
+					!strings.HasPrefix(c.Request().Header.Get(echo.HeaderContentType), echo.MIMEApplicationJSON)
+			},
 		})
 	}
 	e.POST("/api/start", httpSvc.startHandler, unlockRateLimiter())

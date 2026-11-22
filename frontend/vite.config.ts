@@ -11,14 +11,14 @@ const svgrConfig = {
     svgoConfig: {
       plugins: [
         {
-          name: 'preset-default',
+          name: "preset-default",
           params: {
             overrides: {
               removeViewBox: false,
             },
           },
         },
-        'removeDimensions',
+        "removeDimensions",
       ],
     },
   },
@@ -96,9 +96,10 @@ export default defineConfig(({ command }) => ({
     // opts in only when explicitly requested (set in the Docker dev
     // environment), leaving native `yarn dev` on the host using the
     // cheaper event-driven watcher, which already works fine there.
-    watch: process.env.VITE_USE_POLLING === "true"
-      ? { usePolling: true, interval: 300 }
-      : undefined,
+    watch:
+      process.env.VITE_USE_POLLING === "true"
+        ? { usePolling: true, interval: 300 }
+        : undefined,
     proxy: {
       // VITE_API_URL (Docker dev: points at the `backend` container) wins
       // when set; otherwise this derives from the same PORT the Go backend
@@ -109,12 +110,18 @@ export default defineConfig(({ command }) => ({
           process.env.VITE_API_URL ||
           `http://127.0.0.1:${process.env.PORT || 1610}`,
         secure: false,
+        // Append our peer to X-Forwarded-For: the hub trusts this proxy's
+        // hop only because it is added here, never a client-supplied one.
+        xfwd: true,
       },
       "/logout": {
         target:
           process.env.VITE_API_URL ||
           `http://127.0.0.1:${process.env.PORT || 1610}`,
         secure: false,
+        // Append our peer to X-Forwarded-For: the hub trusts this proxy's
+        // hop only because it is added here, never a client-supplied one.
+        xfwd: true,
       },
     },
   },

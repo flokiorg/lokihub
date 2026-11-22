@@ -72,7 +72,7 @@ func (httpSvc *HttpService) registerMCPConnections(g *echo.Group) {
 			exp = &t
 		}
 		if httpSvc.mcpNameLooksTaken(req.Name, 0) {
-			return echo.NewHTTPError(http.StatusConflict, "another AI assistant already has a name that looks the same — choose a different name")
+			return echo.NewHTTPError(http.StatusConflict, "choose a different name: it looks like another assistant's, or mixes letters from different alphabets")
 		}
 		id, tok, err := mcp.CreateConnection(httpSvc.mcpAppCreator(), httpSvc.mcpTokens(), req.Name, req.Groups, exp)
 		if err != nil {
@@ -141,7 +141,7 @@ func (httpSvc *HttpService) registerMCPConnections(g *echo.Group) {
 				var n int64
 				tx.Model(&db.App{}).Where("name = ? AND id != ?", name, app.ID).Count(&n)
 				if n > 0 || httpSvc.mcpNameLooksTaken(name, app.ID) {
-					return echo.NewHTTPError(http.StatusConflict, "another connection already has a name that looks the same")
+					return echo.NewHTTPError(http.StatusConflict, "choose a different name: it looks like another connection's, or mixes letters from different alphabets")
 				}
 				if err := tx.Model(&app).Update("name", name).Error; err != nil {
 					return err
@@ -202,6 +202,9 @@ func (httpSvc *HttpService) registerMCPConnections(g *echo.Group) {
 // such twins would make the owner's approval queue ambiguous (pentest R2-3
 // MED-4).
 func (httpSvc *HttpService) mcpNameLooksTaken(name string, exceptID uint) bool {
+	if mcp.MixedScript(mcp.CleanConnectionName(name)) {
+		return true // a name mixing writing systems is a lookalike by construction
+	}
 	want := mcp.NameSkeleton(name)
 	if want == "" {
 		return false

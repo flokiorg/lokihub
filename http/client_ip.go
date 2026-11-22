@@ -55,14 +55,23 @@ func clientIP(c echo.Context) string {
 	if ip == nil || !isTrustedProxy(ip) {
 		return direct
 	}
-	xff := c.Request().Header.Get("X-Forwarded-For")
-	if xff == "" {
-		return direct
+	// Walk X-Forwarded-For from the right, skipping hops that are themselves
+	// trusted proxies; the first untrusted hop is the client. A trusted proxy
+	// that merely passes a client's header through (no hop of its own) would
+	// otherwise let that client name any address (pentest R3-B #2) — so every
+	// trusted proxy must append its peer (Vite: xfwd), and a hop we cannot
+	// parse ends the walk at the last trusted address.
+	hops := strings.Split(strings.Join(c.Request().Header.Values("X-Forwarded-For"), ","), ",")
+	client := direct
+	for i := len(hops) - 1; i >= 0; i-- {
+		h := net.ParseIP(strings.TrimSpace(hops[i]))
+		if h == nil {
+			return client
+		}
+		client = h.String()
+		if !isTrustedProxy(h) {
+			return client
+		}
 	}
-	hops := strings.Split(xff, ",")
-	last := strings.TrimSpace(hops[len(hops)-1])
-	if net.ParseIP(last) == nil {
-		return direct
-	}
-	return last
+	return client
 }

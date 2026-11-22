@@ -301,7 +301,7 @@ function ActivityCard({
               >
                 <div className="flex min-w-0 flex-col">
                   <span className="font-medium">
-                    {nameOf(e.appId)} · <code>{e.tool}</code>
+                    {nameOf(e.appId)} · #{e.appId} · <code>{e.tool}</code>
                   </span>
                   {e.detail && (
                     <span className="truncate text-sm text-muted-foreground">
