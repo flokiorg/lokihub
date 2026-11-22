@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/flokiorg/lokihub/mcp"
 	"github.com/labstack/echo/v4"
@@ -150,8 +151,9 @@ func (httpSvc *HttpService) registerMCPConsent(g *echo.Group) {
 			return echo.NewHTTPError(http.StatusNotFound, "no such request")
 		}
 		var body struct {
-			Name   string                 `json:"name"`
-			Groups map[mcp.Group]mcp.Mode `json:"groups"`
+			Name          string                 `json:"name"`
+			Groups        map[mcp.Group]mcp.Mode `json:"groups"`
+			ExpiresInDays int                    `json:"expiresInDays"`
 		}
 		if err := c.Bind(&body); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
@@ -159,11 +161,22 @@ func (httpSvc *HttpService) registerMCPConsent(g *echo.Group) {
 		if _, err := httpSvc.mcpOAuth.Consent(c.Param("id")); err != nil {
 			return echo.NewHTTPError(http.StatusNotFound, "this connection request expired — start again from your assistant")
 		}
+		// Same canonicalisation as every other assistant name, so a lookalike
+		// cannot pass the duplicate check (pentest E MED-2).
+		name := mcp.CleanConnectionName(body.Name)
 		scopes, err := mcp.ScopesFor(body.Groups)
-		if err != nil || strings.TrimSpace(body.Name) == "" {
+		if err != nil || name == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "choose a name and at least one area")
 		}
-		appID, err := httpSvc.mcpAppCreator()(strings.TrimSpace(body.Name), nil, scopes)
+		if body.ExpiresInDays < 0 || body.ExpiresInDays > 365 {
+			return echo.NewHTTPError(http.StatusBadRequest, "expiry must be 0 (never) to 365 days")
+		}
+		var exp *time.Time
+		if body.ExpiresInDays > 0 {
+			t := time.Now().Add(time.Duration(body.ExpiresInDays) * 24 * time.Hour)
+			exp = &t
+		}
+		appID, err := httpSvc.mcpAppCreator()(name, exp, scopes)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}

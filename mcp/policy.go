@@ -38,9 +38,9 @@ func tool(g Group, m Mode) Classification {
 	return Classification{Kind: ClassTool, Group: g, Mode: m}
 }
 
-// guarded marks an irreversible write (on-chain redeem to a foreign address,
-// channel open/close) that requires the residual guard (owner confirmation or a
-// GUI-preset allow-list) before it executes. See ARCHITECTURE.md §7.
+// guarded marks an irreversible write (any on-chain send, channel open/close)
+// that always waits for the owner's approval in the Lokihub app before it
+// executes (decision D20 removed the pre-approved address list).
 func guarded(g Group, m Mode) Classification {
 	return Classification{Kind: ClassTool, Group: g, Mode: m, Guarded: true}
 }

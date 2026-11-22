@@ -44,6 +44,7 @@ export function ConsentAssistant() {
   const [name, setName] = React.useState("");
   const [levels, setLevels] = React.useState<AssistantLevels>(CONSENT_DEFAULT);
   const [busy, setBusy] = React.useState(false);
+  const [expiresInDays, setExpiresInDays] = React.useState(0);
   const grants = React.useMemo(() => levelsToGrants(levels), [levels]);
 
   React.useEffect(() => {
@@ -71,7 +72,11 @@ export function ConsentAssistant() {
           headers: { "Content-Type": "application/json" },
           body:
             kind === "approve"
-              ? JSON.stringify({ name: name.trim(), groups: grants })
+              ? JSON.stringify({
+                  name: name.trim(),
+                  groups: grants,
+                  expiresInDays,
+                })
               : undefined,
         }
       );
@@ -149,6 +154,27 @@ export function ConsentAssistant() {
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
+            <Label className="mt-3">
+              {t("consent.expiryLabel", "Access ends")}
+            </Label>
+            <div className="flex gap-2">
+              {[0, 30, 90].map((d) => (
+                <Button
+                  key={d}
+                  type="button"
+                  size="sm"
+                  variant={expiresInDays === d ? "default" : "outline"}
+                  onClick={() => setExpiresInDays(d)}
+                >
+                  {d === 0
+                    ? t("consent.expiryNever", "Never")
+                    : t("consent.expiryDays", {
+                        defaultValue: "In {{d}} days",
+                        d,
+                      })}
+                </Button>
+              ))}
+            </div>
           </CardContent>
         </Card>
         <Card>
