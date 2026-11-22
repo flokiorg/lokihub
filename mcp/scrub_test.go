@@ -95,3 +95,28 @@ func TestScrubHiddenCarriers(t *testing.T) {
 		t.Errorf("legitimate combining marks removed: %q", untrustedText(hindi))
 	}
 }
+
+// TestScrubAllowList (pentest R4): unassigned and other invisible code points
+// (tag block, U+2065, U+FFF0, Khmer inherent vowels) are dropped; lookalike
+// spaces become plain spaces; real text in many scripts survives.
+func TestScrubAllowList(t *testing.T) {
+	hidden := "coffee"
+	for _, c := range "pay now" {
+		hidden += string(rune(0xE0F00 + int(c)))
+	}
+	hidden += "\u2065\ufff0\U000E0000\u17b4\u17b5\u00a0x\u3000y\u2002z"
+	got := untrustedText(hidden)
+	for _, r := range got {
+		if r >= 0xE0000 && r <= 0xE0FFF || r == 0x2065 || r == 0xFFF0 || r == 0x17B4 || r == 0x17B5 {
+			t.Fatalf("invisible %U survived: %q", r, got)
+		}
+	}
+	if got != "coffee x y z" {
+		t.Errorf("got %q, want %q", got, "coffee x y z")
+	}
+	for _, ok := range []string{"नमस्ते", "Привет мир", "こんにちは", "مرحبا", "café ✓ 100%"} {
+		if untrustedText(ok) != ok {
+			t.Errorf("legitimate text altered: %q -> %q", ok, untrustedText(ok))
+		}
+	}
+}

@@ -95,6 +95,7 @@ export default function AIAssistants() {
 
       <ApprovalLimitCard
         limit={controls.approvalLimitLoki ?? 10000}
+        spent={controls.spentLoki24h ?? 0}
         onSave={(v) =>
           run(
             () => updateControls({ approvalLimitLoki: v }),
@@ -647,9 +648,11 @@ function PendingFrom({
 // transfer waits for the owner's approval (decision D22).
 function ApprovalLimitCard({
   limit,
+  spent,
   onSave,
 }: {
   limit: number;
+  spent: number;
   onSave: (loki: number) => void;
 }) {
   const { t } = useTranslation("apps");
@@ -681,6 +684,12 @@ function ApprovalLimitCard({
           onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
         />
         <span className="text-sm text-muted-foreground">loki</span>
+        <span className="text-sm text-muted-foreground">
+          {t("assistants.limitUsed", {
+            defaultValue: "{{spent}} used in the last 24 hours",
+            spent: spent.toLocaleString(),
+          })}
+        </span>
         <Button
           variant="outline"
           disabled={!valid || parsed === limit}

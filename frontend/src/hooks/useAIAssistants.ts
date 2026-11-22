@@ -55,6 +55,8 @@ export type AIControls = {
   loopbackPort?: number;
   /** payments/transfers above this many loki wait for the owner's approval */
   approvalLimitLoki?: number;
+  /** how much of the limit assistants used in the last 24 hours */
+  spentLoki24h?: number;
 };
 
 export type CreatedAssistant = {

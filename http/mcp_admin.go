@@ -73,6 +73,8 @@ type mcpControlsBody struct {
 	LoopbackPort      *int  `json:"loopbackPort,omitempty"`
 	// ApprovalLimitLoki: payments/transfers above it need owner approval.
 	ApprovalLimitLoki *uint64 `json:"approvalLimitLoki,omitempty"`
+	// SpentLoki24h is how much of the limit assistants used in the last 24h.
+	SpentLoki24h *uint64 `json:"spentLoki24h,omitempty"`
 }
 
 type mcpPendingView struct {
@@ -149,6 +151,10 @@ func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 		paused := ctl.Paused()
 		limit := ctl.ApprovalLimitMloki() / 1000
 		body := mcpControlsBody{Paused: &paused, ApprovalLimitLoki: &limit}
+		if httpSvc.mcpSrv != nil {
+			spent := (httpSvc.mcpSrv.SpentInWindowMloki() + 999) / 1000
+			body.SpentLoki24h = &spent
+		}
 		if httpSvc.mcpLoopback != nil {
 			yes, port := true, httpSvc.mcpLoopback.Port()
 			body.LoopbackSupported, body.LoopbackPort = &yes, &port

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/lnclient"
 	"strings"
 	"sync"
 	"time"
@@ -288,8 +289,11 @@ func confirmToolWarn[In, Out any](
 				return ownerQueued{id: act.ID}, nil
 			}
 			out, err := run(ctx, s.api, in)
-			if err != nil && release != nil {
-				release() // a failed payment does not count toward the window
+			// A payment that definitely failed frees its share; one whose outcome
+			// is unknown (still in flight — it may yet settle) keeps it
+			// (pentest R4 LOW).
+			if err != nil && release != nil && !errors.Is(err, lnclient.ErrPaymentPending) {
+				release()
 			}
 			return out, err
 		})
@@ -582,3 +586,7 @@ func clipLines(s string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// SpentInWindowMloki reports the assistants' confirmed outflow (amount + max
+// routing fee) counted in the last 24 hours, for the owner's view.
+func (s *Server) SpentInWindowMloki() uint64 { return s.spend.spentInWindow() }

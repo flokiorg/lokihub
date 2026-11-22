@@ -17,27 +17,33 @@ import (
 func untrustedText(s string) string {
 	clean := true
 	for _, r := range s {
-		if r < 0x20 || r == 0x7f || r >= 0x80 && (r <= 0x9f || r == 0x2028 || r == 0x2029 ||
-			unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Co, r) || r == 0xfffd || hiddenCarrier(r) || blankish(r)) {
-			clean = false
+		if r < 0x20 || r > 0x7e {
+			clean = false // fast path: plain printable ASCII passes unchanged
 			break
 		}
 	}
 	if clean {
 		return s
 	}
+	// ALLOW-LIST (pentest R4: block-lists kept missing invisible code points,
+	// e.g. Go's unicode.C already includes unassigned ones). Keep letters,
+	// digits, punctuation, symbols and visible combining marks; every kind of
+	// space becomes a plain space; line breaks become a visible "⏎"; anything
+	// else — controls, format, private-use, surrogates, unassigned, invisible
+	// marks and fillers — is dropped.
 	var b strings.Builder
 	for _, r := range s {
 		switch {
 		case r == '\n', r == '\r', r == 0x2028, r == 0x2029:
 			b.WriteString(" ⏎ ")
-		case r == '\t', blankish(r):
+		case r == ' ', r == '\t', unicode.Is(unicode.Zs, r), blankish(r):
 			b.WriteByte(' ')
-		case r < 0x20, r == 0x7f, r >= 0x80 && r <= 0x9f,
-			unicode.Is(unicode.Cf, r), unicode.Is(unicode.Co, r), r == 0xfffd, hiddenCarrier(r):
-			// dropped
-		default:
+		case hiddenCarrier(r):
+			// dropped: invisible marks that can encode a hidden message
+		case unicode.In(r, unicode.L, unicode.N, unicode.P, unicode.S, unicode.M):
 			b.WriteRune(r)
+		default:
+			// dropped: Cc, Cf, Co, Cs, unassigned, and anything else
 		}
 	}
 	return b.String()
@@ -134,7 +140,8 @@ func (e scrubbedErr) Unwrap() error { return e.err }
 // Ordinary combining marks are kept — many scripts need them.
 func hiddenCarrier(r rune) bool {
 	switch {
-	case r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0100 && r <= 0xE01EF, r == 0x034F, r == 0x180E,
+	case r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0000 && r <= 0xE0FFF, r == 0x034F, r == 0x180E,
+		r == 0x17B4, r == 0x17B5, // Khmer inherent vowels (invisible)
 		r >= 0x180B && r <= 0x180F,                                       // Mongolian free variation selectors (pentest R3-A)
 		r == 0x16FE4, r == 0x3164, r == 0xFFA0, r == 0x115F, r == 0x1160, // invisible fillers
 		r >= 0x1D173 && r <= 0x1D17A,                       // musical-symbol formatting

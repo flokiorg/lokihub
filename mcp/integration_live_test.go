@@ -649,6 +649,7 @@ func TestLiveMoney(t *testing.T) {
 	// Owner sets a 50-loki approval limit for this test (restored after).
 	var ctl struct {
 		ApprovalLimitLoki *uint64 `json:"approvalLimitLoki"`
+		SpentLoki24h      uint64  `json:"spentLoki24h"`
 	}
 	h.do(t, http.MethodGet, "/api/mcp/controls", h.admin, nil, &ctl)
 	defer func() {
@@ -656,7 +657,9 @@ func TestLiveMoney(t *testing.T) {
 			h.do(t, http.MethodPut, "/api/mcp/controls", h.admin, map[string]any{"approvalLimitLoki": *ctl.ApprovalLimitLoki}, nil)
 		}
 	}()
-	h.do(t, http.MethodPut, "/api/mcp/controls", h.admin, map[string]any{"approvalLimitLoki": 50}, nil)
+	// The 24h window is durable: earlier spending counts. Leave 50 loki of
+	// headroom above what assistants already used.
+	h.do(t, http.MethodPut, "/api/mcp/controls", h.admin, map[string]any{"approvalLimitLoki": ctl.SpentLoki24h + 50}, nil)
 
 	var created struct {
 		AppID     uint   `json:"appId"`
