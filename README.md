@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **This repository has moved to Flokicoin's own git server.**
+> Development of `lokihub` now happens at
+> `nostr://npub1lfwkfe3kt60wa3nqeysmwz3t7h7n3p0zpruqd7yzlqf500rnp68qxzkjuj/grasp.flokicoin.org/lokihub`,
+> with its full history. This GitHub copy stays readable, but new changes, issues and pull requests go to the new home.
+> To clone it: install [ngit](https://ngit.dev) and run `git clone nostr://npub1lfwkfe3kt60wa3nqeysmwz3t7h7n3p0zpruqd7yzlqf500rnp68qxzkjuj/grasp.flokicoin.org/lokihub`.
+
 <img alt="Lokihub Logo" src="./frontend/src/assets/loki-light-head.svg" width="200" align="right" />
 
 
