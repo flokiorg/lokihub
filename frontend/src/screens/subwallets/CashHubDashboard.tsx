@@ -1,10 +1,10 @@
 import { RegenerateCashHubConnection } from "src/components/listings/RegenerateCashHubConnection";
 import {
-  CheckCircleIcon,
   ChevronDownIcon,
   EllipsisIcon,
   InfoIcon,
   PlusIcon,
+  RefreshCwIcon,
   SquarePenIcon,
   Trash2Icon,
   TriangleAlertIcon,
@@ -22,27 +22,26 @@ import {
   CashOutstandingChart,
 } from "src/components/cash/CashMonitorCharts";
 import { CashHubOverview } from "src/components/cash/CashHubOverview";
+import { CashHubWithdrawCard } from "src/components/withdraw/CashHubWithdrawCard";
+import { CashHubPayoutsCard } from "src/components/withdraw/CashHubPayoutsCard";
+import { CashHubOrderConnectionsCard } from "src/components/cash/CashHubOrderConnectionsCard";
+import { CashHubOrderTermsCard } from "src/components/cash/CashHubOrderTermsCard";
+import { CashHubOrdersCard } from "src/components/cash/CashHubOrdersCard";
 import { CashHubConfigCard } from "src/components/CashHubConfigCard";
 import { AppTransactionList } from "src/components/connections/AppTransactionList";
 import { ConnectionDetailsModal } from "src/components/connections/ConnectionDetailsModal";
 import { DisconnectCashHub } from "src/components/connections/DisconnectCashHub";
 import Loading from "src/components/Loading";
 import Permissions from "src/components/Permissions";
+import BudgetExpiryFields from "src/components/BudgetExpiryFields";
 import ResponsiveButton from "src/components/ResponsiveButton";
 import { Alert, AlertDescription } from "src/components/ui/alert";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "src/components/ui/accordion";
 import { Badge } from "src/components/ui/badge";
-import { Checkbox } from "src/components/ui/checkbox";
 import { Button } from "src/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "src/components/ui/card";
@@ -56,12 +55,18 @@ import {
 } from "src/components/ui/dropdown-menu";
 import { Input } from "src/components/ui/input";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "src/components/ui/tabs";
+import {
   DEFAULT_CASH_SPENT_RETENTION_SECS,
-  localStorageKeys,
   SUBWALLET_APPSTORE_APP_ID,
 } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { useSiblingHubs } from "src/hooks/useApps";
+import { useIsNarrow } from "src/hooks/useIsNarrow";
 import { useCapabilities } from "src/hooks/useCapabilities";
 import { useCashHubStats } from "src/hooks/useCashHub";
 import {
@@ -139,31 +144,36 @@ function CashHubDashboardInternal({
   const { t } = useTranslation("apps");
   const { t: tc } = useTranslation("common");
   const { t: tcircles } = useTranslation("circles");
+  const { t: tlistings } = useTranslation("listings");
+  // On a phone the overview's flow stats move into a Summary tab and the tab
+  // bar sticks, so the page reads as focused screens rather than one long
+  // scroll re-shown under every tab. Desktop keeps the single-card layout.
+  const isMobile = useIsNarrow();
 
   const allocationsRef = React.useRef<CashHubAllocationsHandle>(null);
-  const [isCashFormOpen, setCashFormOpen] = React.useState(false);
+  // Only the setter is used now (synced to CashHubAllocations via
+  // onFormOpenChange); the Mint button lives inside the list's header row.
+  const [, setCashFormOpen] = React.useState(false);
+  // Controlled so a phone can open on the Summary tab (the approved mobile
+  // layout) while desktop still opens on the bills list. Lazy-initialised from
+  // the real viewport width so the choice is right on first paint, not after
+  // the media-query hook resolves a tick later.
+  const [activeTab, setActiveTab] = React.useState<string>(() =>
+    typeof window !== "undefined" && window.innerWidth < 768
+      ? "summary"
+      : "wallets"
+  );
   const [isEditing, setIsEditing] = React.useState(false);
   const [showConnectionDetails, setShowConnectionDetails] =
     React.useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
-
-  // "Keep open" is the stored default for the Analytics section, shared by
-  // every Cash Hub. Expanding or collapsing it by hand is just this visit
-  // and does not touch the preference — otherwise the checkbox would fight
-  // the disclosure it sits next to.
-  const [keepAnalyticsOpen, setKeepAnalyticsOpen] = React.useState(
-    () =>
-      localStorage.getItem(localStorageKeys.cashAnalyticsKeepOpen) === "true"
-  );
-  const [isAnalyticsOpen, setAnalyticsOpen] = React.useState(keepAnalyticsOpen);
-
-  const toggleKeepAnalyticsOpen = (checked: boolean) => {
-    setKeepAnalyticsOpen(checked);
-    localStorage.setItem(
-      localStorageKeys.cashAnalyticsKeepOpen,
-      String(checked)
-    );
-  };
+  const [showRegenerateDialog, setShowRegenerateDialog] = React.useState(false);
+  // The Summary tab exists only on a phone. If this is desktop (or the viewport
+  // grows to it while Summary is active), fall back to the bills tab at render
+  // time — deriving rather than resetting state avoids a first-paint race with
+  // the viewport hook.
+  const effectiveTab =
+    !isMobile && activeTab === "summary" ? "wallets" : activeTab;
 
   const [name, setName] = React.useState(hub.name);
   const [permissions, setPermissions] = React.useState<AppPermissions>({
@@ -296,107 +306,95 @@ function CashHubDashboardInternal({
   // of the three things being edited, so it sits with them near the top;
   // while reading it is settled configuration, so it sits below the bills,
   // the trends and the payments an operator actually came here for.
-  // Not a card: each chart brings its own, and a card inside a card just
-  // draws a second border around the same content. The trigger row carries
-  // the heading instead. Rendered inside CashHubOverview's own card (its
-  // last section) rather than as a separate block elsewhere on the page.
-  const analyticsSection = (
-    <Accordion
-      type="single"
-      collapsible
-      value={isAnalyticsOpen ? "analytics" : ""}
-      onValueChange={(v) => setAnalyticsOpen(v === "analytics")}
-    >
-      <AccordionItem value="analytics" className="border-b-0">
-        {/* The checkbox is a sibling of the trigger, not a child: the
-            trigger is a <button>, and a second control nested inside it
-            could not be clicked without also toggling the section. Shown
-            only while open, since "keep open" is a decision you make
-            looking at the thing. */}
-        <div className="flex items-center gap-3 px-1">
-          <AccordionTrigger className="flex-1 py-0 text-base font-semibold">
-            {t("circleHub.analyticsTitle")}
-          </AccordionTrigger>
-          {isAnalyticsOpen && (
-            <label className="text-muted-foreground flex shrink-0 cursor-pointer items-center gap-2 text-sm font-normal">
-              <Checkbox
-                checked={keepAnalyticsOpen}
-                onCheckedChange={(checked) =>
-                  toggleKeepAnalyticsOpen(checked === true)
-                }
-              />
-              {t("circleHub.keepAnalyticsOpen")}
-            </label>
-          )}
-        </div>
-        <AccordionContent className="pt-4 pb-0">
-          {/* Same four questions as the Cash Hubs list, scoped to this hub —
-              can it honour what it owes, what happens to that next, how it
-              got here, and what moved each day. The balance comes off the
-              hub's own App row; a single hub's stats response does not
-              carry one. */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Same rule as the Cash Hubs list: a card that is a few figures
-                rather than a plot takes the whole row instead of sitting
-                half-empty beside one, and the two time series go wide,
-                where a 30-day axis is readable. */}
-            <CashCoverage
-              className="lg:col-span-2"
-              backingMloki={stats.backing_mloki}
-              outstandingMloki={stats.outstanding_mloki}
-              shortfallMloki={stats.shortfall_mloki}
-              capacityMloki={hub.balance}
-            />
-            <CashExpiryRunway className="lg:col-span-2" stats={stats} />
-            <CashOutstandingChart
-              daily={stats.daily}
-              outstandingMloki={stats.outstanding_mloki}
-            />
-            <CashDailyFlow daily={stats.daily} />
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+  // The Analytics tab's content: the same four readings as the Cash Hubs
+  // list, scoped to this hub — can it honour what it owes, what happens to
+  // that next, how it got here, and what moved each day. Lives in its own
+  // tab now (discoverable, full-width) rather than buried in a collapsible
+  // at the foot of the Overview card. The balance comes off the hub's own
+  // App row; a single hub's stats response does not carry one.
+  const analyticsPanel = (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* A card that is a few figures rather than a plot takes the whole row
+          instead of sitting half-empty beside one, and the two time series
+          go wide, where a 30-day axis is readable. */}
+      <CashCoverage
+        className="lg:col-span-2"
+        backingMloki={stats.backing_mloki}
+        outstandingMloki={stats.outstanding_mloki}
+        shortfallMloki={stats.shortfall_mloki}
+        capacityMloki={hub.balance}
+      />
+      <CashExpiryRunway className="lg:col-span-2" stats={stats} />
+      <CashOutstandingChart
+        daily={stats.daily}
+        outstandingMloki={stats.outstanding_mloki}
+      />
+      <CashDailyFlow daily={stats.daily} />
+    </div>
   );
 
+  // Two groups: Permissions (scopes) + a separate Budget & expiry, so expiry
+  // and renewal don't read as "permissions". Used in both the tab and the edit
+  // form.
   const permissionsCard = (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="grid gap-4">
+      <Card>
         {isEditing && (
-          <p className="text-sm text-muted-foreground mb-4">
-            {t("circleHub.budgetManagedNote")}
-          </p>
+          <CardHeader>
+            <CardTitle>{t("permissions.title", "Permissions")}</CardTitle>
+          </CardHeader>
         )}
-        <Permissions
-          capabilities={capabilities}
-          permissions={isEditing ? permissions : savedPermissions}
-          setPermissions={setPermissions}
-          readOnly={!isEditing}
-          scopesReadOnly
-          isNewConnection={false}
-          kindLabel={kindLabel}
-          budgetUsage={hub.budgetUsage}
-          showBudgetUsage={isEditing}
-          showBudgetSection={
-            permissions.scopes.includes("pay_invoice") ||
-            permissions.scopes.includes("cash_redeem")
-          }
-          // A hub's budget looks like it should cap issuance and does not:
-          // every mint funds its bill by internal transfer, which is exempt
-          // from the budget cap (transactions_service.go's skipBudgetCap).
-          // What it actually caps is an ordinary pay_invoice made over the
-          // hub's own connection.
-          budgetCaption={t("budget.cashHubCaption")}
-        />
-      </CardContent>
-    </Card>
+        <CardContent>
+          <Permissions
+            capabilities={capabilities}
+            permissions={isEditing ? permissions : savedPermissions}
+            setPermissions={setPermissions}
+            readOnly={!isEditing}
+            scopesReadOnly
+            isNewConnection={false}
+            kindLabel={kindLabel}
+            showBudgetAndExpiry={false}
+          />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("circleHub.budgetExpiryTitle")}</CardTitle>
+          {isEditing && (
+            <CardDescription>
+              {t("circleHub.budgetManagedNote")}
+            </CardDescription>
+          )}
+        </CardHeader>
+        <CardContent>
+          <BudgetExpiryFields
+            permissions={isEditing ? permissions : savedPermissions}
+            setPermissions={setPermissions}
+            readOnly={!isEditing}
+            isNewConnection={false}
+            budgetUsage={hub.budgetUsage}
+            showBudgetSection={
+              permissions.scopes.includes("pay_invoice") ||
+              permissions.scopes.includes("cash_redeem")
+            }
+            // A hub's budget looks like it should cap issuance and does not:
+            // every mint funds its bill by internal transfer, which is exempt
+            // from the budget cap. What it caps is an ordinary pay_invoice made
+            // over the hub's own connection.
+            budgetCaption={t("budget.cashHubCaption")}
+          />
+        </CardContent>
+      </Card>
+    </div>
   );
 
+  // grid-cols-1 (= minmax(0,1fr)) clamps this single column to the available
+  // width. A bare `grid` is an auto track that instead grows to its widest
+  // child's min-content — here the 6-tab bill filter — which would widen the
+  // page and give it a horizontal scrollbar on narrow screens instead of
+  // letting the tab strip scroll inside its own box.
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5">
       <AppHeader
         title={
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
@@ -444,8 +442,11 @@ function CashHubDashboardInternal({
                 </DropdownMenu>
               ) : (
                 <>
-                  <CheckCircleIcon className="w-3 h-3" />{" "}
-                  {t("connections.connected", "Connected")}
+                  {/* A live-status dot + "Live" (the redesign's header chip),
+                      not a generic "Connected" — the hub is active and able to
+                      honour its bills. */}
+                  <span className="size-2 rounded-full bg-current" />
+                  {t("circleHub.liveChip", "Live")}
                 </>
               )}
             </Badge>
@@ -470,6 +471,22 @@ function CashHubDashboardInternal({
                 </Button>
                 <DropdownMenuContent align="end">
                   <DropdownMenuGroup>
+                    {/* Phone: the header keeps a single action button, so Edit
+                        lives in this menu instead of beside it. */}
+                    {isMobile && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <div
+                            className="flex items-center gap-2"
+                            onClick={() => setIsEditing(true)}
+                          >
+                            <SquarePenIcon className="size-4" />{" "}
+                            {tc("actions.edit", "Edit")}
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem asChild>
                       {/* AppDetails' "Add Another Connection" points at the
                           generic /apps/new flow; for a Cash Hub the
@@ -494,6 +511,15 @@ function CashHubDashboardInternal({
                         )}
                       </div>
                     </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <div
+                        className="flex items-center gap-2"
+                        onClick={() => setShowRegenerateDialog(true)}
+                      >
+                        <RefreshCwIcon className="size-4" />{" "}
+                        {tlistings("regenerate.menuItem")}
+                      </div>
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" asChild>
                       <div
@@ -507,115 +533,185 @@ function CashHubDashboardInternal({
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <ResponsiveButton
-                variant="secondary"
-                onClick={() => setIsEditing(true)}
-                icon={SquarePenIcon}
-                text={t("connections.editConnection")}
-              />
+              {!isMobile && (
+                <ResponsiveButton
+                  variant="secondary"
+                  onClick={() => setIsEditing(true)}
+                  icon={SquarePenIcon}
+                  text={tc("actions.edit", "Edit")}
+                />
+              )}
             </>
           )
         }
       />
-      <RegenerateCashHubConnection hubId={hub.id} />
+      <RegenerateCashHubConnection
+        hubId={hub.id}
+        open={showRegenerateDialog}
+        onOpenChange={setShowRegenerateDialog}
+      />
 
       {/* Page order is what an operator reaches for, in order: what the hub
-          holds and owes, then the bills themselves plus the mint action,
-          then raw payments. Analytics lives inside the Overview card itself
-          (its last section) rather than as its own block further down the
-          page — it used to sit between the Cash Wallets card and the
-          transaction list, disconnected from the figures it explains. */}
+          holds and owes (Overview), then the bills, payments and charts as
+          tabs. Analytics is its own tab rather than a collapsible buried at
+          the foot of the Overview card. */}
       {!isEditing && (
-        <CashHubOverview hub={hub} stats={stats} analytics={analyticsSection} />
+        <div className={isMobile ? "pb-1" : "border-b pb-5"}>
+          {/* Phone: only the hero (balance + controls + coverage) stays here;
+              the flow stats live in the Summary tab below. Desktop keeps the
+              whole overview above the tabs. */}
+          <CashHubOverview
+            hub={hub}
+            stats={stats}
+            section={isMobile ? "hero" : "full"}
+          />
+        </div>
       )}
 
       {isEditing && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{tc("labels.appName", "App Name")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-row gap-2 items-center max-w-lg">
-              <Input
-                autoFocus
-                type="text"
-                name="name"
-                value={name}
-                id="name"
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoComplete="off"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        // The hub settings form is a single column of fields; cap it so inputs
+        // don't sprawl the full width of a desktop. Left-aligned to sit under
+        // the page header rather than floating centre.
+        <div className="grid w-full max-w-2xl gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>{tc("labels.appName", "App Name")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-row gap-2 items-center max-w-lg">
+                <Input
+                  autoFocus
+                  type="text"
+                  name="name"
+                  value={name}
+                  id="name"
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  autoComplete="off"
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-      {isEditing && permissionsCard}
+          {permissionsCard}
 
-      {/* The hub's own expiry and its bill-expiry ceiling are set on the same
+          {/* The hub's own expiry and its bill-expiry ceiling are set on the same
           screen but never checked against each other. Nothing is lost when
           they disagree — bills redeem against their own deadline on their own
           connection, and the sweep is a background job — but minting stops,
           which is worth knowing before saving. */}
-      {isEditing && hubExpiresBeforeBills && (
-        <Alert variant="warning">
-          <TriangleAlertIcon className="h-4 w-4" />
-          <AlertDescription>
-            {t("circleHub.hubExpiryBeforeBillsWarning", { kind: kindLabel })}
-          </AlertDescription>
-        </Alert>
-      )}
+          {hubExpiresBeforeBills && (
+            <Alert variant="warning">
+              <TriangleAlertIcon className="h-4 w-4" />
+              <AlertDescription>
+                {t("circleHub.hubExpiryBeforeBillsWarning", {
+                  kind: kindLabel,
+                })}
+              </AlertDescription>
+            </Alert>
+          )}
 
-      {isEditing && (
-        <CashHubConfigCard
-          title={t("circleHub.hubSettingsTitle")}
-          description={t("circleHub.cashHubSettingsDescription")}
-          budgetLabel={t("circleHub.cashMaxBudgetLabel")}
-          budgetHelper={t("circleHub.cashMaxWalletBudgetHelper")}
-          expiryLabel={t("circleHub.cashMaxExpiryLabel")}
-          expiryHelper={t("circleHub.cashMaxExpiryHelper")}
-          perWalletMaxLoki={cashPerWalletMaxLoki}
-          onPerWalletMaxLokiChange={setCashPerWalletMaxLoki}
-          maxExpSecs={cashMaxExpSecs}
-          onMaxExpSecsChange={setCashMaxExpSecs}
-          minTransferLoki={cashMinTransferLoki}
-          onMinTransferLokiChange={setCashMinTransferLoki}
-          redeemFeePpm={cashRedeemFeePpm}
-          onRedeemFeePpmChange={setCashRedeemFeePpm}
-          spentRetentionSecs={cashSpentRetentionSecs}
-          onSpentRetentionSecsChange={setCashSpentRetentionSecs}
-        />
+          <CashHubConfigCard
+            title={t("circleHub.hubSettingsTitle")}
+            description={t("circleHub.cashHubSettingsDescription")}
+            budgetLabel={t("circleHub.cashMaxBudgetLabel")}
+            budgetHelper={t("circleHub.cashMaxWalletBudgetHelper")}
+            expiryLabel={t("circleHub.cashMaxExpiryLabel")}
+            expiryHelper={t("circleHub.cashMaxExpiryHelper")}
+            perWalletMaxLoki={cashPerWalletMaxLoki}
+            onPerWalletMaxLokiChange={setCashPerWalletMaxLoki}
+            maxExpSecs={cashMaxExpSecs}
+            onMaxExpSecsChange={setCashMaxExpSecs}
+            minTransferLoki={cashMinTransferLoki}
+            onMinTransferLokiChange={setCashMinTransferLoki}
+            redeemFeePpm={cashRedeemFeePpm}
+            onRedeemFeePpmChange={setCashRedeemFeePpm}
+            spentRetentionSecs={cashSpentRetentionSecs}
+            onSpentRetentionSecsChange={setCashSpentRetentionSecs}
+          />
+        </div>
       )}
 
       {!isEditing && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("circleHub.cashWalletsTitle")}</CardTitle>
-              {!isCashFormOpen && (
-                <CardAction>
+          <Tabs
+            value={effectiveTab}
+            onValueChange={setActiveTab}
+            className="w-full"
+          >
+            {/* On a phone the tab bar sticks to the top (full-bleed via -mx-4)
+                so switching tabs never scrolls the hero back into view; on
+                desktop it's an ordinary inline row. */}
+            <div
+              className={cn(
+                "bg-background",
+                isMobile && "sticky top-0 z-20 -mx-4 border-b px-4 pb-2"
+              )}
+            >
+              <TabsList variant="underline">
+                {isMobile && (
+                  <TabsTrigger value="summary">
+                    {t("tabs.summary", "Summary")}
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="wallets">
+                  {t("circleHub.cashWalletsTitle")}
+                </TabsTrigger>
+                <TabsTrigger value="analytics">
+                  {t("circleHub.analyticsTitle")}
+                </TabsTrigger>
+                <TabsTrigger value="activity">
+                  {t("tabs.activity", "Activity")}
+                </TabsTrigger>
+                <TabsTrigger value="permissions">
+                  {t("permissions.title", "Permissions")}
+                </TabsTrigger>
+                {/* Selling/payout tools used to live only on the legacy
+                    /apps/:id route, out of reach for managed hubs. They come
+                    home here so one hub's whole lifecycle is in one place. */}
+                <TabsTrigger value="sell">
+                  {t("circleHub.sellRedeemTab", "Sell & redeem")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            {isMobile && (
+              <TabsContent value="summary">
+                {/* The flow stats + median + budget, split out of the hero
+                    above so the other tabs aren't buried under them. */}
+                <CashHubOverview hub={hub} stats={stats} section="details" />
+              </TabsContent>
+            )}
+            <TabsContent value="wallets">
+              {/* No heading — the active tab already reads "Cash Bills". The
+                  Mint button rides on the list's filter-tabs row (headerAction)
+                  so it lines up with the filters instead of floating above. */}
+              <CashHubAllocations
+                appId={hub.id}
+                ref={allocationsRef}
+                onFormOpenChange={setCashFormOpen}
+                headerAction={
                   <ResponsiveButton
                     size="sm"
                     onClick={() => allocationsRef.current?.openAdd()}
                     icon={PlusIcon}
                     text={t("circleHub.addCashWallet")}
                   />
-                </CardAction>
-              )}
-            </CardHeader>
-            <CardContent>
-              <CashHubAllocations
-                appId={hub.id}
-                ref={allocationsRef}
-                onFormOpenChange={setCashFormOpen}
+                }
               />
-            </CardContent>
-          </Card>
-
-          <AppTransactionList appId={hub.id} />
-
-          {permissionsCard}
+            </TabsContent>
+            <TabsContent value="analytics">{analyticsPanel}</TabsContent>
+            <TabsContent value="activity">
+              <AppTransactionList appId={hub.id} />
+            </TabsContent>
+            <TabsContent value="permissions">{permissionsCard}</TabsContent>
+            <TabsContent value="sell" className="grid gap-4">
+              <CashHubWithdrawCard hubId={hub.id} />
+              <CashHubPayoutsCard hubId={hub.id} />
+              <CashHubOrderConnectionsCard hubId={hub.id} />
+              <CashHubOrderTermsCard hubId={hub.id} />
+              <CashHubOrdersCard hubId={hub.id} />
+            </TabsContent>
+          </Tabs>
 
           {showConnectionDetails && (
             <ConnectionDetailsModal

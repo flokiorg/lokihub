@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	decodepay "github.com/flokiorg/lokihub/internal/decodepay"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -103,6 +105,9 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 
 	logger.Logger.Info().Interface("order_params", orderParams).Msg("Creating LSPS1 order")
 
+	if api.svc.GetLiquidityManager() == nil {
+		return nil, ErrLiquidityNotRunning
+	}
 	event, err := api.svc.GetLiquidityManager().CreateLSPS1Order(ctx, req.LSPPubkey, orderParams, req.RefundOnchainAddress, req.AcceptedTerms)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Interface("params", orderParams).Msg("LSPS1 CreateOrder failed")
@@ -120,6 +125,12 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 		// then fee must be the total payload (for LSPS1 buy-inbound).
 		if feeTotalLoki == 0 && orderTotalLoki > 0 {
 			feeTotalLoki = orderTotalLoki
+		}
+	}
+	if invoice != "" {
+		if err := verifyLSPInvoice(invoice, orderTotalLoki, req.LSPPubkey); err != nil {
+			logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Msg("LSPS1 order invoice rejected")
+			return nil, err
 		}
 	}
 
@@ -150,6 +161,9 @@ func (api *api) LSPS1GetOrder(ctx context.Context, req *LSPS1GetOrderRequest) (i
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
+	if api.svc.GetLiquidityManager() == nil {
+		return nil, ErrLiquidityNotRunning
+	}
 	event, err := api.svc.GetLiquidityManager().GetLSPS1Order(ctx, req.LSPPubkey, req.OrderID)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Str("order_id", req.OrderID).Msg("LSPS1 GetOrder failed")
@@ -292,6 +306,9 @@ func (api *api) LSPS5ListWebhooks(ctx context.Context, req *LSPS5ListWebhooksReq
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
+	if api.svc.GetLiquidityManager() == nil {
+		return nil, ErrLiquidityNotRunning
+	}
 	client := api.svc.GetLiquidityManager().LSPS5Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS5 client not available")
@@ -311,6 +328,9 @@ func (api *api) LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookR
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
+	if api.svc.GetLiquidityManager() == nil {
+		return nil, ErrLiquidityNotRunning
+	}
 	client := api.svc.GetLiquidityManager().LSPS5Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS5 client not available")
@@ -463,4 +483,30 @@ func (api *api) LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, 
 	}
 
 	return response, nil
+}
+
+// ErrLiquidityNotRunning is returned instead of panicking when an LSP call
+// arrives before the liquidity manager has started (or when it is disabled).
+var ErrLiquidityNotRunning = errors.New("the liquidity (LSP) service is not running")
+
+// ErrLSPInvoiceMismatch: the LSP's payment invoice does not match its quote.
+var ErrLSPInvoiceMismatch = errors.New("the LSP's invoice does not match its quoted order total or is not payable to the LSP itself — order refused")
+
+// verifyLSPInvoice checks that an LSPS1 order invoice charges exactly the
+// quoted order total and pays the LSP's own node, so a malicious or spoofed
+// LSP cannot quote a small price and bill a different amount or redirect the
+// payment elsewhere (pentest C F3).
+func verifyLSPInvoice(invoice string, orderTotalLoki uint64, lspPubkey string) error {
+	inv, err := decodepay.Decode(strings.TrimSpace(invoice))
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrLSPInvoiceMismatch, err)
+	}
+	if orderTotalLoki > math.MaxUint64/1000 || inv.AmountMloki < 0 || uint64(inv.AmountMloki) != orderTotalLoki*1000 {
+		return fmt.Errorf("%w (invoice %d mloki, quoted %d loki)", ErrLSPInvoiceMismatch, inv.AmountMloki, orderTotalLoki)
+	}
+	want := strings.ToLower(strings.SplitN(strings.TrimSpace(lspPubkey), "@", 2)[0])
+	if !strings.EqualFold(inv.Payee, want) {
+		return fmt.Errorf("%w (invoice pays %s, not the LSP)", ErrLSPInvoiceMismatch, inv.Payee)
+	}
+	return nil
 }

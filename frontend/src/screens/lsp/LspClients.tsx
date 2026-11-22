@@ -1,5 +1,4 @@
 import { useTranslation } from "react-i18next";
-import AppHeader from "src/components/AppHeader";
 import { Badge } from "src/components/ui/badge";
 import { Skeleton } from "src/components/ui/skeleton";
 import {
@@ -14,18 +13,17 @@ import { useLspPeers } from "src/hooks/useLsp";
 import { LspUnavailable } from "src/screens/lsp/LspUnavailable";
 import { LspPeer } from "src/screens/lsp/types";
 import { useFormatLoki } from "src/screens/lsp/useFormatLoki";
+import { shortenMiddle } from "src/utils/nostr";
 
 export function LspClients() {
   const { t } = useTranslation("lsp");
   const formatLoki = useFormatLoki();
   const { data: peers, error } = useLspPeers();
 
+  // The shared LspLayout now renders the section header + tab bar above this
+  // screen, so it no longer renders its own AppHeader.
   return (
     <div className="space-y-4">
-      <AppHeader
-        title={t("clients.title")}
-        description={t("clients.description")}
-      />
       {error ? (
         <LspUnavailable error={error} />
       ) : !peers ? (
@@ -57,17 +55,17 @@ export function LspClients() {
             {peers.map((p: LspPeer) => (
               <TableRow key={p.pub_key}>
                 <TableCell>
-                  <Badge variant={p.active ? "positive" : "outline"}>
+                  <Badge variant={p.active ? "positive" : "secondary"}>
                     {p.active ? t("clients.online") : t("clients.offline")}
                   </Badge>
                 </TableCell>
                 <TableCell>
                   <div className="grid gap-0.5">
-                    <span className="truncate">
+                    <span className="truncate font-medium">
                       {p.alias || t("clients.unknownAlias")}
                     </span>
-                    <span className="font-mono text-xs text-muted-foreground break-all">
-                      {p.pub_key}
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {shortenMiddle(p.pub_key)}
                     </span>
                     {p.address && (
                       <span className="text-xs text-muted-foreground">

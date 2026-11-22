@@ -5,7 +5,8 @@
     "appearance": "Appearance",
     "unitsAndCurrency": "Units & Currency",
     "language": "Language",
-    "advanced": "Advanced"
+    "advanced": "Advanced",
+    "payouts": "Payouts"
   },
   "appearance": {
     "theme": "Theme",
@@ -19,6 +20,17 @@
     },
     "themes": {
       "default": "Default"
+    },
+    "accent": "Accent colour",
+    "accentDescription": "Tints buttons, links and highlights across the app.",
+    "accents": {
+      "default": "Theme default",
+      "amber": "Amber",
+      "green": "Green",
+      "teal": "Teal",
+      "blue": "Blue",
+      "purple": "Purple",
+      "rose": "Rose"
     }
   },
   "units": {
@@ -74,7 +86,7 @@
   },
   "autoUnlock": {
     "title": "Auto Unlock",
-    "description": "Configure Lokihub will automatically unlock on start (e.g. after machine reboot)",
+    "description": "Let Lokihub unlock itself on start (e.g. after a machine reboot)",
     "bodyText": "In some situations it can be impractical to manually unlock the wallet every time Lokihub is started. In those cases you can save the unlock password in plaintext so that Lokihub can auto-unlock itself.",
     "attention": "Attention",
     "attentionDesc": "Everyone who has access to the machine running this hub could read that password and take your funds. Use this only in a secure environment.",
@@ -98,7 +110,9 @@
     "fullAccess": "Full Access",
     "fullAccessDesc": "Complete control over your hub - can read data and perform all operations (send payments, manage apps, etc.)",
     "readonlyAccess": "Read-Only Access",
-    "readonlyAccessDesc": "View-only access - can read balances, transactions, and other data but cannot perform operations"
+    "readonlyAccessDesc": "View-only access - can read balances, transactions, and other data but cannot perform operations",
+    "payoutEngineTitle": "Payout engine",
+    "payoutEngineDesc": "Low-level diagnostics for the on-chain payout engine. For debugging — safe to ignore."
   },
   "about": {
     "title": "About",
@@ -121,6 +135,7 @@
   },
   "toasts": {
     "themeUpdated": "Theme updated.",
+    "accentUpdated": "Accent colour updated.",
     "appearanceUpdated": "Appearance updated.",
     "currencyUpdated": "Currency set to {{currency}}",
     "formatUpdated": "{{chain}} display format updated",

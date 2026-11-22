@@ -63,6 +63,7 @@ import {
 } from "src/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "src/components/ui/tabs";
 import { LIST_CASH_ALLOCATIONS_LIMIT } from "src/constants";
+import { useIsNarrow } from "src/hooks/useIsNarrow";
 import { useApp } from "src/hooks/useApp";
 import { useAvatarSrc } from "src/hooks/useAvatarSrc";
 import { useIdentityAuthorities } from "src/hooks/useIdentityAuthorities";
@@ -93,6 +94,9 @@ import { request } from "src/utils/request";
 type CashHubAllocationsProps = {
   appId: number;
   onFormOpenChange?: (open: boolean) => void;
+  // Rendered on the filter-tabs row (right-aligned) — e.g. the page's Mint
+  // button — so it lines up with the filters instead of floating above them.
+  headerAction?: React.ReactNode;
 };
 
 export type CashHubAllocationsHandle = {
@@ -313,7 +317,7 @@ function formatDurationLabel(
 export const CashHubAllocations = React.forwardRef<
   CashHubAllocationsHandle,
   CashHubAllocationsProps
->(function CashHubAllocations({ appId, onFormOpenChange }, ref) {
+>(function CashHubAllocations({ appId, onFormOpenChange, headerAction }, ref) {
   const { t } = useTranslation("circles");
   const { t: tc } = useTranslation("common");
   const id = String(appId);
@@ -342,6 +346,7 @@ export const CashHubAllocations = React.forwardRef<
   // Unclaimed by default, not "All". The unredeemed bills are the ones an
   // operator can still act on; "All" buried them under every bill the hub
   // ever issued, archived ones included.
+  const isMobile = useIsNarrow();
   const [status, setStatus] = React.useState<CashSliceStatus | "">("unclaimed");
   const [page, setPage] = React.useState(1);
   const [isLoading, setLoading] = React.useState(false);
@@ -1243,7 +1248,47 @@ export const CashHubAllocations = React.forwardRef<
 
   const formFields = (
     <>
+      {/* Context line: which hub this bill is minted from, and what backs it —
+          the design puts this at the top of the mint sheet so the operator
+          always sees the source and its coverage before setting amounts. */}
+      {hub && (
+        <p className="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
+          <span>{t("cashHubAllocations.mintFrom", { hub: hub.name })}</span>
+          {hub.balance > 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <span>
+                {t("cashHubAllocations.mintBackedBy")}{" "}
+                <span className="sensitive font-medium text-foreground">
+                  <FormattedFlokicoinAmount amount={hub.balance} />
+                </span>
+              </span>
+            </>
+          )}
+        </p>
+      )}
       <div className="grid gap-3">{recipients.map(recipientRowFields)}</div>
+      {/* Cap meter: requested amount against the per-bill max — green within
+          the cap, amber once it's exceeded (same coverage-aware convention as
+          the hub's circulation/backing meters). */}
+      {maxAmountLoki !== undefined && maxAmountLoki > 0 && (
+        <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              totalExceedsMax
+                ? "bg-warning-foreground"
+                : "bg-positive-foreground"
+            )}
+            style={{
+              width: `${Math.min(
+                100,
+                Math.max(0, (totalRequestedLoki / maxAmountLoki) * 100)
+              )}%`,
+            }}
+          />
+        </div>
+      )}
       <p
         className={cn(
           "text-sm",
@@ -1334,45 +1379,101 @@ export const CashHubAllocations = React.forwardRef<
     deadlineExceedsMax ||
     hasDuplicateIdentities;
 
+  // grid-cols-1 (= minmax(0,1fr)) clamps the column so the filter tab strip
+  // below scrolls within its own box rather than widening the page; a bare
+  // `grid` auto-track would grow to the tabs' min-content.
   return (
-    <div ref={listRef} className="grid gap-4 min-w-0">
+    <div ref={listRef} className="grid grid-cols-1 gap-4 min-w-0">
       {!isInlineFormShown && (
-        // min-w-0 lets this shrink below the tabs' natural content width
-        // instead of forcing the whole page wider. TabsList itself (not
-        // this div) owns the actual horizontal scroll if it still doesn't
-        // fit — a second overflow-x-auto here would create two independent
-        // scroll positions for the same content, where scrolling one back
-        // to the start doesn't reset the other, leaving the first tab
-        // stuck partly offscreen.
-        <div className="flex min-w-0 items-center gap-2">
-          <Tabs
-            value={status}
-            onValueChange={(v) => handleStatusChange(v as CashSliceStatus | "")}
-          >
-            <TabsList>
-              {statusTabs.map((tab) => (
-                <TabsTrigger
-                  key={tab.value || "all"}
-                  value={tab.value}
-                  className="shrink-0 gap-1.5"
+        // The filter tabs, their legend, and the page action share one row
+        // that must never widen the page. flex-wrap drops the action onto a
+        // second line when there isn't room for all three side by side; the
+        // tabs group carries min-w-0 at each nesting level so that, once even
+        // the tabs alone overflow, TabsList's own overflow-x-auto scrolls
+        // them inside their box rather than scrolling the window. (A second
+        // overflow-x-auto on a wrapper would fight TabsList's own for the
+        // same content and leave the first tab stuck partly offscreen, so the
+        // horizontal scroll lives in exactly one place.)
+        <div className="flex flex-wrap items-center gap-2">
+          {isMobile ? (
+            // Phone: six tabs scroll horizontally and clip their own active
+            // label to just a count, so collapse them into one dropdown that
+            // shows the current status + count and lists them all in a sheet.
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <Select
+                value={status || "all"}
+                onValueChange={(v) =>
+                  handleStatusChange(v === "all" ? "" : (v as CashSliceStatus))
+                }
+              >
+                <SelectTrigger className="h-9 min-w-0 flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusTabs.map((tab) => (
+                    <SelectItem
+                      key={tab.value || "all"}
+                      value={tab.value || "all"}
+                    >
+                      <span className="flex items-center gap-2">
+                        {tab.label}
+                        <Badge
+                          variant={
+                            tab.value === "expired" && tab.count > 0
+                              ? "warning"
+                              : "secondary"
+                          }
+                          className="px-1.5 py-0 text-[11px] font-normal tabular-nums"
+                        >
+                          {tab.count}
+                        </Badge>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Once per view, never per row — see CashStatusLegend. */}
+              <CashStatusLegend />
+            </div>
+          ) : (
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="min-w-0">
+                <Tabs
+                  value={status}
+                  onValueChange={(v) =>
+                    handleStatusChange(v as CashSliceStatus | "")
+                  }
                 >
-                  {tab.label}
-                  <Badge
-                    variant={
-                      tab.value === "expired" && tab.count > 0
-                        ? "warning"
-                        : "secondary"
-                    }
-                    className="px-1.5 py-0 text-[11px] font-normal tabular-nums"
-                  >
-                    {tab.count}
-                  </Badge>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          {/* Once per view, never per row — see CashStatusLegend. */}
-          <CashStatusLegend />
+                  <TabsList>
+                    {statusTabs.map((tab) => (
+                      <TabsTrigger
+                        key={tab.value || "all"}
+                        value={tab.value}
+                        className="shrink-0 gap-1.5"
+                      >
+                        {tab.label}
+                        <Badge
+                          variant={
+                            tab.value === "expired" && tab.count > 0
+                              ? "warning"
+                              : "secondary"
+                          }
+                          className="px-1.5 py-0 text-[11px] font-normal tabular-nums"
+                        >
+                          {tab.count}
+                        </Badge>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
+              {/* Once per view, never per row — see CashStatusLegend. */}
+              <CashStatusLegend />
+            </div>
+          )}
+          {headerAction && (
+            <div className="ml-auto shrink-0">{headerAction}</div>
+          )}
         </div>
       )}
 
@@ -1415,8 +1516,8 @@ export const CashHubAllocations = React.forwardRef<
       {isLoading ? (
         <p className="text-sm text-muted-foreground">{tc("loading")}</p>
       ) : claims.length > 0 ? (
-        <div className="rounded-lg border min-w-0 overflow-x-auto">
-          <div className="flex items-center gap-3 px-3 py-2.5">
+        <div className="min-w-0 overflow-x-auto">
+          <div className="flex items-center gap-3 border-b px-2 py-2.5">
             <Checkbox
               checked={
                 allSelected ? true : someSelected ? "indeterminate" : false
@@ -1429,7 +1530,7 @@ export const CashHubAllocations = React.forwardRef<
               {t("cashHubAllocations.recipientColumn")}
             </span>
           </div>
-          <div className="grid gap-2 p-1 min-w-0">
+          <div className="flex flex-col min-w-0">
             {displayGroups.map((group) => {
               const isMulti = group.claims.length > 1;
               const totalCount = group.claims.length;
@@ -1474,7 +1575,10 @@ export const CashHubAllocations = React.forwardRef<
                 !isMulti && removableIds.has(group.claims[0].id);
 
               return (
-                <div key={group.key} className="rounded-md border min-w-0">
+                <div
+                  key={group.key}
+                  className="border-b last:border-b-0 min-w-0"
+                >
                   {/* One row shape for every token, whether it has one
                       recipient or several — see the "same UI regardless of
                       recipient count" redesign note above displayGroups.

@@ -36,7 +36,7 @@ import {
   CircleAllowlistHandle,
 } from "src/screens/subwallets/CircleAllowlist";
 import { CircleWallets } from "src/screens/subwallets/CircleWallets";
-import { CircleAnalytics } from "src/components/circles/CircleAnalytics";
+import { CircleHubDashboard } from "src/screens/subwallets/CircleHubDashboard";
 import {
   CircleAcceptingCard,
   CircleMemberRequestCard,
@@ -131,6 +131,19 @@ function AppDetails() {
 
   if (!app || !capabilities) {
     return <Loading />;
+  }
+
+  // A circle hub has its own dedicated dashboard (same split cash_hub got),
+  // so it reads cleanly — overview + controls on top, then tabs — instead of
+  // the generic connection layout. Reached via the existing /apps/:id route.
+  if (app.kind === "circle_hub") {
+    return (
+      <CircleHubDashboard
+        app={app}
+        refetchApp={refetchApp}
+        capabilities={capabilities}
+      />
+    );
   }
 
   return (
@@ -676,10 +689,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                 <>
                   <CircleAcceptingCard app={app} onChanged={refetchApp} />
                   <CircleMemberRequestCard app={app} />
-                  <CircleListingPanel
-                    appId={app.id}
-                    policy={app.circleIdentity?.policy}
-                  />
+                  <CircleListingPanel appId={app.id} />
                 </>
               )}
               {(app.kind === "cash_wallet" || app.kind === "circle_wallet") && (
@@ -706,13 +716,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                   flashing in first. */}
               {app.kind === "circle_hub" ? (
                 circleStats ? (
-                  <CircleHubOverview
-                    hub={app}
-                    stats={circleStats}
-                    analytics={
-                      <CircleAnalytics hub={app} stats={circleStats} />
-                    }
-                  />
+                  <CircleHubOverview hub={app} stats={circleStats} />
                 ) : (
                   <OverviewCardSkeleton />
                 )

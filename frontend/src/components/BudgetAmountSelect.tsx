@@ -45,13 +45,13 @@ function BudgetAmountSelect({
                 onChange(parseInputAmount(preset, inputUnit));
               }}
               className={cn(
-                "cursor-pointer rounded text-nowrap border-2 text-center p-2 py-4 slashed-zero transition-colors",
+                "cursor-pointer rounded-md border p-2.5 text-center font-medium text-nowrap slashed-zero transition-colors",
                 isPresetActive(preset)
-                  ? "border-primary bg-primary/5 text-primary"
-                  : "border-muted hover:bg-accent"
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-input text-muted-foreground hover:border-primary/40 hover:text-foreground"
               )}
             >
-              <div className="font-medium">{label}</div>
+              {label}
             </button>
           );
         })}
@@ -62,13 +62,13 @@ function BudgetAmountSelect({
             onChange(0);
           }}
           className={cn(
-            "cursor-pointer rounded text-nowrap border-2 text-center p-2 py-4 transition-colors",
+            "cursor-pointer rounded-md border p-2.5 text-center font-medium text-nowrap transition-colors",
             isUnlimited
-              ? "border-primary bg-primary/5 text-primary"
-              : "border-muted hover:bg-accent"
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "border-input text-muted-foreground hover:border-primary/40 hover:text-foreground"
           )}
         >
-          <div className="font-medium text-xs">Unlimited</div>
+          Unlimited
         </button>
       </div>
 

@@ -19,7 +19,7 @@ func (httpSvc *HttpService) registerListingRoutes(g *echo.Group) {
 	g.POST("/listings", httpSvc.listingsCreateHandler)
 	g.PUT("/listings/:id", httpSvc.listingsUpdateHandler)
 	g.GET("/listings/:id/preview", httpSvc.listingsPreviewHandler)
-	for _, action := range []string{"pause", "resume", "unlist", "revoke-connection", "check-operator"} {
+	for _, action := range []string{"pause", "resume", "unlist", "reopen", "republish", "revoke-connection", "check-operator"} {
 		g.POST("/listings/:id/"+action, httpSvc.listingsActionHandler(action))
 	}
 	g.GET("/listing-relays", httpSvc.listingRelaysGetHandler)

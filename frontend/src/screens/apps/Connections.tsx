@@ -1,8 +1,14 @@
-import { CirclePlusIcon, LayoutGridIcon, Plug2Icon } from "lucide-react";
+import {
+  BotIcon,
+  CirclePlusIcon,
+  LayoutGridIcon,
+  Plug2Icon,
+} from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import AppHeader from "src/components/AppHeader";
+import AIAssistants from "src/components/connections/AIAssistants";
 import AppStore from "src/components/connections/AppStore";
 import ConnectedApps from "src/components/connections/ConnectedApps";
 import ResponsiveLinkButton from "src/components/ResponsiveLinkButton";
@@ -51,12 +57,19 @@ export function Connections() {
             <Plug2Icon className="w-5 h-5" />{" "}
             {t("connections.connectedApps", "Connected Apps")}
           </TabsTrigger>
+          <TabsTrigger value="assistants" className="flex gap-2 items-center">
+            <BotIcon className="w-5 h-5" />{" "}
+            {t("connections.aiAssistants", "AI assistants")}
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="app-store" tabIndex={-1}>
           <AppStore />
         </TabsContent>
         <TabsContent value="connected-apps" tabIndex={-1}>
           <ConnectedApps />
+        </TabsContent>
+        <TabsContent value="assistants" tabIndex={-1}>
+          <AIAssistants />
         </TabsContent>
       </Tabs>
     </>

@@ -1,12 +1,16 @@
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { ACCENT_KEY, ACCENTS, applyAccent } from "src/lib/accent";
+import { cn } from "src/lib/utils";
 import { LanguageSwitcher } from "src/components/LanguageSwitcher";
 import { WithdrawNodeSettings } from "src/components/withdraw/WithdrawNodeSettings";
 import Loading from "src/components/Loading";
 import SettingsHeader from "src/components/SettingsHeader";
 
 import { Label } from "src/components/ui/label";
+import { Separator } from "src/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -35,6 +39,15 @@ import { request } from "src/utils/request";
 function Settings() {
   const { theme, darkMode, setTheme, setDarkMode } = useTheme();
   const { t } = useTranslation("settings");
+
+  const [accent, setAccent] = useState<string>(
+    () => localStorage.getItem(ACCENT_KEY) || "default"
+  );
+  // Re-assert the stored accent whenever this screen mounts (and after a theme
+  // switch repaints the tokens), so the override survives theme changes.
+  useEffect(() => {
+    applyAccent(ACCENTS.find((a) => a.id === accent)?.value ?? null);
+  }, [accent, theme, darkMode]);
 
   const [fiatCurrencies, setFiatCurrencies] = useState<[string, string][]>([]);
 
@@ -107,33 +120,52 @@ function Settings() {
   return (
     <>
       <SettingsHeader title={t("title")} description={t("description")} />
-      <form className="w-full flex flex-col gap-8">
-        {/* Theme & Appearance Section */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-medium">{t("sections.appearance")}</h3>
+      <form className="w-full flex flex-col gap-6">
+        {/* Card-light: each group is a heading + hairline-separated section
+            (matching the Developer page), not a bordered card each. */}
+        <section className="flex flex-col gap-4">
+          <h3 className="text-base font-semibold">
+            {t("sections.appearance")}
+          </h3>
           <div className="space-y-4">
             <div className="grid gap-2">
-              <Label htmlFor="theme">{t("appearance.theme")}</Label>
-              <Select
-                value={theme}
-                onValueChange={(value) => {
-                  setTheme(value as Theme);
-                  toast(t("toasts.themeUpdated"));
-                }}
-              >
-                <SelectTrigger className="w-full md:w-60">
-                  <SelectValue placeholder={t("appearance.theme")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {Themes.map((th) => (
-                    <SelectItem key={th} value={th}>
-                      <span className="capitalize">
+              <Label>{t("appearance.theme")}</Label>
+              <div className="grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-3">
+                {Themes.map((th) => (
+                  <button
+                    key={th}
+                    type="button"
+                    onClick={() => {
+                      setTheme(th as Theme);
+                      toast(t("toasts.themeUpdated"));
+                    }}
+                    className={cn(
+                      "rounded-lg border bg-card p-2 text-left transition-colors hover:border-primary/50",
+                      theme === th && "border-primary ring-2 ring-primary/30"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-10 overflow-hidden rounded-md border",
+                        th !== "default" && `theme-${th}`
+                      )}
+                    >
+                      <div className="flex-1 bg-background" />
+                      <div className="flex-1 bg-primary" />
+                      <div className="flex-1 bg-secondary" />
+                      <div className="flex-1 bg-muted" />
+                    </div>
+                    <div className="mt-1.5 flex items-center justify-between px-0.5">
+                      <span className="text-sm font-medium capitalize">
                         {th === "default" ? t("appearance.themes.default") : th}
                       </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      {theme === th && (
+                        <Check className="size-4 text-primary" />
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="appearance">{t("appearance.darkMode")}</Label>
@@ -160,12 +192,59 @@ function Settings() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid gap-2">
+              <Label>{t("appearance.accent")}</Label>
+              <p className="text-muted-foreground -mt-1 text-sm">
+                {t("appearance.accentDescription")}
+              </p>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {ACCENTS.map((a) => {
+                  const selected = accent === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      title={t(`appearance.accents.${a.id}` as never)}
+                      aria-label={t(`appearance.accents.${a.id}` as never)}
+                      aria-pressed={selected}
+                      onClick={() => {
+                        setAccent(a.id);
+                        localStorage.setItem(ACCENT_KEY, a.id);
+                        applyAccent(a.value);
+                        toast(t("toasts.accentUpdated"));
+                      }}
+                      className={cn(
+                        "relative flex size-8 items-center justify-center rounded-full border transition-transform hover:scale-110",
+                        selected &&
+                          "ring-2 ring-ring ring-offset-2 ring-offset-background"
+                      )}
+                      style={
+                        a.value
+                          ? { backgroundColor: `hsl(${a.value})` }
+                          : undefined
+                      }
+                    >
+                      {/* "Theme default" has no colour of its own — show a quiet
+                          reset dot rather than a swatch that could read as a
+                          colour choice. */}
+                      {!a.value && (
+                        <span className="bg-foreground/20 size-3 rounded-full" />
+                      )}
+                      {selected && a.value && (
+                        <Check className="size-4 text-white drop-shadow" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        {/* Units & Currency Section */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-medium">
+        <Separator />
+
+        <section className="flex flex-col gap-4">
+          <h3 className="text-base font-semibold">
             {t("sections.unitsAndCurrency")}
           </h3>
           <div className="space-y-4">
@@ -209,19 +288,21 @@ function Settings() {
               </Select>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Language Section */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-medium">{t("sections.language")}</h3>
+        <Separator />
+
+        <section className="flex flex-col gap-4">
+          <h3 className="text-base font-semibold">{t("sections.language")}</h3>
           <LanguageSwitcher />
-        </div>
+        </section>
 
-        {/* Advanced Section */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-medium">{t("sections.advanced")}</h3>
+        <Separator />
+
+        <section className="flex flex-col gap-4">
+          <h3 className="text-base font-semibold">{t("sections.payouts")}</h3>
           <WithdrawNodeSettings />
-        </div>
+        </section>
       </form>
     </>
   );

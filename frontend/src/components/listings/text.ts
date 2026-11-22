@@ -107,7 +107,14 @@ export function validateListingForm(f: {
   operator: string;
   operatorRelay: string;
 }): ListingProblem | undefined {
-  if (!isOneLine(f.title) || graphemes(f.title) > MAX_TITLE) {
+  // A listing is a public advert; a blank title publishes as "Untitled offer"
+  // and is useless to the people meant to find it, so a title is required here
+  // even though the NIP-CASH tag itself is optional.
+  if (
+    f.title.trim() === "" ||
+    !isOneLine(f.title) ||
+    graphemes(f.title) > MAX_TITLE
+  ) {
     return "title";
   }
   if (graphemes(f.content) > MAX_CONTENT) {

@@ -1,15 +1,12 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { reapplyStoredAccent } from "src/lib/accent";
 import { isHttpMode } from "src/utils/isHttpMode";
 
 export type DarkMode = "system" | "light" | "dark";
-export const Themes = [
-  "default",
-
-  "nostr",
-  "matrix",
-  "ghibli",
-  "claymorphism",
-] as const;
+// Matrix dropped from the picker (redesign theme critique: a novelty
+// hacker-green skin, too low-contrast for a money UI). Its CSS is left
+// unused rather than churned out.
+export const Themes = ["default", "nostr", "ghibli", "claymorphism"] as const;
 export type Theme = (typeof Themes)[number];
 
 type ThemeProviderProps = {
@@ -111,6 +108,11 @@ export function ThemeProvider({
     } else {
       classList.remove("dark");
     }
+
+    // Changing the theme class repaints the accent tokens from the theme file,
+    // wiping any accent override — re-assert the stored one so it survives
+    // theme/dark switches and a cold page load (not only a visit to Settings).
+    reapplyStoredAccent();
 
     syncNativeWindowBackground();
   }, [theme, darkMode]);

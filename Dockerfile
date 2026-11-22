@@ -59,6 +59,10 @@ RUN GOARCH=$(echo "$TARGETPLATFORM" | cut -d'/' -f2) go build \
 RUN GOARCH=$(echo "$TARGETPLATFORM" | cut -d'/' -f2) go build \
    -o db_migrate cmd/db_migrate/main.go
 
+# Stdio bridge for AI assistants that only run local programs.
+RUN GOARCH=$(echo "$TARGETPLATFORM" | cut -d'/' -f2) go build \
+   -o lokihub-mcp ./cmd/mcp
+
 # Start a new, final image to reduce size.
 # Pinned by digest (debian:12-slim) - see frontend stage's comment above for why.
 FROM debian@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS final
@@ -68,5 +72,6 @@ FROM debian@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /build/main /bin/
 COPY --from=builder /build/db_migrate /bin/
+COPY --from=builder /build/lokihub-mcp /bin/
 
 ENTRYPOINT [ "/bin/main" ]

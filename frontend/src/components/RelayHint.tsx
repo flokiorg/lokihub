@@ -1,4 +1,4 @@
-import { InfoIcon } from "lucide-react";
+import { AlertTriangleIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
@@ -24,10 +24,13 @@ export function RelayHint({ className }: { className?: string }) {
   }
 
   return (
-    <Alert className={className}>
-      <InfoIcon className="h-4 w-4" />
+    <Alert variant="warning" className={className}>
+      <AlertTriangleIcon className="h-4 w-4" />
       <AlertDescription>
-        <Link to="/settings/services" className="underline underline-offset-2">
+        <Link
+          to="/settings/services#relays"
+          className="font-medium underline underline-offset-2"
+        >
           {t("relayHint.none")}
         </Link>
       </AlertDescription>

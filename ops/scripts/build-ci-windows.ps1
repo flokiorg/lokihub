@@ -57,11 +57,15 @@ function Build-Http {
 
     if ($LASTEXITCODE -ne 0) { throw "go build failed" }
 
+    # Stdio bridge for AI assistants that only run local programs.
+    go build -trimpath -ldflags "-s -w" -o "ops/bin/lokihub-mcp.exe" ./cmd/mcp
+    if ($LASTEXITCODE -ne 0) { throw "go build (lokihub-mcp) failed" }
+
     Push-Location "ops/bin"
     try {
         Move-Item -Force $OutputName $TargetBinaryName
-        Compress-Archive -Path $TargetBinaryName -DestinationPath $ArchiveName -Force
-        Remove-Item $TargetBinaryName
+        Compress-Archive -Path $TargetBinaryName, "lokihub-mcp.exe" -DestinationPath $ArchiveName -Force
+        Remove-Item $TargetBinaryName, "lokihub-mcp.exe"
     } finally {
         Pop-Location
     }
@@ -104,14 +108,17 @@ function Build-Desktop {
 
     if ($LASTEXITCODE -ne 0) { throw "wails build failed" }
 
+    go build -trimpath -ldflags "-s -w" -o "ops/bin/lokihub-mcp.exe" ./cmd/mcp
+    if ($LASTEXITCODE -ne 0) { throw "go build (lokihub-mcp) failed" }
+
     # Packaging
     Push-Location "ops/bin"
     try {
         $SourceBin = "../../build/bin/${Basename}.exe"
         if (Test-Path $SourceBin) {
             Move-Item -Force $SourceBin "lokihub.exe"
-            Compress-Archive -Path "lokihub.exe" -DestinationPath $ArchiveName -Force
-            Remove-Item "lokihub.exe"
+            Compress-Archive -Path "lokihub.exe", "lokihub-mcp.exe" -DestinationPath $ArchiveName -Force
+            Remove-Item "lokihub.exe", "lokihub-mcp.exe"
         } else {
             Write-Warning "Output $SourceBin not found"
         }

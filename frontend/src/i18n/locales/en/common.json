@@ -1,12 +1,14 @@
 {
   "nav": {
+    "groupMoney": "Money",
+    "groupNetwork": "Network",
     "home": "Home",
     "wallet": "Wallet",
-    "subWallets": "Sub-wallets",
+    "subWallets": "Circles",
     "cashHub": "Cash Hubs",
     "connections": "Connections",
     "node": "Node",
-    "lsp": "LSP",
+    "lsp": "Liquidity Provider",
     "settings": "Settings",
     "help": "Help",
     "logout": "Log out"

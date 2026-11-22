@@ -241,3 +241,8 @@ func lockRow(tx *gorm.DB, id uint) (*db.OfferListing, error) {
 	}
 	return &row, nil
 }
+
+// IsPublicRelay reports whether a relay URL is a public wss:// relay (no
+// loopback, private, link-local or internal hosts) — the bar an AI assistant's
+// relay choice must meet (it cannot point the hub at internal services).
+func IsPublicRelay(raw string) bool { return publicRelay(raw) }

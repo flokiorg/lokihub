@@ -11,11 +11,11 @@
     "selectMember": "Select member",
     "nameLabel": "Name",
     "maxWalletBudgetLabel": "Max Wallet Budget",
-    "cashMaxBudgetLabel": "Max Cash Bill Budget",
+    "cashMaxBudgetLabel": "Max value per bill",
     "minRenewalLabel": "Min Renewal",
     "minRenewalHelper": "Shortest renewal period a member may request for their circle wallet's budget",
     "maxWalletExpiryLabel": "Max Wallet Expiry",
-    "cashMaxExpiryLabel": "Max Cash Bill Expiry",
+    "cashMaxExpiryLabel": "How long bills stay valid",
     "feePpmLabel": "Fee (ppm)",
     "feePpmHelper": "Per-million fee charged on payments made by circle wallets (0 = free)",
     "advancedSettings": "Advanced settings",
@@ -80,8 +80,8 @@
     "externalWarning": "Edit the set in a Nostr client that supports follow sets. A client that doesn't know hidden members may drop them when it saves the set.",
     "dLabel": "Set name",
     "dPlaceholder": "family",
-    "dHelper": "The set's d identifier. It names this circle on Nostr and can't be changed later.",
-    "dExternalHelper": "The set's d identifier, exactly as its author published it.",
+    "dHelper": "Names this circle's member list on Nostr. Can't be changed later.",
+    "dExternalHelper": "The set's name on Nostr, exactly as its author published it.",
     "titleLabel": "Title",
     "titlePlaceholder": "e.g. Ada's Family Circle",
     "titleHelper": "Shown as the circle's name in invites.",
@@ -121,7 +121,11 @@
   },
   "circleCard": {
     "member_one": "{{count}} member",
-    "member_other": "{{count}} members"
+    "member_other": "{{count}} members",
+    "membersLabel": "Members",
+    "heldLabel": "Held",
+    "listed": "Listed",
+    "private": "Private"
   },
   "childIdentityCard": {
     "circleWallet": "Circle Wallet",
@@ -237,6 +241,8 @@
     "walletBudgetLabel": "Amount",
     "requestedSummary": "{{total}} {{unit}} requested",
     "requestedSummaryWithMax": "{{total}} {{unit}} requested of this hub's max bill budget of {{max}} {{unit}}",
+    "mintFrom": "From {{hub}}",
+    "mintBackedBy": "backed by",
     "claimDeadlineLabel": "Redeem Deadline",
     "deadlineExceeds": "Exceeds this hub's max redeem deadline of {{max}}",
     "deadlineHelp": "Every recipient must redeem within this long of creation",
@@ -294,13 +300,18 @@
     "copyBillPubkey": "Copy bill pubkey"
   },
   "newCircleHub": {
-    "title": "New Circle Wallet Hub",
+    "title": "New Circle",
     "description": "The people you approve request their own wallet on your node, whenever they need one — payments between them are instant and free.",
-    "identityModeLabel": "Membership Identity",
+    "essentialsTitle": "The essentials",
+    "essentialsDesc": "Name your circle, choose who can join, and set each member's wallet budget. Open Advanced for renewal, expiry and fees.",
+    "advancedHint": "renewal · expiry · fees · hub budget",
+    "membershipDetailsTitle": "Membership & identity",
+    "membershipDetailsDesc": "How people are approved, and the identity this circle signs as.",
+    "identityModeLabel": "Reuse a saved membership",
     "selectIdentityPlaceholder": "Select an identity",
     "createNewIdentity": "Create new identity",
     "existingIdentities": "Existing identities",
-    "identityReuseHelper": "An identity (policy + members) can be reused across multiple circles, which then stay in sync automatically.",
+    "identityReuseHelper": "A saved membership (who can join) can be reused across circles, which then stay in sync automatically.",
     "enterIdentityHelper": "Enter a valid Nostr identity above to continue.",
     "memberModeLabel": "Who can request a wallet from this circle",
     "modeFollowSetTitle": "Follow set",
@@ -320,7 +331,7 @@
     "hubBudgetRenewalHelper": "Doesn't reset the cap above — it's a live ceiling on wallets held at once, not a spend rate. Capacity frees up automatically as wallets expire.",
     "hubExpiryLabel": "Hub Expiry (optional)",
     "hubExpiryHelper": "This circle stops issuing new wallets after this date.",
-    "submit": "Create Circle Wallet Hub",
+    "submit": "Create Circle",
     "selectExistingHint": "Select an existing identity to continue.",
     "enterNameHint": "Enter a name to continue.",
     "enterDHint": "Enter the set name to continue.",
@@ -333,15 +344,23 @@
   },
   "newCashHub": {
     "title": "New Cash Hub",
+    "essentialsTitle": "The essentials",
+    "essentialsDesc": "A Cash Hub mints bills backed by a wallet you choose. Set the value limit and how long bills stay valid; open Advanced for fees and payout cleanup.",
     "description": "The wallet you'll mint Lokicash from. Limits you set here apply to every token it issues.",
-    "maxWalletBudgetHelper": "Maximum budget that can be allocated to each cash bill issued from this hub",
-    "maxExpiryHelper": "Maximum lifetime for issued cash bills",
+    "maxWalletBudgetHelper": "The most a single bill minted from this hub can be worth.",
+    "maxExpiryHelper": "How long a minted bill can still be redeemed before it expires.",
+    "summaryTitle": "You're creating",
+    "summaryName": "Untitled Cash Hub",
+    "summaryBackedBy": "Backed by",
+    "summaryNodeWallet": "Node wallet",
+    "summaryEditableLater": "You can change every limit later from the hub's settings.",
+    "summaryNoExpiry": "Never expires",
     "submit": "Create Cash Hub",
     "createdToast": "Cash Hub \"{{name}}\" created",
     "errors": {
       "create": "Failed to create Cash Hub"
     },
-    "submitHint": "Enter a name and a maximum Cash Bill budget to continue."
+    "submitHint": "Enter a name and a max value per bill to continue."
   },
   "disconnectCircleHub": {
     "title": "Close this circle?",
@@ -416,10 +435,24 @@
     }
   },
   "cashKpis": {
+    "backing": "Backing this hub",
+    "viewNodeWallet": "View node wallet",
+    "reservedAcross": "reserved across your Cash Hubs",
+    "medianRedeem": "Median redeem",
+    "backingAll": "Backing these hubs",
+    "addBacking": "Add backing",
+    "withdraw": "Withdraw",
+    "inCirculation": "Cash in circulation",
+    "coverEnough": "more than enough to cover every live bill",
+    "coverShort": "short of covering every live bill",
+    "covered": "Covered",
+    "medianInstant": "instant",
+    "noActivityCaption": "No bills minted yet — totals fill in once this hub issues its first bill.",
     "outstanding": "Outstanding",
     "outstandingHint_one": "{{count}} bill still redeemable",
     "outstandingHint_other": "{{count}} bills still redeemable",
-    "allHubsCountHint": "hubs on this node",
+    "allHubsCountHint_one": "{{count}} hub on this node",
+    "allHubsCountHint_other": "{{count}} hubs on this node",
     "flowTitle": "Flow",
     "issued": "Issued",
     "redeemed": "Redeemed",
@@ -445,7 +478,11 @@
     "medianTimeToRedeemInfo": "How long a bill typically sits before it is redeemed, measured over the most recent 1,000 redemptions.",
     "writtenOffInfo": "Value that could not be returned to this hub at all — a loss, not a recovery.",
     "leftInBudgetInfo": "How much of this hub's own payment budget is left before it renews. It caps ordinary payments made over the hub's connection — it does NOT limit how much cash the hub can mint.",
-    "budgetRenewalInfo": "This hub's full payment budget and how often it resets. Minting is not drawn from it; a bill's size is capped by the per-bill maximum in Hub Settings."
+    "budgetRenewalInfo": "This hub's full payment budget and how often it resets. Minting is not drawn from it; a bill's size is capped by the per-bill maximum in Hub Settings.",
+    "coverageNone": "Nothing outstanding",
+    "coverageCovered": "Fully covered",
+    "coverageUnderfunded": "Underfunded",
+    "noActivityYet": "No bills minted yet — issue a bill and its totals and timing appear here."
   },
   "cashCharts": {
     "outstandingTitle": "Outstanding over time",
@@ -481,7 +518,10 @@
     "othersBar_other": "+{{count}} others",
     "coverageBacking": "Held by bills",
     "coverageCapacity": "Left to mint",
-    "coverageShortDetail": "At least one bill holds less than its unclaimed slices owe. Aggregate figures cannot show this, so it is measured per bill."
+    "coverageShortDetail": "At least one bill holds less than its unclaimed slices owe. Aggregate figures cannot show this, so it is measured per bill.",
+    "expiryEmpty": "Nothing outstanding yet — this fills in once bills are issued and waiting to be redeemed.",
+    "flowEmpty": "No activity yet — daily issued and redeemed totals appear once this hub mints its first bill.",
+    "outstandingEmpty": "Nothing outstanding yet — the running total appears once bills are issued."
   },
   "cashBills": {
     "dashboardSubtitle": "Cash bills issued from this hub, and where their value went",
@@ -495,15 +535,22 @@
   },
   "circleKpis": {
     "balance": "Hub balance",
+    "acceptingChip": "Accepting members",
+    "notAcceptingChip": "Closed to new members",
+    "held": "Held for this circle",
     "spent": "Spent by members",
     "received": "Received by members",
     "feesEarned": "Fees earned",
+    "maxPerWallet": "Max per wallet",
     "members": "Members"
   },
   "circleCharts": {
     "allocationTitle": "Allocation",
     "allocationHint": "How much of what this circle holds is already sitting in member wallets.",
     "allocationShare": "{{percent}}% allocated",
+    "allocatedWord": "allocated",
+    "freeWord": "free",
+    "freeToAllocate": "free to allocate",
     "allocated": "Allocated",
     "unallocated": "Unallocated",
     "acrossMembers_one": "across {{count}} member",
@@ -521,7 +568,9 @@
     "flowTitle": "Daily flow",
     "flowHint": "Received above the line, spent below it.",
     "othersBar_one": "+{{count}} other",
-    "othersBar_other": "+{{count}} others"
+    "othersBar_other": "+{{count}} others",
+    "membersEmpty": "No member wallets yet — balances and spending appear here once members start using the circle.",
+    "flowEmpty": "No activity yet — daily received and spent totals appear once members use their wallets."
   },
   "circleControls": {
     "acceptingTitle": "New members",

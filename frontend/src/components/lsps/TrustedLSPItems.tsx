@@ -30,7 +30,7 @@ export function NoTrustedLSP() {
   const { t } = useTranslation("setup");
   return (
     <p className="text-sm text-muted-foreground" data-testid="no-trusted-lsp">
-      <Link to="/settings/services" className="underline">
+      <Link to="/settings/services#lsp" className="underline">
         {t("services.lsp.noTrusted")}
       </Link>
     </p>

@@ -18,6 +18,8 @@ import (
 // conformance round drives, on the regtest-only /api/test group of
 // registerWithdrawTestHooks.
 func (httpSvc *HttpService) registerE2ETestHooks(g *echo.Group) {
+	httpSvc.registerMCPTestHooks(g)
+
 	// POST /api/test/faults {stall_commit, break_signer, drop_reply,
 	// drop_before_commit, route_over_bound, hold_payments, hold_self_payments,
 	// fail_chain_scan: bool, reset}: a field

@@ -4,6 +4,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"sync"
@@ -160,6 +161,28 @@ func (httpSvc *HttpService) registerTestHooks(full *echo.Group) {
 			return hookError(c, err)
 		}
 		return c.NoContent(http.StatusNoContent)
+	}))
+	g.POST("/chain/evict", t.with(func(c echo.Context, h *regtest.Hooks) error {
+		var req struct {
+			Txid string `json:"txid"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return hookError(c, err)
+		}
+		if req.Txid == "" {
+			return hookError(c, errors.New("txid is required"))
+		}
+		inMempool, err := h.Evict(req.Txid)
+		if errors.Is(err, regtest.ErrEvictUnsupported) {
+			// lokid cannot drop one pending transaction; surface it so the
+			// caller can skip (as the integration suite does for errEvictUnsupported).
+			return c.JSON(http.StatusNotImplemented, map[string]any{
+				"evicted": false, "in_mempool": inMempool, "message": err.Error()})
+		}
+		if err != nil {
+			return hookError(c, err)
+		}
+		return c.JSON(http.StatusOK, map[string]any{"evicted": true, "in_mempool": inMempool})
 	}))
 	g.POST("/payer/pay-invoice", t.with(func(c echo.Context, h *regtest.Hooks) error {
 		var req struct {

@@ -9,6 +9,25 @@ hub to services the user has explicitly selected.
 
 ### Added
 
+- Adds AI assistants: an AI assistant (via the Model Context Protocol) can use
+  the hub with the permissions the owner grants per area (wallet, cash &
+  circles, network, listings, node, connections — off, read, or read and
+  change). Secrets, backups and creating wallet connections are never
+  available. Every money or destructive action is previewed and confirmed;
+  on-chain sends, channel changes and actions that hand money or trust to a
+  third party wait for the owner's approval, as do payments once the
+  assistants' combined 24-hour outflow (amount plus maximum routing fee)
+  exceeds the owner's limit. Owners can pause all assistants, edit, rename,
+  rotate the key of or revoke each one, and see an activity log. Connect by
+  link and key, by OAuth 2.1 sign-in, from the desktop app's local access, or
+  through the new `lokihub-mcp` stdio program shipped in every release. (#N)
+- Adds the LSP back-office and cash withdraw settings as assistant tools,
+  behind the same approvals. (#N)
+- Redesigns the interface: a Home dashboard, grouped sidebar with Circles as a
+  first-class section, cash and circle dashboards with coverage and allocation
+  meters, a two-pane Settings with an accent picker, listing Reopen and
+  Republish, a Discoverability panel showing where a circle is published, and
+  a mobile layout. (#N)
 - Accepts NIP-CASH Pre-Authorisation grants on the private transport: a bill
   holder can delegate a read method (`cash_status`, `cash_withdraw_quote`) to
   another key, which then reads the bill without the bearer connection secret.
@@ -70,6 +89,11 @@ hub to services the user has explicitly selected.
 
 ### Changed
 
+- Listings live with their hub: the separate Listings page is gone and the
+  listing form opens from the hub. (#N)
+- Unlock, start and backup are rate-limited per route and per real client;
+  behind a reverse proxy, set `LOKIHUB_TRUSTED_PROXIES` to the proxy's address
+  so clients are told apart (default: loopback). (#N)
 - Reads the native chain identity — unit, ticker and block-explorer label/URL —
   from the configured `native_asset` instead of hardcoded Flokicoin values, so a
   fork can retarget the chain with no code change; the embedded default is
@@ -143,6 +167,8 @@ hub to services the user has explicitly selected.
 
 ### Fixed
 
+- LSPS1 order and LSPS5 webhook calls no longer crash when the liquidity
+  service is not running. (#N)
 - Fixes an unpaid LSPS1 `get_order` reporting FAILED on a still-CREATED order: the
   order's `expires_at` was never loaded, so every unpaid order looked expired. (#228)
 - Fixes LSPS5 webhooks: `set_webhook` no longer defaults to the LSP-rejected `https`
@@ -220,6 +246,11 @@ hub to services the user has explicitly selected.
 
 ### Security
 
+- Refuses an LSP's order invoice unless it charges exactly the quoted total
+  and pays the LSP's own node. (#N)
+- Validates explorer proxy paths and caps explorer responses at 4 MiB. (#N)
+- Forbids framing of every page (`frame-ancestors 'none'`), and answers unknown
+  API, MCP and OAuth paths with 404 instead of the web app. (#N)
 - Breaking: lokihub makes no outbound connection to an external URL unless the
   user selected it under Settings → Services — nothing is hardcoded, not even
   relays, and a fresh hub connects to nothing until the user picks services.

@@ -18,6 +18,8 @@ import AppDetails from "src/screens/apps/AppDetails";
 import { AppsCleanup } from "src/screens/apps/AppsCleanup";
 import { Connections } from "src/screens/apps/Connections";
 import NewApp from "src/screens/apps/NewApp";
+import { ConsentAssistant } from "src/screens/apps/ConsentAssistant";
+import { NewAssistant } from "src/screens/apps/NewAssistant";
 import { AppStoreDetail } from "src/screens/appstore/AppStoreDetail";
 import Channels from "src/screens/channels/Channels";
 import { CurrentChannelOrder } from "src/screens/channels/CurrentChannelOrder";
@@ -53,7 +55,7 @@ import { SetupSecurity } from "src/screens/setup/SetupSecurity";
 import { SetupServices } from "src/screens/setup/SetupServices";
 import { FLNDForm } from "src/screens/setup/node/FLNDForm";
 import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
-import { Listings } from "src/screens/listings/Listings";
+import { ListOfferPage } from "src/screens/listings/ListOfferPage";
 import { LspAnalytics } from "src/screens/lsp/LspAnalytics";
 import { LspClients } from "src/screens/lsp/LspClients";
 import { LspConfig } from "src/screens/lsp/LspConfig";
@@ -63,6 +65,7 @@ import { LspOverview } from "src/screens/lsp/LspOverview";
 import { LspWebhooks } from "src/screens/lsp/LspWebhooks";
 import { CashHubDashboard } from "src/screens/subwallets/CashHubDashboard";
 import { CashHubList } from "src/screens/subwallets/CashHubList";
+import { LspLayout } from "src/screens/lsp/LspLayout";
 import { NewCircleHub } from "src/screens/subwallets/NewCircleHub";
 import { NewCashHub } from "src/screens/subwallets/NewCashHub";
 import { NewSimpleSubwallet } from "src/screens/subwallets/NewSimpleSubwallet";
@@ -214,7 +217,12 @@ const routes: RouteObject[] = [
                   },
                   {
                     path: "identity-authorities",
-                    element: <Navigate to="/settings/services" replace />,
+                    element: (
+                      <Navigate
+                        to="/settings/services#identity-authorities"
+                        replace
+                      />
+                    ),
                   },
                   {
                     path: "about",
@@ -266,15 +274,36 @@ const routes: RouteObject[] = [
                 element: <AppDetails />,
               },
               {
+                // The list-offer form lives under its circle — a listing
+                // belongs to one circle, so there is no top-level Listings
+                // area. The same route creates or edits: the circle's :id
+                // decides which, by whether it already has a listing.
+                path: ":id/list-offer",
+                element: <ListOfferPage />,
+                handle: { crumb: () => "Listing" },
+              },
+              {
                 path: "new",
                 element: <NewApp />,
                 handle: { crumb: () => "New App" },
+              },
+              {
+                path: "new/assistant",
+                element: <NewAssistant />,
+                handle: { crumb: () => "AI assistant" },
               },
               {
                 path: "cleanup",
                 element: <AppsCleanup />,
               },
             ],
+          },
+          {
+            // Owner consent for a remote AI assistant (OAuth); the hub's
+            // /oauth/authorize redirects here with an opaque consent id.
+            path: "connect-assistant",
+            element: <ConsentAssistant />,
+            handle: { crumb: () => "Connect AI assistant" },
           },
           {
             path: "sub-wallets",
@@ -332,29 +361,31 @@ const routes: RouteObject[] = [
             ],
           },
           {
-            path: "listings",
-            element: <DefaultRedirect />,
-            handle: { crumb: () => "Listings" },
-            children: [{ index: true, element: <Listings /> }],
-          },
-          {
             path: "lsp",
             element: <DefaultRedirect />,
             handle: { crumb: () => "LSP" },
             children: [
-              { index: true, element: <LspOverview /> },
               {
-                path: "orders",
-                handle: { crumb: () => "Orders" },
+                // Shared LSP layout: header + tab bar, so Overview / Orders /
+                // Peers / Analytics / Config are all reachable (they used to be
+                // URL-only). Mirrors the Settings DefaultRedirect → Layout nest.
+                element: <LspLayout />,
                 children: [
-                  { index: true, element: <LspOrders /> },
-                  { path: ":orderId", element: <LspOrderDetail /> },
+                  { index: true, element: <LspOverview /> },
+                  {
+                    path: "orders",
+                    handle: { crumb: () => "Orders" },
+                    children: [
+                      { index: true, element: <LspOrders /> },
+                      { path: ":orderId", element: <LspOrderDetail /> },
+                    ],
+                  },
+                  { path: "peers", element: <LspClients /> },
+                  { path: "webhooks", element: <LspWebhooks /> },
+                  { path: "analytics", element: <LspAnalytics /> },
+                  { path: "config", element: <LspConfig /> },
                 ],
               },
-              { path: "peers", element: <LspClients /> },
-              { path: "webhooks", element: <LspWebhooks /> },
-              { path: "analytics", element: <LspAnalytics /> },
-              { path: "config", element: <LspConfig /> },
             ],
           },
           {

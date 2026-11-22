@@ -2,10 +2,16 @@
   "nav": "Listings",
   "page": {
     "title": "Listings",
-    "description": "Offers this Hub lists on relays so people without a link can find them",
+    "description": "Offers people can find without a link",
     "empty": "Nothing listed yet",
-    "emptyHint": "List a circle below. A Cash Hub connection is never listed.",
-    "listCircle": "List a circle"
+    "emptyHint": "List one of your circles so people without a link can find it. A Cash Hub connection is never listed.",
+    "listCircle": "List a circle",
+    "listAction": "List an offer",
+    "notListed": "Not listed — people need an invite link to join",
+    "discoverability": "Discoverability",
+    "pausedHint": "Paused — hidden from discovery but still reachable by its link. Resume to make it discoverable again.",
+    "closingHint": "Winding down — no longer discoverable, but still working for anyone who has the link. Reopen to list it again, or let it finish closing.",
+    "detailsToggle": "Listing details"
   },
   "card": {
     "untitled": "Untitled offer",
@@ -14,7 +20,9 @@
   },
   "status": {
     "open": "Open",
+    "listed": "Listed",
     "paused": "Paused",
+    "closing": "Closing",
     "closed": "Closed"
   },
   "health": {
@@ -30,35 +38,63 @@
     "failing": "no relay accepted the last version, retrying"
   },
   "dialog": {
-    "title": "List this offer",
+    "title": "List an offer",
     "editTitle": "Edit listing",
-    "description": "The listing advertises; the terms always come from the offer itself when someone taps it.",
-    "list": "List",
-    "save": "Save"
+    "description": "People without a link can find it. The terms always come from the offer itself when someone taps it.",
+    "list": "List offer",
+    "save": "Save changes",
+    "cancel": "Cancel"
+  },
+  "pick": {
+    "prompt": "Which circle do you want to list?",
+    "none": "All your circles are already listed.",
+    "notFound": "That listing no longer exists."
+  },
+  "groups": {
+    "offer": "The offer",
+    "find": "Help people find it",
+    "optional": "optional",
+    "advanced": "Advanced",
+    "advancedHint": "operator · visibility"
   },
   "warnings": {
     "public": "Listing makes this offer public and lets anyone find this node.",
     "pow": "Proof of work on the inbox is off while no proof-of-work relays are set; anyone can send requests.",
     "circleTerms": "For a circle, its access policy and how much it can still take in become readable by anyone.",
+    "publicConfirm": "I understand this makes the circle publicly discoverable — its access policy and remaining capacity become readable by anyone.",
     "followSet": "This circle's follow set is public. Consider hidden entries for members who should not be named. The listing's title is not taken from the set.",
     "operator": "Naming an operator publicly links their account to this node."
   },
   "form": {
+    "listingCircle": "Listing this circle",
     "title": "Title",
+    "titleRequired": "A title is required to list",
     "content": "Description",
+    "contentHint": "A sentence or two helps people decide.",
     "image": "Image (https)",
     "location": "Place (e.g. Lisbon, Baixa)",
     "regions": "Regions",
     "regionsHint": "Geohash prefixes of 3 or 4 characters",
-    "languages": "Languages (ISO-639-1)",
-    "operator": "Operator (npub or hex, optional)",
+    "languages": "Languages",
+    "languageAdd": "Other (ISO code, e.g. ja)",
+    "operator": "Name an operator",
+    "operatorHint": "Publicly credit who runs this. Their relay is found automatically — nothing to paste.",
     "operatorRelay": "Operator's relay",
+    "regionsLabel": "Map regions",
     "followSetA": "Add the follow set's address",
     "followSetConfirm": "I understand the follow set is public",
+    "canUnlist": "You can pause or unlist it anytime.",
     "preview": "Preview"
   },
+  "map": {
+    "label": "Where",
+    "hint": "Tap the map to add where people should find this.",
+    "precisionRegion": "Region",
+    "precisionArea": "Area",
+    "none": "No area set — it can be found from anywhere."
+  },
   "problems": {
-    "title": "The title must be one line of at most 40 characters.",
+    "title": "Give the offer a title — one line, up to 40 characters.",
     "content": "The description must be at most 280 characters.",
     "image": "The image must be an https URL.",
     "location": "The place must be one line of at most 40 characters, with no link.",
@@ -69,7 +105,13 @@
   },
   "toast": {
     "listed": "Listed",
-    "updated": "Listing updated"
+    "updated": "Listing updated",
+    "reopened": "Reopened"
+  },
+  "state": {
+    "discoverable": "Discoverable on the network",
+    "paused": "Hidden from discovery — still reachable by its link",
+    "closing": "Winding down — still works by its link until it expires"
   },
   "errors": {
     "save": "Could not save the listing",
@@ -85,24 +127,48 @@
     "hint": "The operator names this offer from their own Nostr client or with cashctl; this app never asks for their key."
   },
   "connection": {
-    "label": "Listing connection (public)"
+    "label": "Listing connection (public)",
+    "copy": "Copy link"
   },
   "actions": {
     "pause": "Pause",
     "resume": "Resume",
+    "reopen": "Reopen",
     "edit": "Edit",
+    "manage": "Manage",
+    "more": "More actions",
+    "back": "Back",
     "unlist": "Unlist",
     "checkOperator": "Check operator",
     "revokeConnection": "Revoke listing connection"
+  },
+  "detail": {
+    "noDescription": "No description added.",
+    "place": "Place",
+    "area": "Area",
+    "preview": "How people see it"
   },
   "relays": {
     "title": "Listing relays",
     "description": "Listings and this node's relay list go to: {{relays}}. Leave empty for the general relays.",
     "save": "Save",
-    "saved": "Listing relays saved"
+    "saved": "Listing relays saved",
+    "where": "Where it's published",
+    "summary": "{{ok}} of {{total}} relays",
+    "published": "Published",
+    "pending": "Pending",
+    "pendingCallout": "{{count}} relays from Settings aren't carrying this listing yet.",
+    "pendingCallout_one": "{{count}} relay from Settings isn't carrying this listing yet.",
+    "publishNew": "Publish to {{count}} relays",
+    "publishNew_one": "Publish to {{count}} relay",
+    "republish": "Republish now",
+    "republished": "Republished to your relays",
+    "manage": "Manage relays",
+    "none": "No relays configured — add one in Settings to publish this listing."
   },
   "regenerate": {
     "button": "Revoke and reissue the Cash Hub connection",
+    "menuItem": "Revoke & reissue connection",
     "title": "Revoke this Cash Hub connection?",
     "description": "Do this if the connection string was ever published. The old string stops working at once and a new one is shown once. Bills and records are untouched; reconnect your minting client with the new string.",
     "cancel": "Cancel",

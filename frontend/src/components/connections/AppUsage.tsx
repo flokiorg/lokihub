@@ -72,7 +72,7 @@ export function AppUsage({ app }: { app: App }) {
           <Card className="justify-between">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">
-                {t("usage.isolatedBalance", "Isolated Balance")}
+                {t("usage.isolatedBalance", "Reserved balance")}
               </CardTitle>
             </CardHeader>
             <CardContent>

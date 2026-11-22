@@ -113,6 +113,34 @@ type Tx struct {
 	Depth int64  `json:"depth"` // 0 in the mempool
 }
 
+// ErrEvictUnsupported reports that a transaction still in lokid's mempool cannot
+// be dropped: no RPC removes one transaction, and restarting the node wipes the
+// regtest chain (no --keepregtestdb). Only a transaction already gone from the
+// mempool (mined, or never there) counts as evicted.
+var ErrEvictUnsupported = errors.New("the regtest stack cannot evict a transaction from the mempool")
+
+// Evict drops txid from the chain node's mempool, as a restarted node would
+// forget it. lokid has no RPC to remove a single transaction, so this succeeds
+// (a no-op) only when txid is already absent from the mempool and reports
+// ErrEvictUnsupported while it is still pending. inMempool is whether txid was
+// found pending.
+func (h *Hooks) Evict(txid string) (inMempool bool, err error) {
+	hash, err := chainhash.NewHashFromStr(txid)
+	if err != nil {
+		return false, fmt.Errorf("txid: %w", err)
+	}
+	pool, err := h.Chain.rpc.GetRawMempool()
+	if err != nil {
+		return false, err
+	}
+	for _, id := range pool {
+		if *id == *hash {
+			return true, ErrEvictUnsupported
+		}
+	}
+	return false, nil
+}
+
 // Tx reads a transaction from the chain node's index.
 func (h *Hooks) Tx(txid string) (Tx, error) {
 	hash, err := chainhash.NewHashFromStr(txid)

@@ -201,6 +201,8 @@ export function CashExpiryRunway({
       className={className}
       title={t("cashCharts.expiryTitle")}
       description={t("cashCharts.expiryHint")}
+      empty={stats.outstanding_count === 0}
+      emptyLabel={t("cashCharts.expiryEmpty")}
     >
       <ChartPlot>
         <BarChart
@@ -414,6 +416,15 @@ export function CashDailyFlow({
       className={className}
       title={t("cashCharts.flowTitle")}
       description={t("cashCharts.flowHint")}
+      empty={daily.every(
+        (d) =>
+          !d.issued_mloki &&
+          !d.redeemed_mloki &&
+          !d.returned_mloki &&
+          !d.split_mloki &&
+          !d.written_off_mloki
+      )}
+      emptyLabel={t("cashCharts.flowEmpty")}
     >
       <ChartPlot>
         <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
@@ -581,6 +592,8 @@ export function CashOutstandingChart({
       className={className}
       title={t("cashCharts.outstandingTitle")}
       description={t("cashCharts.outstandingHint")}
+      empty={data.every((p) => p.outstanding === 0)}
+      emptyLabel={t("cashCharts.outstandingEmpty")}
     >
       <ChartPlot>
         <AreaChart

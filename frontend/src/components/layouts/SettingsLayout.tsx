@@ -19,10 +19,14 @@ import {
 } from "src/components/ui/alert-dialog";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Separator } from "src/components/ui/separator";
+import { useScrollToHash } from "src/hooks/useScrollToHash";
 import { cn } from "src/lib/utils";
 import { request } from "src/utils/request";
 
 export default function SettingsLayout() {
+  // Deep-link support: `/settings/services#relays` scrolls to that section.
+  useScrollToHash();
+
   const {
     data: info,
     mutate: refetchInfo,

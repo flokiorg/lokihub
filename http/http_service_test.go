@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/stretchr/testify/mock"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -101,6 +102,8 @@ func TestGetApps_NoToken(t *testing.T) {
 	defer db.CloseDB(gormDb)
 
 	mockEventPublisher := mocks.NewMockEventPublisher(t)
+	// The MCP layer subscribes to app deletions to clear per-connection state.
+	mockEventPublisher.On("RegisterSubscriber", mock.Anything).Return().Maybe()
 
 	mockConfig := mocks.NewMockConfig(t)
 	mockConfig.On("GetEnv").Return(&config.AppConfig{})
@@ -239,6 +242,8 @@ func TestCreateApp_NoToken(t *testing.T) {
 	defer db.CloseDB(gormDb)
 
 	mockEventPublisher := mocks.NewMockEventPublisher(t)
+	// The MCP layer subscribes to app deletions to clear per-connection state.
+	mockEventPublisher.On("RegisterSubscriber", mock.Anything).Return().Maybe()
 
 	mockConfig := mocks.NewMockConfig(t)
 	mockConfig.On("GetEnv").Return(&config.AppConfig{})

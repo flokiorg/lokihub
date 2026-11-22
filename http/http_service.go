@@ -35,6 +35,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/daemonclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/flokiorg/lokihub/mcp"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -80,10 +81,18 @@ type HttpService struct {
 
 	// svc is read only by the test hooks (testhooks builds).
 	svc service.Service
+
+	// mcpSrv is the MCP endpoint (nil until registerMCP); the owner admin
+	// routes use it for the approval queue.
+	mcpSrv *mcp.Server
+	// mcpOAuth is the OAuth 2.1 client/code/consent store for remote MCP.
+	mcpOAuth *mcp.OAuthStore
+	// mcpLoopback is the desktop's local-listener controller (nil on servers).
+	mcpLoopback MCPLoopbackController
 }
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
-	return &HttpService{
+	httpSvc := &HttpService{
 		api:             api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetHubInfoSvc(), eventPublisher),
 		hubInfoHttpSvc:  NewHubInfoHttpService(svc, svc.GetHubInfoSvc(), svc.GetConfig().GetEnv()),
 		cfg:             svc.GetConfig(),
@@ -98,6 +107,14 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		lsps5Replay:     newLSPS5ReplayGuard(),
 		svc:             svc,
 	}
+	// The API (and so the MCP LSP-operator tools) shares this lspd client:
+	// one signer, one status cache (D10).
+	if a, ok := httpSvc.api.(interface {
+		SetLSPOperatorClient(*daemonclient.Client)
+	}); ok {
+		a.SetLSPOperatorClient(httpSvc.lspClient)
+	}
+	return httpSvc
 }
 
 // Shutdown signals long-lived handlers (e.g. SSE streams) to stop.
@@ -142,7 +159,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 		// needs to reach an arbitrary image host. Keep this in sync with the
 		// dev CSP meta tag in frontend/vite.config.ts, which has no shared
 		// source with this header.
-		ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: ws://wails.localhost:*; img-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self';",
+		ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: ws://wails.localhost:*; img-src 'self' data:; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self';",
 		ReferrerPolicy:        "no-referrer",
 	}))
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
@@ -185,14 +202,30 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	// connection gives it: echo's default identifier trusts X-Forwarded-For and
 	// X-Real-IP, so any caller could name a fresh address on each attempt
 	// (GHSA-246p-cpwv-v3jq). Behind a proxy every client then shares one budget.
-	unlockRateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-		Store:               middleware.NewRateLimiterMemoryStore(1),
-		IdentifierExtractor: unlockLimiterIdentifier,
-	})
-	e.POST("/api/start", httpSvc.startHandler, unlockRateLimiter)
-	e.POST("/api/unlock", httpSvc.unlockHandler, unlockRateLimiter)
-	e.POST("/api/backup", httpSvc.createBackupHandler, unlockRateLimiter)
-	e.GET("/logout", httpSvc.logoutHandler, unlockRateLimiter)
+	// One bucket PER ROUTE: an unauthenticated GET /logout (which any web page
+	// can trigger) must not be able to use up the owner's unlock budget
+	// (pentest R2-3 LOW-1). /logout itself needs no limiter.
+	unlockRateLimiter := func() echo.MiddlewareFunc {
+		return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store:               middleware.NewRateLimiterMemoryStore(1),
+			IdentifierExtractor: unlockLimiterIdentifier,
+			// A request the handler will reject before checking anything (not
+			// JSON — e.g. a cross-site no-cors POST from a web page) must not
+			// use up the owner's budget (pentest R3-B LOW).
+			Skipper: func(c echo.Context) bool {
+				return c.Request().Method == http.MethodPost &&
+					!strings.HasPrefix(c.Request().Header.Get(echo.HeaderContentType), echo.MIMEApplicationJSON)
+			},
+		})
+	}
+	e.POST("/api/start", httpSvc.startHandler, unlockRateLimiter())
+	e.POST("/api/unlock", httpSvc.unlockHandler, unlockRateLimiter())
+	e.POST("/api/backup", httpSvc.createBackupHandler, unlockRateLimiter())
+	e.GET("/logout", httpSvc.logoutHandler)
+
+	// Mount the MCP endpoint BEFORE the SPA fallback so the HTML5 static handler
+	// does not swallow /mcp (and, in M4, the OAuth /.well-known routes).
+	httpSvc.registerMCP(e)
 
 	frontend.RegisterHandlers(e)
 
@@ -296,6 +329,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/apps/:pubkey", httpSvc.appsDeleteHandler)
 	fullAccessApiGroup.POST("/transfers", httpSvc.transfersHandler)
 	fullAccessApiGroup.POST("/apps", httpSvc.appsCreateHandler)
+	httpSvc.registerMCPAdmin(fullAccessApiGroup)
 	fullAccessApiGroup.GET("/apps/:id/circle/allowlist", httpSvc.circleAllowlistListHandler)
 	fullAccessApiGroup.PUT("/apps/:id/circle/allowlist", httpSvc.circleAllowlistReplaceHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/circle/allowlist/:pubkey", httpSvc.circleAllowlistRemoveHandler)
@@ -569,7 +603,10 @@ func (httpSvc *HttpService) unlockHandler(c echo.Context) error {
 // unlockLimiterIdentifier is the unlock rate limiter's key: the connection's
 // own peer address, never a forwarded header.
 func unlockLimiterIdentifier(c echo.Context) (string, error) {
-	return echo.ExtractIPDirect()(c.Request()), nil
+	// The real client behind a TRUSTED proxy (pentest F F-3: behind the proxy
+	// every caller used to share one bucket, so a flood locked the owner out),
+	// the TCP peer otherwise — forwarded headers from anyone else are ignored.
+	return clientIP(c), nil
 }
 
 func (httpSvc *HttpService) requireFullAccess(next echo.HandlerFunc) echo.HandlerFunc {

@@ -33,6 +33,7 @@ export type Listing = {
   lastOpenExpiresAt?: number | null;
   relaysOk: number;
   relaysTotal: number;
+  openRelays: string[] | null;
   failing: boolean;
   operatorVerified?: boolean | null;
   operatorCheckedAt?: number | null;
@@ -60,6 +61,8 @@ export type ListingAction =
   | "pause"
   | "resume"
   | "unlist"
+  | "reopen"
+  | "republish"
   | "revoke-connection"
   | "check-operator";
 

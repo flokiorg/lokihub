@@ -5,11 +5,10 @@ import {
   HomeIcon,
   LogOut,
   LucideIcon,
-  MegaphoneIcon,
   Plug2Icon,
   ServerIcon,
   Settings,
-  SquareStack,
+  Users,
   WalletIcon,
 } from "lucide-react";
 import React from "react";
@@ -25,6 +24,7 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -81,7 +81,12 @@ export function AppSidebar() {
   }, [_isHttpMode, navigate, refetchInfo]);
 
   const data = {
-    navMain: [
+    // One flat primary nav — every top-level destination at level 0, no
+    // grouping. Funds first (home, wallet, cash hubs, circles), then how the hub
+    // reaches out (connections, and the LSP backoffice once attached). No
+    // Discoverability entry: a listing belongs to one circle and is managed from
+    // that circle's own page.
+    navPrimary: [
       {
         title: t("nav.home"),
         url: "/home",
@@ -93,29 +98,23 @@ export function AppSidebar() {
         icon: WalletIcon,
       },
       {
-        title: t("nav.subWallets"),
-        url: "/sub-wallets",
-        icon: SquareStack,
-      },
-      {
         title: t("nav.cashHub"),
         url: "/cash-hub",
         icon: BanknoteIcon,
       },
       {
-        title: t("nav", { ns: "listings" }),
-        url: "/listings",
-        icon: MegaphoneIcon,
+        title: t("nav.subWallets"),
+        url: "/sub-wallets",
+        icon: Users,
       },
       {
         title: t("nav.connections"),
         url: "/apps",
         icon: Plug2Icon,
       },
-      // The LSP backoffice is shown only once the Hub is actually attached to an
-      // lspd daemon (info.lspService.attached), the same conditional-nav pattern
-      // as the Node entry's `hasChannelManagement` gate below. Operators who
-      // never attach an LSP never see it.
+      // The LSP backoffice is shown only once the Hub is attached to an lspd
+      // daemon (info.lspService.attached), the same conditional-nav pattern as
+      // the Node entry below.
       ...(info?.lspService?.attached
         ? [
             {
@@ -144,6 +143,32 @@ export function AppSidebar() {
     ],
   };
 
+  const renderNavGroup = (
+    label: string | undefined,
+    items: { title: string; url: string; icon: LucideIcon }[]
+  ) => (
+    <SidebarGroup>
+      {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => (
+            <SidebarMenuItem key={item.title}>
+              <SidebarMenuButton
+                asChild
+                isActive={location.pathname === item.url}
+              >
+                <Link to={item.url} onClick={() => setOpenMobile(false)}>
+                  <item.icon />
+                  <span>{item.title}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+
   return (
     <Sidebar
       side={isRTL ? "right" : "left"}
@@ -161,30 +186,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {data.navMain.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location.pathname === item.url}
-                  >
-                    <Link
-                      to={item.url}
-                      onClick={() => {
-                        setOpenMobile(false);
-                      }}
-                    >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {renderNavGroup(undefined, data.navPrimary)}
         <div className="mt-auto">
           <SidebarGroup>
             <SidebarGroupContent>

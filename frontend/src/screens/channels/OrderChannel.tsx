@@ -499,7 +499,7 @@ export default function OrderChannel() {
               <div className="text-muted-foreground text-xs">
                 <span className="me-1">{t("orderChannel.manageLSP")}</span>
                 <LinkButton
-                  to="/settings/services"
+                  to="/settings/services#lsp"
                   variant="link"
                   className="h-auto p-0 text-xs underline"
                 >

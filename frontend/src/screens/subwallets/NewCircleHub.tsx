@@ -1,4 +1,4 @@
-import { Check, Globe, ListChecks, Server, UserPlus } from "lucide-react";
+import { Globe, ListChecks, Server, UserPlus } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -12,7 +12,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "src/components/ui/accordion";
-import { FieldSet, FieldLegend } from "src/components/ui/field";
 import { Button } from "src/components/ui/button";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { DurationInput } from "src/components/DurationInput";
@@ -52,6 +51,7 @@ import {
   CardHeader,
   CardTitle,
 } from "src/components/ui/card";
+import { NumberedGroupHeading } from "src/components/redesign/NumberedGroupHeading";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import { createApp } from "src/requests/createApp";
@@ -103,16 +103,16 @@ function OptionCards<T extends string>({
             key={option}
             onClick={() => onChange(option)}
             className={cn(
-              "relative flex flex-col gap-2 rounded-lg border p-3 text-start transition-all",
+              "relative flex flex-col gap-2 rounded-lg border p-3 text-start transition-colors",
+              // Selected = the design's brand-wash + brand border (no hard ring
+              // or shadow); matches the segmented-tab / chip selected treatment.
               isSelected
-                ? "border-primary ring-1 ring-primary shadow-sm"
+                ? "border-primary bg-primary/15"
                 : "border-border hover:border-primary/50"
             )}
           >
             {isSelected && (
-              <div className="absolute top-2 end-2 rounded-full bg-primary p-0.5 text-primary-foreground">
-                <Check className="h-3 w-3" />
-              </div>
+              <div className="absolute top-2.5 end-2.5 size-3.5 rounded-full bg-primary" />
             )}
             <Icon
               className={cn(
@@ -221,7 +221,9 @@ function MembershipPreview({
                   </span>
                 )}
                 {isManagedFollowSet && followSet.title && (
-                  <span className="truncate font-medium">{followSet.title}</span>
+                  <span className="truncate font-medium">
+                    {followSet.title}
+                  </span>
                 )}
               </div>
             )}
@@ -494,192 +496,406 @@ export function NewCircleHub() {
       <RelayHint className="max-w-lg" />
       <form
         onSubmit={handleSubmit}
-        className="flex w-full flex-col items-start gap-6 max-w-2xl"
-      >
-        <div className="w-full grid gap-1.5">
-          <Label htmlFor="name">{t("common.nameLabel")}</Label>
-          <Input
-            autoFocus
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            autoComplete="off"
-          />
-        </div>
-
-        {hasSavedIdentities && (
-          <div className="w-full grid gap-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="identity">
-                {t("newCircleHub.identityModeLabel")}
-              </Label>
-              <ManageIdentitiesDialog />
-            </div>
-            <Select
-              value={isNewIdentity ? "new" : selectedIdentityId}
-              onValueChange={(v) => {
-                if (v === "new") {
-                  setIdentityMode("new");
-                  setSelectedIdentityId(undefined);
-                } else {
-                  setIdentityMode("existing");
-                  setSelectedIdentityId(v);
-                }
-              }}
-            >
-              <SelectTrigger id="identity" className="w-full">
-                <SelectValue
-                  placeholder={t("newCircleHub.selectIdentityPlaceholder")}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new">
-                  {t("newCircleHub.createNewIdentity")}
-                </SelectItem>
-                <SelectSeparator />
-                <SelectGroup>
-                  <SelectLabel>
-                    {t("newCircleHub.existingIdentities")}
-                  </SelectLabel>
-                  {identities.map((identity) => (
-                    <SelectItem key={identity.id} value={String(identity.id)}>
-                      <span className="flex w-full items-center justify-between gap-2">
-                        <span>
-                          {identity.name} ({t(`policyLabel.${identity.policy}`)}
-                          )
-                        </span>
-                        {identity.usedByCount > 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            {t("common.inUse")}
-                          </span>
-                        )}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-sm">
-              {t("newCircleHub.identityReuseHelper")}
-            </p>
-          </div>
+        className={cn(
+          "grid w-full gap-6 lg:items-start",
+          // New identity → a two-column form with a sticky preview aside, so it
+          // uses a wide (capped) measure. Existing identity → a single column
+          // of fields, capped tighter so inputs don't sprawl the desktop width.
+          isNewIdentity
+            ? "max-w-6xl lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+            : "max-w-2xl"
         )}
-
-        {isNewIdentity ? (
-          <div className="grid w-full gap-4 md:grid-cols-[minmax(0,1fr)_15rem] md:items-start">
-            <div className="w-full grid gap-4 rounded-lg border p-4 min-w-0">
+      >
+        <div className="grid gap-6">
+          <Card className="w-full">
+            <CardHeader>
+              <NumberedGroupHeading
+                step={1}
+                title={t("newCircleHub.essentialsTitle")}
+                description={t("newCircleHub.essentialsDesc")}
+              />
+            </CardHeader>
+            <CardContent className="grid gap-6">
               <div className="w-full grid gap-1.5">
-                <Label>{t("newCircleHub.memberModeLabel")}</Label>
-                <OptionCards
-                  options={memberModeOptions}
-                  value={memberMode}
-                  onChange={setMemberMode}
+                <Label htmlFor="name">{t("common.nameLabel")}</Label>
+                <Input
+                  autoFocus
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  autoComplete="off"
                 />
               </div>
 
-              {memberMode === "followSet" && (
+              {hasSavedIdentities && (
                 <div className="w-full grid gap-1.5">
-                  <Label>{t("followSet.sourceLabel")}</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="identity">
+                      {t("newCircleHub.identityModeLabel")}
+                    </Label>
+                    <ManageIdentitiesDialog />
+                  </div>
+                  <Select
+                    value={isNewIdentity ? "new" : selectedIdentityId}
+                    onValueChange={(v) => {
+                      if (v === "new") {
+                        setIdentityMode("new");
+                        setSelectedIdentityId(undefined);
+                      } else {
+                        setIdentityMode("existing");
+                        setSelectedIdentityId(v);
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="identity" className="w-full">
+                      <SelectValue
+                        placeholder={t(
+                          "newCircleHub.selectIdentityPlaceholder"
+                        )}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new">
+                        {t("newCircleHub.createNewIdentity")}
+                      </SelectItem>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel>
+                          {t("newCircleHub.existingIdentities")}
+                        </SelectLabel>
+                        {identities.map((identity) => (
+                          <SelectItem
+                            key={identity.id}
+                            value={String(identity.id)}
+                          >
+                            <span className="flex w-full items-center justify-between gap-2">
+                              <span>
+                                {identity.name} (
+                                {t(`policyLabel.${identity.policy}`)})
+                              </span>
+                              {identity.usedByCount > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  {t("common.inUse")}
+                                </span>
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-muted-foreground text-sm">
+                    {t("newCircleHub.identityReuseHelper")}
+                  </p>
+                </div>
+              )}
+
+              {isNewIdentity && (
+                <div className="w-full grid gap-1.5">
+                  <Label>{t("newCircleHub.memberModeLabel")}</Label>
                   <OptionCards
-                    options={followSetSourceOptions}
-                    value={followSetSource}
-                    onChange={setFollowSetSource}
+                    options={memberModeOptions}
+                    value={memberMode}
+                    onChange={setMemberMode}
                   />
                 </div>
               )}
 
-              {needsProviderInput && (
-                <NostrPubkeyInput
-                  id="providerPubkey"
-                  value={providerPubkeyInput}
-                  onChange={setProviderPubkeyInput}
-                  onResolved={setResolvedPubkeyHex}
-                  {...(memberMode === "followSet" && {
-                    label: t("followSet.externalProviderLabel"),
-                    helperText: t("followSet.externalProviderHelper"),
-                  })}
+              <div className="w-full grid gap-1.5">
+                <Label htmlFor="perWalletMax">
+                  {t("common.maxWalletBudgetLabel")}
+                </Label>
+                <CurrencyInput
+                  id="perWalletMax"
+                  amount={
+                    perWalletMaxLoki
+                      ? scaleInputAmount(perWalletMaxLoki, inputUnit).toString()
+                      : ""
+                  }
+                  onAmountChange={(val) =>
+                    setPerWalletMaxLoki(
+                      parseInputAmount(parseFloat(val) || 0, inputUnit)
+                    )
+                  }
+                  inputUnit={inputUnit}
+                  onInputUnitChange={setInputUnit}
+                  required
+                  min={scaleInputAmount(MIN_CIRCLE_WALLET_MAX_LOKI, inputUnit)}
                 />
-              )}
+                <p className="text-muted-foreground text-sm">
+                  {t("newCircleHub.maxWalletBudgetHelper")}{" "}
+                  {t("newCircleHub.minWalletBudgetHint", {
+                    min: MIN_CIRCLE_WALLET_MAX_LOKI,
+                  })}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
-              <div
-                className={cn(
-                  "w-full grid gap-4",
-                  isFormLocked && "opacity-50 pointer-events-none"
-                )}
-              >
-                {isFormLocked && (
-                  <p className="text-sm text-muted-foreground -mt-2">
-                    {t("newCircleHub.enterIdentityHelper")}
-                  </p>
-                )}
+          {isNewIdentity && (
+            <Card className="w-full">
+              <CardHeader>
+                <NumberedGroupHeading
+                  step={2}
+                  title={t("newCircleHub.membershipDetailsTitle")}
+                  description={t("newCircleHub.membershipDetailsDesc")}
+                />
+              </CardHeader>
+              <CardContent>
+                <div className="w-full grid gap-4 min-w-0">
+                  {memberMode === "followSet" && (
+                    <div className="w-full grid gap-1.5">
+                      <Label>{t("followSet.sourceLabel")}</Label>
+                      <OptionCards
+                        options={followSetSourceOptions}
+                        value={followSetSource}
+                        onChange={setFollowSetSource}
+                      />
+                    </div>
+                  )}
 
-                {memberMode === "followSet" && (
-                  <div className="w-full grid gap-1.5">
-                    <Label htmlFor="followSetD">{t("followSet.dLabel")}</Label>
-                    <Input
-                      id="followSetD"
-                      value={followSetD}
-                      maxLength={64}
-                      onChange={(e) => setFollowSetD(e.target.value)}
-                      placeholder={t("followSet.dPlaceholder")}
-                      autoComplete="off"
+                  {needsProviderInput && (
+                    <NostrPubkeyInput
+                      id="providerPubkey"
+                      value={providerPubkeyInput}
+                      onChange={setProviderPubkeyInput}
+                      onResolved={setResolvedPubkeyHex}
+                      {...(memberMode === "followSet" && {
+                        label: t("followSet.externalProviderLabel"),
+                        helperText: t("followSet.externalProviderHelper"),
+                      })}
                     />
-                    <p className="text-sm text-muted-foreground">
-                      {isManagedFollowSet
-                        ? t("followSet.dHelper")
-                        : t("followSet.dExternalHelper")}
+                  )}
+
+                  <div
+                    className={cn(
+                      "w-full grid gap-4",
+                      isFormLocked && "opacity-50 pointer-events-none"
+                    )}
+                  >
+                    {isFormLocked && (
+                      <p className="text-sm text-muted-foreground -mt-2">
+                        {t("newCircleHub.enterIdentityHelper")}
+                      </p>
+                    )}
+
+                    {memberMode === "followSet" && (
+                      <div className="w-full grid gap-1.5">
+                        <Label htmlFor="followSetD">
+                          {t("followSet.dLabel")}
+                        </Label>
+                        <Input
+                          id="followSetD"
+                          value={followSetD}
+                          maxLength={64}
+                          onChange={(e) => setFollowSetD(e.target.value)}
+                          placeholder={t("followSet.dPlaceholder")}
+                          autoComplete="off"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          {isManagedFollowSet
+                            ? t("followSet.dHelper")
+                            : t("followSet.dExternalHelper")}
+                        </p>
+                      </div>
+                    )}
+
+                    {isManagedFollowSet && (
+                      <FollowSetFields
+                        value={followSet}
+                        onChange={setFollowSet}
+                        authorPubkeyHex={nodePubkeyHex}
+                        hiddenMembersAvailable={hiddenMembersAvailable}
+                      />
+                    )}
+
+                    {memberMode === "followSet" && !isManagedFollowSet && (
+                      <WarningAlert>
+                        {t("followSet.externalWarning")}
+                      </WarningAlert>
+                    )}
+
+                    {memberMode === "pinned" && (
+                      <>
+                        <MemberPicker
+                          ownerPubkeyHex={resolvedPubkeyHex}
+                          selected={selectedMemberPubkeys}
+                          onChange={setSelectedMemberPubkeys}
+                        />
+                        {selectedMemberPubkeys.length === 0 && (
+                          <p className="text-sm text-muted-foreground">
+                            {t("newCircleHub.pinMemberHelper")}
+                          </p>
+                        )}
+                      </>
+                    )}
+
+                    <div className="w-full grid gap-1.5">
+                      <Label htmlFor="identityName">
+                        {t("newCircleHub.identityNameLabel")}
+                      </Label>
+                      <Input
+                        id="identityName"
+                        type="text"
+                        value={identityName}
+                        onChange={(e) => setIdentityName(e.target.value)}
+                        placeholder={identityNamePlaceholder}
+                        autoComplete="off"
+                      />
+                      <p className="text-muted-foreground text-sm">
+                        {t("newCircleHub.identityNameHelper")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Accordion
+            type="single"
+            collapsible
+            className="w-full rounded-xl border bg-card px-4"
+          >
+            <AccordionItem value="advanced" className="border-b-0">
+              <AccordionTrigger className="text-sm hover:no-underline">
+                <span className="flex w-full items-center gap-2.5">
+                  <span
+                    className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
+                    aria-hidden
+                  >
+                    3
+                  </span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("common.advancedSettings")}
+                  </span>
+                  {/* Right-aligned hint of what Advanced holds (matches design). */}
+                  <span className="ms-auto hidden text-xs font-normal normal-case text-muted-foreground sm:inline">
+                    {t("newCircleHub.advancedHint")}
+                  </span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="grid gap-4">
+                <div className="w-full grid gap-1.5">
+                  <BudgetRenewalSelect
+                    label={t("common.minRenewalLabel")}
+                    value={minBudgetRenewal}
+                    onChange={setMinBudgetRenewal}
+                  />
+                  <p className="-mt-2 text-sm text-muted-foreground">
+                    {t("common.minRenewalHelper")}
+                  </p>
+                </div>
+                <div className="w-full grid gap-1.5">
+                  <Label htmlFor="maxExpSecs">
+                    {t("common.maxWalletExpiryLabel")}
+                  </Label>
+                  <DurationInput
+                    id="maxExpSecs"
+                    seconds={maxExpSecs}
+                    onChange={setMaxExpSecs}
+                    min={60}
+                    presets={WEEK_SCALE_PRESETS}
+                  />
+                  <p className="text-muted-foreground text-sm">
+                    {t("newCircleHub.maxExpiryHelper")}
+                  </p>
+                </div>
+                <div className="w-full grid gap-1.5">
+                  <Label htmlFor="feesPpm">{t("common.feePpmLabel")}</Label>
+                  <Input
+                    id="feesPpm"
+                    type="number"
+                    min={0}
+                    value={feesPpm}
+                    onChange={(e) => setFeesPpm(Number(e.target.value))}
+                  />
+                  <p className="text-muted-foreground text-sm">
+                    {t("common.feePpmHelper")}
+                  </p>
+                </div>
+                <div className="w-full grid gap-1.5">
+                  <Label htmlFor="hubMaxAmount">
+                    {t("newCircleHub.hubBudgetLabel")}
+                  </Label>
+                  <CurrencyInput
+                    id="hubMaxAmount"
+                    amount={
+                      hubMaxAmountLoki
+                        ? scaleInputAmount(
+                            hubMaxAmountLoki,
+                            inputUnit
+                          ).toString()
+                        : ""
+                    }
+                    onAmountChange={(val) =>
+                      setHubMaxAmountLoki(
+                        parseInputAmount(parseFloat(val) || 0, inputUnit)
+                      )
+                    }
+                    inputUnit={inputUnit}
+                    onInputUnitChange={setInputUnit}
+                    min={0}
+                  />
+                  <p className="text-muted-foreground text-sm">
+                    {t("newCircleHub.hubBudgetHelper")}
+                  </p>
+                </div>
+                {hubMaxAmountLoki > 0 && (
+                  <div className="w-full grid gap-1.5">
+                    <BudgetRenewalSelect
+                      label={t("newCircleHub.hubBudgetRenewalLabel")}
+                      value={hubBudgetRenewal}
+                      onChange={setHubBudgetRenewal}
+                    />
+                    <p className="-mt-2 text-sm text-muted-foreground">
+                      {t("newCircleHub.hubBudgetRenewalHelper")}
                     </p>
                   </div>
                 )}
-
-                {isManagedFollowSet && (
-                  <FollowSetFields
-                    value={followSet}
-                    onChange={setFollowSet}
-                    authorPubkeyHex={nodePubkeyHex}
-                    hiddenMembersAvailable={hiddenMembersAvailable}
-                  />
-                )}
-
-                {memberMode === "followSet" && !isManagedFollowSet && (
-                  <WarningAlert>{t("followSet.externalWarning")}</WarningAlert>
-                )}
-
-                {memberMode === "pinned" && (
-                  <>
-                    <MemberPicker
-                      ownerPubkeyHex={resolvedPubkeyHex}
-                      selected={selectedMemberPubkeys}
-                      onChange={setSelectedMemberPubkeys}
-                    />
-                    {selectedMemberPubkeys.length === 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        {t("newCircleHub.pinMemberHelper")}
-                      </p>
-                    )}
-                  </>
-                )}
-
                 <div className="w-full grid gap-1.5">
-                  <Label htmlFor="identityName">
-                    {t("newCircleHub.identityNameLabel")}
-                  </Label>
-                  <Input
-                    id="identityName"
-                    type="text"
-                    value={identityName}
-                    onChange={(e) => setIdentityName(e.target.value)}
-                    placeholder={identityNamePlaceholder}
-                    autoComplete="off"
+                  <ExpirySelect
+                    label={t("newCircleHub.hubExpiryLabel")}
+                    value={hubExpiresAt}
+                    onChange={setHubExpiresAt}
                   />
-                  <p className="text-muted-foreground text-sm">
-                    {t("newCircleHub.identityNameHelper")}
+                  <p className="-mt-2 text-sm text-muted-foreground">
+                    {t("newCircleHub.hubExpiryHelper")}
                   </p>
                 </div>
-              </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+
+          <div className="grid gap-2">
+            <div className="flex gap-3">
+              <LoadingButton
+                loading={isLoading}
+                type="submit"
+                disabled={isSubmitDisabled}
+              >
+                {t("newCircleHub.submit")}
+              </LoadingButton>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate(-1)}
+              >
+                {tc("actions.cancel")}
+              </Button>
             </div>
+            {submitHint && (
+              <p className="text-sm text-muted-foreground">{submitHint}</p>
+            )}
+          </div>
+        </div>
+
+        {/* The membership preview rides along on the right so the full width
+            is used and you see the circle as members will. */}
+        {isNewIdentity && (
+          <aside className="lg:sticky lg:top-4">
             <MembershipPreview
               memberMode={memberMode}
               followSetD={followSetD}
@@ -689,158 +905,8 @@ export function NewCircleHub() {
               providerPubkeyHex={resolvedPubkeyHex}
               isManagedFollowSet={isManagedFollowSet}
             />
-          </div>
-        ) : null}
-
-        <FieldSet className="w-full gap-4">
-          <FieldLegend variant="label">
-            {t("newCircleHub.walletLimitsLegend")}
-          </FieldLegend>
-          <div className="w-full grid gap-1.5">
-            <Label htmlFor="perWalletMax">
-              {t("common.maxWalletBudgetLabel")}
-            </Label>
-            <CurrencyInput
-              id="perWalletMax"
-              amount={
-                perWalletMaxLoki
-                  ? scaleInputAmount(perWalletMaxLoki, inputUnit).toString()
-                  : ""
-              }
-              onAmountChange={(val) =>
-                setPerWalletMaxLoki(
-                  parseInputAmount(parseFloat(val) || 0, inputUnit)
-                )
-              }
-              inputUnit={inputUnit}
-              onInputUnitChange={setInputUnit}
-              required
-              min={scaleInputAmount(MIN_CIRCLE_WALLET_MAX_LOKI, inputUnit)}
-            />
-            <p className="text-muted-foreground text-sm">
-              {t("newCircleHub.maxWalletBudgetHelper")}{" "}
-              {t("newCircleHub.minWalletBudgetHint", {
-                min: MIN_CIRCLE_WALLET_MAX_LOKI,
-              })}
-            </p>
-          </div>
-          <div className="w-full grid gap-1.5">
-            <BudgetRenewalSelect
-              label={t("common.minRenewalLabel")}
-              value={minBudgetRenewal}
-              onChange={setMinBudgetRenewal}
-            />
-            <p className="-mt-2 text-sm text-muted-foreground">
-              {t("common.minRenewalHelper")}
-            </p>
-          </div>
-          <div className="w-full grid gap-1.5">
-            <Label htmlFor="maxExpSecs">
-              {t("common.maxWalletExpiryLabel")}
-            </Label>
-            <DurationInput
-              id="maxExpSecs"
-              seconds={maxExpSecs}
-              onChange={setMaxExpSecs}
-              min={60}
-              presets={WEEK_SCALE_PRESETS}
-            />
-            <p className="text-muted-foreground text-sm">
-              {t("newCircleHub.maxExpiryHelper")}
-            </p>
-          </div>
-          <div className="w-full grid gap-1.5">
-            <Label htmlFor="feesPpm">{t("common.feePpmLabel")}</Label>
-            <Input
-              id="feesPpm"
-              type="number"
-              min={0}
-              value={feesPpm}
-              onChange={(e) => setFeesPpm(Number(e.target.value))}
-            />
-            <p className="text-muted-foreground text-sm">
-              {t("common.feePpmHelper")}
-            </p>
-          </div>
-        </FieldSet>
-
-        <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value="advanced">
-            <AccordionTrigger className="text-sm">
-              {t("common.advancedSettings")}
-            </AccordionTrigger>
-            <AccordionContent className="grid gap-4">
-              <div className="w-full grid gap-1.5">
-                <Label htmlFor="hubMaxAmount">
-                  {t("newCircleHub.hubBudgetLabel")}
-                </Label>
-                <CurrencyInput
-                  id="hubMaxAmount"
-                  amount={
-                    hubMaxAmountLoki
-                      ? scaleInputAmount(hubMaxAmountLoki, inputUnit).toString()
-                      : ""
-                  }
-                  onAmountChange={(val) =>
-                    setHubMaxAmountLoki(
-                      parseInputAmount(parseFloat(val) || 0, inputUnit)
-                    )
-                  }
-                  inputUnit={inputUnit}
-                  onInputUnitChange={setInputUnit}
-                  min={0}
-                />
-                <p className="text-muted-foreground text-sm">
-                  {t("newCircleHub.hubBudgetHelper")}
-                </p>
-              </div>
-              {hubMaxAmountLoki > 0 && (
-                <div className="w-full grid gap-1.5">
-                  <BudgetRenewalSelect
-                    label={t("newCircleHub.hubBudgetRenewalLabel")}
-                    value={hubBudgetRenewal}
-                    onChange={setHubBudgetRenewal}
-                  />
-                  <p className="-mt-2 text-sm text-muted-foreground">
-                    {t("newCircleHub.hubBudgetRenewalHelper")}
-                  </p>
-                </div>
-              )}
-              <div className="w-full grid gap-1.5">
-                <ExpirySelect
-                  label={t("newCircleHub.hubExpiryLabel")}
-                  value={hubExpiresAt}
-                  onChange={setHubExpiresAt}
-                />
-                <p className="-mt-2 text-sm text-muted-foreground">
-                  {t("newCircleHub.hubExpiryHelper")}
-                </p>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-
-        <div className="grid gap-2">
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate(-1)}
-            >
-              {tc("actions.cancel")}
-            </Button>
-            <LoadingButton
-              loading={isLoading}
-              type="submit"
-              disabled={isSubmitDisabled}
-            >
-              {t("newCircleHub.submit")}
-            </LoadingButton>
-          </div>
-          {submitHint && (
-            <p className="text-sm text-muted-foreground">{submitHint}</p>
-          )}
-        </div>
+          </aside>
+        )}
       </form>
     </div>
   );

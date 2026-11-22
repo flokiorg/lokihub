@@ -84,10 +84,24 @@ export function DurationInput({
     onChange(nextSeconds);
   };
 
+  // A quiet chip: a single hairline border, a primary tint when active —
+  // consistent with the status/language chips elsewhere, instead of the old
+  // heavy 2px boxes. Wrapping (not a fixed 6-col grid) lets every preset show,
+  // so none has to be hidden to fit the row.
+  const chipClass = (active: boolean, disabled = false) =>
+    cn(
+      "rounded-md border px-3 py-1.5 text-nowrap text-center font-medium transition-colors",
+      disabled
+        ? "cursor-not-allowed border-input text-muted-foreground opacity-40"
+        : active
+          ? "border-primary/40 bg-primary/10 text-primary"
+          : "cursor-pointer border-input text-muted-foreground hover:border-primary/40 hover:text-foreground"
+    );
+
   return (
     <div className="grid gap-2">
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
-        {presets.slice(0, -1).map((preset) => {
+      <div className="flex flex-wrap gap-2 text-xs">
+        {presets.map((preset) => {
           const exceedsMax = max !== undefined && preset.seconds > max;
           return (
             <button
@@ -101,12 +115,9 @@ export function DurationInput({
                 setUnit(nextUnit);
                 setAmount(String(preset.seconds / UNIT_SECONDS[nextUnit]));
               }}
-              className={cn(
-                "cursor-pointer rounded text-nowrap border-2 text-center p-2.5",
-                exceedsMax && "cursor-not-allowed opacity-40",
-                activePreset?.seconds === preset.seconds
-                  ? "border-primary"
-                  : "border-muted"
+              className={chipClass(
+                activePreset?.seconds === preset.seconds,
+                exceedsMax
               )}
             >
               {preset.label}
@@ -120,10 +131,7 @@ export function DurationInput({
               setShowCustom(false);
               onChange(0);
             }}
-            className={cn(
-              "cursor-pointer rounded text-nowrap border-2 text-center p-2.5",
-              isNever ? "border-primary" : "border-muted"
-            )}
+            className={chipClass(isNever)}
           >
             {neverLabel}
           </button>
@@ -134,10 +142,7 @@ export function DurationInput({
             setShowCustom(true);
             requestAnimationFrame(() => inputRef.current?.focus());
           }}
-          className={cn(
-            "cursor-pointer rounded text-nowrap border-2 text-center p-2.5",
-            showCustom ? "border-primary" : "border-muted"
-          )}
+          className={chipClass(showCustom)}
         >
           Custom
         </button>

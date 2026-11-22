@@ -567,7 +567,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                     )}
                   </span>
                   <LinkButton
-                    to="/settings/services"
+                    to="/settings/services#lsp"
                     variant="link"
                     className="h-auto p-0 text-xs underline"
                   >
