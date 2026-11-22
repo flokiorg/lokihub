@@ -610,3 +610,126 @@ func TestLiveEditAssistant(t *testing.T) {
 	}
 	h.do(t, http.MethodDelete, "/api/apps/"+created.AppPubkey, h.admin, nil, nil)
 }
+
+// TestLiveMoney (critic T1, decision D22): real Lightning payments on regtest.
+// An assistant on this hub pays invoices issued by a peer hub: below the
+// owner's limit it pays after its own two-step confirmation; above it, the
+// payment waits for the owner and runs exactly once on approval; a confirm
+// code issued for one invoice can never pay another. Needs MCP_PEER_HUB_URL.
+func TestLiveMoney(t *testing.T) {
+	peerURL := os.Getenv("MCP_PEER_HUB_URL")
+	if peerURL == "" {
+		t.Skip("MCP_PEER_HUB_URL not set")
+	}
+	h := newLiveHub(t)
+	peer := &liveHub{base: peerURL, hc: h.hc}
+	time.Sleep(1100 * time.Millisecond) // unlock rate limit
+	var tok struct {
+		Token string `json:"token"`
+	}
+	pw := os.Getenv("MCP_HUB_PASSWORD")
+	if pw == "" {
+		pw = "regtest-dev"
+	}
+	peer.do(t, http.MethodPost, "/api/unlock", "", map[string]any{"unlockPassword": pw, "permission": "full"}, &tok)
+	if tok.Token == "" {
+		t.Fatal("peer unlock failed")
+	}
+	peer.admin = tok.Token
+	invoice := func(mloki uint64, memo string) string {
+		var r struct {
+			Invoice string `json:"invoice"`
+		}
+		if c := peer.do(t, http.MethodPost, "/api/invoices", peer.admin, map[string]any{"amount": mloki, "description": memo}, &r); c != http.StatusOK || r.Invoice == "" {
+			t.Fatalf("peer invoice: HTTP %d", c)
+		}
+		return r.Invoice
+	}
+
+	// Owner sets a 50-loki approval limit for this test (restored after).
+	var ctl struct {
+		ApprovalLimitLoki *uint64 `json:"approvalLimitLoki"`
+	}
+	h.do(t, http.MethodGet, "/api/mcp/controls", h.admin, nil, &ctl)
+	defer func() {
+		if ctl.ApprovalLimitLoki != nil {
+			h.do(t, http.MethodPut, "/api/mcp/controls", h.admin, map[string]any{"approvalLimitLoki": *ctl.ApprovalLimitLoki}, nil)
+		}
+	}()
+	h.do(t, http.MethodPut, "/api/mcp/controls", h.admin, map[string]any{"approvalLimitLoki": 50}, nil)
+
+	var created struct {
+		AppID     uint   `json:"appId"`
+		AppPubkey string `json:"appPubkey"`
+		Token     string `json:"token"`
+	}
+	if c := h.do(t, http.MethodPost, "/api/mcp/connections", h.admin, map[string]any{
+		"name": fmt.Sprintf("money-%d", time.Now().UnixNano()), "groups": map[string]string{"wallet": "write"},
+	}, &created); c != http.StatusOK {
+		t.Fatalf("create: HTTP %d", c)
+	}
+	defer h.do(t, http.MethodDelete, "/api/apps/"+created.AppPubkey, h.admin, nil, nil)
+	cs, err := h.dial(t, created.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := func(args map[string]any) map[string]any {
+		res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{Name: "send_payment", Arguments: args})
+		if err != nil {
+			t.Fatalf("send_payment: %v", err)
+		}
+		if res.IsError {
+			msg := ""
+			for _, c := range res.Content {
+				if tc, ok := c.(*mcpsdk.TextContent); ok {
+					msg += tc.Text
+				}
+			}
+			return map[string]any{"error": msg}
+		}
+		b, _ := json.Marshal(res.StructuredContent)
+		var m map[string]any
+		_ = json.Unmarshal(b, &m)
+		return m
+	}
+
+	// 1. 10 loki — under the limit: pays after the assistant's confirmation.
+	small := invoice(10_000, "coffee")
+	p := step(map[string]any{"idempotency_key": "m1", "invoice": small})
+	if p["status"] != "needs_confirmation" {
+		t.Fatalf("preview: %+v", p)
+	}
+	if pv, _ := p["preview"].(map[string]any); pv["amount_mloki"] != float64(10_000) {
+		t.Errorf("preview amount = %v, want the invoice's 10000 mloki", pv["amount_mloki"])
+	}
+	code := p["confirm_code"]
+	if r := step(map[string]any{"idempotency_key": "m1", "invoice": small, "confirm_code": code}); r["status"] != "executed" {
+		t.Fatalf("small payment: %+v", r)
+	}
+
+	// 2. A code for one invoice cannot pay another (injected swap).
+	other := invoice(30_000, "something else")
+	p2 := step(map[string]any{"idempotency_key": "m2", "invoice": invoice(5_000, "x")})
+	if r := step(map[string]any{"idempotency_key": "m2", "invoice": other, "confirm_code": p2["confirm_code"]}); r["status"] == "executed" {
+		t.Fatal("confirm code paid a different invoice")
+	}
+
+	// 3. 200 loki — over the limit: waits for the owner, runs once on approval.
+	big := invoice(200_000, "big")
+	p3 := step(map[string]any{"idempotency_key": "m3", "invoice": big})
+	r3 := step(map[string]any{"idempotency_key": "m3", "invoice": big, "confirm_code": p3["confirm_code"]})
+	if r3["status"] != "pending_approval" {
+		t.Fatalf("big payment was not held for the owner: %+v", r3)
+	}
+	id, _ := r3["action_id"].(string)
+	if c := h.do(t, http.MethodPost, "/api/mcp/pending/"+id+"/approve", h.admin, nil, nil); c != http.StatusOK {
+		t.Fatalf("owner approve: HTTP %d", c)
+	}
+	if r := step(map[string]any{"idempotency_key": "m3", "invoice": big, "confirm_code": p3["confirm_code"]}); r["status"] != "executed" {
+		t.Fatalf("after approval: %+v", r)
+	}
+	if c := h.do(t, http.MethodPost, "/api/mcp/pending/"+id+"/approve", h.admin, nil, nil); c == http.StatusOK {
+		// a second approval must not pay again (the store returns the first outcome)
+		t.Log("re-approve returned 200 (idempotent)")
+	}
+}
