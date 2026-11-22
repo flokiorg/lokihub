@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	mcpExecutionTTL     = 24 * time.Hour // the idempotency window
-	mcpActivityKeepDays = 90             // durable activity retention
-	mcpActivityPerApp   = 5000           // and at most this many per assistant
-	mcpPruneEvery       = 200            // writes between prunes
+	mcpExecutionTTL        = 24 * time.Hour // the idempotency window
+	mcpActivityKeepDays    = 90             // durable activity retention
+	mcpActivityPerApp      = 5000           // and at most this many per assistant
+	mcpActivityFailsPerApp = 500            // failed/refused calls, kept separately
+	mcpPruneEvery          = 200            // writes between prunes
 )
 
 // gormExecutions persists completed assistant writes (critic O1).
@@ -40,6 +41,9 @@ func (g *gormExecutions) Put(appID uint, tool, key, argsHash string, result []by
 	if g.n.Add(1)%mcpPruneEvery == 0 {
 		g.db.Where("created_at < ?", time.Now().Add(-mcpExecutionTTL)).Delete(&db.MCPExecution{})
 	}
+	// Replace an expired row with the same key (the unique index ignores
+	// expiry), so a reused key is always persisted (pentest R2 L2).
+	g.db.Where("app_id = ? AND tool = ? AND key = ? AND created_at <= ?", appID, tool, key, time.Now().Add(-mcpExecutionTTL)).Delete(&db.MCPExecution{})
 	return g.db.Create(&db.MCPExecution{AppID: appID, Tool: tool, Key: key, ArgsHash: argsHash, Result: string(result)}).Error
 }
 
@@ -56,11 +60,18 @@ func (g *gormActivity) Save(e mcp.ActivityEntry) error {
 	return g.db.Create(&db.MCPActivity{AppID: e.AppID, Tool: e.Tool, Outcome: e.Outcome, Detail: e.Detail, CreatedAt: e.Time}).Error
 }
 
+// prune keeps 90 days and, per assistant, the newest entries of each class
+// separately — failures can never push out real activity (pentest R2 M3).
 func (g *gormActivity) prune(appID uint) {
 	g.db.Where("created_at < ?", time.Now().AddDate(0, 0, -mcpActivityKeepDays)).Delete(&db.MCPActivity{})
-	var cutoff db.MCPActivity
-	if err := g.db.Where("app_id = ?", appID).Order("id desc").Offset(mcpActivityPerApp).First(&cutoff).Error; err == nil {
-		g.db.Where("app_id = ? AND id <= ?", appID, cutoff.ID).Delete(&db.MCPActivity{})
+	for _, c := range []struct {
+		cond string
+		keep int
+	}{{"outcome = 'failed'", mcpActivityFailsPerApp}, {"outcome != 'failed'", mcpActivityPerApp}} {
+		var cutoff db.MCPActivity
+		if err := g.db.Where("app_id = ? AND "+c.cond, appID).Order("id desc").Offset(c.keep).First(&cutoff).Error; err == nil {
+			g.db.Where("app_id = ? AND "+c.cond+" AND id <= ?", appID, cutoff.ID).Delete(&db.MCPActivity{})
+		}
 	}
 }
 

@@ -1,10 +1,11 @@
-import { BotIcon, ShieldCheckIcon } from "lucide-react";
+import { BotIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import AssistantGroupPicker from "src/components/connections/AssistantGroupPicker";
+import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import {
@@ -19,7 +20,13 @@ import { Label } from "src/components/ui/label";
 import { AssistantLevels, levelsToGrants } from "src/hooks/useAIAssistants";
 import { request } from "src/utils/request";
 
-type ConsentView = { clientName: string; redirectHost: string };
+type ConsentView = {
+  clientName: string;
+  redirectHost: string;
+  redirectUri: string;
+  domain: string;
+  pathTenant: boolean;
+};
 
 // Read-only by default for a remote request: the owner opts in to more.
 const CONSENT_DEFAULT: AssistantLevels = {
@@ -57,7 +64,7 @@ export function ConsentAssistant() {
         setView(v);
         // Never pre-fill the attacker-choosable client name (pentest E MED-1/2):
         // default to where the access goes, which the hub verified.
-        setName(v?.redirectHost ? `Assistant via ${v.redirectHost}` : "");
+        setName(v?.domain ? `Assistant via ${v.domain}` : "");
       })
       .catch((e: Error) => setError(e.message));
   }, [id, t]);
@@ -125,8 +132,28 @@ export function ConsentAssistant() {
             </CardDescription>
             <CardTitle className="flex items-center gap-2 text-2xl break-all">
               <BotIcon className="w-5 h-5 shrink-0" />
-              {view.redirectHost}
+              {view.domain || view.redirectHost}
             </CardTitle>
+            <CardDescription className="break-all font-mono text-xs">
+              {view.redirectUri}
+            </CardDescription>
+            {view.pathTenant && (
+              <Alert>
+                <TriangleAlertIcon className="w-4 h-4" />
+                <AlertTitle>
+                  {t(
+                    "consent.sharedHostTitle",
+                    "Shared address — check who it belongs to"
+                  )}
+                </AlertTitle>
+                <AlertDescription>
+                  {t(
+                    "consent.sharedHostBody",
+                    "This callback is a page on a site that hosts many people's pages, so the site name alone doesn't tell you who receives access. Only continue if you recognise this exact address."
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
             <CardDescription className="flex flex-col gap-1">
               <span>
                 {t("consent.callsItself", "It calls itself")}{" "}

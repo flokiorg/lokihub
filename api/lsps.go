@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	decodepay "github.com/flokiorg/lokihub/internal/decodepay"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -500,7 +501,7 @@ func verifyLSPInvoice(invoice string, orderTotalLoki uint64, lspPubkey string) e
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrLSPInvoiceMismatch, err)
 	}
-	if inv.AmountMloki < 0 || uint64(inv.AmountMloki) != orderTotalLoki*1000 {
+	if orderTotalLoki > math.MaxUint64/1000 || inv.AmountMloki < 0 || uint64(inv.AmountMloki) != orderTotalLoki*1000 {
 		return fmt.Errorf("%w (invoice %d mloki, quoted %d loki)", ErrLSPInvoiceMismatch, inv.AmountMloki, orderTotalLoki)
 	}
 	want := strings.ToLower(strings.SplitN(strings.TrimSpace(lspPubkey), "@", 2)[0])

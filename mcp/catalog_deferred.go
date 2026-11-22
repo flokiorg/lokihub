@@ -1074,7 +1074,7 @@ func (s *Server) registerLSPTools(srv *mcpsdk.Server, conn *Conn) {
 					}
 					same := 0
 					for _, o := range entries {
-						if o.NodeKey != e.NodeKey && strings.EqualFold(strings.TrimSpace(o.Name), strings.TrimSpace(e.Name)) {
+						if o.NodeKey != e.NodeKey && NameSkeleton(o.Name) == NameSkeleton(e.Name) {
 							same++
 						}
 					}

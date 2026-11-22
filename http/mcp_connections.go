@@ -71,6 +71,9 @@ func (httpSvc *HttpService) registerMCPConnections(g *echo.Group) {
 			t := time.Now().AddDate(0, 0, req.ExpiresInDays)
 			exp = &t
 		}
+		if httpSvc.mcpNameLooksTaken(req.Name, 0) {
+			return echo.NewHTTPError(http.StatusConflict, "another AI assistant already has a name that looks the same — choose a different name")
+		}
 		id, tok, err := mcp.CreateConnection(httpSvc.mcpAppCreator(), httpSvc.mcpTokens(), req.Name, req.Groups, exp)
 		if err != nil {
 			if errors.Is(err, mcp.ErrNoSecret) {
@@ -137,8 +140,8 @@ func (httpSvc *HttpService) registerMCPConnections(g *echo.Group) {
 				}
 				var n int64
 				tx.Model(&db.App{}).Where("name = ? AND id != ?", name, app.ID).Count(&n)
-				if n > 0 {
-					return echo.NewHTTPError(http.StatusConflict, "another connection already has that name")
+				if n > 0 || httpSvc.mcpNameLooksTaken(name, app.ID) {
+					return echo.NewHTTPError(http.StatusConflict, "another connection already has a name that looks the same")
 				}
 				if err := tx.Model(&app).Update("name", name).Error; err != nil {
 					return err
@@ -180,10 +183,38 @@ func (httpSvc *HttpService) registerMCPConnections(g *echo.Group) {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to update the assistant")
 		}
 		if req.RotateKey {
+			if httpSvc.mcpSrv != nil {
+				httpSvc.mcpSrv.RevokeOutstanding(uint(id))
+			}
+			if httpSvc.mcpOAuth != nil {
+				httpSvc.mcpOAuth.DropCodesForApp(uint(id))
+			}
 			if token, err = httpSvc.mcpTokens().Mint(uint(id)); err != nil {
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to issue the new key")
 			}
 		}
 		return c.JSON(http.StatusOK, map[string]string{"token": token})
 	})
+}
+
+// mcpNameLooksTaken reports whether another AI assistant's name has the same
+// visual skeleton (case, lookalike letters, invisible characters folded) —
+// such twins would make the owner's approval queue ambiguous (pentest R2-3
+// MED-4).
+func (httpSvc *HttpService) mcpNameLooksTaken(name string, exceptID uint) bool {
+	want := mcp.NameSkeleton(name)
+	if want == "" {
+		return false
+	}
+	var names []struct {
+		ID   uint
+		Name string
+	}
+	httpSvc.db.Model(&db.App{}).Select("id, name").Where("kind = ? AND id != ?", mcp.AppKindMCP, exceptID).Find(&names)
+	for _, n := range names {
+		if mcp.NameSkeleton(n.Name) == want {
+			return true
+		}
+	}
+	return false
 }

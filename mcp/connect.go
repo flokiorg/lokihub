@@ -103,11 +103,11 @@ func CleanConnectionName(s string) string {
 	space := false
 	for _, r := range s {
 		switch {
-		case unicode.IsSpace(r):
+		case unicode.IsSpace(r), blankish(r):
 			space = b.Len() > 0
 			continue
 		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), unicode.Is(unicode.Co, r),
-			r == 0x2028, r == 0x2029, r == 0xfffd:
+			r == 0x2028, r == 0x2029, r == 0xfffd, invisibleish(r):
 			continue
 		}
 		if space {
@@ -121,4 +121,47 @@ func CleanConnectionName(s string) string {
 		out = string(r[:64])
 	}
 	return strings.TrimSpace(out)
+}
+
+// invisibleish reports characters that render as nothing or as blank space
+// without being whitespace: combining marks, variation selectors, Hangul
+// fillers, the braille blank and other default-ignorable code points
+// (pentest R2-3 MED-4).
+func invisibleish(r rune) bool {
+	switch {
+	case unicode.Is(unicode.Mn, r), unicode.Is(unicode.Me, r):
+		return true
+	case r == 0x17B4, r == 0x17B5, r == 0x180E, r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0100 && r <= 0xE01EF, r == 0x2060, r == 0xFEFF:
+		return true
+	}
+	return false
+}
+
+// confusables maps Cyrillic and Greek letters that look like Latin ones.
+var confusables = map[rune]rune{
+	'а': 'a', 'в': 'b', 'е': 'e', 'ѕ': 's', 'і': 'i', 'ј': 'j', 'к': 'k', 'м': 'm', 'н': 'h', 'о': 'o',
+	'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'х': 'x', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ԝ': 'w', 'ӏ': 'l',
+	'α': 'a', 'β': 'b', 'ε': 'e', 'η': 'n', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o', 'ρ': 'p', 'τ': 't',
+	'υ': 'u', 'χ': 'x', 'γ': 'y', 'ω': 'w', 'ɡ': 'g', 'ı': 'i', 'ℓ': 'l', '0': 'o', '1': 'l',
+}
+
+// NameSkeleton reduces an assistant name to how it LOOKS: cleaned, lower
+// case, lookalike letters folded to Latin, spaces collapsed. Two names with the
+// same skeleton are refused as duplicates (pentest R2-3 MED-4).
+func NameSkeleton(s string) string {
+	s = strings.ToLower(CleanConnectionName(s))
+	var b strings.Builder
+	for _, r := range s {
+		if m, ok := confusables[r]; ok {
+			r = m
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// blankish: characters that render as an empty gap (Hangul fillers, braille
+// blank) — treated as spaces so they can't disguise a duplicate name.
+func blankish(r rune) bool {
+	return r == 0x115F || r == 0x1160 || r == 0x3164 || r == 0xFFA0 || r == 0x2800
 }

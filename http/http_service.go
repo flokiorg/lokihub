@@ -202,14 +202,19 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	// connection gives it: echo's default identifier trusts X-Forwarded-For and
 	// X-Real-IP, so any caller could name a fresh address on each attempt
 	// (GHSA-246p-cpwv-v3jq). Behind a proxy every client then shares one budget.
-	unlockRateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-		Store:               middleware.NewRateLimiterMemoryStore(1),
-		IdentifierExtractor: unlockLimiterIdentifier,
-	})
-	e.POST("/api/start", httpSvc.startHandler, unlockRateLimiter)
-	e.POST("/api/unlock", httpSvc.unlockHandler, unlockRateLimiter)
-	e.POST("/api/backup", httpSvc.createBackupHandler, unlockRateLimiter)
-	e.GET("/logout", httpSvc.logoutHandler, unlockRateLimiter)
+	// One bucket PER ROUTE: an unauthenticated GET /logout (which any web page
+	// can trigger) must not be able to use up the owner's unlock budget
+	// (pentest R2-3 LOW-1). /logout itself needs no limiter.
+	unlockRateLimiter := func() echo.MiddlewareFunc {
+		return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store:               middleware.NewRateLimiterMemoryStore(1),
+			IdentifierExtractor: unlockLimiterIdentifier,
+		})
+	}
+	e.POST("/api/start", httpSvc.startHandler, unlockRateLimiter())
+	e.POST("/api/unlock", httpSvc.unlockHandler, unlockRateLimiter())
+	e.POST("/api/backup", httpSvc.createBackupHandler, unlockRateLimiter())
+	e.GET("/logout", httpSvc.logoutHandler)
 
 	// Mount the MCP endpoint BEFORE the SPA fallback so the HTML5 static handler
 	// does not swallow /mcp (and, in M4, the OAuth /.well-known routes).

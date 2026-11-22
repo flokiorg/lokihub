@@ -51,7 +51,8 @@ type PendingAction struct {
 	Created time.Time
 
 	argsHash  [32]byte
-	apiMethod string // re-gated against the connection's CURRENT scopes at approve time
+	apiMethod string       // re-gated against the connection's CURRENT scopes at approve time
+	check     func() error // re-verifies the shown preview still holds at approve time
 	run       func() (any, error)
 	once      sync.Once
 	result    any
@@ -110,7 +111,9 @@ func (s *PendingStore) CreateOrGetNew(appID uint, tool, key string, args [32]byt
 	}
 	s.seq++
 	a := &PendingAction{
-		ID:       fmt.Sprintf("act-%d-%d", appID, s.seq),
+		// Random part: ids never repeat across restarts, so a persisted
+		// reference can't point at a different, later action (pentest R2 L1).
+		ID:       fmt.Sprintf("act-%d-%d-%s", appID, s.seq, randToken(6)),
 		AppID:    appID,
 		Tool:     tool,
 		Summary:  summary,
@@ -303,4 +306,22 @@ func (s *PendingStore) method(id string) string {
 		return a.apiMethod
 	}
 	return ""
+}
+
+// SetCheck records an approve-time re-verification for an action.
+func (s *PendingStore) SetCheck(id string, check func() error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a := s.byID[id]; a != nil && a.check == nil {
+		a.check = check
+	}
+}
+
+func (s *PendingStore) checkFor(id string) func() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a := s.byID[id]; a != nil {
+		return a.check
+	}
+	return nil
 }

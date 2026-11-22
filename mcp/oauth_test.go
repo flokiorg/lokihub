@@ -248,3 +248,41 @@ func TestOAuthStoreBounds(t *testing.T) {
 		}
 	}
 }
+
+// TestConsentFloodSparesOwner (pentest R2-3 MED-1): flooding sources only
+// displace their own pending consents; the owner's survives.
+func TestConsentFloodSparesOwner(t *testing.T) {
+	s := NewOAuthStore()
+	res := "https://hub.example/mcp"
+	owner, _ := s.RegisterFrom("Desk", []string{"https://legit.example/cb"}, "1.1.1.1")
+	ownerConsent, err := s.BeginConsentFrom(authReq(owner), res, "1.1.1.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ip := 0; ip < 40; ip++ { // 40 flooding addresses
+		addr := fmt.Sprintf("10.9.0.%d", ip)
+		for c := 0; c < 3; c++ {
+			cl, _ := s.RegisterFrom("x", []string{"https://x.example/cb"}, addr)
+			for i := 0; i < 10; i++ {
+				_, _ = s.BeginConsentFrom(authReq(cl), res, addr)
+			}
+		}
+	}
+	if _, err := s.Consent(ownerConsent); err != nil {
+		t.Fatal("flood pushed out the owner's pending consent")
+	}
+	per := map[string]int{}
+	for _, c := range s.consents {
+		per[c.fromIP]++
+	}
+	for ip, n := range per {
+		if n > maxConsentsPerIP {
+			t.Errorf("source %s holds %d consents (cap %d)", ip, n, maxConsentsPerIP)
+		}
+	}
+	for _, u := range []string{"https://claude.ai;evil.com/cb", "https://claude.ai,evil.com/cb"} {
+		if _, err := s.Register("ok", []string{u}); err == nil {
+			t.Errorf("odd host syntax accepted: %s", u)
+		}
+	}
+}

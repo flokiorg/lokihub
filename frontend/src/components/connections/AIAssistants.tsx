@@ -139,6 +139,7 @@ export default function AIAssistants() {
                 className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0"
               >
                 <PendingFrom
+                  tool={p.tool}
                   summary={p.summary}
                   createdAt={p.createdAt}
                   appId={p.appId}
@@ -352,6 +353,9 @@ function AssistantRow({
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-medium truncate">{assistant.name}</span>
+              <span className="text-sm text-muted-foreground">
+                #{assistant.appId}
+              </span>
               <Badge variant={expired ? "warning" : "positive"}>
                 {expired
                   ? t("assistants.expired", "Expired")
@@ -587,11 +591,13 @@ function LocalAccessCard({
 // PendingFrom shows WHO is asking in a way a lookalike name cannot fake: the
 // assistant's id, when it was connected (flagged when new) and when it asked.
 function PendingFrom({
+  tool,
   summary,
   createdAt,
   appId,
   assistant,
 }: {
+  tool: string;
   summary: string;
   createdAt: string;
   appId: number;
@@ -602,7 +608,12 @@ function PendingFrom({
     assistant && dayjs(assistant.createdAt).isAfter(dayjs().subtract(1, "day"));
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <span className="font-medium break-words">{summary}</span>
+      <span className="font-medium break-words whitespace-pre-line">
+        {summary}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        <code>{tool}</code>
+      </span>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
         <span>
           {assistant?.name ?? t("assistants.unknown", "An assistant")} · #

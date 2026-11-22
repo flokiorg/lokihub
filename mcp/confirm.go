@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -215,7 +217,9 @@ func confirmToolWarn[In, Out any](
 			if err != nil {
 				return nil, zero, toolErr(err)
 			}
-			p = scrubOutput(p)
+			if p, err = scrubOutput(p); err != nil {
+				return nil, zero, err
+			}
 			c, err := s.confirms.Issue(conn.AppID, name, bind, ArgsHash(p))
 			if err != nil {
 				return nil, zero, err
@@ -238,7 +242,9 @@ func confirmToolWarn[In, Out any](
 			if err != nil {
 				return nil, err
 			}
-			p = scrubOutput(p) // fingerprint exactly what was shown
+			if p, err = scrubOutput(p); err != nil { // fingerprint exactly what was shown
+				return nil, err
+			}
 			if err := s.confirms.Redeem(code, conn.AppID, name, bind, ArgsHash(p)); err != nil {
 				return nil, err
 			}
@@ -248,13 +254,33 @@ func confirmToolWarn[In, Out any](
 			owner, release := s.ownerGate(name, p)
 			if owner {
 				captured := in
-				act, _, err := s.pending.CreateOrGetNew(conn.AppID, name, key, bind, ownerSummary(p), func() (any, error) {
+				summary, err := ownerSummary(p)
+				if err != nil {
+					return nil, err
+				}
+				act, _, err := s.pending.CreateOrGetNew(conn.AppID, name, key, bind, summary, func() (any, error) {
 					return run(context.Background(), s.api, captured)
 				})
 				if err != nil {
 					return nil, err
 				}
 				s.pending.SetMethod(act.ID, apiMethod)
+				// At approval, rebuild the preview: if what would run no longer
+				// matches what the owner is reading, refuse (pentest R2-4 LOW-3).
+				shown := ArgsHash(p)
+				s.pending.SetCheck(act.ID, func() error {
+					p2, err := preview(context.Background(), s.api, captured)
+					if err != nil {
+						return err
+					}
+					if p2, err = scrubOutput(p2); err != nil {
+						return err
+					}
+					if ArgsHash(p2) != shown {
+						return ErrConfirmStale
+					}
+					return nil
+				})
 				return ownerQueued{id: act.ID}, nil
 			}
 			out, err := run(ctx, s.api, in)
@@ -275,10 +301,18 @@ func confirmToolWarn[In, Out any](
 			if out, ok := r.Result.(Out); ok && r.Status == "executed" {
 				st.Result = &out
 			}
-			return nil, scrubOutput(st), nil
+			clean, err := scrubOutput(st)
+			if err != nil {
+				return nil, zero, err
+			}
+			return nil, clean, nil
 		}
 		out := asOut[Out](res)
-		return nil, scrubOutput(PaymentStep[Out]{Status: "executed", Result: &out}), nil
+		clean, err := scrubOutput(PaymentStep[Out]{Status: "executed", Result: &out})
+		if err != nil {
+			return nil, zero, err
+		}
+		return nil, clean, nil
 	})
 }
 
@@ -453,9 +487,9 @@ func (s *Server) ownerGate(tool string, p *PaymentPreview) (owner bool, release 
 
 // ownerSummary is the approval text the owner sees: hub-built preview facts
 // only (no invoice memo or other third-party text), cleaned and bounded.
-func ownerSummary(p *PaymentPreview) string {
+func ownerSummary(p *PaymentPreview) (string, error) {
 	if p == nil {
-		return "(no details)"
+		return "(no details)", nil
 	}
 	out := p.Action
 	if p.AmountMloki > 0 {
@@ -464,5 +498,31 @@ func ownerSummary(p *PaymentPreview) string {
 	if p.Recipient != "" {
 		out += " → " + p.Recipient
 	}
-	return clip(out, 600)
+	// Every detail the preview carried, never truncated: the owner approves
+	// exactly what will run (pentest R2 M2 — clipping hid a fee change).
+	for _, d := range p.Details {
+		out += "\n• " + d.Label + ": " + d.Value
+	}
+	out = clipLines(out)
+	if utf8.RuneCountInString(out) > maxOwnerSummary {
+		return "", ErrTooMuchToReview
+	}
+	return out, nil
+}
+
+// maxOwnerSummary bounds what one approval may ask the owner to read; a larger
+// request is refused (split it) rather than shown truncated.
+const maxOwnerSummary = 4000
+
+// ErrTooMuchToReview — the request carries too much detail for one approval.
+var ErrTooMuchToReview = errors.New("mcp: this request has too much detail for the owner to review in one approval — split it into smaller changes")
+
+// clipLines cleans each line (no hidden/direction characters) keeping the
+// bullet line breaks this summary adds itself.
+func clipLines(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = clip(l, maxOwnerSummary)
+	}
+	return strings.Join(lines, "\n")
 }

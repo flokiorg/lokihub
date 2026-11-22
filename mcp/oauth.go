@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"golang.org/x/net/publicsuffix"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -59,7 +60,12 @@ type consent struct {
 	req      AuthorizeRequest
 	resource string
 	expires  time.Time
+	fromIP   string // requesting peer (flood bound)
 }
+
+// maxConsentsPerIP bounds the pending authorizations one source may hold
+// (pentest R2-3 MED-1: a flood pushed the owner's consent out).
+const maxConsentsPerIP = 10
 
 type authCode struct {
 	clientID, redirectURI, challenge, resource string
@@ -103,6 +109,9 @@ func validRedirectURI(raw string) bool {
 			return false
 		}
 	}
+	if !validHostSyntax(u.Host) {
+		return false
+	}
 	for _, r := range u.Host {
 		if r > 0x7e || r <= 0x20 {
 			return false // IDN lookalikes must be registered in punycode, which is what the owner sees
@@ -132,7 +141,7 @@ const maxUnprovenPerIP = 10
 // RegisterFrom is Register with the registering peer's address.
 func (s *OAuthStore) RegisterFrom(name string, redirectURIs []string, ip string) (*OAuthClient, error) {
 	name = strings.TrimSpace(name)
-	if name == "" || utf8.RuneCountInString(name) > maxClientNameLen || !cleanText(name, maxClientNameLen, false) {
+	if name == "" || utf8.RuneCountInString(name) > maxClientNameLen || !cleanText(name, maxClientNameLen, false) || hasInvisible(name) {
 		return nil, fmt.Errorf("%w: client_name required (max %d chars, no control, invisible or direction-changing characters)", ErrOAuthInvalidRequest, maxClientNameLen)
 	}
 	if len(redirectURIs) == 0 || len(redirectURIs) > maxRedirectURIs {
@@ -344,6 +353,14 @@ func pkceChallenge(verifier string) string {
 type ConsentView struct {
 	ClientName   string `json:"clientName"`
 	RedirectHost string `json:"redirectHost"`
+	// RedirectURI is the full callback the code is sent to, and Domain its
+	// registrable domain (eTLD+1): shared hosts (script.google.com/macros/s/…)
+	// and long lookalike subdomains are only judged right on these (pentest
+	// R2-3 MED-2). PathTenant flags a callback whose path or query decides who
+	// receives the code.
+	RedirectURI string `json:"redirectUri"`
+	Domain      string `json:"domain"`
+	PathTenant  bool   `json:"pathTenant"`
 }
 
 // BeginConsent validates an authorization request (with the resource computed
@@ -351,6 +368,11 @@ type ConsentView struct {
 // random consent id. The consent screen refers to the id only, so the browser
 // never gets to re-supply redirect_uri / resource / PKCE values.
 func (s *OAuthStore) BeginConsent(r AuthorizeRequest, expectedResource string) (string, error) {
+	return s.BeginConsentFrom(r, expectedResource, "")
+}
+
+// BeginConsentFrom is BeginConsent with the requesting peer's address.
+func (s *OAuthStore) BeginConsentFrom(r AuthorizeRequest, expectedResource, ip string) (string, error) {
 	if _, err := s.ValidateAuthorize(r, expectedResource); err != nil {
 		return "", err
 	}
@@ -358,23 +380,44 @@ func (s *OAuthStore) BeginConsent(r AuthorizeRequest, expectedResource string) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
-	for k, c := range s.consents { // prune expired before bounding
-		if now.After(c.expires) {
+	for k, c := range s.consents { // prune expired / orphaned before bounding
+		if _, live := s.clients[c.req.ClientID]; now.After(c.expires) || !live {
 			delete(s.consents, k)
 		}
 	}
-	if len(s.consents) >= maxConsents {
-		// Evict the oldest pending consent rather than refusing: a flood can
-		// then only push out other unanswered requests (which the user simply
-		// restarts), never lock out a legitimate authorize (re-audit N2).
-		var oldestK string
-		var oldest time.Time
+	oldestWhere := func(match func(*consent) bool) string {
+		var key string
+		var t time.Time
 		for k, c := range s.consents {
-			if oldestK == "" || c.expires.Before(oldest) {
-				oldestK, oldest = k, c.expires
+			if match(c) && (key == "" || c.expires.Before(t)) {
+				key, t = k, c.expires
 			}
 		}
-		delete(s.consents, oldestK)
+		return key
+	}
+	if ip != "" {
+		mine := 0
+		for _, c := range s.consents {
+			if c.fromIP == ip {
+				mine++
+			}
+		}
+		if mine >= maxConsentsPerIP {
+			delete(s.consents, oldestWhere(func(c *consent) bool { return c.fromIP == ip }))
+		}
+	}
+	if len(s.consents) >= maxConsents {
+		// Full: evict from the source holding the most pending requests, so a
+		// flood only displaces its own (re-audit N2, pentest R2-3 MED-1).
+		count := map[string]int{}
+		top, n := "", 0
+		for _, c := range s.consents {
+			count[c.fromIP]++
+			if count[c.fromIP] > n {
+				top, n = c.fromIP, count[c.fromIP]
+			}
+		}
+		delete(s.consents, oldestWhere(func(c *consent) bool { return c.fromIP == top }))
 	}
 	perClient := 0
 	for _, c := range s.consents {
@@ -396,7 +439,7 @@ func (s *OAuthStore) BeginConsent(r AuthorizeRequest, expectedResource string) (
 		delete(s.consents, oldestK)
 	}
 
-	s.consents[id] = &consent{req: r, resource: expectedResource, expires: now.Add(consentTTL)}
+	s.consents[id] = &consent{req: r, resource: expectedResource, expires: now.Add(consentTTL), fromIP: ip}
 	return id, nil
 }
 
@@ -412,11 +455,18 @@ func (s *OAuthStore) Consent(id string) (ConsentView, error) {
 	if !ok {
 		return ConsentView{}, ErrOAuthInvalidClient
 	}
-	host := c.req.RedirectURI
+	v := ConsentView{ClientName: cl.Name, RedirectHost: c.req.RedirectURI, RedirectURI: c.req.RedirectURI}
 	if u, err := url.Parse(c.req.RedirectURI); err == nil {
-		host = u.Host
+		v.RedirectHost = u.Host
+		h := u.Hostname()
+		v.Domain = h
+		if d, err := publicsuffix.EffectiveTLDPlusOne(h); err == nil {
+			v.Domain = d
+		}
+		loopback := h == "localhost" || h == "127.0.0.1" || h == "::1"
+		v.PathTenant = !loopback && (u.RawQuery != "" || strings.Count(strings.Trim(u.Path, "/"), "/") >= 2)
 	}
-	return ConsentView{ClientName: cl.Name, RedirectHost: host}, nil
+	return v, nil
 }
 
 func (s *OAuthStore) takeConsent(id string) (*consent, error) {
@@ -476,4 +526,41 @@ func redirectWith(base string, v url.Values) string {
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// DropCodesForApp discards unexchanged authorization codes issued for an app
+// (on key rotation they would otherwise mint the new key — pentest R2 L3).
+func (s *OAuthStore) DropCodesForApp(appID uint) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, c := range s.codes {
+		if c.appID == appID {
+			delete(s.codes, k)
+		}
+	}
+}
+
+// validHostSyntax: letters, digits, hyphens and dots, plus an optional :port
+// (no ';' ',' or other characters a browser might treat oddly).
+func validHostSyntax(h string) bool {
+	if h == "" || len(h) > 253 {
+		return false
+	}
+	for _, r := range h {
+		if !(r == '-' || r == '.' || r == ':' || r == '[' || r == ']' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return false
+		}
+	}
+	return true
+}
+
+// hasInvisible: blank-rendering or combining/variation characters, refused in
+// client names shown on the consent screen (pentest R2-3 MED-4).
+func hasInvisible(s string) bool {
+	for _, r := range s {
+		if invisibleish(r) || blankish(r) {
+			return true
+		}
+	}
+	return false
 }

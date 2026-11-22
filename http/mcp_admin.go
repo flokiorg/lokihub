@@ -115,6 +115,8 @@ func (httpSvc *HttpService) registerMCPAdmin(g *echo.Group) {
 			return echo.NewHTTPError(http.StatusGone, "the assistant that asked for this was revoked; the request was dropped")
 		case errors.Is(err, mcp.ErrPendingExpired):
 			return echo.NewHTTPError(http.StatusGone, "this request expired")
+		case errors.Is(err, mcp.ErrConfirmStale):
+			return echo.NewHTTPError(http.StatusConflict, "what this would do has changed since the assistant asked — the request was dropped; ask the assistant again")
 		case errors.Is(err, mcp.ErrNoPending):
 			return echo.NewHTTPError(http.StatusNotFound, "no such action")
 		case errors.Is(err, mcp.ErrPendingDenied):

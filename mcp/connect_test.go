@@ -91,3 +91,20 @@ func TestCleanConnectionName(t *testing.T) {
 		}
 	}
 }
+
+// TestNameSkeleton (pentest R2-3 MED-4): visually identical names collide.
+func TestNameSkeleton(t *testing.T) {
+	base := NameSkeleton("Desk assistant")
+	for _, n := range []string{
+		"Desk assistant\u3164", "Desk assistant\u1160", "Desk\u2800assistant", "Desk\u034f assistant",
+		"Desk assistant\ufe0f", "Desk assistant\u17b5", "Desk \u0430ssistant", "D\u0435sk assistant",
+		"desk assistant", "DESK ASSISTANT",
+	} {
+		if NameSkeleton(n) != base {
+			t.Errorf("lookalike %q has a different skeleton (%q vs %q)", n, NameSkeleton(n), base)
+		}
+	}
+	if NameSkeleton("Kitchen helper") == base {
+		t.Error("different names collide")
+	}
+}

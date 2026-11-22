@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"golang.org/x/time/rate"
 	"sort"
 	"strings"
 	"sync"
@@ -48,7 +49,12 @@ type ActivityLog struct {
 type appActivity struct {
 	main  ring
 	reads ring
+	fails ring          // refused/failed calls: kept apart so they can never evict real activity
+	failW *rate.Limiter // throttles durable writes of failures
 }
+
+// activityFailsKeep bounds an assistant's in-memory failed calls.
+const activityFailsKeep = 100
 
 type stamped struct {
 	seq uint64
@@ -93,17 +99,26 @@ func (l *ActivityLog) add(e ActivityEntry, read bool) {
 		a = &appActivity{}
 		l.apps[e.AppID] = a
 	}
-	if read && e.Outcome == "done" {
+	persist := true
+	switch {
+	case read && e.Outcome == "done":
 		a.reads.add(stamped{l.order, e}, activityReadsKeep)
-	} else {
+		persist = false // plain reads stay in memory only (pentest F F-2)
+	case e.Outcome == "failed":
+		// Failures (unknown tools, missing keys, rate-limited, refused…) can
+		// be produced at will, so they get their own space and a throttled
+		// durable copy: they never push real activity out (pentest R2 M3).
+		a.fails.add(stamped{l.order, e}, activityFailsKeep)
+		if a.failW == nil {
+			a.failW = rate.NewLimiter(1, 20)
+		}
+		persist = a.failW.Allow()
+	default:
 		a.main.add(stamped{l.order, e}, activityPerApp)
 	}
 	store := l.store
 	l.mu.Unlock()
-	if store != nil && !(read && e.Outcome == "done") {
-		// Durable copy of everything except plain successful reads, which
-		// stay in their own bounded in-memory space (a read flood can
-		// never displace a write — pentest F F-2).
+	if store != nil && persist {
 		_ = store.Save(e)
 	}
 	logger.Logger.Info().
@@ -124,7 +139,7 @@ func (l *ActivityLog) List(appID uint, limit int) []ActivityEntry {
 			l.mu.Lock()
 			for id, a := range l.apps {
 				if appID == 0 || id == appID {
-					for _, x := range a.reads.all() {
+					for _, x := range append(a.reads.all(), a.fails.all()...) {
 						out = append(out, x.e)
 					}
 				}
@@ -145,6 +160,7 @@ func (l *ActivityLog) List(appID uint, limit int) []ActivityEntry {
 		}
 		all = append(all, a.main.all()...)
 		all = append(all, a.reads.all()...)
+		all = append(all, a.fails.all()...)
 	}
 	l.mu.Unlock()
 	sort.Slice(all, func(i, j int) bool { return all[i].seq > all[j].seq })

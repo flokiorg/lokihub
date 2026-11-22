@@ -95,7 +95,7 @@ func (httpSvc *HttpService) registerMCPOAuth(e *echo.Echo) {
 		}
 		// Errors here are shown, not redirected: an unverified client/redirect
 		// must never receive a redirect (open-redirector protection).
-		id, err := store.BeginConsent(req, mcp.ResourceURL(c.Request()))
+		id, err := store.BeginConsentFrom(req, mcp.ResourceURL(c.Request()), oauthClientIP0(c))
 		if err != nil {
 			return oauthError(c, http.StatusBadRequest, err, err.Error())
 		}
@@ -167,6 +167,9 @@ func (httpSvc *HttpService) registerMCPConsent(g *echo.Group) {
 		scopes, err := mcp.ScopesFor(body.Groups)
 		if err != nil || name == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "choose a name and at least one area")
+		}
+		if httpSvc.mcpNameLooksTaken(name, 0) {
+			return echo.NewHTTPError(http.StatusConflict, "another AI assistant already has a name that looks the same — choose a different name")
 		}
 		if body.ExpiresInDays < 0 || body.ExpiresInDays > 365 {
 			return echo.NewHTTPError(http.StatusBadRequest, "expiry must be 0 (never) to 365 days")

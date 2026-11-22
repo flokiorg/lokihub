@@ -175,7 +175,11 @@ func guardedTool[In any](
 			return nil, pendingResult{}, err
 		}
 		s.pending.SetMethod(act.ID, apiMethod)
-		return nil, s.pending.Result(act.ID), nil
+		clean, err := scrubOutput(s.pending.Result(act.ID))
+		if err != nil {
+			return nil, pendingResult{}, err
+		}
+		return nil, clean, nil
 	})
 }
 
@@ -274,7 +278,11 @@ func writeTool[In, Out any](
 			return nil, zero, toolErr(err)
 		}
 		out := asOut[Out](res)
-		return nil, scrubOutput(out), nil
+		clean, err := scrubOutput(out)
+		if err != nil {
+			return nil, zero, err
+		}
+		return nil, clean, nil
 	})
 }
 
@@ -358,7 +366,11 @@ func readToolIn[In, Out any](
 		if err != nil {
 			return nil, zero, toolErr(err)
 		}
-		return nil, scrubOutput(out), nil
+		clean, err := scrubOutput(out)
+		if err != nil {
+			return nil, zero, err
+		}
+		return nil, clean, nil
 	})
 }
 
@@ -486,6 +498,12 @@ func (s *Server) ApprovePending(ctx context.Context, id string) (any, error) {
 		_ = s.pending.Deny(id)
 		return nil, ErrRevoked
 	}
+	if check := s.pending.checkFor(id); check != nil {
+		if err := check(); err != nil {
+			_ = s.pending.Deny(id)
+			return nil, err
+		}
+	}
 	return s.pending.Approve(id)
 }
 
@@ -526,4 +544,12 @@ func (s *Server) limiterFor(appID uint) *rate.Limiter {
 func (s *Server) isReadTool(name string) bool {
 	_, ok := s.readTools.Load(name)
 	return ok
+}
+
+// RevokeOutstanding drops a connection's open approval requests and
+// unredeemed confirmation codes — used when its key is rotated, so nothing the
+// leaked key asked for can still be approved or confirmed (pentest R2 L3).
+func (s *Server) RevokeOutstanding(appID uint) {
+	s.pending.DropForApp(appID)
+	s.confirms.dropApp(appID)
 }

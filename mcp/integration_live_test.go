@@ -456,7 +456,7 @@ func TestLiveOAuth(t *testing.T) {
 		Redirect string `json:"redirect"`
 	}
 	if c := h.do(t, http.MethodPost, "/api/mcp/oauth/consent/"+consent+"/approve", h.admin, map[string]any{
-		"name": "Live OAuth client", "groups": map[string]string{"node": "read"},
+		"name": fmt.Sprintf("Live OAuth client %d", time.Now().UnixNano()), "groups": map[string]string{"node": "read"},
 	}, &appr); c != http.StatusOK {
 		t.Fatalf("approve: HTTP %d", c)
 	}
@@ -492,7 +492,7 @@ func TestLiveOAuth(t *testing.T) {
 	r = authorize(reg.ClientID, redirect, prm.Resource)
 	consent = strings.TrimPrefix(r.Header.Get("Location"), "/connect-assistant?consent=")
 	h.do(t, http.MethodPost, "/api/mcp/oauth/consent/"+consent+"/approve", h.admin, map[string]any{
-		"name": "Live OAuth client", "groups": map[string]string{"node": "read"},
+		"name": fmt.Sprintf("Live OAuth client %d", time.Now().UnixNano()), "groups": map[string]string{"node": "read"},
 	}, &appr)
 	ru, _ = url.Parse(appr.Redirect)
 	code = ru.Query().Get("code")

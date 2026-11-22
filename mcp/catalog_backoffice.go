@@ -401,7 +401,7 @@ func compactJSON(v any) string {
 	if err != nil {
 		return "?"
 	}
-	return clip(string(b), 200)
+	return clip(string(b), maxOwnerSummary) // never cut short: the owner must see every value
 }
 
 // cleanJSONValue: every string inside v is plain single-line text.
@@ -810,6 +810,9 @@ func (s *Server) registerLSPOperatorTools(srv *mcpsdk.Server, conn *Conn) {
 			if err != nil {
 				return nil, err
 			}
+			if len(ch.keys) > 8 {
+				return nil, errInvalidArgs("change at most 8 fields per request, so the owner can review each one")
+			}
 			parts := make([]string, 0, len(ch.keys))
 			details := make([]PreviewDetail, 0, len(ch.keys))
 			for _, k := range ch.keys {
@@ -818,7 +821,7 @@ func (s *Server) registerLSPOperatorTools(srv *mcpsdk.Server, conn *Conn) {
 				details = append(details, PreviewDetail{Label: k, Value: "current " + c + " → new " + n})
 			}
 			return &PaymentPreview{
-				Action:    clip(fmt.Sprintf("Change the configuration of %s: %s", nodeLabel(in.Node), strings.Join(parts, "; ")), 560),
+				Action:    fmt.Sprintf("Change the configuration of %s (%d field(s); every change is listed below)", nodeLabel(in.Node), len(ch.keys)),
 				Recipient: "peers ordering channels and routing through this LSP",
 				Details:   details,
 			}, nil
